@@ -80,8 +80,8 @@ impl MacrosRenderer {
                                     .icon(IconName::Plus)
                                     .primary()
                                     .tooltip("Create New Macro")
-                                    .on_click(cx.listener(|panel, _, _window, cx| {
-                                        panel.create_new_local_macro(cx);
+                                    .on_click(cx.listener(|panel, _, window, cx| {
+                                        panel.create_new_local_macro(window, cx);
                                     }))
                             )
                     )
@@ -188,8 +188,8 @@ impl MacrosRenderer {
                     .border_color(cx.theme().accent.opacity(0.6))
                     .shadow_md()
             })
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, _, _window, cx| {
-                panel.open_local_macro(subgraph_id.clone(), subgraph_name.clone(), cx);
+            .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, _, window, cx| {
+                panel.open_local_macro(subgraph_id.clone(), subgraph_name.clone(), window, cx);
             }))
             .child(
                 // Macro icon

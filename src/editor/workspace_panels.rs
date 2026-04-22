@@ -313,13 +313,15 @@ impl Panel for PalettePanel {
 /// Main graph canvas panel with tab bar
 pub struct GraphCanvasPanel {
     editor: WeakEntity<BlueprintEditorPanel>,
+    tab_id: String,
     focus_handle: FocusHandle,
 }
 
 impl GraphCanvasPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, tab_id: String, cx: &mut Context<Self>) -> Self {
         Self {
             editor,
+            tab_id,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -331,24 +333,11 @@ impl Render for GraphCanvasPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if let Some(editor) = self.editor.upgrade() {
             div()
-                .flex()
-                .flex_col()
                 .size_full()
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        editor.render_tab_bar(cx)
-                    })
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_h_0()
-                        .child(
-                            editor.update(cx, |editor, cx| {
-                                NodeGraphRenderer::render(editor, cx)
-                            })
-                        )
-                )
+                .child(editor.update(cx, |editor, cx| {
+                    editor.ensure_active_graph_panel_state(&self.tab_id);
+                    NodeGraphRenderer::render(editor, cx)
+                }))
         } else {
             div().child("Editor not available")
         }
@@ -366,7 +355,19 @@ impl Panel for GraphCanvasPanel {
         "graph-canvas"
     }
 
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+    fn title(&self, _window: &Window, cx: &App) -> AnyElement {
+        if let Some(editor) = self.editor.upgrade() {
+            let editor = editor.read(cx);
+            if let Some(tab) = editor.open_tabs.iter().find(|tab| tab.id == self.tab_id) {
+                let title = if tab.is_dirty {
+                    format!("{} *", tab.name)
+                } else {
+                    tab.name.clone()
+                };
+                return title.into_any_element();
+            }
+        }
+
         "Event Graph".into_any_element()
     }
 }

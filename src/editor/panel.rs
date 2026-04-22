@@ -19,7 +19,9 @@ use crate::core::{
 use ui::graph::DataType;
 use crate::features::variables::ClassVariable;
 use crate::features::connections::operations::ConnectionDrag;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use super::tabs::GraphTab;
+use ui::dock::{DockItem, DockPlacement};
 use ui::graph::{DataType as GraphDataType, LibraryManager, SubGraphDefinition};
 
 /// Main Blueprint Editor Panel struct
@@ -93,6 +95,8 @@ pub struct BlueprintEditorPanel {
     // Tab system
     pub open_tabs: Vec<GraphTab>,
     pub active_tab_index: usize,
+    pub graph_panels: Vec<(String, Entity<GraphCanvasPanel>)>,
+    pub graph_workspace_tabs_dirty: bool,
 
     // Overlay toggles
     pub show_debug_overlay: bool,
@@ -286,6 +290,8 @@ impl BlueprintEditorPanel {
                 library_id: None,
             }],
             active_tab_index: 0,
+            graph_panels: Vec::new(),
+            graph_workspace_tabs_dirty: true,
             show_debug_overlay: true,
             show_minimap: true,
             show_graph_controls: true,
@@ -814,12 +820,101 @@ impl BlueprintEditorPanel {
     // Tab Operations
     // ============================================================================
 
+    pub(crate) fn ensure_active_graph_panel_state(&mut self, tab_id: &str) {
+        if let Some(tab_index) = self.open_tabs.iter().position(|tab| tab.id == tab_id) {
+            if tab_index != self.active_tab_index {
+                self.sync_graph_to_active_tab();
+                self.active_tab_index = tab_index;
+                self.load_active_tab_graph();
+            }
+        }
+    }
+
+    pub(crate) fn refresh_graph_workspace_tabs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.graph_workspace_tabs_dirty {
+            return;
+        }
+
+        let Some(workspace_entity) = self.workspace.clone() else {
+            return;
+        };
+
+        let desired_ids: Vec<String> = self.open_tabs.iter().map(|tab| tab.id.clone()).collect();
+
+        let stale_panels: Vec<Entity<GraphCanvasPanel>> = self
+            .graph_panels
+            .iter()
+            .filter(|(tab_id, _)| !desired_ids.contains(tab_id))
+            .map(|(_, panel)| panel.clone())
+            .collect();
+
+        for panel in stale_panels {
+            workspace_entity.update(cx, |workspace, cx| {
+                workspace.remove_panel(panel.clone(), DockPlacement::Center, window, cx);
+            });
+        }
+
+        self.graph_panels.retain(|(tab_id, _)| desired_ids.contains(tab_id));
+
+        let editor_weak = cx.entity().downgrade();
+        for tab in &self.open_tabs {
+            if self.graph_panels.iter().any(|(tab_id, _)| tab_id == &tab.id) {
+                continue;
+            }
+
+            let tab_id = tab.id.clone();
+            let panel = cx.new(|cx| GraphCanvasPanel::new(editor_weak.clone(), tab_id.clone(), cx));
+
+            workspace_entity.update(cx, |workspace, cx| {
+                workspace.add_panel(panel.clone(), DockPlacement::Center, window, cx);
+            });
+
+            self.graph_panels.push((tab.id.clone(), panel));
+        }
+
+        self.activate_graph_workspace_tab(self.active_tab_index, window, cx);
+        self.graph_workspace_tabs_dirty = false;
+    }
+
+    pub(crate) fn activate_graph_workspace_tab(&mut self, tab_index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(workspace_entity) = self.workspace.clone() else {
+            return;
+        };
+
+        workspace_entity.update(cx, |workspace, cx| {
+            workspace.dock_area().update(cx, |dock_area, cx| {
+                fn activate_tab_item(item: &mut DockItem, tab_index: usize, window: &mut Window, cx: &mut App) -> bool {
+                    match item {
+                        DockItem::Tabs { view, .. } => {
+                            view.update(cx, |tab_panel, cx| {
+                                tab_panel.set_active_tab(tab_index, window, cx);
+                            });
+                            true
+                        }
+                        DockItem::Split { items, .. } => {
+                            for child in items.iter_mut() {
+                                if activate_tab_item(child, tab_index, window, cx) {
+                                    return true;
+                                }
+                            }
+                            false
+                        }
+                        _ => false,
+                    }
+                }
+
+                let _ = activate_tab_item(dock_area.items_mut(), tab_index, window, cx);
+            });
+        });
+    }
+
     /// Switch to a different tab
-    pub fn switch_to_tab(&mut self, tab_index: usize, cx: &mut Context<Self>) {
+    pub fn switch_to_tab(&mut self, tab_index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if tab_index < self.open_tabs.len() && tab_index != self.active_tab_index {
             self.sync_graph_to_active_tab();
             self.active_tab_index = tab_index;
             self.load_active_tab_graph();
+            self.activate_graph_workspace_tab(tab_index, window, cx);
             cx.notify();
         }
     }

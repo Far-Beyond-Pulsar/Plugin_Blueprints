@@ -7,10 +7,10 @@ use crate::BlueprintGraph;
 
 impl BlueprintEditorPanel {
     /// Open a local macro in a new tab
-    pub fn open_local_macro(&mut self, macro_id: String, macro_name: String, cx: &mut Context<Self>) {
+    pub fn open_local_macro(&mut self, macro_id: String, macro_name: String, window: &mut Window, cx: &mut Context<Self>) {
         // Check if already open
         if let Some(index) = self.open_tabs.iter().position(|tab| tab.id == macro_id) {
-            self.switch_to_tab(index, cx);
+            self.switch_to_tab(index, window, cx);
             return;
         }
 
@@ -43,6 +43,8 @@ impl BlueprintEditorPanel {
             self.open_tabs.push(new_tab);
             self.active_tab_index = self.open_tabs.len() - 1;
             self.load_active_tab_graph();
+            self.graph_workspace_tabs_dirty = true;
+            self.refresh_graph_workspace_tabs(window, cx);
 
             tracing::info!("Opened local macro in tab: {}", macro_name);
             cx.notify();
@@ -50,10 +52,10 @@ impl BlueprintEditorPanel {
     }
 
     /// Open a global/engine macro in a new tab
-    pub fn open_global_macro(&mut self, macro_id: String, macro_name: String, cx: &mut Context<Self>) {
+    pub fn open_global_macro(&mut self, macro_id: String, macro_name: String, window: &mut Window, cx: &mut Context<Self>) {
         // Check if already open
         if let Some(index) = self.open_tabs.iter().position(|tab| tab.id == macro_id) {
-            self.switch_to_tab(index, cx);
+            self.switch_to_tab(index, window, cx);
             return;
         }
 
@@ -101,7 +103,7 @@ impl BlueprintEditorPanel {
     }
 
     /// Create a new local macro from current selection
-    pub fn create_new_local_macro(&mut self, cx: &mut Context<Self>) {
+    pub fn create_new_local_macro(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let macro_name = format!("Macro {}", self.local_macros.len() + 1);
         let macro_id = uuid::Uuid::new_v4().to_string();
 
@@ -125,6 +127,6 @@ impl BlueprintEditorPanel {
         };
 
         self.local_macros.push(macro_def);
-        self.open_local_macro(macro_id, macro_name, cx);
+        self.open_local_macro(macro_id, macro_name, window, cx);
     }
 }

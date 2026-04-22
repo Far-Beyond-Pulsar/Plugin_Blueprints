@@ -298,8 +298,8 @@ impl BlueprintEditorPanel {
                                             .bg(cx.theme().accent)
                                     )
                                 })
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, _window, cx| {
-                                    this.switch_to_tab(index, cx);
+                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, window, cx| {
+                                    this.switch_to_tab(index, window, cx);
                                 }))
                         })
                     )

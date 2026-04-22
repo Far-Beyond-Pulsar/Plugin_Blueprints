@@ -45,11 +45,24 @@ impl BlueprintEditorPanel {
             let find_panel = cx.new(|cx| FindPanel::new(editor_weak.clone(), cx));
             let properties_panel = cx.new(|cx| PropertiesPanel::new(editor_weak.clone(), cx));
             let palette_panel = cx.new(|cx| PalettePanel::new(editor_weak.clone(), cx));
-            let center_panel = cx.new(|cx| GraphCanvasPanel::new(editor_weak.clone(), cx));
+            let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = self
+                .open_tabs
+                .iter()
+                .map(|tab| {
+                    let tab_id = tab.id.clone();
+                    let panel = cx.new(|cx| GraphCanvasPanel::new(editor_weak.clone(), tab_id.clone(), cx));
+                    (tab.id.clone(), panel)
+                })
+                .collect();
+
+            self.graph_panels = center_panels.clone();
 
             let center = DockItem::tabs(
-                vec![Arc::new(center_panel)],
-                None,
+                center_panels
+                    .iter()
+                    .map(|(_, panel)| Arc::new(panel.clone()) as Arc<dyn ui::dock::PanelView>)
+                    .collect(),
+                Some(self.active_tab_index),
                 &dock_area_weak,
                 window,
                 cx,
@@ -83,5 +96,6 @@ impl BlueprintEditorPanel {
         });
 
         self.workspace = Some(workspace);
+        self.graph_workspace_tabs_dirty = false;
     }
 }

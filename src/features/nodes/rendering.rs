@@ -226,7 +226,7 @@ fn render_blueprint_node(
                                             .unwrap_or_else(|| library_id.clone());
                                         panel.request_open_engine_library(library_id, library_name, Some(subgraph_id.clone()), Some(node_title.clone()), cx);
                                     } else if let Some(m) = panel.local_macros.iter().find(|m| m.id == subgraph_id) {
-                                        panel.open_local_macro(subgraph_id.clone(), m.name.clone(), cx);
+                                        panel.open_local_macro(subgraph_id.clone(), m.name.clone(), window, cx);
                                     } else {
                                         tracing::info!("Macro '{}' not found", node_title);
                                     }
