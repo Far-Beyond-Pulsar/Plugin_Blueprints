@@ -77,6 +77,7 @@ pub struct BlueprintEditorPanel {
     pub resizing_comment: Option<(String, ResizeHandle)>,
     pub editing_comment: Option<String>,
     pub comment_text_input: Entity<InputState>,
+    pub comment_color_bindings_dirty: bool,
 
     // Subscriptions
     pub subscriptions: Vec<Subscription>,
@@ -263,6 +264,7 @@ impl BlueprintEditorPanel {
             comment_text_input: cx.new(|cx| {
                 InputState::new(window, cx).placeholder("Comment text...")
             }),
+            comment_color_bindings_dirty: true,
             subscriptions: Vec::new(),
             compilation_status: CompilationStatus::default(),
             compilation_history: Vec::new(),
@@ -602,13 +604,72 @@ impl BlueprintEditorPanel {
     // Comment Operations
     // ============================================================================
 
+    fn snap_comment_position(&self, position: Point<f32>) -> Point<f32> {
+        crate::rendering::graph::NodeGraphRenderer::snap_to_grid(position, self.graph.zoom_level)
+    }
+
+    fn snap_comment_size(size: Size<f32>) -> Size<f32> {
+        let grid = 10.0;
+        Size::new(
+            (size.width / grid).round() * grid,
+            (size.height / grid).round() * grid,
+        )
+    }
+
+    fn snap_comment_bounds(comment: &mut BlueprintComment) {
+        let left = (comment.position.x / 10.0).round() * 10.0;
+        let top = (comment.position.y / 10.0).round() * 10.0;
+        let right = ((comment.position.x + comment.size.width) / 10.0).round() * 10.0;
+        let bottom = ((comment.position.y + comment.size.height) / 10.0).round() * 10.0;
+
+        comment.position = Point::new(left, top);
+        comment.size = Self::snap_comment_size(Size::new(
+            (right - left).max(100.0),
+            (bottom - top).max(50.0),
+        ));
+    }
+
+    pub(crate) fn refresh_comment_color_bindings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.comment_color_bindings_dirty {
+            return;
+        }
+
+        self.subscriptions.clear();
+
+        for comment in &self.graph.comments {
+            if let Some(picker_state) = comment.color_picker_state.as_ref() {
+                let comment_id = comment.id.clone();
+                let subscription = cx.subscribe_in(
+                    picker_state,
+                    window,
+                    move |this: &mut BlueprintEditorPanel,
+                          _picker,
+                          event: &ui::color_picker::ColorPickerEvent,
+                          _window,
+                          cx| {
+                        if let ui::color_picker::ColorPickerEvent::Change(Some(color)) = event {
+                            if let Some(comment) = this.graph.comments.iter_mut().find(|c| c.id == comment_id) {
+                                comment.color = *color;
+                                cx.notify();
+                            }
+                        }
+                    },
+                );
+
+                self.subscriptions.push(subscription);
+            }
+        }
+
+        self.comment_color_bindings_dirty = false;
+    }
+
     /// Update comment drag position
     pub fn update_comment_drag(&mut self, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
         if let Some(comment_id) = &self.dragging_comment.clone() {
-            let new_position = Point::new(
+            let new_position = self.snap_comment_position(Point::new(
                 mouse_pos.x - self.drag_offset.x,
                 mouse_pos.y - self.drag_offset.y,
-            );
+            ));
 
             if let Some(comment) = self.graph.comments.iter_mut().find(|c| c.id == *comment_id) {
                 let delta = Point::new(
@@ -690,6 +751,7 @@ impl BlueprintEditorPanel {
                 // Enforce minimum size
                 comment.size.width = comment.size.width.max(100.0);
                 comment.size.height = comment.size.height.max(50.0);
+                Self::snap_comment_bounds(comment);
 
                 self.drag_offset = mouse_pos;
                 cx.notify();
@@ -741,30 +803,10 @@ impl BlueprintEditorPanel {
 
     /// Add a new comment at the specified position
     pub fn add_comment(&mut self, position: Point<f32>, window: &mut Window, cx: &mut Context<Self>) {
-        let new_comment = BlueprintComment::new(position, window, cx);
-
-        // Subscribe to color picker changes
-        if let Some(picker_state) = new_comment.color_picker_state.as_ref() {
-            let comment_id = new_comment.id.clone();
-            let _ = cx.subscribe_in(
-                picker_state,
-                window,
-                move |this: &mut BlueprintEditorPanel,
-                      _picker,
-                      event: &ui::color_picker::ColorPickerEvent,
-                      _window,
-                      cx| {
-                    if let ui::color_picker::ColorPickerEvent::Change(Some(color)) = event {
-                        if let Some(comment) = this.graph.comments.iter_mut().find(|c| c.id == comment_id) {
-                            comment.color = *color;
-                            cx.notify();
-                        }
-                    }
-                },
-            );
-        }
+        let new_comment = BlueprintComment::new(self.snap_comment_position(position), window, cx);
 
         self.graph.comments.push(new_comment);
+        self.comment_color_bindings_dirty = true;
         cx.notify();
     }
 
@@ -813,6 +855,7 @@ impl BlueprintEditorPanel {
     pub fn load_active_tab_graph(&mut self) {
         if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
             self.graph = tab.graph.clone();
+            self.comment_color_bindings_dirty = true;
         }
     }
 
@@ -926,6 +969,7 @@ impl BlueprintEditorPanel {
 
         // Load main graph
         self.graph = self.convert_graph_description_to_blueprint(&asset.main_graph, window, cx)?;
+        self.comment_color_bindings_dirty = true;
 
         // Load local macros
         self.local_macros = asset.local_macros;
@@ -1011,6 +1055,7 @@ impl BlueprintEditorPanel {
             // Load the active tab's graph into self.graph
             if let Some(active_tab) = self.open_tabs.get(self.active_tab_index) {
                 self.graph = active_tab.graph.clone();
+                self.comment_color_bindings_dirty = true;
             }
         }
 
@@ -1097,6 +1142,7 @@ impl BlueprintEditorPanel {
         };
 
         self.graph = self.convert_graph_description_to_blueprint(&graph_description, window, cx)?;
+        self.comment_color_bindings_dirty = true;
 
         // Reset to main tab
         self.open_tabs = vec![GraphTab {

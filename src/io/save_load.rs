@@ -174,6 +174,7 @@ impl BlueprintEditorPanel {
         }
 
         self.graph = self.convert_graph_description_to_blueprint(&asset.main_graph, window, cx)?;
+        self.comment_color_bindings_dirty = true;
         self.local_macros = asset.local_macros;
 
         // Convert ui::ClassVariable to local ClassVariable
@@ -231,6 +232,7 @@ impl BlueprintEditorPanel {
 
             if let Some(active_tab) = self.open_tabs.get(self.active_tab_index) {
                 self.graph = active_tab.graph.clone();
+                self.comment_color_bindings_dirty = true;
             }
         }
 

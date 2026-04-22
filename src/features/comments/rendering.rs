@@ -15,6 +15,13 @@ use crate::rendering::graph::NodeGraphRenderer;
 use super::operations::ResizeHandle;
 use ui::{Colorize, PixelsExt};
 
+fn comment_body_color(color: Hsla) -> Hsla {
+    Hsla {
+        a: color.a.max(0.45),
+        ..color
+    }
+}
+
 /// Comment rendering methods
 ///
 /// These methods will be implemented on the NodeGraphRenderer or similar rendering struct.
@@ -92,7 +99,7 @@ pub fn render_comment(
         .child(
             div()
                 .size_full()
-                .bg(comment.color)
+                .bg(comment_body_color(comment.color))
                 .border_2()
                 .border_color(if comment.is_selected {
                     gpui::yellow()
@@ -351,7 +358,7 @@ fn render_comment(
         .child(
             div()
                 .size_full()
-                .bg(comment.color)
+                .bg(comment_body_color(comment.color))
                 .border_2()
                 .border_color(if comment.is_selected {
                     gpui::yellow()

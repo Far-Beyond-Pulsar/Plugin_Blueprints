@@ -326,6 +326,8 @@ impl Render for BlueprintEditorPanel {
             self.initialize_workspace(window, cx);
         }
 
+        self.refresh_comment_color_bindings(window, cx);
+
         v_flex()
             .size_full()
             .bg(cx.theme().background)
