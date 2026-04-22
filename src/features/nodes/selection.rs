@@ -3,6 +3,7 @@
 use gpui::*;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::core::types::{BlueprintNode, Connection};
+use crate::rendering::graph::NodeGraphRenderer;
 
 impl BlueprintEditorPanel {
     /// Select a single node (or clear selection if None)
@@ -150,7 +151,8 @@ impl BlueprintEditorPanel {
 
                 if let Some(data_type) = self.get_connection_data_type(&connection) {
                     // Create reroute node
-                    let reroute_node = BlueprintNode::create_reroute(graph_pos);
+                    let reroute_pos = NodeGraphRenderer::snap_to_grid(graph_pos, self.graph.zoom_level);
+                    let reroute_node = BlueprintNode::create_reroute(reroute_pos);
                     let reroute_id = reroute_node.id.clone();
 
                     self.graph.nodes.push(reroute_node);

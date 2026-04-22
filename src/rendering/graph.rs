@@ -94,6 +94,7 @@ impl NodeGraphRenderer {
                 }
             }))
             // Render layers in correct z-order
+            .child(Self::render_grid_background(panel, cx))
             .child(Self::render_comments(panel, cx))
             .child(Self::render_connections(panel, cx))
             .child(Self::render_nodes(panel, cx))
@@ -131,97 +132,90 @@ impl NodeGraphRenderer {
             .on_key_down(crate::rendering::input::on_key_down(cx))
     }
 
-    /// WARNING: For reasons uninvestigated this causes EXTREME performance degradation at some zoom levels
     pub fn render_grid_background(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
-        // Multi-scale grid system that shows/hides based on zoom level
-        // Grid scales: 50px (fine), 200px (medium), 1000px (coarse)
         let zoom = panel.graph.zoom_level;
-        let pan = &panel.graph.pan_offset;
+        let pan = panel.graph.pan_offset;
+        let background = cx.theme().muted.opacity(0.05);
+        let minor_color = cx.theme().border.opacity(0.08);
+        let major_color = cx.theme().border.opacity(0.18);
 
-        // Define grid scales and their visibility thresholds
-        let grids = [
-            (50.0, 0.5, 1.5, 0.15),   // Fine grid: visible between 0.5x and 1.5x zoom, low opacity
-            (200.0, 0.3, 2.0, 0.25),  // Medium grid: visible between 0.3x and 2.0x zoom
-            (1000.0, 0.1, 10.0, 0.35), // Coarse grid: always visible, higher opacity
-        ];
+        gpui::canvas(
+            move |_bounds, _window, _cx| {},
+            move |bounds, _prepaint, window, _cx| {
+                let width = bounds.size.width.as_f32();
+                let height = bounds.size.height.as_f32();
+                let origin_x = bounds.origin.x.as_f32();
+                let origin_y = bounds.origin.y.as_f32();
 
-        let mut grid_layers = Vec::new();
+                Self::paint_grid_rect(window, origin_x, origin_y, width, height, background);
 
-        for (grid_size, min_zoom, max_zoom, base_opacity) in grids {
-            // Skip grids outside their zoom range
-            if zoom < min_zoom || zoom > max_zoom {
-                continue;
-            }
+                let minor_step = 10.0 * zoom;
+                let major_step = 50.0 * zoom;
 
-            // Fade in/out at edges of zoom range
-            let fade_range = 0.2_f32;
-            let fade_in = ((zoom - min_zoom) / (min_zoom * fade_range)).min(1.0_f32);
-            let fade_out = ((max_zoom - zoom) / (max_zoom * fade_range)).min(1.0_f32);
-            let fade = fade_in.min(fade_out).max(0.0_f32);
-            let opacity = base_opacity * fade;
+                if minor_step >= 6.0 {
+                    Self::paint_grid_lines(window, origin_x, origin_y, width, height, pan, zoom, 10.0, minor_color);
+                }
 
-            if opacity > 0.01 {
-                grid_layers.push(Self::render_grid_layer(grid_size, opacity, pan, zoom, cx));
-            }
-        }
-
-        div().absolute().inset_0()
-            .bg(cx.theme().muted.opacity(0.05))
-            .children(grid_layers)
+                if major_step >= 4.0 {
+                    Self::paint_grid_lines(window, origin_x, origin_y, width, height, pan, zoom, 50.0, major_color);
+                }
+            },
+        )
+        .absolute()
+        .inset_0()
+        .size_full()
     }
 
-    pub fn render_grid_layer(
-        grid_size: f32,
-        opacity: f32,
-        pan: &Point<f32>,
+    fn paint_grid_lines(
+        window: &mut Window,
+        origin_x: f32,
+        origin_y: f32,
+        width: f32,
+        height: f32,
+        pan: Point<f32>,
         zoom: f32,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) -> impl IntoElement {
-        // Calculate visible grid range
-        let scaled_grid_size = grid_size * zoom;
-
-        // Calculate grid offset based on pan
-        let offset_x = (pan.x * zoom) % scaled_grid_size;
-        let offset_y = (pan.y * zoom) % scaled_grid_size;
-
-        // Render grid dots
-        let viewport_width = 3840.0;
-        let viewport_height = 2160.0;
-
-        let grid_color = cx.theme().border.opacity(opacity);
-        let dot_size = 2.0;
-
-        let mut dots = Vec::new();
-
-        // Calculate number of grid lines needed
-        let num_cols = (viewport_width / scaled_grid_size).ceil() as i32 + 2;
-        let num_rows = (viewport_height / scaled_grid_size).ceil() as i32 + 2;
-
-        for col in 0..num_cols {
-            for row in 0..num_rows {
-                let x = offset_x + (col as f32 * scaled_grid_size);
-                let y = offset_y + (row as f32 * scaled_grid_size);
-
-                if x >= -scaled_grid_size && x <= viewport_width + scaled_grid_size
-                    && y >= -scaled_grid_size && y <= viewport_height + scaled_grid_size {
-                    dots.push(
-                        div()
-                            .absolute()
-                            .left(px(x - dot_size / 2.0))
-                            .top(px(y - dot_size / 2.0))
-                            .w(px(dot_size))
-                            .h(px(dot_size))
-                            .bg(grid_color)
-                            .rounded_full()
-                    );
-                }
-            }
+        grid_size: f32,
+        color: gpui::Hsla,
+    ) {
+        let step = grid_size * zoom;
+        if step <= 0.0 {
+            return;
         }
 
-        div()
-            .absolute()
-            .inset_0()
-            .children(dots)
+        let start_x = (pan.x * zoom).rem_euclid(step);
+        let start_y = (pan.y * zoom).rem_euclid(step);
+
+        let mut x = start_x;
+        while x <= width {
+            Self::paint_grid_rect(window, origin_x + x, origin_y, 1.0, height, color);
+            x += step;
+        }
+
+        let mut y = start_y;
+        while y <= height {
+            Self::paint_grid_rect(window, origin_x, origin_y + y, width, 1.0, color);
+            y += step;
+        }
+    }
+
+    fn paint_grid_rect(
+        window: &mut Window,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: gpui::Hsla,
+    ) {
+        let mut builder = gpui::PathBuilder::fill();
+        builder.move_to(point(px(x), px(y)));
+        builder.line_to(point(px(x + width), px(y)));
+        builder.line_to(point(px(x + width), px(y + height)));
+        builder.line_to(point(px(x), px(y + height)));
+        builder.close();
+
+        if let Ok(path) = builder.build() {
+            window.paint_path(path, color);
+        }
     }
 
     // ── Feature rendering delegation ──────────────────────────────────────
@@ -293,19 +287,9 @@ impl NodeGraphRenderer {
         )
     }
 
-    /// Snaps a position to the appropriate grid size based on zoom level
-    pub fn snap_to_grid(pos: Point<f32>, zoom_level: f32) -> Point<f32> {
-        // Choose grid size based on zoom level
-        // Use finer grids when zoomed in, coarser grids when zoomed out
-        let grid_size = if zoom_level >= 1.5 {
-            50.0  // Fine grid
-        } else if zoom_level >= 0.5 {
-            50.0  // Fine grid
-        } else if zoom_level >= 0.3 {
-            200.0 // Medium grid
-        } else {
-            1000.0 // Coarse grid
-        };
+    /// Snaps a position to the fixed 10px graph grid.
+    pub fn snap_to_grid(pos: Point<f32>, _zoom_level: f32) -> Point<f32> {
+        let grid_size = 10.0;
 
         Point::new(
             (pos.x / grid_size).round() * grid_size,

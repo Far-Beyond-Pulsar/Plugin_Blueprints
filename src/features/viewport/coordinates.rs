@@ -120,33 +120,16 @@ pub fn graph_to_screen_pos(graph_pos: Point<f32>, graph: &BlueprintGraph) -> Poi
 // Grid Snapping
 // ============================================================================
 
-/// Snaps a position to the appropriate grid size based on zoom level
-///
-/// Uses different grid sizes depending on zoom level:
-/// - Fine grid (50px): zoom >= 0.5
-/// - Medium grid (200px): 0.3 <= zoom < 0.5
-/// - Coarse grid (1000px): zoom < 0.3
-///
-/// This creates an adaptive grid that feels natural at all zoom levels.
+/// Snaps a position to the fixed 10px graph grid.
 ///
 /// # Arguments
 /// * `pos` - Position to snap to grid
-/// * `zoom_level` - Current zoom level (affects grid size)
+/// * `zoom_level` - Unused; retained for API compatibility
 ///
 /// # Returns
 /// Position snapped to the nearest grid point
-pub fn snap_to_grid(pos: Point<f32>, zoom_level: f32) -> Point<f32> {
-    // Choose grid size based on zoom level
-    // Use finer grids when zoomed in, coarser grids when zoomed out
-    let grid_size = if zoom_level >= 1.5 {
-        50.0  // Fine grid
-    } else if zoom_level >= 0.5 {
-        50.0  // Fine grid
-    } else if zoom_level >= 0.3 {
-        200.0 // Medium grid
-    } else {
-        1000.0 // Coarse grid
-    };
+pub fn snap_to_grid(pos: Point<f32>, _zoom_level: f32) -> Point<f32> {
+    let grid_size = 10.0;
 
     Point::new(
         (pos.x / grid_size).round() * grid_size,
@@ -274,21 +257,18 @@ mod tests {
 
     #[test]
     fn test_snap_to_grid() {
-        // Fine grid at high zoom
         let pos = Point::new(123.0, 456.0);
         let snapped = snap_to_grid(pos, 2.0);
-        assert_eq!(snapped.x, 100.0);
-        assert_eq!(snapped.y, 450.0);
+        assert_eq!(snapped.x, 120.0);
+        assert_eq!(snapped.y, 460.0);
 
-        // Medium grid at mid zoom
         let snapped = snap_to_grid(pos, 0.4);
-        assert_eq!(snapped.x, 200.0);
-        assert_eq!(snapped.y, 400.0);
+        assert_eq!(snapped.x, 120.0);
+        assert_eq!(snapped.y, 460.0);
 
-        // Coarse grid at low zoom
         let snapped = snap_to_grid(pos, 0.2);
-        assert_eq!(snapped.x, 0.0);
-        assert_eq!(snapped.y, 0.0);
+        assert_eq!(snapped.x, 120.0);
+        assert_eq!(snapped.y, 460.0);
     }
 
     #[test]

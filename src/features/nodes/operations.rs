@@ -5,10 +5,12 @@
 use gpui::*;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::core::types::BlueprintNode;
+use crate::rendering::graph::NodeGraphRenderer;
 
 impl BlueprintEditorPanel {
     /// Add a node to the graph
-    pub fn add_node(&mut self, node: BlueprintNode, cx: &mut Context<Self>) {
+    pub fn add_node(&mut self, mut node: BlueprintNode, cx: &mut Context<Self>) {
+        node.position = NodeGraphRenderer::snap_to_grid(node.position, self.graph.zoom_level);
         tracing::info!("Adding node: {} at position {:?}", node.title, node.position);
         self.graph.nodes.push(node);
 
@@ -27,8 +29,7 @@ impl BlueprintEditorPanel {
             new_node.position.x += 20.0;
             new_node.position.y += 20.0;
             new_node.is_selected = false;
-            self.graph.nodes.push(new_node);
-            cx.notify();
+            self.add_node(new_node, cx);
         }
     }
 
@@ -59,16 +60,11 @@ impl BlueprintEditorPanel {
             node.position.x += 30.0;
             node.position.y += 30.0;
             node.is_selected = false;
-            self.graph.nodes.push(node);
-
-            if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-                tab.is_dirty = true;
-            }
+            self.add_node(node, cx);
             tracing::info!("Pasted node from clipboard");
         } else {
             tracing::info!("Paste requested with empty clipboard");
         }
-        cx.notify();
     }
 
     /// Start dragging a node
@@ -104,10 +100,11 @@ impl BlueprintEditorPanel {
     /// Update drag position
     pub fn update_drag(&mut self, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
         if let Some(dragging_id) = &self.dragging_node.clone() {
-            let new_position = Point::new(
+            let raw_position = Point::new(
                 mouse_pos.x - self.drag_offset.x,
                 mouse_pos.y - self.drag_offset.y
             );
+            let new_position = NodeGraphRenderer::snap_to_grid(raw_position, self.graph.zoom_level);
 
             if let Some(initial_pos) = self.initial_drag_positions.get(dragging_id) {
                 let delta = Point::new(
@@ -118,10 +115,10 @@ impl BlueprintEditorPanel {
                 // Move all nodes that were selected when dragging started
                 for (node_id, initial_position) in &self.initial_drag_positions {
                     if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *node_id) {
-                        node.position = Point::new(
+                        node.position = NodeGraphRenderer::snap_to_grid(Point::new(
                             initial_position.x + delta.x,
                             initial_position.y + delta.y
-                        );
+                        ), self.graph.zoom_level);
                     }
                 }
             }
