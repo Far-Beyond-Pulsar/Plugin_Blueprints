@@ -28,11 +28,14 @@ impl NodeGraphRenderer {
     /// Main render method that orchestrates all graph rendering
     pub fn render(
         panel: &mut BlueprintEditorPanel,
+        view_id: &str,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         let focus_handle = panel.focus_handle().clone();
         let graph_id = "blueprint-graph";
         let panel_entity = cx.entity().clone();
+
+        let view_id = view_id.to_string();
 
         div()
             .size_full()
@@ -48,6 +51,7 @@ impl NodeGraphRenderer {
             .key_context("BlueprintGraph")
             .on_children_prepainted({
                 let panel_entity = panel_entity.clone();
+                let view_id = view_id.clone();
                 move |children_bounds, _window, cx| {
                     // children_bounds are in WINDOW coordinates!
                     // Calculate the bounding box of all children to get our element's window-relative bounds
@@ -72,7 +76,9 @@ impl NodeGraphRenderer {
 
                         // Store the graph element's bounds derived from children (which are in window coords)
                         panel_entity.update(cx, |panel, _cx| {
-                            panel.graph_element_bounds = Some(gpui::Bounds { origin, size });
+                            let bounds = gpui::Bounds { origin, size };
+                            panel.graph_element_bounds = Some(bounds);
+                            panel.graph_element_bounds_by_view.insert(view_id.clone(), bounds);
                         });
                     }
                 }
@@ -98,7 +104,7 @@ impl NodeGraphRenderer {
             .child(Self::render_comments(panel, cx))
             .child(Self::render_connections(panel, cx))
             .child(Self::render_nodes(panel, cx))
-            .child(crate::rendering::overlay::render_selection_box(panel, cx))
+            .child(crate::rendering::overlay::render_selection_box(panel, &view_id, cx))
             .child(crate::rendering::overlay::render_viewport_bounds_debug(panel, cx))
             .when(panel.show_debug_overlay, |this| {
                 this.child(crate::rendering::overlay::render_debug_overlay(panel, cx))
@@ -113,23 +119,23 @@ impl NodeGraphRenderer {
             // Attach all input handlers from rendering::input module
             .on_mouse_down(
                 gpui::MouseButton::Right,
-                crate::rendering::input::on_mouse_down_right(cx),
+                crate::rendering::input::on_mouse_down_right(view_id.clone(), cx),
             )
             .on_mouse_down(
                 gpui::MouseButton::Left,
-                crate::rendering::input::on_mouse_down_left(cx),
+                crate::rendering::input::on_mouse_down_left(view_id.clone(), cx),
             )
-            .on_mouse_move(crate::rendering::input::on_mouse_move(cx))
+            .on_mouse_move(crate::rendering::input::on_mouse_move(view_id.clone(), cx))
             .on_mouse_up(
                 gpui::MouseButton::Left,
-                crate::rendering::input::on_mouse_up_left(cx),
+                crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
             )
             .on_mouse_up(
                 gpui::MouseButton::Right,
-                crate::rendering::input::on_mouse_up_right(cx),
+                crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
             )
-            .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(cx))
-            .on_key_down(crate::rendering::input::on_key_down(cx))
+            .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(view_id.clone(), cx))
+            .on_key_down(crate::rendering::input::on_key_down(view_id, cx))
     }
 
     pub fn render_grid_background(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
@@ -258,7 +264,25 @@ impl NodeGraphRenderer {
     /// Mouse events from GPUI are relative to window origin.
     /// We already have the graph element's bounds captured during events.
     /// Simple math: element_pos = window_pos - element_origin
+    pub fn window_to_graph_element_pos_for_view(
+        window_pos: Point<Pixels>,
+        panel: &BlueprintEditorPanel,
+        view_id: &str,
+    ) -> Point<Pixels> {
+        if let Some(bounds) = panel.graph_element_bounds_by_view.get(view_id) {
+            Point::new(window_pos.x - bounds.origin.x, window_pos.y - bounds.origin.y)
+        } else {
+            window_pos
+        }
+    }
+
     pub fn window_to_graph_element_pos(window_pos: Point<Pixels>, panel: &BlueprintEditorPanel) -> Point<Pixels> {
+        if let Some(view_id) = panel.interaction_view_id.as_ref() {
+            if let Some(bounds) = panel.graph_element_bounds_by_view.get(view_id) {
+                return Point::new(window_pos.x - bounds.origin.x, window_pos.y - bounds.origin.y);
+            }
+        }
+
         if let Some(bounds) = &panel.graph_element_bounds {
             // Direct subtraction: mouse relative to element = mouse relative to window - element origin relative to window
             Point::new(

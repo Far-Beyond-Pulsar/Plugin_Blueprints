@@ -14,8 +14,13 @@ use super::graph::NodeGraphRenderer;
 /// Render the selection box during drag-select
 pub fn render_selection_box(
     panel: &BlueprintEditorPanel,
+    view_id: &str,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl IntoElement {
+    if panel.interaction_view_id.as_deref() != Some(view_id) {
+        return div().into_any_element();
+    }
+
     if let (Some(start), Some(end)) = (panel.selection_start, panel.selection_end) {
         // Convert selection bounds to screen coordinates
         let start_screen = NodeGraphRenderer::graph_to_screen_pos(start, &panel.graph);

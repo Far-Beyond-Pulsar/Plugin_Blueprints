@@ -336,7 +336,7 @@ impl Render for GraphCanvasPanel {
                 .size_full()
                 .child(editor.update(cx, |editor, cx| {
                     editor.ensure_active_graph_panel_state(&self.tab_id);
-                    NodeGraphRenderer::render(editor, cx)
+                    NodeGraphRenderer::render(editor, &self.tab_id, cx)
                 }))
         } else {
             div().child("Editor not available")

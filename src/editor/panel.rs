@@ -65,6 +65,8 @@ pub struct BlueprintEditorPanel {
 
     // Coordinate conversion
     pub graph_element_bounds: Option<Bounds<Pixels>>,
+    pub graph_element_bounds_by_view: HashMap<String, Bounds<Pixels>>,
+    pub interaction_view_id: Option<String>,
 
     // Variables system
     pub class_variables: Vec<ClassVariable>,
@@ -252,6 +254,8 @@ impl BlueprintEditorPanel {
             last_click_time: None,
             last_click_pos: None,
             graph_element_bounds: None,
+            graph_element_bounds_by_view: HashMap::new(),
+            interaction_view_id: None,
             class_variables: Vec::new(),
             is_creating_variable: false,
             variable_name_input: cx.new(|cx| {

@@ -14,14 +14,16 @@ use super::graph::NodeGraphRenderer;
 
 /// Create mouse down (right button) handler for the graph canvas
 pub fn on_mouse_down_right(
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
             // Convert window coordinates to element coordinates
-            let element_pos = NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
+            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
             let mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
+            panel.interaction_view_id = Some(view_id.clone());
 
             // Store right-click start position for gesture detection
             if panel.dragging_connection.is_none() && panel.dragging_node.is_none() {
@@ -34,17 +36,19 @@ pub fn on_mouse_down_right(
 
 /// Create mouse down (left button) handler for the graph canvas
 pub fn on_mouse_down_left(
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
+        panel.interaction_view_id = Some(view_id.clone());
         // Debug: Print raw event position and calculated offset
         tracing::info!("[MOUSE] Raw window position: x={}, y={}", event.position.x.as_f32(), event.position.y.as_f32());
-        tracing::info!("[MOUSE] Stored element bounds: {:?}", panel.graph_element_bounds);
+        tracing::info!("[MOUSE] Stored element bounds: {:?}", panel.graph_element_bounds_by_view.get(&view_id));
 
         // Convert window-relative coordinates to element-relative coordinates
-        let element_pos = NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
+        let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
         tracing::info!("[MOUSE] Calculated element-relative position: x={}, y={}", element_pos.x.as_f32(), element_pos.y.as_f32());
 
         // Convert element coordinates to graph coordinates
@@ -99,13 +103,18 @@ pub fn on_mouse_down_left(
 
 /// Create mouse move handler for the graph canvas
 pub fn on_mouse_move(
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseMoveEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &MouseMoveEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
+            if panel.interaction_view_id.as_deref() != Some(view_id.as_str()) {
+                return;
+            }
+
             // Convert window coordinates to element coordinates
-            let element_pos = NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
+            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
             let mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
 
             // Check if right-click drag should start panning
@@ -144,11 +153,16 @@ pub fn on_mouse_move(
 
 /// Create mouse up (left button) handler for the graph canvas
 pub fn on_mouse_up_left(
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseUpEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &MouseUpEvent, window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
+            if panel.interaction_view_id.as_deref() != Some(view_id.as_str()) {
+                return;
+            }
+
             if panel.dragging_comment.is_some() {
                 panel.end_comment_drag(cx);
             } else if panel.resizing_comment.is_some() {
@@ -157,12 +171,12 @@ pub fn on_mouse_up_left(
                 panel.end_drag(cx);
             } else if panel.dragging_variable.is_some() {
                 // Variable dropped on canvas - show Get/Set context menu
-                let element_pos = NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
+                let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
                 let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
                 panel.finish_dragging_variable(graph_pos, cx);
             } else if panel.dragging_connection.is_some() {
                 // Show node creation menu when dropping connection on empty space
-                let element_pos = NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
+                let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
                 let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
                 panel.show_node_picker(graph_pos, window, cx);
                 panel.cancel_connection_drag(cx);
@@ -172,17 +186,24 @@ pub fn on_mouse_up_left(
             } else if panel.is_panning() {
                 panel.end_panning(cx);
             }
+
+            panel.interaction_view_id = None;
         });
     }
 }
 
 /// Create mouse up (right button) handler for the graph canvas
 pub fn on_mouse_up_right(
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseUpEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |_event: &MouseUpEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
+            if panel.interaction_view_id.as_deref() != Some(view_id.as_str()) {
+                return;
+            }
+
             // Match old behavior: always end panning on RMB release.
             if panel.is_panning() {
                 panel.end_panning(cx);
@@ -190,17 +211,20 @@ pub fn on_mouse_up_right(
 
             // Always clear right-click gesture state.
             panel.right_click_start = None;
+            panel.interaction_view_id = None;
         });
     }
 }
 
 /// Create scroll wheel handler for the graph canvas
 pub fn on_scroll_wheel(
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&ScrollWheelEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &ScrollWheelEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
+            panel.interaction_view_id = Some(view_id.clone());
             // Zoom with scroll wheel
             let delta_y = match event.delta {
                 ScrollDelta::Pixels(p) => p.y.as_f32(),
@@ -209,7 +233,7 @@ pub fn on_scroll_wheel(
 
             // Perform zoom centered on the mouse
             // Convert to element coordinates first
-            let element_pos = NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
+            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
             panel.handle_zoom(delta_y, element_pos, cx);
         });
     }
@@ -217,6 +241,7 @@ pub fn on_scroll_wheel(
 
 /// Create key down handler for the graph canvas
 pub fn on_key_down(
+    _view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&KeyDownEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
