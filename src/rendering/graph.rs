@@ -130,7 +130,15 @@ impl NodeGraphRenderer {
                 gpui::MouseButton::Left,
                 crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
             )
+            .on_mouse_up_out(
+                gpui::MouseButton::Left,
+                crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
+            )
             .on_mouse_up(
+                gpui::MouseButton::Right,
+                crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
+            )
+            .on_mouse_up_out(
                 gpui::MouseButton::Right,
                 crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
             )

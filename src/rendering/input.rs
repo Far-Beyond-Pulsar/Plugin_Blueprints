@@ -38,7 +38,7 @@ pub fn on_mouse_down_right(
             // Convert window coordinates to element coordinates
             let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
             let mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
-            panel.interaction_view_id = Some(view_id.clone());
+            panel.activate_interaction_view(&view_id);
 
             // Store right-click start position for gesture detection
             if panel.dragging_connection.is_none() && panel.dragging_node.is_none() {
@@ -57,7 +57,7 @@ pub fn on_mouse_down_left(
     let entity = cx.entity().clone();
     move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
-        panel.interaction_view_id = Some(view_id.clone());
+        panel.activate_interaction_view(&view_id);
         // Debug: Print raw event position and calculated offset
         tracing::info!("[MOUSE] Raw window position: x={}, y={}", event.position.x.as_f32(), event.position.y.as_f32());
         tracing::info!("[MOUSE] Stored element bounds: {:?}", panel.graph_element_bounds_by_view.get(&view_id));
@@ -132,13 +132,11 @@ pub fn on_mouse_move(
                 return;
             }
 
+            panel.activate_interaction_view(&view_id);
+
             // Convert window coordinates to element coordinates
             let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
             let mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
-
-            if panel.interaction_view_id.is_none() {
-                panel.interaction_view_id = Some(view_id.clone());
-            }
 
             // Check if right-click drag should start panning
             if let Some(right_start) = panel.right_click_start {
@@ -190,6 +188,8 @@ pub fn on_mouse_up_left(
                 return;
             }
 
+            panel.activate_interaction_view(&view_id);
+
             if panel.dragging_comment.is_some() {
                 panel.end_comment_drag(cx);
             } else if panel.resizing_comment.is_some() {
@@ -214,7 +214,7 @@ pub fn on_mouse_up_left(
                 panel.end_panning(cx);
             }
 
-            panel.interaction_view_id = None;
+            panel.clear_interaction_view_owner();
         });
     }
 }
@@ -225,15 +225,17 @@ pub fn on_mouse_up_right(
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseUpEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
-    move |_event: &MouseUpEvent, _window: &mut Window, cx: &mut App| {
+    move |event: &MouseUpEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
             let should_process = match panel.interaction_view_id.as_deref() {
                 Some(owner) => owner == view_id,
-                None => true,
+                None => point_in_view_bounds(panel, &view_id, event.position),
             };
             if !should_process {
                 return;
             }
+
+            panel.activate_interaction_view(&view_id);
 
             // Match old behavior: always end panning on RMB release.
             if panel.is_panning() {
@@ -242,7 +244,7 @@ pub fn on_mouse_up_right(
 
             // Always clear right-click gesture state.
             panel.right_click_start = None;
-            panel.interaction_view_id = None;
+            panel.clear_interaction_view_owner();
         });
     }
 }
@@ -255,7 +257,7 @@ pub fn on_scroll_wheel(
     let entity = cx.entity().clone();
     move |event: &ScrollWheelEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
-            panel.interaction_view_id = Some(view_id.clone());
+            panel.activate_interaction_view(&view_id);
             // Zoom with scroll wheel
             let delta_y = match event.delta {
                 ScrollDelta::Pixels(p) => p.y.as_f32(),
