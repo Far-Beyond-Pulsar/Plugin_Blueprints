@@ -283,6 +283,20 @@ impl NodeGraphRenderer {
             }
         }
 
+        // If no interaction owner is set yet (common when child handlers stop propagation),
+        // resolve against whichever graph view currently contains the pointer.
+        let wx = window_pos.x.as_f32();
+        let wy = window_pos.y.as_f32();
+        for bounds in panel.graph_element_bounds_by_view.values() {
+            let left = bounds.origin.x.as_f32();
+            let top = bounds.origin.y.as_f32();
+            let right = left + bounds.size.width.as_f32();
+            let bottom = top + bounds.size.height.as_f32();
+            if wx >= left && wx <= right && wy >= top && wy <= bottom {
+                return Point::new(window_pos.x - bounds.origin.x, window_pos.y - bounds.origin.y);
+            }
+        }
+
         if let Some(bounds) = &panel.graph_element_bounds {
             // Direct subtraction: mouse relative to element = mouse relative to window - element origin relative to window
             Point::new(

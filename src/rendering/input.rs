@@ -12,6 +12,21 @@ use gpui::*;
 use crate::editor::panel::BlueprintEditorPanel;
 use super::graph::NodeGraphRenderer;
 
+fn point_in_view_bounds(panel: &BlueprintEditorPanel, view_id: &str, window_pos: Point<Pixels>) -> bool {
+    let Some(bounds) = panel.graph_element_bounds_by_view.get(view_id) else {
+        return false;
+    };
+
+    let wx = window_pos.x.as_f32();
+    let wy = window_pos.y.as_f32();
+    let left = bounds.origin.x.as_f32();
+    let top = bounds.origin.y.as_f32();
+    let right = left + bounds.size.width.as_f32();
+    let bottom = top + bounds.size.height.as_f32();
+
+    wx >= left && wx <= right && wy >= top && wy <= bottom
+}
+
 /// Create mouse down (right button) handler for the graph canvas
 pub fn on_mouse_down_right(
     view_id: String,
@@ -109,13 +124,21 @@ pub fn on_mouse_move(
     let entity = cx.entity().clone();
     move |event: &MouseMoveEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
-            if panel.interaction_view_id.as_deref() != Some(view_id.as_str()) {
+            let should_process = match panel.interaction_view_id.as_deref() {
+                Some(owner) => owner == view_id,
+                None => point_in_view_bounds(panel, &view_id, event.position),
+            };
+            if !should_process {
                 return;
             }
 
             // Convert window coordinates to element coordinates
             let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
             let mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
+
+            if panel.interaction_view_id.is_none() {
+                panel.interaction_view_id = Some(view_id.clone());
+            }
 
             // Check if right-click drag should start panning
             if let Some(right_start) = panel.right_click_start {
@@ -159,7 +182,11 @@ pub fn on_mouse_up_left(
     let entity = cx.entity().clone();
     move |event: &MouseUpEvent, window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
-            if panel.interaction_view_id.as_deref() != Some(view_id.as_str()) {
+            let should_process = match panel.interaction_view_id.as_deref() {
+                Some(owner) => owner == view_id,
+                None => point_in_view_bounds(panel, &view_id, event.position),
+            };
+            if !should_process {
                 return;
             }
 
@@ -200,7 +227,11 @@ pub fn on_mouse_up_right(
     let entity = cx.entity().clone();
     move |_event: &MouseUpEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
-            if panel.interaction_view_id.as_deref() != Some(view_id.as_str()) {
+            let should_process = match panel.interaction_view_id.as_deref() {
+                Some(owner) => owner == view_id,
+                None => true,
+            };
+            if !should_process {
                 return;
             }
 
