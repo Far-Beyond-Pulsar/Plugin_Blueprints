@@ -107,18 +107,25 @@ fn render_blueprint_node(
     let screen = NodeGraphRenderer::graph_to_screen_pos(node.position, &panel.graph);
     let node_id = node.id.clone();
     let is_dragging = panel.dragging_node.as_ref() == Some(&node.id);
-    let scaled_width = node.size.width * z;
+    // Width and height both snapped to the grid interval so nodes align with
+    // grid snapping regardless of zoom level.
+    let scaled_width  = layout::snap_to_grid(node.size.width) * z;
+    let max_rows      = node.inputs.len().max(node.outputs.len()).max(1);
+    let scaled_height = layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)) * z;
 
     // Style
-    let body_bg          = style::body_bg();
-    let title_bg         = style::title_bg(node_color);
-    let border_color     = if node.is_selected { gpui::white() } else { style::idle_border() };
-    let corner_r         = style::corner_radius(z);
-    let header_shadow_grad = style::header_shadow_gradient();
+    let body_bg      = style::body_bg();
+    let title_bg     = style::title_bg(node_color);
+    let border_color = if node.is_selected {
+        style::selected_border(node_color)
+    } else {
+        style::idle_border()
+    };
+    let corner_r     = style::corner_radius(z);
 
     // Layout constants — MUST match calculate_pin_position.
-    const HEADER_H: f32 = 27.0;
-    const SEP_H: f32    =  1.0;
+    const HEADER_H: f32 = layout::HEADER_H;
+    const SEP_H: f32    = layout::SEP_H;
 
     // Node card
     v_flex()
@@ -126,6 +133,7 @@ fn render_blueprint_node(
         .left(px(screen.x))
         .top(px(screen.y))
         .w(px(scaled_width))
+        .h(px(scaled_height))
         .bg(body_bg)
         .rounded(corner_r)
         .overflow_hidden()
@@ -150,12 +158,6 @@ fn render_blueprint_node(
                 })
                 .bg(title_bg)
                 .child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .bg(header_shadow_grad)
-                )
-                .child(
                     h_flex()
                         .w_full()
                         .h_full()
@@ -166,16 +168,12 @@ fn render_blueprint_node(
                         .child(
                             div()
                                 .text_size(px(12.0 * z))
-                                .text_color(gpui::Hsla { h: 0.0, s: 0.0, l: 0.92, a: 1.0 })
+                                .text_color(gpui::Hsla { h: 0.0, s: 0.0, l: 1.0, a: 0.85 })
                                 .child(node.icon.clone()),
                         )
                         .child(
                             div()
-                                .px(px(5.0 * z))
-                                .py(px(1.5 * z))
-                                .rounded(px(3.0 * z))
-                                .bg(style::title_pill_bg())
-                                .text_size(px(14.0 * z))
+                                .text_size(px(13.0 * z))
                                 .font_semibold()
                                 .text_color(gpui::white())
                                 .child(node.title.clone()),
@@ -247,12 +245,12 @@ fn render_blueprint_node(
                 ),
         )
 
-        // Separator
+        // Accent separator — thin bright line derived from node color
         .child(
             div()
                 .w_full()
                 .h(px(SEP_H * z))
-                .bg(style::separator_bg()),
+                .bg(style::accent_separator(node_color)),
         )
 
         // Pin body
@@ -416,10 +414,7 @@ fn render_node_pins(
     panel: &BlueprintEditorPanel,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl IntoElement {
-    const BODY_PAD: f32  = 8.0;
-    const PIN_ROW_H: f32 = 16.0;
-    const PIN_GAP: f32   = 4.0;
-    const PIN_SIZE: f32  = 12.0;
+    use crate::rendering::layout as L;
 
     let label_color = style::label_color();
     let corner_r = style::corner_radius(z);
@@ -427,23 +422,23 @@ fn render_node_pins(
 
     div()
         .w_full()
-        .bg(gpui::Hsla { h: 0.0, s: 0.0, l: 0.08, a: 1.0 })
+        .bg(style::body_bg())
         .corner_radii(gpui::Corners {
             top_left: px(0.0),
             top_right: px(0.0),
             bottom_right: corner_r,
             bottom_left: corner_r,
         })
-        .px(px(BODY_PAD * z))
-        .pt(px(BODY_PAD * z))
-        .pb(px(BODY_PAD * z))
+        .px(px(L::BODY_PAD * z))
+        .pt(px(L::BODY_PAD * z))
+        .pb(px(L::BODY_PAD * z))
         .flex()
         .flex_col()
-        .gap(px(PIN_GAP * z))
+        .gap(px(L::PIN_GAP * z))
         .children((0..max_rows).map(|i| {
             div()
                 .w_full()
-                .h(px(PIN_ROW_H * z))
+                .h(px(L::PIN_ROW_H * z))
                 .flex()
                 .items_center()
                 // Left: input pin + label
@@ -455,7 +450,7 @@ fn render_node_pins(
                         .child(if let Some(pin) = node.inputs.get(i) {
                             render_pin(pin, true, &node.id, panel, cx).into_any_element()
                         } else {
-                            div().w(px(PIN_SIZE * z)).h(px(PIN_SIZE * z)).into_any_element()
+                            div().w(px(L::PIN_SIZE * z)).h(px(L::PIN_SIZE * z)).into_any_element()
                         })
                         .child(if let Some(pin) = node.inputs.get(i) {
                             if !pin.name.is_empty() {
@@ -495,7 +490,7 @@ fn render_node_pins(
                         .child(if let Some(pin) = node.outputs.get(i) {
                             render_pin(pin, false, &node.id, panel, cx).into_any_element()
                         } else {
-                            div().w(px(PIN_SIZE * z)).h(px(PIN_SIZE * z)).into_any_element()
+                            div().w(px(L::PIN_SIZE * z)).h(px(L::PIN_SIZE * z)).into_any_element()
                         })
                 })
         }))
