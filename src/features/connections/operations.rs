@@ -84,10 +84,13 @@ impl BlueprintEditorPanel {
             // Validate connection
             if let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id) {
                 if let Some(pin) = node.inputs.iter().find(|p| p.id == pin_id) {
+                    // Clone pin data type before mutable operations
+                    let pin_data_type = pin.data_type.clone();
+
                     // Check compatibility and not same node
                     if super::compatibility::are_types_compatible(
                         &drag.source_pin_type,
-                        &pin.data_type,
+                        &pin_data_type,
                     ) && drag.source_node != node_id
                     {
                         // Check if source or target is a reroute node
@@ -117,7 +120,7 @@ impl BlueprintEditorPanel {
 
                         if drag.source_pin_type == GraphDataType::Execution
                             || target_is_reroute
-                            || pin.data_type != GraphDataType::Execution
+                            || pin_data_type != GraphDataType::Execution
                         {
                             // Execution targets, reroute inputs, or data inputs: single connection to target
                             tracing::info!(
@@ -143,7 +146,7 @@ impl BlueprintEditorPanel {
                         );
 
                         // Create new connection
-                        let connection_type = if pin.data_type == GraphDataType::Execution {
+                        let connection_type = if pin_data_type == GraphDataType::Execution {
                             ui::graph::ConnectionType::Execution
                         } else {
                             ui::graph::ConnectionType::Data
@@ -157,7 +160,12 @@ impl BlueprintEditorPanel {
                             target_pin: pin_id.clone(),
                             connection_type,
                         };
-                        self.graph.connections.push(connection);
+
+                        // Create and execute undo command
+                        let mut cmd = crate::features::undo::AddConnectionCommand::new(connection.clone());
+                        cmd.execute(self, cx);
+                        self.push_undo_command(crate::features::undo::Command::AddConnection(cmd));
+
                         tracing::info!("Connection created successfully!");
 
                         // Propagate types through reroute nodes
@@ -166,7 +174,7 @@ impl BlueprintEditorPanel {
                         } else if source_is_reroute {
                             self.propagate_reroute_types(
                                 drag.source_node.clone(),
-                                pin.data_type.clone(),
+                                pin_data_type,
                                 cx,
                             );
                         }
@@ -182,11 +190,33 @@ impl BlueprintEditorPanel {
 
     /// Disconnect a pin
     pub fn disconnect_pin(&mut self, node_id: String, pin_id: String, cx: &mut Context<Self>) {
-        self.graph.connections.retain(|conn| {
-            !(conn.source_node == node_id && conn.source_pin == pin_id)
-                && !(conn.target_node == node_id && conn.target_pin == pin_id)
-        });
-        cx.notify();
+        // Collect connections to delete
+        let connections_to_delete: Vec<_> = self.graph.connections
+            .iter()
+            .filter(|conn| {
+                (conn.source_node == node_id && conn.source_pin == pin_id)
+                    || (conn.target_node == node_id && conn.target_pin == pin_id)
+            })
+            .cloned()
+            .collect();
+
+        if !connections_to_delete.is_empty() {
+            // Create batch command if multiple connections
+            if connections_to_delete.len() == 1 {
+                let mut cmd = crate::features::undo::DeleteConnectionCommand::new(connections_to_delete[0].clone());
+                cmd.execute(self, cx);
+                self.push_undo_command(crate::features::undo::Command::DeleteConnection(cmd));
+            } else {
+                let mut batch = crate::features::undo::BatchCommand::new("Disconnect pin".to_string());
+                for connection in connections_to_delete {
+                    batch.add_command(crate::features::undo::Command::DeleteConnection(
+                        crate::features::undo::DeleteConnectionCommand::new(connection)
+                    ));
+                }
+                batch.execute(self, cx);
+                self.push_undo_command(crate::features::undo::Command::Batch(batch));
+            }
+        }
     }
 
     /// Propagate types through connected reroute nodes

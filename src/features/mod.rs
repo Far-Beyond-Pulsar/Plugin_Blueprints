@@ -12,5 +12,6 @@ pub mod compilation;
 pub mod connections;
 pub mod macros;
 pub mod nodes;
+pub mod undo;
 pub mod variables;
 pub mod viewport;

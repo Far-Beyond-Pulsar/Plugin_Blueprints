@@ -121,6 +121,9 @@ pub struct BlueprintEditorPanel {
     pub dragging_tab: Option<TabDragInfo>,
 
     pub is_dirty: bool, // Whether there are unsaved changes
+
+    // Undo/redo system
+    pub undo_manager: crate::features::undo::UndoManager,
 }
 
 /// Information about a tab being dragged
@@ -372,6 +375,7 @@ impl BlueprintEditorPanel {
             right_tab: 0,
             dragging_tab: None,
             is_dirty: false,
+            undo_manager: crate::features::undo::UndoManager::new(),
         }
     }
 
@@ -1038,9 +1042,12 @@ impl BlueprintEditorPanel {
     ) {
         let new_comment = BlueprintComment::new(self.snap_comment_position(position), window, cx);
 
-        self.graph.comments.push(new_comment);
+        // Create and execute undo command
+        let mut cmd = crate::features::undo::AddCommentCommand::new(new_comment.clone());
+        cmd.execute(self, cx);
+        self.push_undo_command(crate::features::undo::Command::AddComment(cmd));
+
         self.comment_color_bindings_dirty = true;
-        cx.notify();
     }
 
     // ============================================================================

@@ -192,26 +192,41 @@ impl BlueprintEditorPanel {
             comment_count
         );
 
-        // Delete selected nodes
-        self.graph
-            .nodes
-            .retain(|node| !self.graph.selected_nodes.contains(&node.id));
+        // Create a batch command for multiple deletions
+        let mut batch = crate::features::undo::BatchCommand::new(
+            format!("Delete {} entities", node_count + comment_count)
+        );
 
-        // Delete connections involving deleted nodes
-        self.graph.connections.retain(|conn| {
-            !self.graph.selected_nodes.contains(&conn.source_node)
-                && !self.graph.selected_nodes.contains(&conn.target_node)
-        });
+        // Add delete commands for each selected node
+        for node_id in &self.graph.selected_nodes.clone() {
+            if let Some(node) = self.graph.nodes.iter().find(|n| &n.id == node_id).cloned() {
+                let connections: Vec<_> = self.graph.connections
+                    .iter()
+                    .filter(|c| &c.source_node == node_id || &c.target_node == node_id)
+                    .cloned()
+                    .collect();
 
-        // Delete selected comments
-        self.graph
-            .comments
-            .retain(|comment| !self.graph.selected_comments.contains(&comment.id));
+                batch.add_command(crate::features::undo::Command::DeleteNode(
+                    crate::features::undo::DeleteNodeCommand::new(node, connections)
+                ));
+            }
+        }
+
+        // Add delete commands for each selected comment
+        for comment_id in &self.graph.selected_comments.clone() {
+            if let Some(comment) = self.graph.comments.iter().find(|c| &c.id == comment_id).cloned() {
+                batch.add_command(crate::features::undo::Command::DeleteComment(
+                    crate::features::undo::DeleteCommentCommand::new(comment)
+                ));
+            }
+        }
+
+        // Execute the batch command
+        batch.execute(self, cx);
+        self.push_undo_command(crate::features::undo::Command::Batch(batch));
 
         // Clear selection
         self.graph.selected_nodes.clear();
         self.graph.selected_comments.clear();
-
-        cx.notify();
     }
 }

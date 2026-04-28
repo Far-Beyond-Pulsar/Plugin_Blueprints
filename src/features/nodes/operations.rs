@@ -16,13 +16,16 @@ impl BlueprintEditorPanel {
             node.title,
             node.position
         );
-        self.graph.nodes.push(node);
+
+        // Create and execute undo command
+        let mut cmd = crate::features::undo::AddNodeCommand::new(node.clone());
+        cmd.execute(self, cx);
+        self.push_undo_command(crate::features::undo::Command::AddNode(cmd));
 
         // Mark tab as dirty
         if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
             tab.is_dirty = true;
         }
-        cx.notify();
     }
 
     /// Duplicate a node
@@ -39,12 +42,19 @@ impl BlueprintEditorPanel {
 
     /// Delete a node and its connections
     pub fn delete_node(&mut self, node_id: String, cx: &mut Context<Self>) {
-        self.graph.nodes.retain(|n| n.id != node_id);
-        self.graph
-            .connections
-            .retain(|conn| conn.source_node != node_id && conn.target_node != node_id);
-        self.graph.selected_nodes.retain(|id| *id != node_id);
-        cx.notify();
+        // Find the node and its connections before deleting
+        if let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id).cloned() {
+            let connections: Vec<_> = self.graph.connections
+                .iter()
+                .filter(|c| c.source_node == node_id || c.target_node == node_id)
+                .cloned()
+                .collect();
+
+            // Create and execute undo command
+            let mut cmd = crate::features::undo::DeleteNodeCommand::new(node, connections);
+            cmd.execute(self, cx);
+            self.push_undo_command(crate::features::undo::Command::DeleteNode(cmd));
+        }
     }
 
     /// Copy node into the in-memory clipboard
@@ -168,6 +178,36 @@ impl BlueprintEditorPanel {
 
     /// End drag operation
     pub fn end_drag(&mut self, cx: &mut Context<Self>) {
+        // Create move command for undo/redo
+        if !self.initial_drag_positions.is_empty() || !self.initial_comment_drag_positions.is_empty() {
+            let mut node_moves = Vec::new();
+            let mut comment_moves = Vec::new();
+
+            // Collect node moves
+            for (node_id, old_pos) in &self.initial_drag_positions {
+                if let Some(node) = self.graph.nodes.iter().find(|n| &n.id == node_id) {
+                    if node.position != *old_pos {
+                        node_moves.push((node_id.clone(), *old_pos, node.position));
+                    }
+                }
+            }
+
+            // Collect comment moves
+            for (comment_id, old_pos) in &self.initial_comment_drag_positions {
+                if let Some(comment) = self.graph.comments.iter().find(|c| &c.id == comment_id) {
+                    if comment.position != *old_pos {
+                        comment_moves.push((comment_id.clone(), *old_pos, comment.position));
+                    }
+                }
+            }
+
+            // Only push command if something actually moved
+            if !node_moves.is_empty() || !comment_moves.is_empty() {
+                let cmd = crate::features::undo::MoveEntitiesCommand::new(node_moves, comment_moves);
+                self.push_undo_command(crate::features::undo::Command::MoveEntities(cmd));
+            }
+        }
+
         // Update comment containment after drag
         for comment in self.graph.comments.iter_mut() {
             comment.update_contained_nodes(&self.graph.nodes);

@@ -395,6 +395,18 @@ pub fn on_key_down(
                 // Ctrl+V pastes entities from clipboard
                 println!("[KEYBIND] Ctrl+V pressed - attempting paste");
                 panel.paste_entities(window, cx);
+            } else if key_lower == "z" && event.keystroke.modifiers.control && event.keystroke.modifiers.shift {
+                // Ctrl+Shift+Z redoes the last undone action
+                println!("[KEYBIND] Ctrl+Shift+Z pressed - attempting redo");
+                panel.redo(cx);
+            } else if key_lower == "z" && event.keystroke.modifiers.control {
+                // Ctrl+Z undoes the last action
+                println!("[KEYBIND] Ctrl+Z pressed - attempting undo");
+                panel.undo(cx);
+            } else if key_lower == "y" && event.keystroke.modifiers.control {
+                // Ctrl+Y redoes the last undone action (alternative)
+                println!("[KEYBIND] Ctrl+Y pressed - attempting redo");
+                panel.redo(cx);
             } else {
                 // Log unhandled keys for debugging
                 if event.keystroke.modifiers.control {
