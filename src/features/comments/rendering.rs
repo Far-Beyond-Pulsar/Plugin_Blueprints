@@ -201,15 +201,7 @@ pub fn render_comment(
                                             &panel.graph,
                                         );
 
-                                        if let Some(comment) =
-                                            panel.graph.comments.iter().find(|c| c.id == comment_id)
-                                        {
-                                            panel.dragging_comment = Some(comment_id.clone());
-                                            panel.drag_offset = Point::new(
-                                                graph_pos.x - comment.position.x,
-                                                graph_pos.y - comment.position.y,
-                                            );
-                                        }
+                                        panel.start_comment_drag(comment_id.clone(), graph_pos, cx);
 
                                         let current_pos = Point::new(
                                             element_pos.x.as_f32(),
@@ -530,14 +522,8 @@ fn render_comment(
                                         let element_pos = Self::window_to_graph_element_pos(event.position, panel);
                                         let graph_pos = Self::screen_to_graph_pos(element_pos, &panel.graph);
 
-                                        // Calculate drag offset (same as node dragging)
-                                        if let Some(comment) = panel.graph.comments.iter().find(|c| c.id == comment_id) {
-                                            panel.dragging_comment = Some(comment_id.clone());
-                                            panel.drag_offset = Point::new(
-                                                graph_pos.x - comment.position.x,
-                                                graph_pos.y - comment.position.y,
-                                            );
-                                        }
+                                        // Start comment drag (stores initial positions for multi-select)
+                                        panel.start_comment_drag(comment_id.clone(), graph_pos, cx);
 
                                         // Update click tracking
                                         let current_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());

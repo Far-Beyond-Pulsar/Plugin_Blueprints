@@ -1,0 +1,217 @@
+//! Unified operations for graph entities (nodes and comments)
+
+use crate::core::graph_entity::{DragState, EntitySelection, GraphEntity};
+use crate::core::types::{BlueprintComment, BlueprintNode};
+use crate::editor::panel::BlueprintEditorPanel;
+use crate::rendering::graph::NodeGraphRenderer;
+use gpui::*;
+
+impl BlueprintEditorPanel {
+    /// Get all currently selected entities as a unified list
+    pub fn get_selected_entities(&self) -> Vec<EntitySelection> {
+        let mut selections = Vec::new();
+
+        for node_id in &self.graph.selected_nodes {
+            selections.push(EntitySelection::Node(node_id.clone()));
+        }
+
+        for comment_id in &self.graph.selected_comments {
+            selections.push(EntitySelection::Comment(comment_id.clone()));
+        }
+
+        selections
+    }
+
+    /// Start dragging any entity (unified for nodes and comments)
+    pub fn start_entity_drag(
+        &mut self,
+        dragged_entity: EntitySelection,
+        mouse_pos: Point<f32>,
+        _cx: &mut Context<Self>,
+    ) {
+        tracing::info!(
+            "[DRAG] Starting drag for {:?} at {:?}",
+            dragged_entity,
+            mouse_pos
+        );
+
+        // Clear previous drag state
+        self.initial_drag_positions.clear();
+        self.initial_comment_drag_positions.clear();
+
+        // Check if the dragged entity is selected
+        let is_selected = match &dragged_entity {
+            EntitySelection::Node(id) => self.graph.selected_nodes.contains(id),
+            EntitySelection::Comment(id) => self.graph.selected_comments.contains(id),
+        };
+
+        if is_selected {
+            // Multi-select drag: store all selected entities
+            let selections = self.get_selected_entities();
+            tracing::info!("[DRAG] Multi-select: dragging {} entities", selections.len());
+
+            for selection in selections {
+                match selection {
+                    EntitySelection::Node(ref id) => {
+                        if let Some(node) = self.graph.nodes.iter().find(|n| n.id() == id) {
+                            self.initial_drag_positions.insert(id.clone(), node.position());
+                        }
+                    }
+                    EntitySelection::Comment(ref id) => {
+                        if let Some(comment) = self.graph.comments.iter().find(|c| c.id() == id) {
+                            self.initial_comment_drag_positions
+                                .insert(id.clone(), comment.position());
+                        }
+                    }
+                }
+            }
+        } else {
+            // Single drag
+            match &dragged_entity {
+                EntitySelection::Node(id) => {
+                    if let Some(node) = self.graph.nodes.iter().find(|n| n.id() == id) {
+                        self.initial_drag_positions.insert(id.clone(), node.position());
+                    }
+                }
+                EntitySelection::Comment(id) => {
+                    if let Some(comment) = self.graph.comments.iter().find(|c| c.id() == id) {
+                        self.initial_comment_drag_positions
+                            .insert(id.clone(), comment.position());
+                    }
+                }
+            }
+        }
+
+        // Set drag offset
+        match &dragged_entity {
+            EntitySelection::Node(id) => {
+                if let Some(node) = self.graph.nodes.iter().find(|n| n.id() == id) {
+                    let pos = node.position();
+                    self.drag_offset = Point::new(mouse_pos.x - pos.x, mouse_pos.y - pos.y);
+                    self.dragging_node = Some(id.clone());
+                }
+            }
+            EntitySelection::Comment(id) => {
+                if let Some(comment) = self.graph.comments.iter().find(|c| c.id() == id) {
+                    let pos = comment.position();
+                    self.drag_offset = Point::new(mouse_pos.x - pos.x, mouse_pos.y - pos.y);
+                    self.dragging_comment = Some(id.clone());
+                }
+            }
+        }
+    }
+
+    /// Update entity drag (unified for all entity types)
+    pub fn update_entity_drag(&mut self, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
+        // Calculate new position
+        let raw_position = Point::new(
+            mouse_pos.x - self.drag_offset.x,
+            mouse_pos.y - self.drag_offset.y,
+        );
+
+        // Determine which entity is being dragged
+        let dragged_id = if let Some(node_id) = &self.dragging_node {
+            Some(EntitySelection::Node(node_id.clone()))
+        } else if let Some(comment_id) = &self.dragging_comment {
+            Some(EntitySelection::Comment(comment_id.clone()))
+        } else {
+            None
+        };
+
+        if let Some(dragged) = dragged_id {
+            // Get initial position of dragged entity
+            let initial_pos = match &dragged {
+                EntitySelection::Node(id) => self.initial_drag_positions.get(id).copied(),
+                EntitySelection::Comment(id) => {
+                    self.initial_comment_drag_positions.get(id).copied()
+                }
+            };
+
+            if let Some(initial_pos) = initial_pos {
+                // Calculate delta based on dragged entity type
+                let snapped_pos = match &dragged {
+                    EntitySelection::Node(_) => {
+                        NodeGraphRenderer::snap_to_grid(raw_position, self.graph.zoom_level)
+                    }
+                    EntitySelection::Comment(_) => self.snap_comment_position(raw_position),
+                };
+
+                let delta = Point::new(
+                    snapped_pos.x - initial_pos.x,
+                    snapped_pos.y - initial_pos.y,
+                );
+
+                // Move all nodes in the selection
+                for (node_id, initial_position) in &self.initial_drag_positions.clone() {
+                    if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id() == node_id) {
+                        let new_pos = Point::new(
+                            initial_position.x + delta.x,
+                            initial_position.y + delta.y,
+                        );
+                        node.set_position(NodeGraphRenderer::snap_to_grid(
+                            new_pos,
+                            self.graph.zoom_level,
+                        ));
+                    }
+                }
+
+                // Move all comments in the selection
+                for (comment_id, initial_position) in &self.initial_comment_drag_positions.clone()
+                {
+                    let new_pos = Point::new(
+                        initial_position.x + delta.x,
+                        initial_position.y + delta.y,
+                    );
+                    let snapped_pos = self.snap_comment_position(new_pos);
+
+                    if let Some(comment) =
+                        self.graph.comments.iter_mut().find(|c| c.id() == comment_id)
+                    {
+                        comment.set_position(snapped_pos);
+                    }
+                }
+
+                cx.notify();
+            }
+        }
+    }
+
+    /// Delete all selected entities (unified)
+    pub fn delete_selected_entities(&mut self, cx: &mut Context<Self>) {
+        let node_count = self.graph.selected_nodes.len();
+        let comment_count = self.graph.selected_comments.len();
+
+        if node_count == 0 && comment_count == 0 {
+            tracing::info!("[DELETE] No entities selected");
+            return;
+        }
+
+        tracing::info!(
+            "[DELETE] Deleting {} nodes, {} comments",
+            node_count,
+            comment_count
+        );
+
+        // Delete selected nodes
+        self.graph
+            .nodes
+            .retain(|node| !self.graph.selected_nodes.contains(&node.id));
+
+        // Delete connections involving deleted nodes
+        self.graph.connections.retain(|conn| {
+            !self.graph.selected_nodes.contains(&conn.source_node)
+                && !self.graph.selected_nodes.contains(&conn.target_node)
+        });
+
+        // Delete selected comments
+        self.graph
+            .comments
+            .retain(|comment| !self.graph.selected_comments.contains(&comment.id));
+
+        // Clear selection
+        self.graph.selected_nodes.clear();
+        self.graph.selected_comments.clear();
+
+        cx.notify();
+    }
+}

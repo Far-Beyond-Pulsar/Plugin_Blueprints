@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use ui::color_picker::ColorPickerState;
 use ui::graph::DataType;
 
+use crate::core::graph_entity::GraphEntity;
 use crate::rendering::layout;
 
 // ============================================================================
@@ -295,5 +296,45 @@ impl BlueprintNode {
             description: "Reroute node for organizing connections".to_string(),
             color: None,
         }
+    }
+}
+
+// ============================================================================
+// GraphEntity Trait Implementations
+// ============================================================================
+
+impl GraphEntity for BlueprintNode {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn position(&self) -> Point<f32> {
+        self.position
+    }
+
+    fn set_position(&mut self, pos: Point<f32>) {
+        self.position = pos;
+    }
+
+    fn size(&self) -> Size<f32> {
+        self.size
+    }
+}
+
+impl GraphEntity for BlueprintComment {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn position(&self) -> Point<f32> {
+        self.position
+    }
+
+    fn set_position(&mut self, pos: Point<f32>) {
+        self.position = pos;
+    }
+
+    fn size(&self) -> Size<f32> {
+        self.size
     }
 }

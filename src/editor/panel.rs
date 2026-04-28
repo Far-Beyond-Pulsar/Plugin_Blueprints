@@ -33,6 +33,7 @@ pub struct BlueprintEditorPanel {
     pub dragging_node: Option<String>,
     pub drag_offset: Point<f32>,
     pub initial_drag_positions: HashMap<String, Point<f32>>,
+    pub initial_comment_drag_positions: HashMap<String, Point<f32>>,
     pub node_clipboard: Option<BlueprintNode>,
 
     // Connection drag state
@@ -144,6 +145,7 @@ pub struct GraphInteractionState {
     pub dragging_node: Option<String>,
     pub drag_offset: Point<f32>,
     pub initial_drag_positions: HashMap<String, Point<f32>>,
+    pub initial_comment_drag_positions: HashMap<String, Point<f32>>,
     pub dragging_connection: Option<ConnectionDrag>,
     pub is_panning: bool,
     pub pan_start: Point<f32>,
@@ -167,6 +169,7 @@ impl Default for GraphInteractionState {
             dragging_node: None,
             drag_offset: Point::new(0.0, 0.0),
             initial_drag_positions: HashMap::new(),
+            initial_comment_drag_positions: HashMap::new(),
             dragging_connection: None,
             is_panning: false,
             pan_start: Point::new(0.0, 0.0),
@@ -302,6 +305,7 @@ impl BlueprintEditorPanel {
             dragging_node: None,
             drag_offset: Point::new(0.0, 0.0),
             initial_drag_positions: HashMap::new(),
+            initial_comment_drag_positions: HashMap::new(),
             node_clipboard: None,
             dragging_connection: None,
             is_panning: false,
@@ -679,6 +683,7 @@ impl BlueprintEditorPanel {
             dragging_node: self.dragging_node.clone(),
             drag_offset: self.drag_offset,
             initial_drag_positions: self.initial_drag_positions.clone(),
+            initial_comment_drag_positions: self.initial_comment_drag_positions.clone(),
             dragging_connection: self.dragging_connection.clone(),
             is_panning: self.is_panning,
             pan_start: self.pan_start,
@@ -701,6 +706,7 @@ impl BlueprintEditorPanel {
         self.dragging_node = state.dragging_node;
         self.drag_offset = state.drag_offset;
         self.initial_drag_positions = state.initial_drag_positions;
+        self.initial_comment_drag_positions = state.initial_comment_drag_positions;
         self.dragging_connection = state.dragging_connection;
         self.is_panning = state.is_panning;
         self.pan_start = state.pan_start;
@@ -756,7 +762,7 @@ impl BlueprintEditorPanel {
     // Comment Operations
     // ============================================================================
 
-    fn snap_comment_position(&self, position: Point<f32>) -> Point<f32> {
+    pub(crate) fn snap_comment_position(&self, position: Point<f32>) -> Point<f32> {
         crate::rendering::graph::NodeGraphRenderer::snap_to_grid(position, self.graph.zoom_level)
     }
 
@@ -821,27 +827,91 @@ impl BlueprintEditorPanel {
         self.comment_color_bindings_dirty = false;
     }
 
+    /// Start dragging a comment (stores initial positions of all selected items)
+    pub fn start_comment_drag(&mut self, comment_id: String, mouse_pos: Point<f32>, _cx: &mut Context<Self>) {
+        tracing::info!(
+            "[DRAG] Starting drag for comment {} at mouse position {:?}",
+            comment_id,
+            mouse_pos
+        );
+
+        if let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) {
+            self.dragging_comment = Some(comment_id.clone());
+            self.drag_offset = Point::new(
+                mouse_pos.x - comment.position.x,
+                mouse_pos.y - comment.position.y,
+            );
+
+            // Store initial positions for multi-select drag
+            self.initial_drag_positions.clear();
+            self.initial_comment_drag_positions.clear();
+
+            if self.graph.selected_comments.contains(&comment_id) {
+                // Drag all selected comments
+                tracing::info!(
+                    "[DRAG] Multi-select: dragging {} selected comments",
+                    self.graph.selected_comments.len()
+                );
+                for selected_id in &self.graph.selected_comments {
+                    if let Some(selected_comment) =
+                        self.graph.comments.iter().find(|c| c.id == *selected_id)
+                    {
+                        self.initial_comment_drag_positions
+                            .insert(selected_id.clone(), selected_comment.position);
+                    }
+                }
+
+                // Also drag all selected nodes
+                tracing::info!(
+                    "[DRAG] Multi-select: also dragging {} selected nodes",
+                    self.graph.selected_nodes.len()
+                );
+                for node_id in &self.graph.selected_nodes {
+                    if let Some(node) = self.graph.nodes.iter().find(|n| n.id == *node_id) {
+                        self.initial_drag_positions.insert(node_id.clone(), node.position);
+                    }
+                }
+            } else {
+                // Drag only this comment
+                self.initial_comment_drag_positions
+                    .insert(comment_id.clone(), comment.position);
+            }
+        }
+    }
+
     /// Update comment drag position
     pub fn update_comment_drag(&mut self, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
         if let Some(comment_id) = &self.dragging_comment.clone() {
-            let new_position = self.snap_comment_position(Point::new(
+            let raw_position = Point::new(
                 mouse_pos.x - self.drag_offset.x,
                 mouse_pos.y - self.drag_offset.y,
-            ));
+            );
+            let new_position = self.snap_comment_position(raw_position);
 
-            if let Some(comment) = self.graph.comments.iter_mut().find(|c| c.id == *comment_id) {
+            if let Some(initial_pos) = self.initial_comment_drag_positions.get(comment_id) {
                 let delta = Point::new(
-                    new_position.x - comment.position.x,
-                    new_position.y - comment.position.y,
+                    new_position.x - initial_pos.x,
+                    new_position.y - initial_pos.y,
                 );
 
-                comment.position = new_position;
+                // Move all comments that were selected when dragging started
+                for (cid, initial_position) in &self.initial_comment_drag_positions.clone() {
+                    let new_pos = self.snap_comment_position(Point::new(
+                        initial_position.x + delta.x,
+                        initial_position.y + delta.y,
+                    ));
+                    if let Some(comment) = self.graph.comments.iter_mut().find(|c| c.id == *cid) {
+                        comment.position = new_pos;
+                    }
+                }
 
-                // Move all contained nodes with the comment
-                for node_id in &comment.contained_node_ids.clone() {
+                // Move all nodes that were selected when dragging started
+                for (node_id, initial_position) in &self.initial_drag_positions.clone() {
                     if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *node_id) {
-                        node.position.x += delta.x;
-                        node.position.y += delta.y;
+                        node.position = crate::rendering::graph::NodeGraphRenderer::snap_to_grid(
+                            Point::new(initial_position.x + delta.x, initial_position.y + delta.y),
+                            self.graph.zoom_level,
+                        );
                     }
                 }
 

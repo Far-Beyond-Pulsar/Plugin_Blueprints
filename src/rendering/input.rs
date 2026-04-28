@@ -381,13 +381,29 @@ pub fn on_key_down(
                 panel.delete_selected_nodes(cx);
             } else if key_lower == "c" && !event.keystroke.modifiers.control {
                 // C key creates a new comment
+                tracing::info!("[KEYBIND] C key pressed - creating comment");
                 panel.create_comment_at_center(window, cx);
             } else if key_lower == "c" && event.keystroke.modifiers.control {
                 // Ctrl+C copies selected entities
+                tracing::info!(
+                    "[KEYBIND] Ctrl+C pressed - copying {} nodes, {} comments",
+                    panel.graph.selected_nodes.len(),
+                    panel.graph.selected_comments.len()
+                );
                 panel.copy_selected_entities(cx);
             } else if key_lower == "v" && event.keystroke.modifiers.control {
                 // Ctrl+V pastes entities from clipboard
+                tracing::info!("[KEYBIND] Ctrl+V pressed - attempting paste");
                 panel.paste_entities(window, cx);
+            } else {
+                // Log unhandled keys for debugging
+                if event.keystroke.modifiers.control {
+                    tracing::debug!(
+                        "[KEYBIND] Unhandled Ctrl+{} (modifiers: {:?})",
+                        key_lower,
+                        event.keystroke.modifiers
+                    );
+                }
             }
         });
     }
