@@ -15,6 +15,7 @@ use gpui::*;
 use ui::{
     h_flex,
     input::{InputState, TextInput},
+    scroll::{Scrollbar, ScrollbarState},
     v_flex, v_virtual_list, ActiveTheme, Icon, IconName, VirtualListScrollHandle,
 };
 
@@ -43,6 +44,8 @@ pub struct NodePaletteView {
     search_input: Entity<InputState>,
     /// Allows programmatic scroll-to-top on search change.
     scroll_handle: VirtualListScrollHandle,
+    /// Tracks scroll position for the scrollbar thumb.
+    scrollbar_state: ScrollbarState,
 }
 
 impl NodePaletteView {
@@ -59,6 +62,7 @@ impl NodePaletteView {
             all_items,
             search_input,
             scroll_handle: VirtualListScrollHandle::new(),
+            scrollbar_state: ScrollbarState::default(),
         }
     }
 }
@@ -88,6 +92,7 @@ impl Render for NodePaletteView {
         let items_snap = visible;
         let view_entity = cx.entity().clone();
         let scroll_handle = self.scroll_handle.clone();
+        let scrollbar_state = self.scrollbar_state.clone();
 
         v_flex()
             .size_full()
@@ -156,7 +161,7 @@ impl Render for NodePaletteView {
             )
             // ── Scrollable node list ───────────────────────────────────────────
             .child(
-                div().flex_1().min_h_0().overflow_hidden().child(
+                div().flex_1().min_h_0().overflow_hidden().relative().child(
                     v_virtual_list(
                         view_entity,
                         "node-palette-view-list",
@@ -190,6 +195,12 @@ impl Render for NodePaletteView {
                     )
                     .size_full()
                     .track_scroll(&scroll_handle),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .child(Scrollbar::vertical(&scrollbar_state, &scroll_handle)),
                 ),
             )
     }
