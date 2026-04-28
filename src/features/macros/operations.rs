@@ -1,13 +1,19 @@
 //! Macro operations - Opening, creating, and navigating macros
 
-use gpui::*;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::GraphTab;
 use crate::BlueprintGraph;
+use gpui::*;
 
 impl BlueprintEditorPanel {
     /// Open a local macro in a new tab
-    pub fn open_local_macro(&mut self, macro_id: String, macro_name: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn open_local_macro(
+        &mut self,
+        macro_id: String,
+        macro_name: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // Check if already open
         if let Some(index) = self.open_tabs.iter().position(|tab| tab.id == macro_id) {
             self.switch_to_tab(index, window, cx);
@@ -52,7 +58,13 @@ impl BlueprintEditorPanel {
     }
 
     /// Open a global/engine macro in a new tab
-    pub fn open_global_macro(&mut self, macro_id: String, macro_name: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn open_global_macro(
+        &mut self,
+        macro_id: String,
+        macro_name: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // Check if already open
         if let Some(index) = self.open_tabs.iter().position(|tab| tab.id == macro_id) {
             self.switch_to_tab(index, window, cx);
@@ -79,7 +91,8 @@ impl BlueprintEditorPanel {
             return None;
         }
 
-        self.library_manager.get_libraries()
+        self.library_manager
+            .get_libraries()
             .iter()
             .find(|(_, lib)| lib.subgraphs.iter().any(|sg| sg.id == macro_id))
             .map(|(id, _)| id.clone())

@@ -9,26 +9,23 @@
 //! - `events`: Actions and event types for editor interactions
 //! - `serialization`: Serde helpers for GPUI types and blueprint persistence
 
-pub mod types;
-pub mod graph;
 pub mod definitions;
 pub mod events;
+pub mod graph;
 pub mod serialization;
+pub mod types;
 
 // Re-export commonly used types for convenience
 pub use types::{
-    BlueprintNode, Pin, Connection, BlueprintComment,
-    NodeType, PinType, CompilationState, CompilationStatus,
-    VirtualizationStats,
+    BlueprintComment, BlueprintNode, CompilationState, CompilationStatus, Connection, NodeType,
+    Pin, PinType, VirtualizationStats,
 };
 
 pub use graph::BlueprintGraph;
 
-pub use definitions::{
-    NodeDefinitions, NodeCategory, NodeDefinition, PinDefinition,
-};
+pub use definitions::{NodeCategory, NodeDefinition, NodeDefinitions, PinDefinition};
 
 pub use events::{
-    DuplicateNode, DeleteNode, CopyNode, PasteNode,
-    DisconnectPin, OpenAddNodeMenu, OpenEngineLibraryRequest,
+    CopyNode, DeleteNode, DisconnectPin, DuplicateNode, OpenAddNodeMenu, OpenEngineLibraryRequest,
+    PasteNode,
 };

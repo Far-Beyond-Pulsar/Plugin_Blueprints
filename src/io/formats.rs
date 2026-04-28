@@ -6,8 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ui::graph::{
-    GraphDescription, SubGraphDefinition, ClassVariable,
-    BlueprintMetadata, GraphViewState
+    BlueprintMetadata, ClassVariable, GraphDescription, GraphViewState, SubGraphDefinition,
 };
 
 // ============================================================================
@@ -154,7 +153,8 @@ pub fn generate_file_header() -> String {
 
 /// Strip header comments from a file's content
 pub fn strip_header_comments(content: &str) -> String {
-    content.lines()
+    content
+        .lines()
         .skip_while(|line| line.trim().starts_with("//"))
         .collect::<Vec<_>>()
         .join("\n")

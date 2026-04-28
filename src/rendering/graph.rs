@@ -6,22 +6,25 @@
 //! - Viewport culling/virtualization helpers
 //! Main graph canvas renderer - orchestrates all rendering features
 use gpui::prelude::FluentBuilder;
-use gpui::*;
 use gpui::prelude::*;
-use ui::{Colorize, PixelsExt, ActiveTheme, button::{Button, ButtonVariants}, h_flex, v_flex, IconName, Sizable, StyledExt, tooltip::Tooltip};
+use gpui::*;
+use ui::{
+    button::{Button, ButtonVariants},
+    h_flex,
+    tooltip::Tooltip,
+    v_flex, ActiveTheme, Colorize, IconName, PixelsExt, Sizable, StyledExt,
+};
 
-use crate::rendering::{layout, style};
 use crate::editor::panel::BlueprintEditorPanel;
-use crate::{BlueprintNode, BlueprintGraph, Pin, NodeType, Connection};
+use crate::rendering::{layout, style};
+use crate::{BlueprintGraph, BlueprintNode, Connection, NodeType, Pin};
 use ui::graph::DataType;
 
 pub struct NodeGraphRenderer;
 
 /// Helper to create simple text tooltip for pins (still using gpui's built-in tooltip)
 fn create_text_tooltip(text: &'static str) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-    move |window, cx| {
-        Tooltip::new(text).build(window, cx)
-    }
+    move |window, cx| Tooltip::new(text).build(window, cx)
 }
 
 impl NodeGraphRenderer {
@@ -64,11 +67,16 @@ impl NodeGraphRenderer {
                         for child_bounds in &children_bounds {
                             min_x = min_x.min(child_bounds.origin.x.as_f32());
                             min_y = min_y.min(child_bounds.origin.y.as_f32());
-                            max_x = max_x.max((child_bounds.origin.x + child_bounds.size.width).as_f32());
-                            max_y = max_y.max((child_bounds.origin.y + child_bounds.size.height).as_f32());
+                            max_x = max_x
+                                .max((child_bounds.origin.x + child_bounds.size.width).as_f32());
+                            max_y = max_y
+                                .max((child_bounds.origin.y + child_bounds.size.height).as_f32());
                         }
 
-                        let origin = gpui::Point { x: px(min_x), y: px(min_y) };
+                        let origin = gpui::Point {
+                            x: px(min_x),
+                            y: px(min_y),
+                        };
                         let size = gpui::Size {
                             width: px(max_x - min_x),
                             height: px(max_y - min_y),
@@ -78,34 +86,43 @@ impl NodeGraphRenderer {
                         panel_entity.update(cx, |panel, _cx| {
                             let bounds = gpui::Bounds { origin, size };
                             panel.graph_element_bounds = Some(bounds);
-                            panel.graph_element_bounds_by_view.insert(view_id.clone(), bounds);
+                            panel
+                                .graph_element_bounds_by_view
+                                .insert(view_id.clone(), bounds);
                         });
                     }
                 }
             })
             .id(graph_id)
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, event, window, cx| {
-                // Focus on click to enable keyboard events
-                panel.focus_handle().focus(window);
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |panel, event, window, cx| {
+                    // Focus on click to enable keyboard events
+                    panel.focus_handle().focus(window);
 
-                // If editing a comment, clicking outside should save and exit edit mode
-                if panel.editing_comment.is_some() {
-                    panel.finish_comment_editing(cx);
-                }
+                    // If editing a comment, clicking outside should save and exit edit mode
+                    if panel.editing_comment.is_some() {
+                        panel.finish_comment_editing(cx);
+                    }
 
-                // Close variable drop menu if it's open
-                if panel.variable_drop_menu_position.is_some() {
-                    panel.variable_drop_menu_position = None;
-                    cx.notify();
-                }
-            }))
+                    // Close variable drop menu if it's open
+                    if panel.variable_drop_menu_position.is_some() {
+                        panel.variable_drop_menu_position = None;
+                        cx.notify();
+                    }
+                }),
+            )
             // Render layers in correct z-order
             .child(Self::render_grid_background(panel, cx))
             .child(Self::render_comments(panel, cx))
             .child(Self::render_connections(panel, cx))
             .child(Self::render_nodes(panel, cx))
-            .child(crate::rendering::overlay::render_selection_box(panel, &view_id, cx))
-            .child(crate::rendering::overlay::render_viewport_bounds_debug(panel, cx))
+            .child(crate::rendering::overlay::render_selection_box(
+                panel, &view_id, cx,
+            ))
+            .child(crate::rendering::overlay::render_viewport_bounds_debug(
+                panel, cx,
+            ))
             .when(panel.show_debug_overlay, |this| {
                 this.child(crate::rendering::overlay::render_debug_overlay(panel, cx))
             })
@@ -142,11 +159,17 @@ impl NodeGraphRenderer {
                 gpui::MouseButton::Right,
                 crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
             )
-            .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(view_id.clone(), cx))
+            .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(
+                view_id.clone(),
+                cx,
+            ))
             .on_key_down(crate::rendering::input::on_key_down(view_id, cx))
     }
 
-    pub fn render_grid_background(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    pub fn render_grid_background(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         let zoom = panel.graph.zoom_level;
         let pan = panel.graph.pan_offset;
         let background = cx.theme().muted.opacity(0.05);
@@ -167,11 +190,31 @@ impl NodeGraphRenderer {
                 let major_step = 50.0 * zoom;
 
                 if minor_step >= 6.0 {
-                    Self::paint_grid_lines(window, origin_x, origin_y, width, height, pan, zoom, 10.0, minor_color);
+                    Self::paint_grid_lines(
+                        window,
+                        origin_x,
+                        origin_y,
+                        width,
+                        height,
+                        pan,
+                        zoom,
+                        10.0,
+                        minor_color,
+                    );
                 }
 
                 if major_step >= 4.0 {
-                    Self::paint_grid_lines(window, origin_x, origin_y, width, height, pan, zoom, 50.0, major_color);
+                    Self::paint_grid_lines(
+                        window,
+                        origin_x,
+                        origin_y,
+                        width,
+                        height,
+                        pan,
+                        zoom,
+                        50.0,
+                        major_color,
+                    );
                 }
             },
         )
@@ -278,16 +321,25 @@ impl NodeGraphRenderer {
         view_id: &str,
     ) -> Point<Pixels> {
         if let Some(bounds) = panel.graph_element_bounds_by_view.get(view_id) {
-            Point::new(window_pos.x - bounds.origin.x, window_pos.y - bounds.origin.y)
+            Point::new(
+                window_pos.x - bounds.origin.x,
+                window_pos.y - bounds.origin.y,
+            )
         } else {
             window_pos
         }
     }
 
-    pub fn window_to_graph_element_pos(window_pos: Point<Pixels>, panel: &BlueprintEditorPanel) -> Point<Pixels> {
+    pub fn window_to_graph_element_pos(
+        window_pos: Point<Pixels>,
+        panel: &BlueprintEditorPanel,
+    ) -> Point<Pixels> {
         if let Some(view_id) = panel.interaction_view_id.as_ref() {
             if let Some(bounds) = panel.graph_element_bounds_by_view.get(view_id) {
-                return Point::new(window_pos.x - bounds.origin.x, window_pos.y - bounds.origin.y);
+                return Point::new(
+                    window_pos.x - bounds.origin.x,
+                    window_pos.y - bounds.origin.y,
+                );
             }
         }
 
@@ -301,7 +353,10 @@ impl NodeGraphRenderer {
             let right = left + bounds.size.width.as_f32();
             let bottom = top + bounds.size.height.as_f32();
             if wx >= left && wx <= right && wy >= top && wy <= bottom {
-                return Point::new(window_pos.x - bounds.origin.x, window_pos.y - bounds.origin.y);
+                return Point::new(
+                    window_pos.x - bounds.origin.x,
+                    window_pos.y - bounds.origin.y,
+                );
             }
         }
 
@@ -320,7 +375,10 @@ impl NodeGraphRenderer {
 
     /// Convert window-relative coordinates to panel coordinates
     /// For UI elements positioned at panel level: menus, tooltips, etc.
-    pub fn window_to_panel_pos(window_pos: Point<Pixels>, panel: &BlueprintEditorPanel) -> Point<Pixels> {
+    pub fn window_to_panel_pos(
+        window_pos: Point<Pixels>,
+        panel: &BlueprintEditorPanel,
+    ) -> Point<Pixels> {
         // Same calculation as graph element since they share the same coordinate space
         Self::window_to_graph_element_pos(window_pos, panel)
     }
@@ -438,12 +496,12 @@ impl NodeGraphRenderer {
 
         // These MUST match the values used in render_blueprint_node / render_node_pins.
         const HEADER_H: f32 = 27.0;
-        const SEP_H: f32    =  1.0;
-        const BODY_PAD: f32 =  8.0;
+        const SEP_H: f32 = 1.0;
+        const BODY_PAD: f32 = 8.0;
         const PIN_ROW_H: f32 = 16.0;
-        const PIN_GAP: f32  =  4.0;
+        const PIN_GAP: f32 = 4.0;
 
-        let z   = graph.zoom_level;
+        let z = graph.zoom_level;
         let nsp = Self::graph_to_screen_pos(node.position, graph);
 
         let row = if is_input {

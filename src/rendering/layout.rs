@@ -4,12 +4,12 @@
 /// Node height formula:
 ///   HEADER_H + SEP_H + BODY_PAD*2 + max_pins * PIN_ROW_H + (max_pins-1) * PIN_GAP
 
-pub const HEADER_H: f32   = 28.0;
-pub const SEP_H: f32      =  2.0;
-pub const BODY_PAD: f32   =  8.0;
-pub const PIN_ROW_H: f32  = 18.0;
-pub const PIN_GAP: f32    =  4.0;
-pub const PIN_SIZE: f32   = 12.0;
+pub const HEADER_H: f32 = 28.0;
+pub const SEP_H: f32 = 2.0;
+pub const BODY_PAD: f32 = 8.0;
+pub const PIN_ROW_H: f32 = 18.0;
+pub const PIN_GAP: f32 = 4.0;
+pub const PIN_SIZE: f32 = 12.0;
 
 /// Grid snap interval (graph-space units). Node dimensions are rounded up to
 /// the nearest multiple of this value so they align with grid snapping.

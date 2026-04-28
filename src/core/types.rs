@@ -5,10 +5,10 @@
 //! the visual and logical structure of a blueprint graph.
 
 use gpui::*;
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use ui::graph::DataType;
+use std::collections::HashMap;
 use ui::color_picker::ColorPickerState;
+use ui::graph::DataType;
 
 use crate::rendering::layout;
 
@@ -62,7 +62,7 @@ pub struct BlueprintNode {
     pub outputs: Vec<Pin>,
     pub properties: HashMap<String, String>,
     pub is_selected: bool,
-    pub description: String, // Markdown documentation for the node
+    pub description: String,   // Markdown documentation for the node
     pub color: Option<String>, // Custom color from blueprint attribute
 }
 
@@ -73,9 +73,9 @@ pub enum NodeType {
     Logic,
     Math,
     Object,
-    Reroute, // Visual pass-through node for organizing connections
-    MacroEntry, // Entry point for macro graphs (replaces generic subgraph_input)
-    MacroExit, // Exit point for macro graphs (replaces generic subgraph_output)
+    Reroute,       // Visual pass-through node for organizing connections
+    MacroEntry,    // Entry point for macro graphs (replaces generic subgraph_input)
+    MacroExit,     // Exit point for macro graphs (replaces generic subgraph_output)
     MacroInstance, // Instance of a macro in parent graph
 }
 
@@ -137,16 +137,23 @@ pub struct BlueprintComment {
 }
 
 impl BlueprintComment {
-    pub fn new(position: Point<f32>, window: &mut gpui::Window, cx: &mut gpui::Context<crate::editor::panel::BlueprintEditorPanel>) -> Self {
-        let color_picker_state = Some(cx.new(|cx| {
-            ColorPickerState::new(window, cx)
-        }));
+    pub fn new(
+        position: Point<f32>,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) -> Self {
+        let color_picker_state = Some(cx.new(|cx| ColorPickerState::new(window, cx)));
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             text: "Comment".to_string(),
             position,
             size: Size::new(300.0, 200.0),
-            color: Hsla { h: 0.5, s: 0.3, l: 0.2, a: 0.3 }, // Default semi-transparent color
+            color: Hsla {
+                h: 0.5,
+                s: 0.3,
+                l: 0.2,
+                a: 0.3,
+            }, // Default semi-transparent color
             contained_node_ids: Vec::new(),
             is_selected: false,
             color_picker_state,
@@ -200,20 +207,31 @@ pub struct VirtualizationStats {
 // ============================================================================
 
 impl BlueprintNode {
-    pub fn from_definition(definition: &crate::core::definitions::NodeDefinition, position: Point<f32>) -> Self {
-        let inputs: Vec<Pin> = definition.inputs.iter().map(|pin_def| Pin {
-            id: pin_def.id.clone(),
-            name: pin_def.name.clone(),
-            pin_type: pin_def.pin_type.clone(),
-            data_type: pin_def.data_type.clone(),
-        }).collect();
+    pub fn from_definition(
+        definition: &crate::core::definitions::NodeDefinition,
+        position: Point<f32>,
+    ) -> Self {
+        let inputs: Vec<Pin> = definition
+            .inputs
+            .iter()
+            .map(|pin_def| Pin {
+                id: pin_def.id.clone(),
+                name: pin_def.name.clone(),
+                pin_type: pin_def.pin_type.clone(),
+                data_type: pin_def.data_type.clone(),
+            })
+            .collect();
 
-        let outputs: Vec<Pin> = definition.outputs.iter().map(|pin_def| Pin {
-            id: pin_def.id.clone(),
-            name: pin_def.name.clone(),
-            pin_type: pin_def.pin_type.clone(),
-            data_type: pin_def.data_type.clone(),
-        }).collect();
+        let outputs: Vec<Pin> = definition
+            .outputs
+            .iter()
+            .map(|pin_def| Pin {
+                id: pin_def.id.clone(),
+                name: pin_def.name.clone(),
+                pin_type: pin_def.pin_type.clone(),
+                data_type: pin_def.data_type.clone(),
+            })
+            .collect();
 
         // Determine node type based on category
         let node_definitions = crate::core::definitions::NodeDefinitions::load();

@@ -3,8 +3,7 @@
 use gpui::*;
 use ui::{
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex,
-    ActiveTheme as _, StyledExt, IconName,
+    h_flex, v_flex, ActiveTheme as _, IconName, StyledExt,
 };
 
 use crate::editor::panel::BlueprintEditorPanel;
@@ -12,7 +11,10 @@ use crate::editor::panel::BlueprintEditorPanel;
 pub struct MacrosRenderer;
 
 impl MacrosRenderer {
-    pub fn render(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    pub fn render(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         v_flex()
             .size_full()
             .bg(cx.theme().sidebar)
@@ -48,11 +50,7 @@ impl MacrosRenderer {
                                             .flex()
                                             .items_center()
                                             .justify_center()
-                                            .child(
-                                                div()
-                                                    .text_base()
-                                                    .child("📦")
-                                            )
+                                            .child(div().text_base().child("📦")),
                                     )
                                     .child(
                                         v_flex()
@@ -62,18 +60,23 @@ impl MacrosRenderer {
                                                     .text_sm()
                                                     .font_bold()
                                                     .text_color(cx.theme().foreground)
-                                                    .child("Local Macros")
+                                                    .child("Local Macros"),
                                             )
                                             .child(
                                                 div()
                                                     .text_xs()
                                                     .text_color(cx.theme().muted_foreground)
-                                                    .child(format!("{} macro{}",
+                                                    .child(format!(
+                                                        "{} macro{}",
                                                         panel.local_macros.len(),
-                                                        if panel.local_macros.len() == 1 { "" } else { "s" }
-                                                    ))
-                                            )
-                                    )
+                                                        if panel.local_macros.len() == 1 {
+                                                            ""
+                                                        } else {
+                                                            "s"
+                                                        }
+                                                    )),
+                                            ),
+                                    ),
                             )
                             .child(
                                 Button::new("create-macro")
@@ -82,8 +85,8 @@ impl MacrosRenderer {
                                     .tooltip("Create New Macro")
                                     .on_click(cx.listener(|panel, _, window, cx| {
                                         panel.create_new_local_macro(window, cx);
-                                    }))
-                            )
+                                    })),
+                            ),
                     )
                     .child(
                         // Category bar
@@ -101,7 +104,7 @@ impl MacrosRenderer {
                                     .text_xs()
                                     .font_semibold()
                                     .text_color(cx.theme().accent)
-                                    .child("THIS BLUEPRINT")
+                                    .child("THIS BLUEPRINT"),
                             )
                             .child(
                                 div()
@@ -112,9 +115,9 @@ impl MacrosRenderer {
                                     .text_xs()
                                     .font_family("JetBrainsMono-Regular")
                                     .text_color(cx.theme().accent)
-                                    .child(format!("{}", panel.local_macros.len()))
-                            )
-                    )
+                                    .child(format!("{}", panel.local_macros.len())),
+                            ),
+                    ),
             )
             .child(
                 // CONTENT AREA - local macros list
@@ -124,51 +127,49 @@ impl MacrosRenderer {
                     .p_3()
                     .gap_2()
                     .scrollable(Axis::Vertical)
-                    .child(Self::render_local_macros_list(panel, cx))
+                    .child(Self::render_local_macros_list(panel, cx)),
             )
     }
 
-    fn render_local_macros_list(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .children(
-                if panel.local_macros.is_empty() {
-                    vec![
-                        div()
-                            .flex()
-                            .flex_col()
-                            .items_center()
-                            .justify_center()
-                            .gap_3()
-                            .h(px(200.))
-                            .child(
-                                div()
-                                    .text_3xl()
-                                    .child("📦")
-                            )
-                            .child(
-                                div()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .text_sm()
-                                    .child("No local macros yet")
-                            )
-                            .child(
-                                div()
-                                    .text_color(cx.theme().muted_foreground.opacity(0.7))
-                                    .text_xs()
-                                    .child("Click + to create one")
-                            )
-                            .into_any_element()
-                    ]
-                } else {
-                    panel.local_macros.iter().map(|subgraph| {
-                        Self::render_macro_row(subgraph, cx)
-                    }).collect()
-                }
-            )
+    fn render_local_macros_list(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
+        v_flex().gap_2().children(if panel.local_macros.is_empty() {
+            vec![div()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap_3()
+                .h(px(200.))
+                .child(div().text_3xl().child("📦"))
+                .child(
+                    div()
+                        .text_color(cx.theme().muted_foreground)
+                        .text_sm()
+                        .child("No local macros yet"),
+                )
+                .child(
+                    div()
+                        .text_color(cx.theme().muted_foreground.opacity(0.7))
+                        .text_xs()
+                        .child("Click + to create one"),
+                )
+                .into_any_element()]
+        } else {
+            panel
+                .local_macros
+                .iter()
+                .map(|subgraph| Self::render_macro_row(subgraph, cx))
+                .collect()
+        })
     }
 
-    fn render_macro_row(subgraph: &ui::graph::SubGraphDefinition, cx: &mut Context<BlueprintEditorPanel>) -> AnyElement {
+    fn render_macro_row(
+        subgraph: &ui::graph::SubGraphDefinition,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
         let subgraph_id = subgraph.id.clone();
         let subgraph_name = subgraph.name.clone();
 
@@ -188,9 +189,12 @@ impl MacrosRenderer {
                     .border_color(cx.theme().accent.opacity(0.6))
                     .shadow_md()
             })
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, _, window, cx| {
-                panel.open_local_macro(subgraph_id.clone(), subgraph_name.clone(), window, cx);
-            }))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |panel, _, window, cx| {
+                    panel.open_local_macro(subgraph_id.clone(), subgraph_name.clone(), window, cx);
+                }),
+            )
             .child(
                 // Macro icon
                 div()
@@ -198,10 +202,15 @@ impl MacrosRenderer {
                     .w(px(14.))
                     .h(px(14.))
                     .rounded_full()
-                    .bg(gpui::Rgba { r: 0.61, g: 0.35, b: 0.71, a: 1.0 }) // Purple for macros
+                    .bg(gpui::Rgba {
+                        r: 0.61,
+                        g: 0.35,
+                        b: 0.71,
+                        a: 1.0,
+                    }) // Purple for macros
                     .border_2()
                     .border_color(cx.theme().border)
-                    .shadow_sm()
+                    .shadow_sm(),
             )
             .child(
                 // Macro info section
@@ -214,14 +223,14 @@ impl MacrosRenderer {
                             .text_sm()
                             .font_semibold()
                             .text_color(cx.theme().foreground)
-                            .child(subgraph.name.clone())
+                            .child(subgraph.name.clone()),
                     )
                     .child(
                         // Description
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(subgraph.description.clone())
+                            .child(subgraph.description.clone()),
                     )
                     .child(
                         // Input/Output count
@@ -237,7 +246,7 @@ impl MacrosRenderer {
                                     .text_xs()
                                     .font_family("JetBrainsMono-Regular")
                                     .text_color(cx.theme().success)
-                                    .child(format!("→ {}", subgraph.interface.inputs.len()))
+                                    .child(format!("→ {}", subgraph.interface.inputs.len())),
                             )
                             .child(
                                 div()
@@ -248,16 +257,16 @@ impl MacrosRenderer {
                                     .text_xs()
                                     .font_family("JetBrainsMono-Regular")
                                     .text_color(cx.theme().warning)
-                                    .child(format!("← {}", subgraph.interface.outputs.len()))
-                            )
-                    )
+                                    .child(format!("← {}", subgraph.interface.outputs.len())),
+                            ),
+                    ),
             )
             .child(
                 // Arrow icon indicating clickable
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground.opacity(0.4))
-                    .child("›")
+                    .child("›"),
             )
             .into_any_element()
     }

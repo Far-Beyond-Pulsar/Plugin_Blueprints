@@ -7,10 +7,10 @@
 //! - Drag and drop handling
 //! - Type enumeration
 
-use gpui::*;
+use super::types::{ClassVariable, TypeItem, VariableDrag};
+use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
-use crate::core::types::{Pin, PinType, BlueprintNode, NodeType};
-use super::types::{ClassVariable, VariableDrag, TypeItem};
+use gpui::*;
 use ui::graph::DataType;
 
 impl BlueprintEditorPanel {
@@ -18,12 +18,12 @@ impl BlueprintEditorPanel {
     pub fn start_creating_variable(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.is_creating_variable = true;
 
-        self.variable_name_input = cx.new(|cx| {
-            ui::input::InputState::new(window, cx).placeholder("Variable name...")
-        });
+        self.variable_name_input =
+            cx.new(|cx| ui::input::InputState::new(window, cx).placeholder("Variable name..."));
 
         let available_types = self.get_available_types();
-        let type_items: Vec<TypeItem> = available_types.into_iter()
+        let type_items: Vec<TypeItem> = available_types
+            .into_iter()
             .map(|type_str| TypeItem::new(type_str))
             .collect();
 
@@ -43,8 +43,16 @@ impl BlueprintEditorPanel {
 
     /// Complete variable creation
     pub fn complete_creating_variable(&mut self, cx: &mut Context<Self>) {
-        let name = self.variable_name_input.read(cx).text().to_string().trim().to_string();
-        let selected_type = self.variable_type_dropdown.read(cx)
+        let name = self
+            .variable_name_input
+            .read(cx)
+            .text()
+            .to_string()
+            .trim()
+            .to_string();
+        let selected_type = self
+            .variable_type_dropdown
+            .read(cx)
             .selected_value()
             .map(|v| v.to_string())
             .unwrap_or_else(|| "i32".to_string());
@@ -102,7 +110,12 @@ impl BlueprintEditorPanel {
 
     /// Add input pin to subgraph input node.
     pub fn add_input_pin(&mut self, cx: &mut Context<Self>) {
-        if let Some(input_node) = self.graph.nodes.iter_mut().find(|n| n.definition_id == "subgraph_input") {
+        if let Some(input_node) = self
+            .graph
+            .nodes
+            .iter_mut()
+            .find(|n| n.definition_id == "subgraph_input")
+        {
             let pin_count = input_node.outputs.len();
             let new_pin = Pin {
                 id: format!("input_{}", pin_count),
@@ -117,7 +130,12 @@ impl BlueprintEditorPanel {
 
     /// Add output pin to subgraph output node.
     pub fn add_output_pin(&mut self, cx: &mut Context<Self>) {
-        if let Some(output_node) = self.graph.nodes.iter_mut().find(|n| n.definition_id == "subgraph_output") {
+        if let Some(output_node) = self
+            .graph
+            .nodes
+            .iter_mut()
+            .find(|n| n.definition_id == "subgraph_output")
+        {
             let pin_count = output_node.inputs.len();
             let new_pin = Pin {
                 id: format!("output_{}", pin_count),
@@ -132,7 +150,12 @@ impl BlueprintEditorPanel {
 
     /// Remove input pin from subgraph input node.
     pub fn remove_input_pin(&mut self, pin_id: &str, cx: &mut Context<Self>) {
-        if let Some(input_node) = self.graph.nodes.iter_mut().find(|n| n.definition_id == "subgraph_input") {
+        if let Some(input_node) = self
+            .graph
+            .nodes
+            .iter_mut()
+            .find(|n| n.definition_id == "subgraph_input")
+        {
             input_node.outputs.retain(|p| p.id != pin_id);
             cx.notify();
         }
@@ -140,14 +163,22 @@ impl BlueprintEditorPanel {
 
     /// Remove output pin from subgraph output node.
     pub fn remove_output_pin(&mut self, pin_id: &str, cx: &mut Context<Self>) {
-        if let Some(output_node) = self.graph.nodes.iter_mut().find(|n| n.definition_id == "subgraph_output") {
+        if let Some(output_node) = self
+            .graph
+            .nodes
+            .iter_mut()
+            .find(|n| n.definition_id == "subgraph_output")
+        {
             output_node.inputs.retain(|p| p.id != pin_id);
             cx.notify();
         }
     }
 
     /// Load variables from vars_save.json
-    pub(crate) fn load_variables_from_class(&mut self, class_path: &std::path::Path) -> Result<(), String> {
+    pub(crate) fn load_variables_from_class(
+        &mut self,
+        class_path: &std::path::Path,
+    ) -> Result<(), String> {
         let vars_file = class_path.join("vars_save.json");
 
         if !vars_file.exists() {
@@ -166,7 +197,9 @@ impl BlueprintEditorPanel {
 
     /// Save variables to vars_save.json
     pub(crate) fn save_variables_to_class(&self) -> Result<(), String> {
-        let class_path = self.current_class_path.as_ref()
+        let class_path = self
+            .current_class_path
+            .as_ref()
             .ok_or_else(|| "No class currently loaded".to_string())?;
 
         let vars_file = class_path.join("vars_save.json");
@@ -278,17 +311,21 @@ impl BlueprintEditorPanel {
     }
 
     /// Start dragging a variable
-    pub fn start_dragging_variable(&mut self, var_name: String, var_type: String, cx: &mut Context<Self>) {
-        self.dragging_variable = Some(VariableDrag {
-            var_name,
-            var_type,
-        });
+    pub fn start_dragging_variable(
+        &mut self,
+        var_name: String,
+        var_type: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.dragging_variable = Some(VariableDrag { var_name, var_type });
         cx.notify();
     }
 
     /// Generate vars/mod.rs from current variables
     pub(crate) fn generate_vars_module(&self) -> Result<(), String> {
-        let class_path = self.current_class_path.as_ref()
+        let class_path = self
+            .current_class_path
+            .as_ref()
             .ok_or_else(|| "No class currently loaded".to_string())?;
 
         let vars_dir = class_path.join("vars");
@@ -302,8 +339,20 @@ impl BlueprintEditorPanel {
         let needs_refcell = self.class_variables.iter().any(|v| {
             !matches!(
                 v.var_type.as_str(),
-                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool" |
-                "char" | "usize" | "isize" | "i8" | "i16" | "u8" | "u16"
+                "i32"
+                    | "i64"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "usize"
+                    | "isize"
+                    | "i8"
+                    | "i16"
+                    | "u8"
+                    | "u16"
             )
         });
 
@@ -328,8 +377,20 @@ impl BlueprintEditorPanel {
 
             let use_cell = matches!(
                 var.var_type.as_str(),
-                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool" |
-                "char" | "usize" | "isize" | "i8" | "i16" | "u8" | "u16"
+                "i32"
+                    | "i64"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "usize"
+                    | "isize"
+                    | "i8"
+                    | "i16"
+                    | "u8"
+                    | "u16"
             );
 
             let cell_type = if use_cell { "Cell" } else { "RefCell" };

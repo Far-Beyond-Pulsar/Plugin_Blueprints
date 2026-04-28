@@ -9,9 +9,9 @@
 //!
 //! It also includes utility functions for grid snapping and color parsing.
 
-use gpui::*;
 use crate::core::BlueprintGraph;
 use crate::editor::panel::BlueprintEditorPanel;
+use gpui::*;
 use ui::PixelsExt;
 
 // ============================================================================
@@ -33,7 +33,10 @@ use ui::PixelsExt;
 ///
 /// # Returns
 /// Position relative to the graph element origin
-pub fn window_to_graph_element_pos(window_pos: Point<Pixels>, panel: &BlueprintEditorPanel) -> Point<Pixels> {
+pub fn window_to_graph_element_pos(
+    window_pos: Point<Pixels>,
+    panel: &BlueprintEditorPanel,
+) -> Point<Pixels> {
     if let Some(bounds) = &panel.graph_element_bounds {
         // Direct subtraction: mouse relative to element = mouse relative to window - element origin relative to window
         Point::new(
@@ -58,7 +61,10 @@ pub fn window_to_graph_element_pos(window_pos: Point<Pixels>, panel: &BlueprintE
 ///
 /// # Returns
 /// Position relative to the panel origin
-pub fn window_to_panel_pos(window_pos: Point<Pixels>, panel: &BlueprintEditorPanel) -> Point<Pixels> {
+pub fn window_to_panel_pos(
+    window_pos: Point<Pixels>,
+    panel: &BlueprintEditorPanel,
+) -> Point<Pixels> {
     // Same calculation as graph element since they share the same coordinate space
     window_to_graph_element_pos(window_pos, panel)
 }

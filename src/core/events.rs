@@ -5,8 +5,8 @@
 //! and cross-panel communication.
 
 use gpui::*;
-use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // Context Menu Actions

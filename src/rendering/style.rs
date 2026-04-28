@@ -71,5 +71,3 @@ pub fn label_color() -> Hsla {
 pub fn corner_radius(z: f32) -> Pixels {
     px(7.0 * z)
 }
-
-

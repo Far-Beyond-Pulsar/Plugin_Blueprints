@@ -7,9 +7,9 @@
 //! - Row-height constants
 //! - Helper functions for building, filtering, and sizing the list
 
-use std::rc::Rc;
+use crate::core::definitions::{NodeDefinition, NodeDefinitions};
 use gpui::{px, size, Pixels, Size};
-use crate::core::definitions::{NodeDefinitions, NodeDefinition};
+use std::rc::Rc;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Row-height constants
@@ -47,7 +47,7 @@ impl PaletteItem {
     pub fn height(&self) -> f32 {
         match self {
             Self::CategoryHeader { .. } => CATEGORY_HEADER_H,
-            Self::NodeEntry { .. }      => NODE_ENTRY_H,
+            Self::NodeEntry { .. } => NODE_ENTRY_H,
         }
     }
 }
@@ -107,8 +107,7 @@ pub fn filter_palette_items(all_items: &[PaletteItem], query: &str) -> Vec<Palet
         .filter(|item| match item {
             PaletteItem::CategoryHeader { .. } => false,
             PaletteItem::NodeEntry { def, .. } => {
-                def.name.to_lowercase().contains(&q)
-                    || def.description.to_lowercase().contains(&q)
+                def.name.to_lowercase().contains(&q) || def.description.to_lowercase().contains(&q)
             }
         })
         .cloned()

@@ -4,15 +4,20 @@
 //! what's being interacted with.
 //! Input event handling for the graph canvas
 
+use super::graph::NodeGraphRenderer;
+use crate::editor::panel::BlueprintEditorPanel;
+use gpui::*;
+use ui::input::InputState;
 use ui::ActiveTheme;
 use ui::PixelsExt;
-use ui::StyledExt;
 use ui::Sizable;
-use gpui::*;
-use crate::editor::panel::BlueprintEditorPanel;
-use super::graph::NodeGraphRenderer;
+use ui::StyledExt;
 
-fn point_in_view_bounds(panel: &BlueprintEditorPanel, view_id: &str, window_pos: Point<Pixels>) -> bool {
+fn point_in_view_bounds(
+    panel: &BlueprintEditorPanel,
+    view_id: &str,
+    window_pos: Point<Pixels>,
+) -> bool {
     let Some(bounds) = panel.graph_element_bounds_by_view.get(view_id) else {
         return false;
     };
@@ -36,7 +41,11 @@ pub fn on_mouse_down_right(
     move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
             // Convert window coordinates to element coordinates
-            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
+            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
+                event.position,
+                panel,
+                &view_id,
+            );
             let mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
             panel.activate_interaction_view(&view_id);
 
@@ -57,61 +66,84 @@ pub fn on_mouse_down_left(
     let entity = cx.entity().clone();
     move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
-        panel.activate_interaction_view(&view_id);
-        // Debug: Print raw event position and calculated offset
-        tracing::info!("[MOUSE] Raw window position: x={}, y={}", event.position.x.as_f32(), event.position.y.as_f32());
-        tracing::info!("[MOUSE] Stored element bounds: {:?}", panel.graph_element_bounds_by_view.get(&view_id));
+            panel.activate_interaction_view(&view_id);
+            // Debug: Print raw event position and calculated offset
+            tracing::info!(
+                "[MOUSE] Raw window position: x={}, y={}",
+                event.position.x.as_f32(),
+                event.position.y.as_f32()
+            );
+            tracing::info!(
+                "[MOUSE] Stored element bounds: {:?}",
+                panel.graph_element_bounds_by_view.get(&view_id)
+            );
 
-        // Convert window-relative coordinates to element-relative coordinates
-        let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
-        tracing::info!("[MOUSE] Calculated element-relative position: x={}, y={}", element_pos.x.as_f32(), element_pos.y.as_f32());
+            // Convert window-relative coordinates to element-relative coordinates
+            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
+                event.position,
+                panel,
+                &view_id,
+            );
+            tracing::info!(
+                "[MOUSE] Calculated element-relative position: x={}, y={}",
+                element_pos.x.as_f32(),
+                element_pos.y.as_f32()
+            );
 
-        // Convert element coordinates to graph coordinates
-        let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
-        let _mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
+            // Convert element coordinates to graph coordinates
+            let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
+            let _mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
 
-        tracing::info!("[MOUSE] Converted to graph pos: x={}, y={}", graph_pos.x, graph_pos.y);
-        tracing::info!("[MOUSE] Pan offset: x={}, y={}", panel.graph.pan_offset.x, panel.graph.pan_offset.y);
-        tracing::info!("[MOUSE] Zoom level: {}", panel.graph.zoom_level);
+            tracing::info!(
+                "[MOUSE] Converted to graph pos: x={}, y={}",
+                graph_pos.x,
+                graph_pos.y
+            );
+            tracing::info!(
+                "[MOUSE] Pan offset: x={}, y={}",
+                panel.graph.pan_offset.x,
+                panel.graph.pan_offset.y
+            );
+            tracing::info!("[MOUSE] Zoom level: {}", panel.graph.zoom_level);
 
-        // Check if clicking on a node (check ALL nodes, not just rendered ones)
-        let clicked_node = panel.graph.nodes.iter().find(|node| {
-            let node_left = node.position.x;
-            let node_top = node.position.y;
-            let node_right = node.position.x + node.size.width;
-            let node_bottom = node.position.y + node.size.height;
+            // Check if clicking on a node (check ALL nodes, not just rendered ones)
+            let clicked_node = panel.graph.nodes.iter().find(|node| {
+                let node_left = node.position.x;
+                let node_top = node.position.y;
+                let node_right = node.position.x + node.size.width;
+                let node_bottom = node.position.y + node.size.height;
 
-            graph_pos.x >= node_left
-                && graph_pos.x <= node_right
-                && graph_pos.y >= node_top
-                && graph_pos.y <= node_bottom
-        });
+                graph_pos.x >= node_left
+                    && graph_pos.x <= node_right
+                    && graph_pos.y >= node_top
+                    && graph_pos.y <= node_bottom
+            });
 
-        if let Some(node) = clicked_node {
-            // Clicked on a node
-            tracing::info!("Clicked on node: {}", node.id);
+            if let Some(node) = clicked_node {
+                // Clicked on a node
+                tracing::info!("Clicked on node: {}", node.id);
 
-            // Delegate to features::nodes::operations::handle_node_click
-            // For now, inline implementation:
-            if !panel.graph.selected_nodes.contains(&node.id) {
-                if !event.modifiers.control {
-                    panel.graph.selected_nodes.clear();
+                // Delegate to features::nodes::operations::handle_node_click
+                // For now, inline implementation:
+                if !panel.graph.selected_nodes.contains(&node.id) {
+                    if !event.modifiers.control {
+                        panel.graph.selected_nodes.clear();
+                    }
+                    panel.graph.selected_nodes.push(node.id.clone());
                 }
-                panel.graph.selected_nodes.push(node.id.clone());
-            }
 
-            panel.start_drag(node.id.clone(), graph_pos, cx);
-        } else {
-            // Clicked on empty space
-            if !panel.handle_empty_space_click(graph_pos, cx) {
-                // No UI element claimed the click, start selection drag
-                if !event.modifiers.control {
-                    panel.graph.selected_nodes.clear();
-                    panel.graph.selected_comments.clear();
+                panel.start_drag(node.id.clone(), graph_pos, cx);
+            } else {
+                // Clicked on empty space
+                if !panel.handle_empty_space_click(graph_pos, cx) {
+                    // No UI element claimed the click, start selection drag
+                    if !event.modifiers.control {
+                        panel.graph.selected_nodes.clear();
+                        panel.graph.selected_comments.clear();
+                    }
+                    panel.start_selection_drag(graph_pos, event.modifiers.control, cx);
                 }
-                panel.start_selection_drag(graph_pos, event.modifiers.control, cx);
             }
-        }
         });
     }
 }
@@ -132,15 +164,25 @@ pub fn on_mouse_move(
                 return;
             }
 
+            // Track the last mouse screen position (within this view) so the
+            // popover trigger can be positioned at the cursor when opening.
+            panel.popup_trigger_screen_pos = Some(event.position);
+
             panel.activate_interaction_view(&view_id);
 
             // Convert window coordinates to element coordinates
-            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
+            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
+                event.position,
+                panel,
+                &view_id,
+            );
             let mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
 
             // Check if right-click drag should start panning
             if let Some(right_start) = panel.right_click_start {
-                let distance = ((mouse_pos.x - right_start.x).powi(2) + (mouse_pos.y - right_start.y).powi(2)).sqrt();
+                let distance = ((mouse_pos.x - right_start.x).powi(2)
+                    + (mouse_pos.y - right_start.y).powi(2))
+                .sqrt();
                 if distance > panel.right_click_threshold {
                     // Start panning if we've moved beyond threshold
                     panel.start_panning(right_start, cx);
@@ -198,12 +240,20 @@ pub fn on_mouse_up_left(
                 panel.end_drag(cx);
             } else if panel.dragging_variable.is_some() {
                 // Variable dropped on canvas - show Get/Set context menu
-                let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
+                let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
+                    event.position,
+                    panel,
+                    &view_id,
+                );
                 let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
                 panel.finish_dragging_variable(graph_pos, cx);
             } else if panel.dragging_connection.is_some() {
                 // Show node creation menu when dropping connection on empty space
-                let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
+                let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
+                    event.position,
+                    panel,
+                    &view_id,
+                );
                 let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
                 panel.show_node_picker(graph_pos, window, cx);
                 panel.cancel_connection_drag(cx);
@@ -225,7 +275,7 @@ pub fn on_mouse_up_right(
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseUpEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
-    move |event: &MouseUpEvent, _window: &mut Window, cx: &mut App| {
+    move |event: &MouseUpEvent, window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
             let should_process = match panel.interaction_view_id.as_deref() {
                 Some(owner) => owner == view_id,
@@ -237,9 +287,48 @@ pub fn on_mouse_up_right(
 
             panel.activate_interaction_view(&view_id);
 
-            // Match old behavior: always end panning on RMB release.
+            // If we were panning, end panning as before.
             if panel.is_panning() {
                 panel.end_panning(cx);
+                // Clear right-click gesture state and exit.
+                panel.right_click_start = None;
+                panel.clear_interaction_view_owner();
+                return;
+            }
+
+            // If this was a short right-click (no pan), prepare quick-palette state.
+            if panel.right_click_start.is_some() {
+                // Convert window coordinates to element coordinates then to graph pos
+                let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
+                    event.position,
+                    panel,
+                    &view_id,
+                );
+                let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
+
+                // Store the graph position where the new node should be placed.
+                panel.popup_palette_graph_pos = Some(graph_pos);
+
+                // Ensure a search input entity exists for the popup (focusable text state)
+                if panel.popup_palette_search_input.is_none() {
+                    let input_entity =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
+                    panel.popup_palette_search_input = Some(input_entity);
+                }
+
+                // Focus the search box so typing can begin immediately.
+                if let Some(input) = &panel.popup_palette_search_input {
+                    input.update(cx, |input, cx| {
+                        input.focus(window, cx);
+                    });
+                }
+
+                // Keep the trigger screen pos as-is; the popover trigger is positioned
+                // continuously from the mouse move handler so Popover will open on the
+                // same click position.
+
+                // Notify to re-render and show popup
+                cx.notify();
             }
 
             // Always clear right-click gesture state.
@@ -266,7 +355,11 @@ pub fn on_scroll_wheel(
 
             // Perform zoom centered on the mouse
             // Convert to element coordinates first
-            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(event.position, panel, &view_id);
+            let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
+                event.position,
+                panel,
+                &view_id,
+            );
             panel.handle_zoom(delta_y, element_pos, cx);
         });
     }

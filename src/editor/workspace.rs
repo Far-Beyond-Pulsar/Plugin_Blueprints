@@ -9,12 +9,7 @@ use ui::workspace::Workspace;
 
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::{
-    CompilerPanel,
-    FindPanel,
-    GraphCanvasPanel,
-    MacrosPanel,
-    PalettePanel,
-    PropertiesPanel,
+    CompilerPanel, FindPanel, GraphCanvasPanel, MacrosPanel, PalettePanel, PropertiesPanel,
     VariablesPanel,
 };
 
@@ -50,7 +45,8 @@ impl BlueprintEditorPanel {
                 .iter()
                 .map(|tab| {
                     let tab_id = tab.id.clone();
-                    let panel = cx.new(|cx| GraphCanvasPanel::new(editor_weak.clone(), tab_id.clone(), cx));
+                    let panel =
+                        cx.new(|cx| GraphCanvasPanel::new(editor_weak.clone(), tab_id.clone(), cx));
                     (tab.id.clone(), panel)
                 })
                 .collect();

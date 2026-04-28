@@ -7,12 +7,12 @@
 //! - Selection highlighting
 //! Comment rendering - visual representation of comment boxes
 
-use gpui::*;
-use gpui::prelude::FluentBuilder;
+use super::operations::ResizeHandle;
 use crate::core::types::BlueprintComment;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
-use super::operations::ResizeHandle;
+use gpui::prelude::FluentBuilder;
+use gpui::*;
 use ui::{Colorize, PixelsExt};
 
 fn comment_body_color(color: Hsla) -> Hsla {
@@ -120,11 +120,12 @@ pub fn render_comment(
                             .font_family("JetBrainsMono-Regular")
                             .font_weight(gpui::FontWeight::default())
                             .child(ui::input::TextInput::new(&panel.comment_text_input))
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(
-                                |_panel, _event: &MouseDownEvent, _window, cx| {
+                            .on_mouse_down(
+                                gpui::MouseButton::Left,
+                                cx.listener(|_panel, _event: &MouseDownEvent, _window, cx| {
                                     cx.stop_propagation();
-                                },
-                            ))
+                                }),
+                            )
                             .on_mouse_move(cx.listener(
                                 |_panel, _event: &MouseMoveEvent, _window, cx| {
                                     cx.stop_propagation();
@@ -150,12 +151,22 @@ pub fn render_comment(
                                     }
 
                                     let now = std::time::Instant::now();
-                                    let should_edit = if let Some(last_click) = panel.last_click_time {
+                                    let should_edit = if let Some(last_click) =
+                                        panel.last_click_time
+                                    {
                                         if now.duration_since(last_click).as_millis() < 500 {
                                             if let Some(last_pos) = panel.last_click_pos {
-                                                let element_pos = NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
-                                                let current_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
-                                                let distance = ((current_pos.x - last_pos.x).powi(2)
+                                                let element_pos =
+                                                    NodeGraphRenderer::window_to_graph_element_pos(
+                                                        event.position,
+                                                        panel,
+                                                    );
+                                                let current_pos = Point::new(
+                                                    element_pos.x.as_f32(),
+                                                    element_pos.y.as_f32(),
+                                                );
+                                                let distance = ((current_pos.x - last_pos.x)
+                                                    .powi(2)
                                                     + (current_pos.y - last_pos.y).powi(2))
                                                 .sqrt();
                                                 distance < 10.0
@@ -171,17 +182,28 @@ pub fn render_comment(
 
                                     if should_edit {
                                         panel.editing_comment = Some(comment_id.clone());
-                                        if let Some(comment) = panel.graph.comments.iter().find(|c| c.id == comment_id) {
+                                        if let Some(comment) =
+                                            panel.graph.comments.iter().find(|c| c.id == comment_id)
+                                        {
                                             panel.comment_text_input.update(cx, |state, cx| {
                                                 state.set_value(comment.text.clone(), window, cx);
                                             });
                                         }
                                         panel.last_click_time = None;
                                     } else {
-                                        let element_pos = NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
-                                        let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
+                                        let element_pos =
+                                            NodeGraphRenderer::window_to_graph_element_pos(
+                                                event.position,
+                                                panel,
+                                            );
+                                        let graph_pos = NodeGraphRenderer::screen_to_graph_pos(
+                                            element_pos,
+                                            &panel.graph,
+                                        );
 
-                                        if let Some(comment) = panel.graph.comments.iter().find(|c| c.id == comment_id) {
+                                        if let Some(comment) =
+                                            panel.graph.comments.iter().find(|c| c.id == comment_id)
+                                        {
                                             panel.dragging_comment = Some(comment_id.clone());
                                             panel.drag_offset = Point::new(
                                                 graph_pos.x - comment.position.x,
@@ -189,7 +211,10 @@ pub fn render_comment(
                                             );
                                         }
 
-                                        let current_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
+                                        let current_pos = Point::new(
+                                            element_pos.x.as_f32(),
+                                            element_pos.y.as_f32(),
+                                        );
                                         panel.last_click_time = Some(now);
                                         panel.last_click_pos = Some(current_pos);
                                     }
@@ -201,14 +226,62 @@ pub fn render_comment(
                     }
                 })
                 .children([
-                    render_resize_handle(ResizeHandle::TopLeft, &comment_id, resize_handle_size, panel, cx),
-                    render_resize_handle(ResizeHandle::TopRight, &comment_id, resize_handle_size, panel, cx),
-                    render_resize_handle(ResizeHandle::BottomLeft, &comment_id, resize_handle_size, panel, cx),
-                    render_resize_handle(ResizeHandle::BottomRight, &comment_id, resize_handle_size, panel, cx),
-                    render_resize_handle(ResizeHandle::Top, &comment_id, resize_handle_size, panel, cx),
-                    render_resize_handle(ResizeHandle::Bottom, &comment_id, resize_handle_size, panel, cx),
-                    render_resize_handle(ResizeHandle::Left, &comment_id, resize_handle_size, panel, cx),
-                    render_resize_handle(ResizeHandle::Right, &comment_id, resize_handle_size, panel, cx),
+                    render_resize_handle(
+                        ResizeHandle::TopLeft,
+                        &comment_id,
+                        resize_handle_size,
+                        panel,
+                        cx,
+                    ),
+                    render_resize_handle(
+                        ResizeHandle::TopRight,
+                        &comment_id,
+                        resize_handle_size,
+                        panel,
+                        cx,
+                    ),
+                    render_resize_handle(
+                        ResizeHandle::BottomLeft,
+                        &comment_id,
+                        resize_handle_size,
+                        panel,
+                        cx,
+                    ),
+                    render_resize_handle(
+                        ResizeHandle::BottomRight,
+                        &comment_id,
+                        resize_handle_size,
+                        panel,
+                        cx,
+                    ),
+                    render_resize_handle(
+                        ResizeHandle::Top,
+                        &comment_id,
+                        resize_handle_size,
+                        panel,
+                        cx,
+                    ),
+                    render_resize_handle(
+                        ResizeHandle::Bottom,
+                        &comment_id,
+                        resize_handle_size,
+                        panel,
+                        cx,
+                    ),
+                    render_resize_handle(
+                        ResizeHandle::Left,
+                        &comment_id,
+                        resize_handle_size,
+                        panel,
+                        cx,
+                    ),
+                    render_resize_handle(
+                        ResizeHandle::Right,
+                        &comment_id,
+                        resize_handle_size,
+                        panel,
+                        cx,
+                    ),
                 ])
                 .when(comment.is_selected, |this| {
                     this.child(
@@ -225,11 +298,12 @@ pub fn render_comment(
                                 )
                                 .size(ui::Size::Small),
                             )
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(
-                                |_panel, _event: &MouseDownEvent, _window, cx| {
+                            .on_mouse_down(
+                                gpui::MouseButton::Left,
+                                cx.listener(|_panel, _event: &MouseDownEvent, _window, cx| {
                                     cx.stop_propagation();
-                                },
-                            )),
+                                }),
+                            ),
                     )
                 }),
         )
@@ -260,7 +334,11 @@ pub fn render_resize_handle(
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl IntoElement {
     let (left, top, cursor) = match handle {
-        ResizeHandle::TopLeft => (Some(px(0.0)), Some(px(0.0)), CursorStyle::ResizeUpLeftDownRight),
+        ResizeHandle::TopLeft => (
+            Some(px(0.0)),
+            Some(px(0.0)),
+            CursorStyle::ResizeUpLeftDownRight,
+        ),
         ResizeHandle::TopRight => (None, Some(px(0.0)), CursorStyle::ResizeUpRightDownLeft),
         ResizeHandle::BottomLeft => (Some(px(0.0)), None, CursorStyle::ResizeUpRightDownLeft),
         ResizeHandle::BottomRight => (None, None, CursorStyle::ResizeUpLeftDownRight),
@@ -278,22 +356,29 @@ pub fn render_resize_handle(
         .when(left.is_none(), |this| this.right(px(0.0)))
         .when_some(top, |this, t| this.top(t))
         .when(top.is_none(), |this| this.bottom(px(0.0)))
-        .when(matches!(handle, ResizeHandle::Top | ResizeHandle::Bottom), |this| {
-            this.left_0().right_0().h(px(size))
-        })
-        .when(matches!(handle, ResizeHandle::Left | ResizeHandle::Right), |this| {
-            this.top_0().bottom_0().w(px(size))
-        })
-        .when(!matches!(handle, ResizeHandle::Top | ResizeHandle::Bottom | ResizeHandle::Left | ResizeHandle::Right), |this| {
-            this.size(px(size))
-        })
+        .when(
+            matches!(handle, ResizeHandle::Top | ResizeHandle::Bottom),
+            |this| this.left_0().right_0().h(px(size)),
+        )
+        .when(
+            matches!(handle, ResizeHandle::Left | ResizeHandle::Right),
+            |this| this.top_0().bottom_0().w(px(size)),
+        )
+        .when(
+            !matches!(
+                handle,
+                ResizeHandle::Top | ResizeHandle::Bottom | ResizeHandle::Left | ResizeHandle::Right
+            ),
+            |this| this.size(px(size)),
+        )
         .bg(gpui::transparent_black())
         .cursor(cursor)
         .on_mouse_down(gpui::MouseButton::Left, {
             cx.listener(move |panel, event: &MouseDownEvent, _window, cx| {
                 cx.stop_propagation();
 
-                let element_pos = NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
+                let element_pos =
+                    NodeGraphRenderer::window_to_graph_element_pos(event.position, panel);
                 let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
 
                 panel.resizing_comment = Some((comment_id.clone(), handle.clone()));

@@ -4,22 +4,20 @@
 
 use gpui::*;
 use ui::{
-    h_flex, v_flex, Icon, IconName,
-    ActiveTheme,
     dock::{Panel, PanelEvent},
+    h_flex,
     input::{InputState, TextInput},
-    v_virtual_list, VirtualListScrollHandle,
+    v_flex, v_virtual_list, ActiveTheme, Icon, IconName, VirtualListScrollHandle,
 };
 
-use crate::core::definitions::{NodeDefinitions, NodeDefinition};
+use crate::core::definitions::{NodeDefinition, NodeDefinitions};
 use crate::core::types::BlueprintNode;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::macros::panel::MacrosRenderer;
 use crate::features::variables::rendering::VariablesRenderer;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::node_library::{
-    build_item_sizes, build_palette_items, count_nodes,
-    filter_palette_items, PaletteItem,
+    build_item_sizes, build_palette_items, count_nodes, filter_palette_items, PaletteItem,
     CATEGORY_HEADER_H, NODE_ENTRY_H,
 };
 use crate::ui_components::properties::PropertiesRenderer;
@@ -47,11 +45,7 @@ impl Render for VariablesPanel {
             div()
                 .size_full()
                 .bg(cx.theme().sidebar)
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        VariablesRenderer::render(editor, cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| VariablesRenderer::render(editor, cx)))
         } else {
             div().child("Editor not available")
         }
@@ -97,11 +91,7 @@ impl Render for MacrosPanel {
             div()
                 .size_full()
                 .bg(cx.theme().sidebar)
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        MacrosRenderer::render(editor, cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| MacrosRenderer::render(editor, cx)))
         } else {
             div().child("Editor not available")
         }
@@ -146,11 +136,7 @@ impl Render for CompilerPanel {
         if let Some(editor) = self.editor.upgrade() {
             div()
                 .size_full()
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        editor.render_compiler_results(cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| editor.render_compiler_results(cx)))
         } else {
             div().child("Editor not available")
         }
@@ -195,11 +181,7 @@ impl Render for FindPanel {
         if let Some(editor) = self.editor.upgrade() {
             div()
                 .size_full()
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        editor.render_find_panel(cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| editor.render_find_panel(cx)))
         } else {
             div().child("Editor not available")
         }
@@ -245,11 +227,7 @@ impl Render for PropertiesPanel {
             div()
                 .size_full()
                 .bg(cx.theme().sidebar)
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        PropertiesRenderer::render(editor, cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| PropertiesRenderer::render(editor, cx)))
         } else {
             div().child("Editor not available")
         }
@@ -282,12 +260,12 @@ impl Panel for PropertiesPanel {
 /// at construction time.  Each render cycle the list is optionally filtered by
 /// the search query; only the visible rows are rendered by `v_virtual_list`.
 pub struct PalettePanel {
-    editor:        WeakEntity<BlueprintEditorPanel>,
-    focus_handle:  FocusHandle,
+    editor: WeakEntity<BlueprintEditorPanel>,
+    focus_handle: FocusHandle,
     /// Complete flat list (category headers + node rows) – never mutated after init.
-    all_items:     Vec<PaletteItem>,
+    all_items: Vec<PaletteItem>,
     /// State for the search-filter input box.
-    search_input:  Entity<InputState>,
+    search_input: Entity<InputState>,
     /// Allows programmatic scrolling (e.g. scroll-to-top on search).
     scroll_handle: VirtualListScrollHandle,
 }
@@ -299,8 +277,7 @@ impl PalettePanel {
         cx: &mut Context<Self>,
     ) -> Self {
         let all_items = build_palette_items(NodeDefinitions::load());
-        let search_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
+        let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
         Self {
             editor,
             focus_handle: cx.focus_handle(),
@@ -316,15 +293,15 @@ impl EventEmitter<PanelEvent> for PalettePanel {}
 impl Render for PalettePanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // ── 1. Build filtered visible list ────────────────────────────────────
-        let query      = self.search_input.read(cx).value().to_string();
-        let visible    = filter_palette_items(&self.all_items, &query);
+        let query = self.search_input.read(cx).value().to_string();
+        let visible = filter_palette_items(&self.all_items, &query);
         let node_count = count_nodes(&visible);
         let item_sizes = build_item_sizes(&visible);
 
         // ── 2. Capture what the 'static closure needs ────────────────────────
         // All captured data must be owned / Clone – no references.
-        let items_snap    = visible;                  // Vec<PaletteItem> → moved
-        let view_entity   = cx.entity().clone();
+        let items_snap = visible; // Vec<PaletteItem> → moved
+        let view_entity = cx.entity().clone();
         let scroll_handle = self.scroll_handle.clone();
 
         v_flex()
@@ -393,47 +370,40 @@ impl Render for PalettePanel {
             )
             // ── Virtual list body ──────────────────────────────────────────────
             .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_hidden()
-                    .child(
-                        v_virtual_list(
-                            view_entity,
-                            "palette-node-list",
-                            item_sizes,
-                            // The closure is 'static + Fn.  Only owned data is
-                            // captured; `items_snap` is borrowed inside each call.
-                            move |_panel, range, _window, cx| {
-                                range
-                                    .map(|ix| -> AnyElement {
-                                        let Some(item) = items_snap.get(ix) else {
-                                            return div()
-                                                .h(px(NODE_ENTRY_H))
-                                                .into_any_element();
-                                        };
-                                        match item {
-                                            PaletteItem::CategoryHeader {
-                                                name,
-                                                color,
-                                                node_count,
-                                            } => palette_category_header(
-                                                name, color, *node_count, cx,
-                                            )
+                div().flex_1().min_h_0().overflow_hidden().child(
+                    v_virtual_list(
+                        view_entity,
+                        "palette-node-list",
+                        item_sizes,
+                        // The closure is 'static + Fn.  Only owned data is
+                        // captured; `items_snap` is borrowed inside each call.
+                        move |_panel, range, _window, cx| {
+                            range
+                                .map(|ix| -> AnyElement {
+                                    let Some(item) = items_snap.get(ix) else {
+                                        return div().h(px(NODE_ENTRY_H)).into_any_element();
+                                    };
+                                    match item {
+                                        PaletteItem::CategoryHeader {
+                                            name,
+                                            color,
+                                            node_count,
+                                        } => palette_category_header(name, color, *node_count, cx)
                                             .into_any_element(),
 
-                                            PaletteItem::NodeEntry { def, category_color } => {
-                                                palette_node_row(ix, def.clone(), category_color, cx)
-                                                    .into_any_element()
-                                            }
-                                        }
-                                    })
-                                    .collect()
-                            },
-                        )
-                        .size_full()
-                        .track_scroll(&scroll_handle),
-                    ),
+                                        PaletteItem::NodeEntry {
+                                            def,
+                                            category_color,
+                                        } => palette_node_row(ix, def.clone(), category_color, cx)
+                                            .into_any_element(),
+                                    }
+                                })
+                                .collect()
+                        },
+                    )
+                    .size_full()
+                    .track_scroll(&scroll_handle),
+                ),
             )
     }
 }
@@ -479,7 +449,12 @@ fn hex_color(hex: &str) -> Rgba {
         }
     }
     // Fallback: mid-grey
-    Rgba { r: 0.6, g: 0.6, b: 0.6, a: 1.0 }
+    Rgba {
+        r: 0.6,
+        g: 0.6,
+        b: 0.6,
+        a: 1.0,
+    }
 }
 
 /// Compact category-header row (non-interactive).
@@ -564,7 +539,7 @@ fn palette_node_row(
         .child(
             v_flex()
                 .flex_1()
-                .min_w_0()  // allows flex child to shrink below content width
+                .min_w_0() // allows flex child to shrink below content width
                 .gap_0p5()
                 .child(
                     div()
@@ -595,8 +570,7 @@ fn palette_node_row(
                         let graph_pos =
                             NodeGraphRenderer::screen_to_graph_pos(screen_pos, &ep.graph);
                         let stagger = (ep.graph.nodes.len() % 8) as f32 * 18.0;
-                        let place_pos =
-                            Point::new(graph_pos.x + stagger, graph_pos.y + stagger);
+                        let place_pos = Point::new(graph_pos.x + stagger, graph_pos.y + stagger);
                         let node = BlueprintNode::from_definition(&def_now, place_pos);
                         ep.add_node(node, cx);
                     });
@@ -613,7 +587,11 @@ pub struct GraphCanvasPanel {
 }
 
 impl GraphCanvasPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, tab_id: String, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        editor: WeakEntity<BlueprintEditorPanel>,
+        tab_id: String,
+        cx: &mut Context<Self>,
+    ) -> Self {
         Self {
             editor,
             tab_id,
@@ -627,12 +605,10 @@ impl EventEmitter<PanelEvent> for GraphCanvasPanel {}
 impl Render for GraphCanvasPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if let Some(editor) = self.editor.upgrade() {
-            div()
-                .size_full()
-                .child(editor.update(cx, |editor, cx| {
-                    editor.ensure_active_graph_panel_state(&self.tab_id);
-                    NodeGraphRenderer::render(editor, &self.tab_id, cx)
-                }))
+            div().size_full().child(editor.update(cx, |editor, cx| {
+                editor.ensure_active_graph_panel_state(&self.tab_id);
+                NodeGraphRenderer::render(editor, &self.tab_id, cx)
+            }))
         } else {
             div().child("Editor not available")
         }

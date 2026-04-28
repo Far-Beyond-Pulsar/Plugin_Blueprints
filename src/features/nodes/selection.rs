@@ -1,9 +1,9 @@
 //! Selection operations - selection box and multi-selection
 
-use gpui::*;
-use crate::editor::panel::BlueprintEditorPanel;
 use crate::core::types::{BlueprintNode, Connection};
+use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
+use gpui::*;
 
 impl BlueprintEditorPanel {
     /// Select a single node (or clear selection if None)
@@ -91,14 +91,22 @@ impl BlueprintEditorPanel {
 
     /// Delete all selected nodes
     pub fn delete_selected_nodes(&mut self, cx: &mut Context<Self>) {
-        tracing::info!("[DELETE] Selected nodes count: {}", self.graph.selected_nodes.len());
-        tracing::info!("[DELETE] Selected node IDs: {:?}", self.graph.selected_nodes);
+        tracing::info!(
+            "[DELETE] Selected nodes count: {}",
+            self.graph.selected_nodes.len()
+        );
+        tracing::info!(
+            "[DELETE] Selected node IDs: {:?}",
+            self.graph.selected_nodes
+        );
 
         if !self.graph.selected_nodes.is_empty() {
             let node_count_before = self.graph.nodes.len();
 
             // Remove selected nodes
-            self.graph.nodes.retain(|node| !self.graph.selected_nodes.contains(&node.id));
+            self.graph
+                .nodes
+                .retain(|node| !self.graph.selected_nodes.contains(&node.id));
 
             let node_count_after = self.graph.nodes.len();
             tracing::info!(
@@ -136,7 +144,8 @@ impl BlueprintEditorPanel {
                 ((graph_pos.x - last_pos.x).powi(2) + (graph_pos.y - last_pos.y).powi(2)).sqrt();
             tracing::info!(
                 "[REROUTE] Double-click check: time_diff={}ms, pos_diff={:.2}px",
-                time_diff, pos_diff
+                time_diff,
+                pos_diff
             );
             time_diff < 500 && pos_diff < 50.0
         } else {
@@ -151,7 +160,8 @@ impl BlueprintEditorPanel {
 
                 if let Some(data_type) = self.get_connection_data_type(&connection) {
                     // Create reroute node
-                    let reroute_pos = NodeGraphRenderer::snap_to_grid(graph_pos, self.graph.zoom_level);
+                    let reroute_pos =
+                        NodeGraphRenderer::snap_to_grid(graph_pos, self.graph.zoom_level);
                     let reroute_node = BlueprintNode::create_reroute(reroute_pos);
                     let reroute_id = reroute_node.id.clone();
 

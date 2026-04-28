@@ -6,10 +6,10 @@
 //! - rendering.rs: GPUI rendering code
 //! - panel.rs: Dockable panel (if applicable)
 
-pub mod nodes;
-pub mod connections;
 pub mod comments;
-pub mod variables;
-pub mod macros;
-pub mod viewport;
 pub mod compilation;
+pub mod connections;
+pub mod macros;
+pub mod nodes;
+pub mod variables;
+pub mod viewport;

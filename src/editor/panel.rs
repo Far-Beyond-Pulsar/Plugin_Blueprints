@@ -4,24 +4,16 @@
 //! constructors, and basic accessors.
 
 use gpui::*;
-use ui::{
-    input::InputState,
-    resizable::ResizableState,
-};
 use std::collections::HashMap;
+use ui::{input::InputState, resizable::ResizableState};
 
-use crate::core::{
-    types::*,
-    graph::*,
-    events::*,
-    definitions::NodeDefinitions,
-};
-use ui::graph::DataType;
-use crate::features::variables::ClassVariable;
-use crate::features::connections::operations::ConnectionDrag;
-use crate::editor::workspace_panels::GraphCanvasPanel;
 use super::tabs::GraphTab;
+use crate::core::{definitions::NodeDefinitions, events::*, graph::*, types::*};
+use crate::editor::workspace_panels::GraphCanvasPanel;
+use crate::features::connections::operations::ConnectionDrag;
+use crate::features::variables::ClassVariable;
 use ui::dock::{DockItem, DockPlacement};
+use ui::graph::DataType;
 use ui::graph::{DataType as GraphDataType, LibraryManager, SubGraphDefinition};
 
 /// Main Blueprint Editor Panel struct
@@ -73,7 +65,8 @@ pub struct BlueprintEditorPanel {
     pub class_variables: Vec<ClassVariable>,
     pub is_creating_variable: bool,
     pub variable_name_input: Entity<InputState>,
-    pub variable_type_dropdown: Entity<ui::dropdown::DropdownState<Vec<crate::features::variables::TypeItem>>>,
+    pub variable_type_dropdown:
+        Entity<ui::dropdown::DropdownState<Vec<crate::features::variables::TypeItem>>>,
     pub dragging_variable: Option<crate::features::variables::VariableDrag>,
     pub variable_drop_menu_position: Option<Point<f32>>,
 
@@ -106,10 +99,15 @@ pub struct BlueprintEditorPanel {
     pub show_minimap: bool,
     pub show_graph_controls: bool,
 
+    // Palette popup state (right-click quick palette)
+    pub popup_trigger_screen_pos: Option<Point<Pixels>>,
+    pub popup_palette_graph_pos: Option<Point<f32>>,
+    pub popup_palette_search_input: Option<Entity<InputState>>,
+
     // Sidebar tab states
-    pub left_top_tab: usize,      // 0=Variables, 1=Functions, 2=Macros
-    pub left_bottom_tab: usize,   // 0=Library, 1=Compiler
-    pub right_tab: usize,          // 0=Details, 1=Palette
+    pub left_top_tab: usize,    // 0=Variables, 1=Functions, 2=Macros
+    pub left_bottom_tab: usize, // 0=Library, 1=Compiler
+    pub right_tab: usize,       // 0=Details, 1=Palette
 
     // Tab drag state
     pub dragging_tab: Option<TabDragInfo>,
@@ -222,7 +220,11 @@ impl BlueprintEditorPanel {
     }
 
     /// Create a new blueprint editor panel with a file to load
-    pub fn new_with_file(file_path: std::path::PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new_with_file(
+        file_path: std::path::PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let mut panel = Self::new_internal(Some(file_path.clone()), window, cx);
 
         // Try to load the blueprint file
@@ -240,7 +242,7 @@ impl BlueprintEditorPanel {
         library_id: String,
         library_name: String,
         window: &mut Window,
-        cx: &mut Context<Self>
+        cx: &mut Context<Self>,
     ) -> Self {
         let mut panel = Self::new_internal(None, window, cx);
         panel.tab_title = Some(format!("Library: {}", library_name));
@@ -257,7 +259,7 @@ impl BlueprintEditorPanel {
     fn new_internal(
         project_path: Option<std::path::PathBuf>,
         window: &mut Window,
-        cx: &mut Context<Self>
+        cx: &mut Context<Self>,
     ) -> Self {
         let _resizable_state = ResizableState::new(cx);
         let _left_sidebar_resizable_state = ResizableState::new(cx);
@@ -283,7 +285,7 @@ impl BlueprintEditorPanel {
         Self {
             focus_handle: cx.focus_handle(),
             graph: main_graph.clone(),
-            workspace: None,  // Will be initialized in render
+            workspace: None, // Will be initialized in render
             current_class_path: None,
             tab_title: None,
             dragging_node: None,
@@ -307,20 +309,17 @@ impl BlueprintEditorPanel {
             interaction_state_by_view: HashMap::new(),
             class_variables: Vec::new(),
             is_creating_variable: false,
-            variable_name_input: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("Variable name...")
-            }),
-            variable_type_dropdown: cx.new(|cx| {
-                ui::dropdown::DropdownState::new(Vec::new(), None, window, cx)
-            }),
+            variable_name_input: cx
+                .new(|cx| InputState::new(window, cx).placeholder("Variable name...")),
+            variable_type_dropdown: cx
+                .new(|cx| ui::dropdown::DropdownState::new(Vec::new(), None, window, cx)),
             dragging_variable: None,
             variable_drop_menu_position: None,
             dragging_comment: None,
             resizing_comment: None,
             editing_comment: None,
-            comment_text_input: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("Comment text...")
-            }),
+            comment_text_input: cx
+                .new(|cx| InputState::new(window, cx).placeholder("Comment text...")),
             comment_color_bindings_dirty: true,
             subscriptions: Vec::new(),
             compilation_status: CompilationStatus::default(),
@@ -348,6 +347,9 @@ impl BlueprintEditorPanel {
             show_debug_overlay: true,
             show_minimap: true,
             show_graph_controls: true,
+            popup_trigger_screen_pos: None,
+            popup_palette_graph_pos: None,
+            popup_palette_search_input: None,
             left_top_tab: 0,
             left_bottom_tab: 0,
             right_tab: 0,
@@ -766,7 +768,11 @@ impl BlueprintEditorPanel {
         ));
     }
 
-    pub(crate) fn refresh_comment_color_bindings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn refresh_comment_color_bindings(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.comment_color_bindings_dirty {
             return;
         }
@@ -785,7 +791,9 @@ impl BlueprintEditorPanel {
                           _window,
                           cx| {
                         if let ui::color_picker::ColorPickerEvent::Change(Some(color)) = event {
-                            if let Some(comment) = this.graph.comments.iter_mut().find(|c| c.id == comment_id) {
+                            if let Some(comment) =
+                                this.graph.comments.iter_mut().find(|c| c.id == comment_id)
+                            {
                                 comment.color = *color;
                                 cx.notify();
                             }
@@ -939,7 +947,12 @@ impl BlueprintEditorPanel {
     }
 
     /// Add a new comment at the specified position
-    pub fn add_comment(&mut self, position: Point<f32>, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn add_comment(
+        &mut self,
+        position: Point<f32>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let new_comment = BlueprintComment::new(self.snap_comment_position(position), window, cx);
 
         self.graph.comments.push(new_comment);
@@ -961,7 +974,11 @@ impl BlueprintEditorPanel {
         }
     }
 
-    pub(crate) fn refresh_graph_workspace_tabs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn refresh_graph_workspace_tabs(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.graph_workspace_tabs_dirty {
             return;
         }
@@ -985,11 +1002,16 @@ impl BlueprintEditorPanel {
             });
         }
 
-        self.graph_panels.retain(|(tab_id, _)| desired_ids.contains(tab_id));
+        self.graph_panels
+            .retain(|(tab_id, _)| desired_ids.contains(tab_id));
 
         let editor_weak = cx.entity().downgrade();
         for tab in &self.open_tabs {
-            if self.graph_panels.iter().any(|(tab_id, _)| tab_id == &tab.id) {
+            if self
+                .graph_panels
+                .iter()
+                .any(|(tab_id, _)| tab_id == &tab.id)
+            {
                 continue;
             }
 
@@ -1007,14 +1029,24 @@ impl BlueprintEditorPanel {
         self.graph_workspace_tabs_dirty = false;
     }
 
-    pub(crate) fn activate_graph_workspace_tab(&mut self, tab_index: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn activate_graph_workspace_tab(
+        &mut self,
+        tab_index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(workspace_entity) = self.workspace.clone() else {
             return;
         };
 
         workspace_entity.update(cx, |workspace, cx| {
             workspace.dock_area().update(cx, |dock_area, cx| {
-                fn activate_tab_item(item: &mut DockItem, tab_index: usize, window: &mut Window, cx: &mut App) -> bool {
+                fn activate_tab_item(
+                    item: &mut DockItem,
+                    tab_index: usize,
+                    window: &mut Window,
+                    cx: &mut App,
+                ) -> bool {
                     match item {
                         DockItem::Tabs { view, .. } => {
                             view.update(cx, |tab_panel, cx| {
@@ -1118,17 +1150,17 @@ impl BlueprintEditorPanel {
         tracing::info!("📂 ═══════════════════════════════════════════════════════════════");
         tracing::info!("📂 File: {}", file_path);
 
-        let content = std::fs::read_to_string(file_path)
-            .map_err(|e| {
-                let error_msg = format!("Failed to read file: {}", e);
-                eprintln!("❌ {}", error_msg);
-                error_msg
-            })?;
+        let content = std::fs::read_to_string(file_path).map_err(|e| {
+            let error_msg = format!("Failed to read file: {}", e);
+            eprintln!("❌ {}", error_msg);
+            error_msg
+        })?;
 
         tracing::info!("📂 ✓ File read successfully ({} bytes)", content.len());
 
         // Strip header comments
-        let json = content.lines()
+        let json = content
+            .lines()
             .skip_while(|line| line.trim().starts_with("//"))
             .collect::<Vec<_>>()
             .join("\n");
@@ -1138,19 +1170,28 @@ impl BlueprintEditorPanel {
             Ok(blueprint_asset) => {
                 tracing::info!("📂 ✓ Detected unified blueprint format");
                 self.load_from_blueprint_asset(blueprint_asset, file_path, window, cx)?;
-            },
+            }
             Err(unified_err) => {
                 tracing::info!("📂 ⚠️  Unified format parse failed:");
                 tracing::info!("📂    Error: {}", unified_err);
-                tracing::info!("📂    Line: {}, Column: {}", unified_err.line(), unified_err.column());
+                tracing::info!(
+                    "📂    Line: {}, Column: {}",
+                    unified_err.line(),
+                    unified_err.column()
+                );
 
                 // Show context around the error location
                 let lines: Vec<&str> = json.lines().collect();
                 let error_line = unified_err.line().saturating_sub(1);
                 if error_line < lines.len() {
                     tracing::info!("📂    Context:");
-                    for i in error_line.saturating_sub(2)..=error_line.saturating_add(2).min(lines.len().saturating_sub(1)) {
-                        tracing::info!("📂      {}{}: {}",
+                    for i in error_line.saturating_sub(2)
+                        ..=error_line
+                            .saturating_add(2)
+                            .min(lines.len().saturating_sub(1))
+                    {
+                        tracing::info!(
+                            "📂      {}{}: {}",
                             if i == error_line { ">>> " } else { "    " },
                             i + 1,
                             lines.get(i).unwrap_or(&"")
@@ -1201,13 +1242,15 @@ impl BlueprintEditorPanel {
         self.local_macros = asset.local_macros;
 
         // Load variables
-        self.class_variables = asset.variables.iter().map(|v| {
-            ClassVariable {
+        self.class_variables = asset
+            .variables
+            .iter()
+            .map(|v| ClassVariable {
                 name: v.name.clone(),
                 var_type: format!("{:?}", v.data_type),
                 default_value: v.default_value.clone(),
-            }
-        }).collect();
+            })
+            .collect();
 
         // Restore main tab
         self.open_tabs = vec![GraphTab {
@@ -1230,12 +1273,16 @@ impl BlueprintEditorPanel {
                 }
 
                 // Check if this is a local macro
-                let macro_data = self.local_macros.iter()
+                let macro_data = self
+                    .local_macros
+                    .iter()
                     .find(|m| &m.id == tab_id)
                     .map(|m| (m.name.clone(), m.graph.clone()));
 
                 if let Some((macro_name, macro_graph)) = macro_data {
-                    if let Ok(mut blueprint_graph) = self.convert_graph_description_to_blueprint(&macro_graph, window, cx) {
+                    if let Ok(mut blueprint_graph) =
+                        self.convert_graph_description_to_blueprint(&macro_graph, window, cx)
+                    {
                         // Restore view state for this tab if available
                         if let Some(view_state) = editor_state.graph_view_states.get(tab_id) {
                             blueprint_graph.pan_offset = Point {
@@ -1276,7 +1323,9 @@ impl BlueprintEditorPanel {
             }
 
             // Restore active tab index (with bounds check)
-            self.active_tab_index = editor_state.active_tab_index.min(self.open_tabs.len().saturating_sub(1));
+            self.active_tab_index = editor_state
+                .active_tab_index
+                .min(self.open_tabs.len().saturating_sub(1));
 
             // Load the active tab's graph into self.graph
             if let Some(active_tab) = self.open_tabs.get(self.active_tab_index) {
@@ -1354,17 +1403,21 @@ impl BlueprintEditorPanel {
             nodes: legacy_graph.nodes,
             connections: legacy_graph.connections,
             metadata: legacy_graph.metadata,
-            comments: legacy_graph.comments.into_iter().map(|c| {
-                let (r, g, b) = hsl_to_rgb(c.color.h, c.color.s, c.color.l);
-                ui::graph::BlueprintComment {
-                    id: c.id,
-                    text: c.text,
-                    position: (c.position.x, c.position.y),
-                    size: (c.size.width, c.size.height),
-                    color: [r, g, b, c.color.a],
-                    contained_node_ids: c.contained_node_ids,
-                }
-            }).collect(),
+            comments: legacy_graph
+                .comments
+                .into_iter()
+                .map(|c| {
+                    let (r, g, b) = hsl_to_rgb(c.color.h, c.color.s, c.color.l);
+                    ui::graph::BlueprintComment {
+                        id: c.id,
+                        text: c.text,
+                        position: (c.position.x, c.position.y),
+                        size: (c.size.width, c.size.height),
+                        color: [r, g, b, c.color.a],
+                        contained_node_ids: c.contained_node_ids,
+                    }
+                })
+                .collect(),
         };
 
         self.graph = self.convert_graph_description_to_blueprint(&graph_description, window, cx)?;
@@ -1409,7 +1462,10 @@ impl BlueprintEditorPanel {
             .map_err(|e| format!("Failed to parse macros.json: {}", e))?;
 
         self.local_macros = macros;
-        tracing::info!("📂 Loaded {} local macros from macros.json", self.local_macros.len());
+        tracing::info!(
+            "📂 Loaded {} local macros from macros.json",
+            self.local_macros.len()
+        );
         Ok(())
     }
 
@@ -1418,7 +1474,7 @@ impl BlueprintEditorPanel {
         &mut self,
         class_path: &std::path::Path,
         window: &mut Window,
-        cx: &mut Context<Self>
+        cx: &mut Context<Self>,
     ) -> Result<(), String> {
         #[derive(serde::Deserialize)]
         struct SerializedGraphTab {
@@ -1448,11 +1504,15 @@ impl BlueprintEditorPanel {
             }
 
             if ser_tab.is_library_macro {
-                let macro_graph = self.library_manager.get_subgraph(&ser_tab.id)
+                let macro_graph = self
+                    .library_manager
+                    .get_subgraph(&ser_tab.id)
                     .map(|m| m.graph.clone());
 
                 if let Some(graph) = macro_graph {
-                    if let Ok(blueprint_graph) = self.convert_graph_description_to_blueprint(&graph, window, cx) {
+                    if let Ok(blueprint_graph) =
+                        self.convert_graph_description_to_blueprint(&graph, window, cx)
+                    {
                         self.open_tabs.push(GraphTab {
                             id: ser_tab.id.clone(),
                             name: ser_tab.name.clone(),
@@ -1465,12 +1525,16 @@ impl BlueprintEditorPanel {
                     }
                 }
             } else {
-                let macro_graph = self.local_macros.iter()
+                let macro_graph = self
+                    .local_macros
+                    .iter()
                     .find(|m| m.id == ser_tab.id)
                     .map(|m| m.graph.clone());
 
                 if let Some(graph) = macro_graph {
-                    if let Ok(blueprint_graph) = self.convert_graph_description_to_blueprint(&graph, window, cx) {
+                    if let Ok(blueprint_graph) =
+                        self.convert_graph_description_to_blueprint(&graph, window, cx)
+                    {
                         self.open_tabs.push(GraphTab {
                             id: ser_tab.id.clone(),
                             name: ser_tab.name.clone(),
@@ -1504,11 +1568,21 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (f32, f32, f32) {
     let p = 2.0 * l - q;
 
     let hue_to_rgb = |p: f32, q: f32, mut t: f32| -> f32 {
-        if t < 0.0 { t += 1.0; }
-        if t > 1.0 { t -= 1.0; }
-        if t < 1.0 / 6.0 { return p + (q - p) * 6.0 * t; }
-        if t < 1.0 / 2.0 { return q; }
-        if t < 2.0 / 3.0 { return p + (q - p) * (2.0 / 3.0 - t) * 6.0; }
+        if t < 0.0 {
+            t += 1.0;
+        }
+        if t > 1.0 {
+            t -= 1.0;
+        }
+        if t < 1.0 / 6.0 {
+            return p + (q - p) * 6.0 * t;
+        }
+        if t < 1.0 / 2.0 {
+            return q;
+        }
+        if t < 2.0 / 3.0 {
+            return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+        }
         p
     };
 

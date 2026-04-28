@@ -1,17 +1,17 @@
 //! Connection rendering - bezier curves and visual presentation
 use ui::ActiveTheme;
 use ui::PixelsExt;
-use ui::StyledExt;
 use ui::Sizable;
+use ui::StyledExt;
 
+use super::operations::ConnectionDrag;
+use crate::core::graph::BlueprintGraph;
+use crate::core::types::{BlueprintNode, Connection, NodeType};
+use crate::editor::panel::BlueprintEditorPanel;
+use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
 use std::collections::{HashMap, HashSet};
-use crate::editor::panel::BlueprintEditorPanel;
-use crate::core::types::{Connection, BlueprintNode, NodeType};
-use crate::core::graph::BlueprintGraph;
-use crate::rendering::graph::NodeGraphRenderer;
 use ui::graph::DataType;
-use super::operations::ConnectionDrag;
 
 struct GraphCullBounds {
     left: f32,
@@ -24,7 +24,12 @@ fn compute_graph_cull_bounds(panel: &BlueprintEditorPanel) -> GraphCullBounds {
     let graph = &panel.graph;
     let viewport_size = panel
         .graph_element_bounds
-        .map(|b| (b.size.width.as_f32().max(1.0), b.size.height.as_f32().max(1.0)))
+        .map(|b| {
+            (
+                b.size.width.as_f32().max(1.0),
+                b.size.height.as_f32().max(1.0),
+            )
+        })
         .unwrap_or((3840.0, 2160.0));
 
     let graph_origin = NodeGraphRenderer::screen_to_graph_pos(Point::new(px(0.0), px(0.0)), graph);
@@ -64,7 +69,8 @@ impl BlueprintEditorPanel {
         let mut connection_shapes: Vec<(Point<f32>, Point<f32>, gpui::Hsla)> = Vec::new();
         let cull_bounds = compute_graph_cull_bounds(panel);
 
-        let mut node_by_id: HashMap<&str, &BlueprintNode> = HashMap::with_capacity(panel.graph.nodes.len());
+        let mut node_by_id: HashMap<&str, &BlueprintNode> =
+            HashMap::with_capacity(panel.graph.nodes.len());
         let mut visible_node_ids: HashSet<&str> = HashSet::with_capacity(panel.graph.nodes.len());
         for node in &panel.graph.nodes {
             let node_id = node.id.as_str();
@@ -161,12 +167,7 @@ impl BlueprintEditorPanel {
 
         if let (Some(from_node), Some(to_node)) = (from_node, to_node) {
             if let (Some(from_pin_pos), Some(to_pin_pos)) = (
-                Self::calculate_pin_position(
-                    from_node,
-                    &connection.source_pin,
-                    false,
-                    graph,
-                ),
+                Self::calculate_pin_position(from_node, &connection.source_pin, false, graph),
                 Self::calculate_pin_position(to_node, &connection.target_pin, true, graph),
             ) {
                 let pin_color = if let Some(pin) = from_node
@@ -200,7 +201,9 @@ impl BlueprintEditorPanel {
             {
                 let pin_color = Self::get_pin_color(&drag.source_pin_type, cx);
                 let end_pos = if let Some((target_node_id, target_pin_id)) = &drag.target_pin {
-                    if let Some(target_node) = panel.graph.nodes.iter().find(|n| n.id == *target_node_id) {
+                    if let Some(target_node) =
+                        panel.graph.nodes.iter().find(|n| n.id == *target_node_id)
+                    {
                         Self::calculate_pin_position(target_node, target_pin_id, true, &panel.graph)
                             .unwrap_or(drag.current_mouse_pos)
                     } else {
@@ -236,17 +239,47 @@ impl BlueprintEditorPanel {
         let segments = ((distance / 14.0).ceil() as usize).clamp(28, 80);
 
         // Paint soft outer glow first (wider, transparent)
-        let glow_color = gpui::Hsla { h: color.h, s: color.s, l: color.l, a: 0.12 };
+        let glow_color = gpui::Hsla {
+            h: color.h,
+            s: color.s,
+            l: color.l,
+            a: 0.12,
+        };
         let glow_thickness = thickness * 3.0;
-        Self::paint_bezier_stroke(window, from_pos, to_pos, control1, control2, glow_color, glow_thickness, segments);
+        Self::paint_bezier_stroke(
+            window,
+            from_pos,
+            to_pos,
+            control1,
+            control2,
+            glow_color,
+            glow_thickness,
+            segments,
+        );
 
         // Paint the main wire
-        Self::paint_bezier_stroke(window, from_pos, to_pos, control1, control2, color, thickness, segments);
+        Self::paint_bezier_stroke(
+            window, from_pos, to_pos, control1, control2, color, thickness, segments,
+        );
 
         // Paint bright center highlight for a glossy wire look
-        let highlight = gpui::Hsla { h: color.h, s: color.s * 0.5, l: (color.l + 0.25).min(0.95), a: 0.5 };
+        let highlight = gpui::Hsla {
+            h: color.h,
+            s: color.s * 0.5,
+            l: (color.l + 0.25).min(0.95),
+            a: 0.5,
+        };
         let highlight_thickness = thickness * 0.35;
-        Self::paint_bezier_stroke(window, from_pos, to_pos, control1, control2, highlight, highlight_thickness, segments);
+        Self::paint_bezier_stroke(
+            window,
+            from_pos,
+            to_pos,
+            control1,
+            control2,
+            highlight,
+            highlight_thickness,
+            segments,
+        );
     }
 
     /// Paint a single bezier stroke
@@ -375,12 +408,12 @@ impl BlueprintEditorPanel {
 
         // These MUST match the values used in render_blueprint_node / render_node_pins.
         const HEADER_H: f32 = 27.0;
-        const SEP_H: f32    =  1.0;
-        const BODY_PAD: f32 =  8.0;
+        const SEP_H: f32 = 1.0;
+        const BODY_PAD: f32 = 8.0;
         const PIN_ROW_H: f32 = 16.0;
-        const PIN_GAP: f32  =  4.0;
+        const PIN_GAP: f32 = 4.0;
 
-        let z   = graph.zoom_level;
+        let z = graph.zoom_level;
         let nsp = Self::graph_to_screen_pos(node.position, graph);
 
         let row = if is_input {
@@ -407,7 +440,10 @@ impl BlueprintEditorPanel {
     }
 
     /// Get the color for a pin based on its data type
-    pub fn get_pin_color(data_type: &DataType, _cx: &mut Context<BlueprintEditorPanel>) -> gpui::Hsla {
+    pub fn get_pin_color(
+        data_type: &DataType,
+        _cx: &mut Context<BlueprintEditorPanel>,
+    ) -> gpui::Hsla {
         // Use the new type system to generate pin colors
         let pin_style = data_type.generate_pin_style();
         // Convert RGB to HSLA using the proper GPUI color API

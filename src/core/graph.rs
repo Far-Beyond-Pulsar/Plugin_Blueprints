@@ -3,8 +3,8 @@
 //! This module defines the main `BlueprintGraph` type that holds all nodes,
 //! connections, comments, and view state for a single blueprint document.
 
+use super::types::{BlueprintComment, BlueprintNode, Connection, VirtualizationStats};
 use gpui::*;
-use super::types::{BlueprintNode, Connection, BlueprintComment, VirtualizationStats};
 
 /// The main container for a blueprint graph, including all nodes, connections,
 /// comments, selection state, and viewport information.

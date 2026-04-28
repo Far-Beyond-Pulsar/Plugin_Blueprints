@@ -3,12 +3,12 @@
 //! This module provides the main save/load functionality for blueprints,
 //! including autosave, format detection, and legacy format migration.
 
-use std::path::{Path, PathBuf};
-use gpui::*;
+use super::{formats, legacy};
+use crate::core::types::CompilationState;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::tabs::GraphTab;
-use crate::core::types::CompilationState;
-use super::{formats, legacy};
+use gpui::*;
+use std::path::{Path, PathBuf};
 
 impl BlueprintEditorPanel {
     /// Save the current blueprint to its file path
@@ -70,8 +70,7 @@ impl BlueprintEditorPanel {
         let content = formats::serialize_blueprint_with_header(&asset)?;
 
         // Write to file
-        std::fs::write(path, content)
-            .map_err(|e| format!("Failed to write file: {}", e))?;
+        std::fs::write(path, content).map_err(|e| format!("Failed to write file: {}", e))?;
 
         Ok(())
     }
@@ -84,8 +83,8 @@ impl BlueprintEditorPanel {
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
         // Read file content
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
 
         // Try to deserialize as current format first
         let asset = match formats::deserialize_blueprint(&content) {
@@ -118,7 +117,9 @@ impl BlueprintEditorPanel {
         let main_graph = self.convert_graph_to_description(&self.graph)?;
 
         // Convert local ClassVariable to ui::ClassVariable
-        let variables: Vec<ui::graph::ClassVariable> = self.class_variables.iter()
+        let variables: Vec<ui::graph::ClassVariable> = self
+            .class_variables
+            .iter()
             .enumerate()
             .map(|(i, v)| ui::graph::ClassVariable {
                 id: format!("var_{}", i),
@@ -178,7 +179,9 @@ impl BlueprintEditorPanel {
         self.local_macros = asset.local_macros;
 
         // Convert ui::ClassVariable to local ClassVariable
-        self.class_variables = asset.variables.iter()
+        self.class_variables = asset
+            .variables
+            .iter()
             .map(|v| crate::features::variables::ClassVariable {
                 name: v.name.clone(),
                 var_type: format!("{:?}", v.data_type),
@@ -202,9 +205,12 @@ impl BlueprintEditorPanel {
                     .map(|m| (m.id.clone(), m.name.clone(), m.graph.clone()));
 
                 if let Some((macro_id, macro_name, macro_graph_desc)) = macro_data {
-                    if let Ok(mut macro_graph) = self.convert_graph_description_to_blueprint(&macro_graph_desc, window, cx) {
+                    if let Ok(mut macro_graph) =
+                        self.convert_graph_description_to_blueprint(&macro_graph_desc, window, cx)
+                    {
                         if let Some(view_state) = editor_state.graph_view_states.get(tab_id) {
-                            macro_graph.pan_offset = Point::new(view_state.pan_offset_x, view_state.pan_offset_y);
+                            macro_graph.pan_offset =
+                                Point::new(view_state.pan_offset_x, view_state.pan_offset_y);
                             macro_graph.zoom_level = view_state.zoom;
                         }
 
@@ -272,7 +278,11 @@ impl BlueprintEditorPanel {
     }
 
     /// Load from autosave file (recovery)
-    pub fn load_autosave(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Result<(), String> {
+    pub fn load_autosave(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
         if let Some(path) = &self.current_class_path {
             let autosave_path = path.with_extension("blueprint.autosave");
             self.load_from_path(&autosave_path, window, cx)?;

@@ -5,10 +5,10 @@
 
 pub mod panel;
 pub mod panel_render;
-pub mod workspace;
-pub mod workspace_panels;
 pub mod tabs;
 pub mod toolbar;
+pub mod workspace;
+pub mod workspace_panels;
 
 pub use panel::BlueprintEditorPanel;
 pub use tabs::GraphTab;

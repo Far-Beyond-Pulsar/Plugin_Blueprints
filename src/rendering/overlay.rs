@@ -6,10 +6,13 @@
 //! - Graph controls (zoom level, etc.)
 
 //! Overlay rendering - debug info, selection box, viewport bounds
-use gpui::*;
-use ui::{ActiveTheme, PixelsExt, StyledExt, Sizable, button::{Button, ButtonVariants}, h_flex, v_flex, IconName};
-use crate::editor::panel::BlueprintEditorPanel;
 use super::graph::NodeGraphRenderer;
+use crate::editor::panel::BlueprintEditorPanel;
+use gpui::*;
+use ui::{
+    button::{Button, ButtonVariants},
+    h_flex, v_flex, ActiveTheme, IconName, PixelsExt, Sizable, StyledExt,
+};
 
 /// Render the selection box during drag-select
 pub fn render_selection_box(
@@ -42,8 +45,18 @@ pub fn render_selection_box(
                     .w(px(width))
                     .h(px(height))
                     .border_1()
-                    .border_color(gpui::Hsla { h: 0.58, s: 0.7, l: 0.6, a: 0.7 })
-                    .bg(gpui::Hsla { h: 0.58, s: 0.5, l: 0.5, a: 0.08 })
+                    .border_color(gpui::Hsla {
+                        h: 0.58,
+                        s: 0.7,
+                        l: 0.6,
+                        a: 0.7,
+                    })
+                    .bg(gpui::Hsla {
+                        h: 0.58,
+                        s: 0.5,
+                        l: 0.5,
+                        a: 0.08,
+                    })
                     .rounded(px(3.0)),
             )
             .into_any_element()
@@ -76,8 +89,10 @@ pub fn render_viewport_bounds_debug(
     // Convert back to screen coordinates for rendering
     let top_left_screen =
         NodeGraphRenderer::graph_to_screen_pos(Point::new(visible_left, visible_top), &panel.graph);
-    let bottom_right_screen =
-        NodeGraphRenderer::graph_to_screen_pos(Point::new(visible_right, visible_bottom), &panel.graph);
+    let bottom_right_screen = NodeGraphRenderer::graph_to_screen_pos(
+        Point::new(visible_right, visible_bottom),
+        &panel.graph,
+    );
 
     let width = bottom_right_screen.x - top_left_screen.x;
     let height = bottom_right_screen.y - top_left_screen.y;
@@ -132,7 +147,9 @@ pub fn render_debug_overlay(
         .graph
         .connections
         .iter()
-        .filter(|connection| NodeGraphRenderer::is_connection_visible_simple(connection, &panel.graph))
+        .filter(|connection| {
+            NodeGraphRenderer::is_connection_visible_simple(connection, &panel.graph)
+        })
         .count();
     let culled_connection_count = panel.graph.connections.len() - visible_connection_count;
 
@@ -177,8 +194,8 @@ pub fn render_debug_overlay(
                                         .on_click(cx.listener(|panel, _, _, cx| {
                                             panel.show_debug_overlay = false;
                                             cx.notify();
-                                        }))
-                                )
+                                        })),
+                                ),
                         )
                         .child(div().h(px(1.0)).bg(cx.theme().border).my_1())
                         .child(div().text_xs().text_color(cx.theme().info).child(format!(
@@ -237,10 +254,10 @@ pub fn render_debug_overlay(
                                 )),
                         )
                         .child(
-                            div().text_xs().text_color(cx.theme().danger).child(format!(
-                                "Connections Culled: {}",
-                                culled_connection_count
-                            )),
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().danger)
+                                .child(format!("Connections Culled: {}", culled_connection_count)),
                         )
                         .child(
                             div()
@@ -283,58 +300,49 @@ pub fn render_graph_controls(
     panel: &BlueprintEditorPanel,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl IntoElement {
-    div()
-        .absolute()
-        .bottom_4()
-        .right_4()
-        .w(px(280.0))
-        .child(
-            v_flex()
+    div().absolute().bottom_4().right_4().w(px(280.0)).child(
+        v_flex().gap_2().items_end().w(px(280.0)).child(
+            h_flex()
                 .gap_2()
-                .items_end()
-                .w(px(280.0))
+                .p_2()
+                .w_full()
+                .bg(cx.theme().background.opacity(0.9))
+                .rounded(cx.theme().radius)
+                .border_1()
+                .border_color(cx.theme().border)
+                .justify_between()
+                .items_center()
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(format!("Zoom: {:.0}%", panel.graph.zoom_level * 100.0)),
+                )
                 .child(
                     h_flex()
                         .gap_2()
-                        .p_2()
-                        .w_full()
-                        .bg(cx.theme().background.opacity(0.9))
-                        .rounded(cx.theme().radius)
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .justify_between()
-                        .items_center()
                         .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("Zoom: {:.0}%", panel.graph.zoom_level * 100.0)),
+                            Button::new("zoom_fit")
+                                .icon(IconName::BadgeCheck)
+                                .tooltip("Fit to View")
+                                .on_click(cx.listener(|panel, _, _window, cx| {
+                                    let graph = panel.get_graph_mut();
+                                    graph.zoom_level = 1.0;
+                                    graph.pan_offset = Point::new(0.0, 0.0);
+                                    cx.notify();
+                                })),
                         )
                         .child(
-                            h_flex()
-                                .gap_2()
-                                .child(
-                                    Button::new("zoom_fit")
-                                        .icon(IconName::BadgeCheck)
-                                        .tooltip("Fit to View")
-                                        .on_click(cx.listener(|panel, _, _window, cx| {
-                                            let graph = panel.get_graph_mut();
-                                            graph.zoom_level = 1.0;
-                                            graph.pan_offset = Point::new(0.0, 0.0);
-                                            cx.notify();
-                                        }))
-                                )
-                                .child(
-                                    Button::new("close_graph_controls")
-                                        .icon(IconName::X)
-                                        .ghost()
-                                        .xsmall()
-                                        .on_click(cx.listener(|panel, _, _, cx| {
-                                            panel.show_graph_controls = false;
-                                            cx.notify();
-                                        }))
-                                )
-                        )
-                )
-        )
+                            Button::new("close_graph_controls")
+                                .icon(IconName::X)
+                                .ghost()
+                                .xsmall()
+                                .on_click(cx.listener(|panel, _, _, cx| {
+                                    panel.show_graph_controls = false;
+                                    cx.notify();
+                                })),
+                        ),
+                ),
+        ),
+    )
 }

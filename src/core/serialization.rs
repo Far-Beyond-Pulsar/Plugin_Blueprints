@@ -24,7 +24,11 @@ pub mod point_serde {
     where
         S: Serializer,
     {
-        PointData { x: point.x, y: point.y }.serialize(serializer)
+        PointData {
+            x: point.x,
+            y: point.y,
+        }
+        .serialize(serializer)
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Point<f32>, D::Error>
@@ -53,7 +57,11 @@ pub mod size_serde {
     where
         S: Serializer,
     {
-        SizeData { width: size.width, height: size.height }.serialize(serializer)
+        SizeData {
+            width: size.width,
+            height: size.height,
+        }
+        .serialize(serializer)
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Size<f32>, D::Error>
@@ -84,7 +92,13 @@ pub mod hsla_serde {
     where
         S: Serializer,
     {
-        HslaData { h: color.h, s: color.s, l: color.l, a: color.a }.serialize(serializer)
+        HslaData {
+            h: color.h,
+            s: color.s,
+            l: color.l,
+            a: color.a,
+        }
+        .serialize(serializer)
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Hsla, D::Error>
@@ -92,6 +106,11 @@ pub mod hsla_serde {
         D: Deserializer<'de>,
     {
         let data = HslaData::deserialize(deserializer)?;
-        Ok(Hsla { h: data.h, s: data.s, l: data.l, a: data.a })
+        Ok(Hsla {
+            h: data.h,
+            s: data.s,
+            l: data.l,
+            a: data.a,
+        })
     }
 }

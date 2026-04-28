@@ -6,10 +6,10 @@
 //! - Type compatibility checking
 //! - Reroute node type inference
 
+pub mod compatibility;
 pub mod operations;
 pub mod rendering;
-pub mod compatibility;
 
+pub use compatibility::*;
 pub use operations::*;
 pub use rendering::*;
-pub use compatibility::*;

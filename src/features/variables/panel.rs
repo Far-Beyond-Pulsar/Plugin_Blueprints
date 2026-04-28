@@ -1,9 +1,12 @@
 //! Variables Panel - dockable panel for managing class variables
 
-use gpui::*;
-use ui::{ActiveTheme, StyledExt, dock::{Panel, PanelEvent}};
-use crate::editor::panel::BlueprintEditorPanel;
 use super::rendering::VariablesRenderer;
+use crate::editor::panel::BlueprintEditorPanel;
+use gpui::*;
+use ui::{
+    dock::{Panel, PanelEvent},
+    ActiveTheme, StyledExt,
+};
 
 /// Variables Panel - renders variables list
 pub struct VariablesPanel {
@@ -28,11 +31,7 @@ impl Render for VariablesPanel {
             div()
                 .size_full()
                 .bg(cx.theme().sidebar)
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        VariablesRenderer::render(editor, cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| VariablesRenderer::render(editor, cx)))
         } else {
             div().child("Editor not available")
         }

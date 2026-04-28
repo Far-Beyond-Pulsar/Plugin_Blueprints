@@ -1,10 +1,13 @@
 //! Graph conversion - Convert between BlueprintGraph and GraphDescription formats
 
-use gpui::*;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::layout;
-use crate::{BlueprintGraph, BlueprintNode, BlueprintComment, Connection, Pin, PinType, NodeType, NodeDefinitions};
-use ui::graph::{self as graph_types, GraphDescription, NodeInstance, PropertyValue, Position};
+use crate::{
+    BlueprintComment, BlueprintGraph, BlueprintNode, Connection, NodeDefinitions, NodeType, Pin,
+    PinType,
+};
+use gpui::*;
+use ui::graph::{self as graph_types, GraphDescription, NodeInstance, Position, PropertyValue};
 
 impl BlueprintEditorPanel {
     /// Convert current blueprint graph to graph description
@@ -15,7 +18,7 @@ impl BlueprintEditorPanel {
     /// Convert any blueprint graph to graph description
     pub(crate) fn convert_graph_to_description(
         &self,
-        graph: &BlueprintGraph
+        graph: &BlueprintGraph,
     ) -> Result<GraphDescription, String> {
         let mut graph_desc = GraphDescription::new("Blueprint Graph");
 
@@ -55,7 +58,9 @@ impl BlueprintEditorPanel {
 
         // Convert connections
         for connection in &graph.connections {
-            let conn_type = graph.nodes.iter()
+            let conn_type = graph
+                .nodes
+                .iter()
                 .find(|n| n.id == connection.source_node)
                 .and_then(|node| node.outputs.iter().find(|p| p.id == connection.source_pin))
                 .map(|pin| match &pin.data_type {
@@ -76,16 +81,18 @@ impl BlueprintEditorPanel {
         }
 
         // Convert comments
-        graph_desc.comments = graph.comments.iter().map(|c| {
-            graph_types::BlueprintComment {
+        graph_desc.comments = graph
+            .comments
+            .iter()
+            .map(|c| graph_types::BlueprintComment {
                 id: c.id.clone(),
                 text: c.text.clone(),
                 position: (c.position.x, c.position.y),
                 size: (c.size.width, c.size.height),
                 color: [c.color.h, c.color.s, c.color.l, c.color.a],
                 contained_node_ids: c.contained_node_ids.clone(),
-            }
-        }).collect();
+            })
+            .collect();
 
         Ok(graph_desc)
     }
@@ -158,39 +165,51 @@ impl BlueprintEditorPanel {
                     let height = layout::node_height_for_pin_rows(max_pins);
                     crate::Size::new(240.0, height)
                 },
-                inputs: node_instance.inputs.iter().map(|pin_inst| {
-                    let pin = &pin_inst.pin;
-                    Pin {
-                        id: pin_inst.id.clone(),
-                        name: pin.name.clone(),
-                        pin_type: match pin.pin_type {
-                            graph_types::PinType::Input => PinType::Input,
-                            graph_types::PinType::Output => PinType::Output,
-                        },
-                        data_type: pin.data_type.clone(),
-                    }
-                }).collect(),
-                outputs: node_instance.outputs.iter().map(|pin_inst| {
-                    let pin = &pin_inst.pin;
-                    Pin {
-                        id: pin_inst.id.clone(),
-                        name: pin.name.clone(),
-                        pin_type: match pin.pin_type {
-                            graph_types::PinType::Input => PinType::Input,
-                            graph_types::PinType::Output => PinType::Output,
-                        },
-                        data_type: pin.data_type.clone(),
-                    }
-                }).collect(),
-                properties: node_instance.properties.iter().map(|(k, v)| {
-                    let value_str = match v {
-                        PropertyValue::String(s) => s.clone(),
-                        PropertyValue::Number(n) => n.to_string(),
-                        PropertyValue::Boolean(b) => b.to_string(),
-                        _ => "".to_string(),
-                    };
-                    (k.clone(), value_str)
-                }).collect(),
+                inputs: node_instance
+                    .inputs
+                    .iter()
+                    .map(|pin_inst| {
+                        let pin = &pin_inst.pin;
+                        Pin {
+                            id: pin_inst.id.clone(),
+                            name: pin.name.clone(),
+                            pin_type: match pin.pin_type {
+                                graph_types::PinType::Input => PinType::Input,
+                                graph_types::PinType::Output => PinType::Output,
+                            },
+                            data_type: pin.data_type.clone(),
+                        }
+                    })
+                    .collect(),
+                outputs: node_instance
+                    .outputs
+                    .iter()
+                    .map(|pin_inst| {
+                        let pin = &pin_inst.pin;
+                        Pin {
+                            id: pin_inst.id.clone(),
+                            name: pin.name.clone(),
+                            pin_type: match pin.pin_type {
+                                graph_types::PinType::Input => PinType::Input,
+                                graph_types::PinType::Output => PinType::Output,
+                            },
+                            data_type: pin.data_type.clone(),
+                        }
+                    })
+                    .collect(),
+                properties: node_instance
+                    .properties
+                    .iter()
+                    .map(|(k, v)| {
+                        let value_str = match v {
+                            PropertyValue::String(s) => s.clone(),
+                            PropertyValue::Number(n) => n.to_string(),
+                            PropertyValue::Boolean(b) => b.to_string(),
+                            _ => "".to_string(),
+                        };
+                        (k.clone(), value_str)
+                    })
+                    .collect(),
                 is_selected: false,
                 description,
                 color,
@@ -212,23 +231,31 @@ impl BlueprintEditorPanel {
         }
 
         // Convert comments with initialized color picker states
-        let comments: Vec<BlueprintComment> = graph_desc.comments.iter().map(|c| {
-            let color = Hsla { h: c.color[0], s: c.color[1], l: c.color[2], a: c.color[3] };
-            let color_picker_state = Some(cx.new(|cx| {
-                ui::color_picker::ColorPickerState::new(window, cx)
-            }));
+        let comments: Vec<BlueprintComment> = graph_desc
+            .comments
+            .iter()
+            .map(|c| {
+                let color = Hsla {
+                    h: c.color[0],
+                    s: c.color[1],
+                    l: c.color[2],
+                    a: c.color[3],
+                };
+                let color_picker_state =
+                    Some(cx.new(|cx| ui::color_picker::ColorPickerState::new(window, cx)));
 
-            BlueprintComment {
-                id: c.id.clone(),
-                text: c.text.clone(),
-                position: Point::new(c.position.0, c.position.1),
-                size: crate::Size::new(c.size.0, c.size.1),
-                color,
-                contained_node_ids: c.contained_node_ids.clone(),
-                is_selected: false,
-                color_picker_state,
-            }
-        }).collect();
+                BlueprintComment {
+                    id: c.id.clone(),
+                    text: c.text.clone(),
+                    position: Point::new(c.position.0, c.position.1),
+                    size: crate::Size::new(c.size.0, c.size.1),
+                    color,
+                    contained_node_ids: c.contained_node_ids.clone(),
+                    is_selected: false,
+                    color_picker_state,
+                }
+            })
+            .collect();
 
         Ok(BlueprintGraph {
             nodes,
