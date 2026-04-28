@@ -18,10 +18,52 @@ use ui::{h_flex, v_flex};
 
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::core::types::*;
-use crate::core::graph::BlueprintGraph;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::rendering::{layout, style};
 use ui::graph::DataType;
+
+struct GraphCullBounds {
+    left: f32,
+    top: f32,
+    right: f32,
+    bottom: f32,
+}
+
+fn compute_graph_cull_bounds(panel: &BlueprintEditorPanel) -> GraphCullBounds {
+    let graph = &panel.graph;
+    let viewport_size = panel
+        .graph_element_bounds
+        .map(|b| (b.size.width.as_f32().max(1.0), b.size.height.as_f32().max(1.0)))
+        .unwrap_or((3840.0, 2160.0));
+
+    let graph_origin = NodeGraphRenderer::screen_to_graph_pos(Point::new(px(0.0), px(0.0)), graph);
+    let graph_end = NodeGraphRenderer::screen_to_graph_pos(
+        Point::new(px(viewport_size.0), px(viewport_size.1)),
+        graph,
+    );
+
+    // Keep generous padding to avoid edge popping while panning/zooming.
+    let padding = (260.0 / graph.zoom_level.max(0.05)).max(120.0);
+
+    GraphCullBounds {
+        left: graph_origin.x.min(graph_end.x) - padding,
+        top: graph_origin.y.min(graph_end.y) - padding,
+        right: graph_origin.x.max(graph_end.x) + padding,
+        bottom: graph_origin.y.max(graph_end.y) + padding,
+    }
+}
+
+fn is_node_visible_in_bounds(node: &BlueprintNode, bounds: &GraphCullBounds) -> bool {
+    let node_left = node.position.x;
+    let node_top = node.position.y;
+    let node_right = node.position.x + node.size.width;
+    let node_bottom = node.position.y + node.size.height;
+
+    !(node_left > bounds.right
+        || node_right < bounds.left
+        || node_top > bounds.bottom
+        || node_bottom < bounds.top)
+}
 
 /// Helper to create simple text tooltip for pins
 fn create_text_tooltip(text: &'static str) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
@@ -36,13 +78,14 @@ pub fn render_all(
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl IntoElement {
     let _render_start = std::time::Instant::now();
+    let cull_bounds = compute_graph_cull_bounds(panel);
 
     // Only render nodes that are visible within the viewport (virtualization)
     let visible_nodes: Vec<BlueprintNode> = panel
         .graph
         .nodes
         .iter()
-        .filter(|node| is_node_visible_simple(node, &panel.graph))
+        .filter(|node| is_node_visible_in_bounds(node, &cull_bounds))
         .map(|node| {
             let mut node = node.clone();
             node.is_selected = panel.graph.selected_nodes.contains(&node.id);
@@ -645,42 +688,6 @@ fn get_pin_color(data_type: &DataType, _cx: &mut Context<BlueprintEditorPanel>) 
         a: pin_style.color.a,
     };
     gpui::Hsla::from(rgba)
-}
-
-fn is_node_visible_simple(node: &BlueprintNode, graph: &BlueprintGraph) -> bool {
-    // Calculate node position in screen coordinates
-    let node_screen_pos = NodeGraphRenderer::graph_to_screen_pos(node.position, graph);
-    let node_screen_size = Size::new(
-        node.size.width * graph.zoom_level,
-        node.size.height * graph.zoom_level,
-    );
-
-    // Calculate the visible area based on the inverse of current pan/zoom
-    // This creates a dynamic culling frustum that properly accounts for viewport transformations
-
-    // Convert screen bounds back to graph space for accurate culling
-    let screen_to_graph_origin = NodeGraphRenderer::screen_to_graph_pos(Point::new(px(0.0), px(0.0)), graph);
-    let screen_to_graph_end =
-        NodeGraphRenderer::screen_to_graph_pos(Point::new(px(3840.0), px(2160.0)), graph); // 4K bounds
-
-    // Add generous padding in graph space to prevent premature culling
-    let padding_in_graph_space = 200.0 / graph.zoom_level; // Padding scales with zoom
-
-    let visible_left = screen_to_graph_origin.x - padding_in_graph_space;
-    let visible_top = screen_to_graph_origin.y - padding_in_graph_space;
-    let visible_right = screen_to_graph_end.x + padding_in_graph_space;
-    let visible_bottom = screen_to_graph_end.y + padding_in_graph_space;
-
-    // Check if node intersects with visible bounds in graph space
-    let node_left = node.position.x;
-    let node_top = node.position.y;
-    let node_right = node.position.x + node.size.width;
-    let node_bottom = node.position.y + node.size.height;
-
-    !(node_left > visible_right
-        || node_right < visible_left
-        || node_top > visible_bottom
-        || node_bottom < visible_top)
 }
 
 /// Parses a hex color string (e.g., "#4A90E2") into a GPUI Hsla color
