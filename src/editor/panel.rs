@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use ui::{input::InputState, resizable::ResizableState};
 
 use super::tabs::GraphTab;
+use crate::ui_components::palette_view::NodePaletteView;
 use crate::core::{definitions::NodeDefinitions, events::*, graph::*, types::*};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
@@ -99,8 +100,14 @@ pub struct BlueprintEditorPanel {
     pub show_minimap: bool,
     pub show_graph_controls: bool,
 
-    // Palette context-menu state (right-click quick palette)
+    // Quick palette overlay (right-click on graph canvas)
     pub popup_palette_graph_pos: Option<Point<f32>>,
+    /// Whether the right-click quick-palette overlay is currently visible.
+    pub quick_palette_open: bool,
+    /// Window-space position where the user right-clicked (used to anchor the overlay).
+    pub quick_palette_screen_pos: Point<Pixels>,
+    /// The shared palette view rendered inside the overlay.
+    pub quick_palette_view: Entity<NodePaletteView>,
 
     // Sidebar tab states
     pub left_top_tab: usize,    // 0=Variables, 1=Functions, 2=Macros
@@ -280,6 +287,10 @@ impl BlueprintEditorPanel {
             Self::create_sample_graph()
         };
 
+        let editor_weak = cx.entity().downgrade();
+        let quick_palette_view =
+            cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
+
         Self {
             focus_handle: cx.focus_handle(),
             graph: main_graph.clone(),
@@ -346,6 +357,9 @@ impl BlueprintEditorPanel {
             show_minimap: true,
             show_graph_controls: true,
             popup_palette_graph_pos: None,
+            quick_palette_open: false,
+            quick_palette_screen_pos: Point::default(),
+            quick_palette_view,
             left_top_tab: 0,
             left_bottom_tab: 0,
             right_tab: 0,

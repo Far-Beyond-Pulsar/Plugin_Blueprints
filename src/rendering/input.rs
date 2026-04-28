@@ -57,6 +57,11 @@ pub fn on_mouse_down_right(
                 panel.right_click_start = Some(mouse_pos);
                 // Don't show menu immediately - wait for mouse up or movement
             }
+
+            // Open the rich quick-palette overlay at the cursor position
+            panel.quick_palette_open = true;
+            panel.quick_palette_screen_pos = event.position;
+            cx.notify();
         });
     }
 }
@@ -69,6 +74,14 @@ pub fn on_mouse_down_left(
     let entity = cx.entity().clone();
     move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
+            // Close the quick-palette overlay if it's open
+            if panel.quick_palette_open {
+                panel.quick_palette_open = false;
+                panel.popup_palette_graph_pos = None;
+                cx.notify();
+                return;
+            }
+
             panel.activate_interaction_view(&view_id);
             // Debug: Print raw event position and calculated offset
             tracing::info!(

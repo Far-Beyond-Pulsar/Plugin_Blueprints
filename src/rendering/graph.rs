@@ -11,12 +11,9 @@ use gpui::*;
 use ui::{
     button::{Button, ButtonVariants},
     h_flex,
-    menu::context_menu::ContextMenuExt,
     tooltip::Tooltip,
     v_flex, ActiveTheme, Colorize, IconName, PixelsExt, Sizable, StyledExt,
 };
-
-use crate::core::definitions::NodeDefinitions;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::{layout, style};
 use crate::{BlueprintGraph, BlueprintNode, Connection, NodeType, Pin};
@@ -135,48 +132,8 @@ impl NodeGraphRenderer {
             // .when(panel.show_minimap, |this| {
             //     this.child(crate::ui_components::minimap::MinimapRenderer::render(panel, cx))
             // })
-            // Attach all input handlers from rendering::input module
-            .context_menu({
-                let panel_entity = panel_entity.clone();
-                move |menu, _window, _cx| {
-                    let defs = NodeDefinitions::load();
-                    let mut menu = menu
-                        .min_w(px(300.0))
-                        .max_h(px(520.0))
-                        .scrollable();
-
-                    for category in &defs.categories {
-                        menu = menu.label(category.name.clone());
-
-                        for def in &category.nodes {
-                            let def_clone = def.clone();
-                            let panel_entity = panel_entity.clone();
-                            menu = menu.menu_handler(def.name.clone(), move |_window, app| {
-                                panel_entity.update(app, |panel, cx| {
-                                    let base = panel.popup_palette_graph_pos.or_else(|| {
-                                        panel.graph_element_bounds.map(|bounds| {
-                                            let center = Point::new(bounds.center().x, bounds.center().y);
-                                            let graph_pos = NodeGraphRenderer::screen_to_graph_pos(center, &panel.graph);
-                                            Point::new(graph_pos.x, graph_pos.y)
-                                        })
-                                    }).unwrap_or(Point::new(0.0, 0.0));
-
-                                    let stagger = (panel.graph.nodes.len() % 8) as f32 * 18.0;
-                                    let node_pos = Point::new(base.x + stagger, base.y + stagger);
-                                    let node = BlueprintNode::from_definition(&def_clone, node_pos);
-                                    panel.add_node(node, cx);
-                                    panel.popup_palette_graph_pos = None;
-                                    cx.notify();
-                                });
-                            });
-                        }
-
-                        menu = menu.separator();
-                    }
-
-                    menu
-                }
-            })
+            // Quick-palette overlay — shown on right-click, same primitive as the color-picker popout
+            .child(Self::render_quick_palette_overlay(panel, cx))
             .on_mouse_down(
                 gpui::MouseButton::Right,
                 crate::rendering::input::on_mouse_down_right(view_id.clone(), cx),
@@ -207,6 +164,47 @@ impl NodeGraphRenderer {
                 cx,
             ))
             .on_key_down(crate::rendering::input::on_key_down(view_id, cx))
+    }
+
+    /// Render the quick-palette overlay using the same `deferred(anchored(…))` primitive
+    /// as the color-picker popout — no `Popover` wrapper needed.
+    fn render_quick_palette_overlay(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        if !panel.quick_palette_open {
+            return div().into_any_element();
+        }
+
+        let panel_entity = cx.entity().clone();
+
+        deferred(
+            anchored()
+                .position(panel.quick_palette_screen_pos)
+                .snap_to_window_with_margin(px(8.))
+                .anchor(gpui::Corner::TopLeft)
+                .child(
+                    div()
+                        .occlude()
+                        .w(px(320.0))
+                        .h(px(480.0))
+                        .shadow_lg()
+                        .rounded(px(6.0))
+                        .overflow_hidden()
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .child(panel.quick_palette_view.clone())
+                        .on_mouse_down_out(move |_, _window, cx| {
+                            panel_entity.update(cx, |panel, cx| {
+                                panel.quick_palette_open = false;
+                                panel.popup_palette_graph_pos = None;
+                                cx.notify();
+                            });
+                        }),
+                ),
+        )
+        .with_priority(1)
+        .into_any_element()
     }
 
     pub fn render_grid_background(
