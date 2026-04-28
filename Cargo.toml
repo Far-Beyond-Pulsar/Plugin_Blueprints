@@ -41,3 +41,4 @@ futures = "0.3"
 # Force windows 0.62 to match wgpu-hal and avoid gpu-allocator version conflict
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common"] }
+arboard = "3.4"

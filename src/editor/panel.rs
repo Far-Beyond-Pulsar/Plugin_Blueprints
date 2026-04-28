@@ -1070,20 +1070,29 @@ impl BlueprintEditorPanel {
         match clipboard_data.to_json() {
             Ok(json) => {
                 println!("[CLIPBOARD] Serialized JSON length: {} bytes", json.len());
-                println!("[CLIPBOARD] First 200 chars: {}", &json.chars().take(200).collect::<String>());
 
-                // Write to system clipboard
-                let clipboard_item = gpui::ClipboardItem::new_string(json.clone());
-                println!("[CLIPBOARD] Created ClipboardItem");
-                cx.write_to_clipboard(clipboard_item);
-                println!("[CLIPBOARD] Called write_to_clipboard");
-
-                println!(
-                    "[CLIPBOARD] Copied {} nodes, {} comments, {} connections",
-                    clipboard_data.nodes.len(),
-                    clipboard_data.comments.len(),
-                    clipboard_data.connections.len()
-                );
+                // Write to system clipboard using arboard
+                match arboard::Clipboard::new() {
+                    Ok(mut clipboard) => {
+                        match clipboard.set_text(&json) {
+                            Ok(_) => {
+                                println!("[CLIPBOARD] Successfully wrote to clipboard via arboard");
+                                println!(
+                                    "[CLIPBOARD] Copied {} nodes, {} comments, {} connections",
+                                    clipboard_data.nodes.len(),
+                                    clipboard_data.comments.len(),
+                                    clipboard_data.connections.len()
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!("[CLIPBOARD] arboard set_text failed: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[CLIPBOARD] Failed to create arboard clipboard: {}", e);
+                    }
+                }
             }
             Err(e) => {
                 eprintln!("[CLIPBOARD] Failed to serialize clipboard data: {}", e);
@@ -1095,30 +1104,27 @@ impl BlueprintEditorPanel {
     pub fn paste_entities(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         use crate::features::clipboard::ClipboardData;
 
-        println!("[CLIPBOARD] Attempting to read from clipboard...");
+        println!("[CLIPBOARD] Attempting to read from clipboard via arboard...");
 
-        // Read from system clipboard
-        let clipboard_item = cx.read_from_clipboard();
-        println!("[CLIPBOARD] read_from_clipboard returned: {:?}", clipboard_item.is_some());
-
-        let Some(clipboard_item) = clipboard_item else {
-            println!("[CLIPBOARD] Clipboard is empty (None)");
-            return;
+        // Read from system clipboard using arboard
+        let json = match arboard::Clipboard::new() {
+            Ok(mut clipboard) => {
+                match clipboard.get_text() {
+                    Ok(text) => {
+                        println!("[CLIPBOARD] Successfully read from clipboard, length: {} bytes", text.len());
+                        text
+                    }
+                    Err(e) => {
+                        println!("[CLIPBOARD] arboard get_text failed: {}", e);
+                        return;
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[CLIPBOARD] Failed to create arboard clipboard: {}", e);
+                return;
+            }
         };
-
-        println!("[CLIPBOARD] Got clipboard item, attempting to read text...");
-
-        // Get text from clipboard
-        let text_result = clipboard_item.text();
-        println!("[CLIPBOARD] text() returned: {:?}", text_result.is_some());
-
-        let Some(json) = text_result else {
-            println!("[CLIPBOARD] Clipboard contains no text (None)");
-            return;
-        };
-
-        println!("[CLIPBOARD] Got text from clipboard, length: {} bytes", json.len());
-        println!("[CLIPBOARD] First 200 chars: {}", &json.chars().take(200).collect::<String>());
 
         // Try to deserialize
         match ClipboardData::from_json(&json) {
