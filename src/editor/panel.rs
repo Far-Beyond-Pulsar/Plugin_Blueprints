@@ -1069,8 +1069,15 @@ impl BlueprintEditorPanel {
         // Serialize to JSON
         match clipboard_data.to_json() {
             Ok(json) => {
+                println!("[CLIPBOARD] Serialized JSON length: {} bytes", json.len());
+                println!("[CLIPBOARD] First 200 chars: {}", &json.chars().take(200).collect::<String>());
+
                 // Write to system clipboard
-                cx.write_to_clipboard(gpui::ClipboardItem::new_string(json));
+                let clipboard_item = gpui::ClipboardItem::new_string(json.clone());
+                println!("[CLIPBOARD] Created ClipboardItem");
+                cx.write_to_clipboard(clipboard_item);
+                println!("[CLIPBOARD] Called write_to_clipboard");
+
                 println!(
                     "[CLIPBOARD] Copied {} nodes, {} comments, {} connections",
                     clipboard_data.nodes.len(),
@@ -1088,17 +1095,30 @@ impl BlueprintEditorPanel {
     pub fn paste_entities(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         use crate::features::clipboard::ClipboardData;
 
+        println!("[CLIPBOARD] Attempting to read from clipboard...");
+
         // Read from system clipboard
-        let Some(clipboard_item) = cx.read_from_clipboard() else {
-            println!("[CLIPBOARD] Clipboard is empty");
+        let clipboard_item = cx.read_from_clipboard();
+        println!("[CLIPBOARD] read_from_clipboard returned: {:?}", clipboard_item.is_some());
+
+        let Some(clipboard_item) = clipboard_item else {
+            println!("[CLIPBOARD] Clipboard is empty (None)");
             return;
         };
 
+        println!("[CLIPBOARD] Got clipboard item, attempting to read text...");
+
         // Get text from clipboard
-        let Some(json) = clipboard_item.text() else {
-            println!("[CLIPBOARD] Clipboard contains no text");
+        let text_result = clipboard_item.text();
+        println!("[CLIPBOARD] text() returned: {:?}", text_result.is_some());
+
+        let Some(json) = text_result else {
+            println!("[CLIPBOARD] Clipboard contains no text (None)");
             return;
         };
+
+        println!("[CLIPBOARD] Got text from clipboard, length: {} bytes", json.len());
+        println!("[CLIPBOARD] First 200 chars: {}", &json.chars().take(200).collect::<String>());
 
         // Try to deserialize
         match ClipboardData::from_json(&json) {
