@@ -379,9 +379,15 @@ pub fn on_key_down(
                     panel.graph.selected_nodes
                 );
                 panel.delete_selected_nodes(cx);
-            } else if key_lower == "c" && event.keystroke.modifiers.control {
-                // Ctrl+C creates a new comment
+            } else if key_lower == "c" && !event.keystroke.modifiers.control {
+                // C key creates a new comment
                 panel.create_comment_at_center(window, cx);
+            } else if key_lower == "c" && event.keystroke.modifiers.control {
+                // Ctrl+C copies selected entities
+                panel.copy_selected_entities(cx);
+            } else if key_lower == "v" && event.keystroke.modifiers.control {
+                // Ctrl+V pastes entities from clipboard
+                panel.paste_entities(window, cx);
             }
         });
     }

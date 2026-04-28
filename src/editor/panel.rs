@@ -974,6 +974,120 @@ impl BlueprintEditorPanel {
     }
 
     // ============================================================================
+    // Clipboard Operations
+    // ============================================================================
+
+    /// Copy selected entities to clipboard
+    pub fn copy_selected_entities(&mut self, cx: &mut Context<Self>) {
+        use crate::features::clipboard::ClipboardData;
+
+        // Check if there's anything selected
+        if self.graph.selected_nodes.is_empty() && self.graph.selected_comments.is_empty() {
+            tracing::info!("[CLIPBOARD] Nothing selected to copy");
+            return;
+        }
+
+        // Create clipboard data from selection
+        let clipboard_data = ClipboardData::from_selection(
+            &self.graph.nodes,
+            &self.graph.comments,
+            &self.graph.connections,
+            &self.graph.selected_nodes,
+            &self.graph.selected_comments,
+        );
+
+        // Serialize to JSON
+        match clipboard_data.to_json() {
+            Ok(json) => {
+                // Write to system clipboard
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(json));
+                tracing::info!(
+                    "[CLIPBOARD] Copied {} nodes, {} comments, {} connections",
+                    clipboard_data.nodes.len(),
+                    clipboard_data.comments.len(),
+                    clipboard_data.connections.len()
+                );
+            }
+            Err(e) => {
+                tracing::error!("[CLIPBOARD] Failed to serialize clipboard data: {}", e);
+            }
+        }
+    }
+
+    /// Paste entities from clipboard
+    pub fn paste_entities(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::features::clipboard::ClipboardData;
+
+        // Read from system clipboard
+        let Some(clipboard_item) = cx.read_from_clipboard() else {
+            tracing::info!("[CLIPBOARD] Clipboard is empty");
+            return;
+        };
+
+        // Get text from clipboard
+        let Some(json) = clipboard_item.text() else {
+            tracing::info!("[CLIPBOARD] Clipboard contains no text");
+            return;
+        };
+
+        // Try to deserialize
+        match ClipboardData::from_json(&json) {
+            Ok(clipboard_data) => {
+                tracing::info!(
+                    "[CLIPBOARD] Pasting {} nodes, {} comments, {} connections",
+                    clipboard_data.nodes.len(),
+                    clipboard_data.comments.len(),
+                    clipboard_data.connections.len()
+                );
+
+                // Calculate paste offset (offset by 50px so pasted items appear near originals)
+                let offset = Point::new(50.0, 50.0);
+
+                // Convert clipboard data to graph entities with new IDs
+                let (nodes, comments, connections) =
+                    clipboard_data.to_graph_entities(offset, window, cx);
+
+                // Clear current selection
+                self.graph.selected_nodes.clear();
+                self.graph.selected_comments.clear();
+
+                // Add pasted entities to graph
+                for node in &nodes {
+                    self.graph.nodes.push(node.clone());
+                    self.graph.selected_nodes.push(node.id.clone());
+                }
+
+                for comment in &comments {
+                    self.graph.comments.push(comment.clone());
+                    self.graph.selected_comments.push(comment.id.clone());
+                }
+
+                for connection in &connections {
+                    self.graph.connections.push(connection.clone());
+                }
+
+                // Mark comment color bindings as dirty so new comments get subscriptions
+                self.comment_color_bindings_dirty = true;
+
+                tracing::info!(
+                    "[CLIPBOARD] Successfully pasted {} nodes, {} comments, {} connections",
+                    nodes.len(),
+                    comments.len(),
+                    connections.len()
+                );
+
+                cx.notify();
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "[CLIPBOARD] Failed to parse clipboard data (probably not graph data): {}",
+                    e
+                );
+            }
+        }
+    }
+
+    // ============================================================================
     // Tab Operations
     // ============================================================================
 

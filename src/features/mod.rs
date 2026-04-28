@@ -6,6 +6,7 @@
 //! - rendering.rs: GPUI rendering code
 //! - panel.rs: Dockable panel (if applicable)
 
+pub mod clipboard;
 pub mod comments;
 pub mod compilation;
 pub mod connections;

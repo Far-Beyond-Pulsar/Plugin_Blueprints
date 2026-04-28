@@ -85,6 +85,29 @@ impl BlueprintEditorPanel {
                     self.graph.selected_nodes.retain(|id| id != &node.id);
                 }
             }
+
+            // Check all comments for intersection with selection box
+            for comment in &self.graph.comments {
+                let comment_left = comment.position.x;
+                let comment_top = comment.position.y;
+                let comment_right = comment.position.x + comment.size.width;
+                let comment_bottom = comment.position.y + comment.size.height;
+
+                // Check intersection
+                let intersects = !(comment_right < min_x
+                    || comment_left > max_x
+                    || comment_bottom < min_y
+                    || comment_top > max_y);
+
+                if intersects {
+                    if !self.graph.selected_comments.contains(&comment.id) {
+                        self.graph.selected_comments.push(comment.id.clone());
+                    }
+                } else {
+                    self.graph.selected_comments.retain(|id| id != &comment.id);
+                }
+            }
+
             cx.notify();
         }
     }
