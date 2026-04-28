@@ -37,7 +37,8 @@ pub fn on_mouse_down_right(
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
-    move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
+    move |event: &MouseDownEvent, window: &mut Window, cx: &mut App| {
+        let palette_view = entity.read(cx).quick_palette_view.clone();
         entity.update(cx, |panel, cx| {
             // Convert window coordinates to element coordinates
             let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
@@ -63,6 +64,9 @@ pub fn on_mouse_down_right(
             panel.quick_palette_screen_pos = event.position;
             cx.notify();
         });
+        // Focus the search box so the user can type immediately
+        let search_handle = palette_view.read(cx).search_focus_handle(cx);
+        window.focus(&search_handle);
     }
 }
 

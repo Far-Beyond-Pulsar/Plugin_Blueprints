@@ -63,6 +63,13 @@ impl NodePaletteView {
     }
 }
 
+impl NodePaletteView {
+    /// Return the focus handle of the search input so callers can focus it.
+    pub fn search_focus_handle(&self, cx: &App) -> FocusHandle {
+        self.search_input.read(cx).focus_handle(cx)
+    }
+}
+
 impl Focusable for NodePaletteView {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
