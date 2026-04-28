@@ -241,7 +241,7 @@ impl BlueprintEditorPanel {
         if let Err(e) = panel.load_blueprint(file_path.to_str().unwrap(), window, cx) {
             eprintln!("Failed to load blueprint: {}", e);
         } else {
-            tracing::info!("Loaded blueprint from {:?}", file_path);
+            println!("Loaded blueprint from {:?}", file_path);
         }
 
         panel
@@ -261,7 +261,7 @@ impl BlueprintEditorPanel {
             main_tab.name = format!("{} Overview", library_name);
         }
 
-        tracing::info!("Created blueprint editor for library: {}", library_name);
+        println!("Created blueprint editor for library: {}", library_name);
         panel
     }
 
@@ -829,7 +829,7 @@ impl BlueprintEditorPanel {
 
     /// Start dragging a comment (stores initial positions of all selected items)
     pub fn start_comment_drag(&mut self, comment_id: String, mouse_pos: Point<f32>, _cx: &mut Context<Self>) {
-        tracing::info!(
+        println!(
             "[DRAG] Starting drag for comment {} at mouse position {:?}",
             comment_id,
             mouse_pos
@@ -848,7 +848,7 @@ impl BlueprintEditorPanel {
 
             if self.graph.selected_comments.contains(&comment_id) {
                 // Drag all selected comments
-                tracing::info!(
+                println!(
                     "[DRAG] Multi-select: dragging {} selected comments",
                     self.graph.selected_comments.len()
                 );
@@ -862,7 +862,7 @@ impl BlueprintEditorPanel {
                 }
 
                 // Also drag all selected nodes
-                tracing::info!(
+                println!(
                     "[DRAG] Multi-select: also dragging {} selected nodes",
                     self.graph.selected_nodes.len()
                 );
@@ -1053,7 +1053,7 @@ impl BlueprintEditorPanel {
 
         // Check if there's anything selected
         if self.graph.selected_nodes.is_empty() && self.graph.selected_comments.is_empty() {
-            tracing::info!("[CLIPBOARD] Nothing selected to copy");
+            println!("[CLIPBOARD] Nothing selected to copy");
             return;
         }
 
@@ -1071,7 +1071,7 @@ impl BlueprintEditorPanel {
             Ok(json) => {
                 // Write to system clipboard
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(json));
-                tracing::info!(
+                println!(
                     "[CLIPBOARD] Copied {} nodes, {} comments, {} connections",
                     clipboard_data.nodes.len(),
                     clipboard_data.comments.len(),
@@ -1079,7 +1079,7 @@ impl BlueprintEditorPanel {
                 );
             }
             Err(e) => {
-                tracing::error!("[CLIPBOARD] Failed to serialize clipboard data: {}", e);
+                eprintln!("[CLIPBOARD] Failed to serialize clipboard data: {}", e);
             }
         }
     }
@@ -1090,20 +1090,20 @@ impl BlueprintEditorPanel {
 
         // Read from system clipboard
         let Some(clipboard_item) = cx.read_from_clipboard() else {
-            tracing::info!("[CLIPBOARD] Clipboard is empty");
+            println!("[CLIPBOARD] Clipboard is empty");
             return;
         };
 
         // Get text from clipboard
         let Some(json) = clipboard_item.text() else {
-            tracing::info!("[CLIPBOARD] Clipboard contains no text");
+            println!("[CLIPBOARD] Clipboard contains no text");
             return;
         };
 
         // Try to deserialize
         match ClipboardData::from_json(&json) {
             Ok(clipboard_data) => {
-                tracing::info!(
+                println!(
                     "[CLIPBOARD] Pasting {} nodes, {} comments, {} connections",
                     clipboard_data.nodes.len(),
                     clipboard_data.comments.len(),
@@ -1139,7 +1139,7 @@ impl BlueprintEditorPanel {
                 // Mark comment color bindings as dirty so new comments get subscriptions
                 self.comment_color_bindings_dirty = true;
 
-                tracing::info!(
+                println!(
                     "[CLIPBOARD] Successfully pasted {} nodes, {} comments, {} connections",
                     nodes.len(),
                     comments.len(),
@@ -1149,7 +1149,7 @@ impl BlueprintEditorPanel {
                 cx.notify();
             }
             Err(e) => {
-                tracing::warn!(
+                println!(
                     "[CLIPBOARD] Failed to parse clipboard data (probably not graph data): {}",
                     e
                 );
@@ -1342,10 +1342,10 @@ impl BlueprintEditorPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
-        tracing::info!("📂 ═══════════════════════════════════════════════════════════════");
-        tracing::info!("📂 LOADING BLUEPRINT FROM FILE");
-        tracing::info!("📂 ═══════════════════════════════════════════════════════════════");
-        tracing::info!("📂 File: {}", file_path);
+        println!("📂 ═══════════════════════════════════════════════════════════════");
+        println!("📂 LOADING BLUEPRINT FROM FILE");
+        println!("📂 ═══════════════════════════════════════════════════════════════");
+        println!("📂 File: {}", file_path);
 
         let content = std::fs::read_to_string(file_path).map_err(|e| {
             let error_msg = format!("Failed to read file: {}", e);
@@ -1353,7 +1353,7 @@ impl BlueprintEditorPanel {
             error_msg
         })?;
 
-        tracing::info!("📂 ✓ File read successfully ({} bytes)", content.len());
+        println!("📂 ✓ File read successfully ({} bytes)", content.len());
 
         // Strip header comments
         let json = content
@@ -1365,13 +1365,13 @@ impl BlueprintEditorPanel {
         // Try new unified format first
         match serde_json::from_str::<ui::graph::BlueprintAsset>(&json) {
             Ok(blueprint_asset) => {
-                tracing::info!("📂 ✓ Detected unified blueprint format");
+                println!("📂 ✓ Detected unified blueprint format");
                 self.load_from_blueprint_asset(blueprint_asset, file_path, window, cx)?;
             }
             Err(unified_err) => {
-                tracing::info!("📂 ⚠️  Unified format parse failed:");
-                tracing::info!("📂    Error: {}", unified_err);
-                tracing::info!(
+                println!("📂 ⚠️  Unified format parse failed:");
+                println!("📂    Error: {}", unified_err);
+                println!(
                     "📂    Line: {}, Column: {}",
                     unified_err.line(),
                     unified_err.column()
@@ -1381,13 +1381,13 @@ impl BlueprintEditorPanel {
                 let lines: Vec<&str> = json.lines().collect();
                 let error_line = unified_err.line().saturating_sub(1);
                 if error_line < lines.len() {
-                    tracing::info!("📂    Context:");
+                    println!("📂    Context:");
                     for i in error_line.saturating_sub(2)
                         ..=error_line
                             .saturating_add(2)
                             .min(lines.len().saturating_sub(1))
                     {
-                        tracing::info!(
+                        println!(
                             "📂      {}{}: {}",
                             if i == error_line { ">>> " } else { "    " },
                             i + 1,
@@ -1396,7 +1396,7 @@ impl BlueprintEditorPanel {
                     }
                 }
 
-                tracing::info!("📂 ✓ Trying legacy format...");
+                println!("📂 ✓ Trying legacy format...");
 
                 // Try parsing as legacy format
                 self.load_legacy_format(&json, file_path, window, cx)
@@ -1531,13 +1531,13 @@ impl BlueprintEditorPanel {
             }
         }
 
-        tracing::info!("📂 Loaded unified blueprint format");
-        tracing::info!("📂   ✓ Main Graph: {} nodes", self.graph.nodes.len());
-        tracing::info!("📂   ✓ Local Macros: {}", self.local_macros.len());
-        tracing::info!("📂   ✓ Variables: {}", self.class_variables.len());
-        tracing::info!("📂   ✓ Open Tabs: {}", self.open_tabs.len());
-        tracing::info!("📂   ✓ Active Tab Index: {}", self.active_tab_index);
-        tracing::info!("📂 ═══════════════════════════════════════════════════════════════");
+        println!("📂 Loaded unified blueprint format");
+        println!("📂   ✓ Main Graph: {} nodes", self.graph.nodes.len());
+        println!("📂   ✓ Local Macros: {}", self.local_macros.len());
+        println!("📂   ✓ Variables: {}", self.class_variables.len());
+        println!("📂   ✓ Open Tabs: {}", self.open_tabs.len());
+        println!("📂   ✓ Active Tab Index: {}", self.active_tab_index);
+        println!("📂 ═══════════════════════════════════════════════════════════════");
 
         Ok(())
     }
@@ -1593,7 +1593,7 @@ impl BlueprintEditorPanel {
         let legacy_graph: LegacyGraphDescription = serde_json::from_str(json)
             .map_err(|e| format!("Failed to parse legacy format: {}", e))?;
 
-        tracing::info!("📂 ✓ Legacy format parsed successfully");
+        println!("📂 ✓ Legacy format parsed successfully");
 
         // Convert legacy format to current format
         let graph_description = ui::graph::GraphDescription {
@@ -1641,7 +1641,7 @@ impl BlueprintEditorPanel {
             let _ = self.load_variables_from_class(parent);
         }
 
-        tracing::info!("📂 Loaded blueprint in legacy format");
+        println!("📂 Loaded blueprint in legacy format");
         Ok(())
     }
 
@@ -1659,7 +1659,7 @@ impl BlueprintEditorPanel {
             .map_err(|e| format!("Failed to parse macros.json: {}", e))?;
 
         self.local_macros = macros;
-        tracing::info!(
+        println!(
             "📂 Loaded {} local macros from macros.json",
             self.local_macros.len()
         );
@@ -1746,7 +1746,7 @@ impl BlueprintEditorPanel {
             }
         }
 
-        tracing::info!("📂 Restored {} tabs from tabs.json", self.open_tabs.len());
+        println!("📂 Restored {} tabs from tabs.json", self.open_tabs.len());
         Ok(())
     }
 }

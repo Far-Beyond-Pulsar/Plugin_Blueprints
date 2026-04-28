@@ -80,12 +80,12 @@ pub fn on_mouse_down_left(
 
             panel.activate_interaction_view(&view_id);
             // Debug: Print raw event position and calculated offset
-            tracing::info!(
+            println!(
                 "[MOUSE] Raw window position: x={}, y={}",
                 event.position.x.as_f32(),
                 event.position.y.as_f32()
             );
-            tracing::info!(
+            println!(
                 "[MOUSE] Stored element bounds: {:?}",
                 panel.graph_element_bounds_by_view.get(&view_id)
             );
@@ -96,7 +96,7 @@ pub fn on_mouse_down_left(
                 panel,
                 &view_id,
             );
-            tracing::info!(
+            println!(
                 "[MOUSE] Calculated element-relative position: x={}, y={}",
                 element_pos.x.as_f32(),
                 element_pos.y.as_f32()
@@ -106,17 +106,17 @@ pub fn on_mouse_down_left(
             let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
             let _mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
 
-            tracing::info!(
+            println!(
                 "[MOUSE] Converted to graph pos: x={}, y={}",
                 graph_pos.x,
                 graph_pos.y
             );
-            tracing::info!(
+            println!(
                 "[MOUSE] Pan offset: x={}, y={}",
                 panel.graph.pan_offset.x,
                 panel.graph.pan_offset.y
             );
-            tracing::info!("[MOUSE] Zoom level: {}", panel.graph.zoom_level);
+            println!("[MOUSE] Zoom level: {}", panel.graph.zoom_level);
 
             // Check if clicking on a node (check ALL nodes, not just rendered ones)
             let clicked_node = panel.graph.nodes.iter().find(|node| {
@@ -133,7 +133,7 @@ pub fn on_mouse_down_left(
 
             if let Some(node) = clicked_node {
                 // Clicked on a node
-                tracing::info!("Clicked on node: {}", node.id);
+                println!("Clicked on node: {}", node.id);
 
                 // Delegate to features::nodes::operations::handle_node_click
                 // For now, inline implementation:
@@ -351,7 +351,7 @@ pub fn on_key_down(
     let entity = cx.entity().clone();
     move |event: &KeyDownEvent, window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
-            tracing::info!("Key pressed: {:?}", event.keystroke.key);
+            println!("Key pressed: {:?}", event.keystroke.key);
 
             let key_lower = event.keystroke.key.to_lowercase();
 
@@ -374,18 +374,18 @@ pub fn on_key_down(
                     panel.cancel_connection_drag(cx);
                 }
             } else if key_lower == "delete" || key_lower == "backspace" {
-                tracing::info!(
+                println!(
                     "Delete key pressed! Selected nodes: {:?}",
                     panel.graph.selected_nodes
                 );
                 panel.delete_selected_nodes(cx);
             } else if key_lower == "c" && !event.keystroke.modifiers.control {
                 // C key creates a new comment
-                tracing::info!("[KEYBIND] C key pressed - creating comment");
+                println!("[KEYBIND] C key pressed - creating comment");
                 panel.create_comment_at_center(window, cx);
             } else if key_lower == "c" && event.keystroke.modifiers.control {
                 // Ctrl+C copies selected entities
-                tracing::info!(
+                println!(
                     "[KEYBIND] Ctrl+C pressed - copying {} nodes, {} comments",
                     panel.graph.selected_nodes.len(),
                     panel.graph.selected_comments.len()
@@ -393,12 +393,12 @@ pub fn on_key_down(
                 panel.copy_selected_entities(cx);
             } else if key_lower == "v" && event.keystroke.modifiers.control {
                 // Ctrl+V pastes entities from clipboard
-                tracing::info!("[KEYBIND] Ctrl+V pressed - attempting paste");
+                println!("[KEYBIND] Ctrl+V pressed - attempting paste");
                 panel.paste_entities(window, cx);
             } else {
                 // Log unhandled keys for debugging
                 if event.keystroke.modifiers.control {
-                    tracing::debug!(
+                    println!(
                         "[KEYBIND] Unhandled Ctrl+{} (modifiers: {:?})",
                         key_lower,
                         event.keystroke.modifiers

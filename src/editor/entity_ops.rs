@@ -29,7 +29,7 @@ impl BlueprintEditorPanel {
         mouse_pos: Point<f32>,
         _cx: &mut Context<Self>,
     ) {
-        tracing::info!(
+        println!(
             "[DRAG] Starting drag for {:?} at {:?}",
             dragged_entity,
             mouse_pos
@@ -48,7 +48,7 @@ impl BlueprintEditorPanel {
         if is_selected {
             // Multi-select drag: store all selected entities
             let selections = self.get_selected_entities();
-            tracing::info!("[DRAG] Multi-select: dragging {} entities", selections.len());
+            println!("[DRAG] Multi-select: dragging {} entities", selections.len());
 
             for selection in selections {
                 match selection {
@@ -182,11 +182,11 @@ impl BlueprintEditorPanel {
         let comment_count = self.graph.selected_comments.len();
 
         if node_count == 0 && comment_count == 0 {
-            tracing::info!("[DELETE] No entities selected");
+            println!("[DELETE] No entities selected");
             return;
         }
 
-        tracing::info!(
+        println!(
             "[DELETE] Deleting {} nodes, {} comments",
             node_count,
             comment_count

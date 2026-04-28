@@ -11,7 +11,7 @@ impl BlueprintEditorPanel {
     /// Add a node to the graph
     pub fn add_node(&mut self, mut node: BlueprintNode, cx: &mut Context<Self>) {
         node.position = NodeGraphRenderer::snap_to_grid(node.position, self.graph.zoom_level);
-        tracing::info!(
+        println!(
             "Adding node: {} at position {:?}",
             node.title,
             node.position
@@ -50,10 +50,10 @@ impl BlueprintEditorPanel {
     /// Copy node into the in-memory clipboard
     pub fn copy_node(&mut self, node_id: String, _cx: &mut Context<Self>) {
         if let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id).cloned() {
-            tracing::info!("Copied node: {}", node.title);
+            println!("Copied node: {}", node.title);
             self.node_clipboard = Some(node);
         } else {
-            tracing::warn!("Copy failed: node not found ({})", node_id);
+            println!("Copy failed: node not found ({})", node_id);
         }
     }
 
@@ -65,15 +65,15 @@ impl BlueprintEditorPanel {
             node.position.y += 30.0;
             node.is_selected = false;
             self.add_node(node, cx);
-            tracing::info!("Pasted node from clipboard");
+            println!("Pasted node from clipboard");
         } else {
-            tracing::info!("Paste requested with empty clipboard");
+            println!("Paste requested with empty clipboard");
         }
     }
 
     /// Start dragging a node
     pub fn start_drag(&mut self, node_id: String, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
-        tracing::info!(
+        println!(
             "[DRAG] Starting drag for node {} at mouse position {:?}",
             node_id,
             mouse_pos
@@ -90,7 +90,7 @@ impl BlueprintEditorPanel {
 
             if self.graph.selected_nodes.contains(&node_id) {
                 // Drag all selected nodes
-                tracing::info!(
+                println!(
                     "[DRAG] Multi-select: dragging {} selected nodes",
                     self.graph.selected_nodes.len()
                 );
@@ -104,7 +104,7 @@ impl BlueprintEditorPanel {
                 }
 
                 // Also drag all selected comments
-                tracing::info!(
+                println!(
                     "[DRAG] Multi-select: also dragging {} selected comments",
                     self.graph.selected_comments.len()
                 );
