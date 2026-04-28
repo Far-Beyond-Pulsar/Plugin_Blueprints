@@ -44,7 +44,7 @@ impl BlueprintEditorPanel {
             let compiler_panel = cx.new(|cx| CompilerPanel::new(editor_weak.clone(), cx));
             let find_panel = cx.new(|cx| FindPanel::new(editor_weak.clone(), cx));
             let properties_panel = cx.new(|cx| PropertiesPanel::new(editor_weak.clone(), cx));
-            let palette_panel = cx.new(|cx| PalettePanel::new(editor_weak.clone(), cx));
+            let palette_panel = cx.new(|cx| PalettePanel::new(editor_weak.clone(), window, cx));
             let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = self
                 .open_tabs
                 .iter()
