@@ -513,7 +513,7 @@ fn palette_category_header(
                 .px_2()
                 .text_xs()
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(cx.theme().accent)
+                .text_color(cx.theme().muted_foreground)
                 .child(name.to_uppercase()),
         )
         .child(
