@@ -49,6 +49,10 @@ pub fn on_mouse_down_right(
             let mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
             panel.activate_interaction_view(&view_id);
 
+            // Stamp trigger position immediately on RMB down so the next frame has
+            // a deterministic anchor for Popover trigger hit-testing.
+            panel.popup_trigger_screen_pos = Some(event.position);
+
             // Store right-click start position for gesture detection
             if panel.dragging_connection.is_none() && panel.dragging_node.is_none() {
                 panel.right_click_start = Some(mouse_pos);
@@ -166,7 +170,12 @@ pub fn on_mouse_move(
 
             // Track the last mouse screen position (within this view) so the
             // popover trigger can be positioned at the cursor when opening.
+            let prev_trigger = panel.popup_trigger_screen_pos;
             panel.popup_trigger_screen_pos = Some(event.position);
+            if prev_trigger != panel.popup_trigger_screen_pos {
+                // Force a repaint so the invisible Popover trigger moves with the cursor.
+                cx.notify();
+            }
 
             panel.activate_interaction_view(&view_id);
 
