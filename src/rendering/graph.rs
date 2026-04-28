@@ -11,10 +11,12 @@ use gpui::*;
 use ui::{
     button::{Button, ButtonVariants},
     h_flex,
+    menu::context_menu::ContextMenuExt,
     tooltip::Tooltip,
     v_flex, ActiveTheme, Colorize, IconName, PixelsExt, Sizable, StyledExt,
 };
 
+use crate::core::definitions::NodeDefinitions;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::{layout, style};
 use crate::{BlueprintGraph, BlueprintNode, Connection, NodeType, Pin};
@@ -134,6 +136,47 @@ impl NodeGraphRenderer {
             //     this.child(crate::ui_components::minimap::MinimapRenderer::render(panel, cx))
             // })
             // Attach all input handlers from rendering::input module
+            .context_menu({
+                let panel_entity = panel_entity.clone();
+                move |menu, _window, _cx| {
+                    let defs = NodeDefinitions::load();
+                    let mut menu = menu
+                        .min_w(px(300.0))
+                        .max_h(px(520.0))
+                        .scrollable();
+
+                    for category in &defs.categories {
+                        menu = menu.label(category.name.clone());
+
+                        for def in &category.nodes {
+                            let def_clone = def.clone();
+                            let panel_entity = panel_entity.clone();
+                            menu = menu.menu_handler(def.name.clone(), move |_window, app| {
+                                panel_entity.update(app, |panel, cx| {
+                                    let base = panel.popup_palette_graph_pos.or_else(|| {
+                                        panel.graph_element_bounds.map(|bounds| {
+                                            let center = Point::new(bounds.center().x, bounds.center().y);
+                                            let graph_pos = NodeGraphRenderer::screen_to_graph_pos(center, &panel.graph);
+                                            Point::new(graph_pos.x, graph_pos.y)
+                                        })
+                                    }).unwrap_or(Point::new(0.0, 0.0));
+
+                                    let stagger = (panel.graph.nodes.len() % 8) as f32 * 18.0;
+                                    let node_pos = Point::new(base.x + stagger, base.y + stagger);
+                                    let node = BlueprintNode::from_definition(&def_clone, node_pos);
+                                    panel.add_node(node, cx);
+                                    panel.popup_palette_graph_pos = None;
+                                    cx.notify();
+                                });
+                            });
+                        }
+
+                        menu = menu.separator();
+                    }
+
+                    menu
+                }
+            })
             .on_mouse_down(
                 gpui::MouseButton::Right,
                 crate::rendering::input::on_mouse_down_right(view_id.clone(), cx),

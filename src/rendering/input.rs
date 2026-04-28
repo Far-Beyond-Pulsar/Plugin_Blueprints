@@ -7,7 +7,6 @@
 use super::graph::NodeGraphRenderer;
 use crate::editor::panel::BlueprintEditorPanel;
 use gpui::*;
-use ui::input::InputState;
 use ui::ActiveTheme;
 use ui::PixelsExt;
 use ui::Sizable;
@@ -47,11 +46,11 @@ pub fn on_mouse_down_right(
                 &view_id,
             );
             let mouse_pos = Point::new(element_pos.x.as_f32(), element_pos.y.as_f32());
+            let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
             panel.activate_interaction_view(&view_id);
 
-            // Stamp trigger position immediately on RMB down so the next frame has
-            // a deterministic anchor for Popover trigger hit-testing.
-            panel.popup_trigger_screen_pos = Some(event.position);
+            // Store placement position for context-menu actions (add node here).
+            panel.popup_palette_graph_pos = Some(graph_pos);
 
             // Store right-click start position for gesture detection
             if panel.dragging_connection.is_none() && panel.dragging_node.is_none() {
@@ -168,15 +167,6 @@ pub fn on_mouse_move(
                 return;
             }
 
-            // Track the last mouse screen position (within this view) so the
-            // popover trigger can be positioned at the cursor when opening.
-            let prev_trigger = panel.popup_trigger_screen_pos;
-            panel.popup_trigger_screen_pos = Some(event.position);
-            if prev_trigger != panel.popup_trigger_screen_pos {
-                // Force a repaint so the invisible Popover trigger moves with the cursor.
-                cx.notify();
-            }
-
             panel.activate_interaction_view(&view_id);
 
             // Convert window coordinates to element coordinates
@@ -284,7 +274,7 @@ pub fn on_mouse_up_right(
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseUpEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
-    move |event: &MouseUpEvent, window: &mut Window, cx: &mut App| {
+    move |event: &MouseUpEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
             let should_process = match panel.interaction_view_id.as_deref() {
                 Some(owner) => owner == view_id,
@@ -296,48 +286,9 @@ pub fn on_mouse_up_right(
 
             panel.activate_interaction_view(&view_id);
 
-            // If we were panning, end panning as before.
+            // Match old behavior: always end panning on RMB release.
             if panel.is_panning() {
                 panel.end_panning(cx);
-                // Clear right-click gesture state and exit.
-                panel.right_click_start = None;
-                panel.clear_interaction_view_owner();
-                return;
-            }
-
-            // If this was a short right-click (no pan), prepare quick-palette state.
-            if panel.right_click_start.is_some() {
-                // Convert window coordinates to element coordinates then to graph pos
-                let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
-                    event.position,
-                    panel,
-                    &view_id,
-                );
-                let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
-
-                // Store the graph position where the new node should be placed.
-                panel.popup_palette_graph_pos = Some(graph_pos);
-
-                // Ensure a search input entity exists for the popup (focusable text state)
-                if panel.popup_palette_search_input.is_none() {
-                    let input_entity =
-                        cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
-                    panel.popup_palette_search_input = Some(input_entity);
-                }
-
-                // Focus the search box so typing can begin immediately.
-                if let Some(input) = &panel.popup_palette_search_input {
-                    input.update(cx, |input, cx| {
-                        input.focus(window, cx);
-                    });
-                }
-
-                // Keep the trigger screen pos as-is; the popover trigger is positioned
-                // continuously from the mouse move handler so Popover will open on the
-                // same click position.
-
-                // Notify to re-render and show popup
-                cx.notify();
             }
 
             // Always clear right-click gesture state.

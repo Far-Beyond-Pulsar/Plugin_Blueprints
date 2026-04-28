@@ -99,10 +99,8 @@ pub struct BlueprintEditorPanel {
     pub show_minimap: bool,
     pub show_graph_controls: bool,
 
-    // Palette popup state (right-click quick palette)
-    pub popup_trigger_screen_pos: Option<Point<Pixels>>,
+    // Palette context-menu state (right-click quick palette)
     pub popup_palette_graph_pos: Option<Point<f32>>,
-    pub popup_palette_search_input: Option<Entity<InputState>>,
 
     // Sidebar tab states
     pub left_top_tab: usize,    // 0=Variables, 1=Functions, 2=Macros
@@ -347,9 +345,7 @@ impl BlueprintEditorPanel {
             show_debug_overlay: true,
             show_minimap: true,
             show_graph_controls: true,
-            popup_trigger_screen_pos: None,
             popup_palette_graph_pos: None,
-            popup_palette_search_input: None,
             left_top_tab: 0,
             left_bottom_tab: 0,
             right_tab: 0,
