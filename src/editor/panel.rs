@@ -104,6 +104,8 @@ pub struct BlueprintEditorPanel {
     pub popup_palette_graph_pos: Option<Point<f32>>,
     /// Whether the right-click quick-palette overlay is currently visible.
     pub quick_palette_open: bool,
+    /// Whether the quick-palette search input should be focused on next paint.
+    pub quick_palette_focus_pending: bool,
     /// Window-space position where the user right-clicked (used to anchor the overlay).
     pub quick_palette_screen_pos: Point<Pixels>,
     /// The shared palette view rendered inside the overlay.
@@ -358,6 +360,7 @@ impl BlueprintEditorPanel {
             show_graph_controls: true,
             popup_palette_graph_pos: None,
             quick_palette_open: false,
+            quick_palette_focus_pending: false,
             quick_palette_screen_pos: Point::default(),
             quick_palette_view,
             left_top_tab: 0,

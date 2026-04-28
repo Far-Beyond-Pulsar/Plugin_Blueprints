@@ -37,8 +37,7 @@ pub fn on_mouse_down_right(
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
-    move |event: &MouseDownEvent, window: &mut Window, cx: &mut App| {
-        let palette_view = entity.read(cx).quick_palette_view.clone();
+    move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
         entity.update(cx, |panel, cx| {
             // Convert window coordinates to element coordinates
             let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
@@ -61,12 +60,10 @@ pub fn on_mouse_down_right(
 
             // Open the rich quick-palette overlay at the cursor position
             panel.quick_palette_open = true;
+            panel.quick_palette_focus_pending = true;
             panel.quick_palette_screen_pos = event.position;
             cx.notify();
         });
-        // Focus the search box so the user can type immediately
-        let search_handle = palette_view.read(cx).search_focus_handle(cx);
-        window.focus(&search_handle);
     }
 }
 
@@ -81,6 +78,7 @@ pub fn on_mouse_down_left(
             // Close the quick-palette overlay if it's open
             if panel.quick_palette_open {
                 panel.quick_palette_open = false;
+                panel.quick_palette_focus_pending = false;
                 panel.popup_palette_graph_pos = None;
                 cx.notify();
                 return;

@@ -362,6 +362,7 @@ fn palette_node_row(
                         // Dismiss the quick-palette overlay when it is active.
                         // In the dock-panel context this is always false already.
                         ep.quick_palette_open = false;
+                        ep.quick_palette_focus_pending = false;
                         cx.notify();
                     });
                 }

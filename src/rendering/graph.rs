@@ -194,9 +194,27 @@ impl NodeGraphRenderer {
                         .border_1()
                         .border_color(cx.theme().border)
                         .child(panel.quick_palette_view.clone())
+                        .on_children_prepainted({
+                            let panel_entity = panel_entity.clone();
+                            move |_children_bounds, window, cx| {
+                                panel_entity.update(cx, |panel, cx| {
+                                    if !panel.quick_palette_focus_pending {
+                                        return;
+                                    }
+
+                                    let search_handle = panel
+                                        .quick_palette_view
+                                        .read(cx)
+                                        .search_focus_handle(cx);
+                                    panel.quick_palette_focus_pending = false;
+                                    window.focus(&search_handle);
+                                });
+                            }
+                        })
                         .on_mouse_down_out(move |_, _window, cx| {
                             panel_entity.update(cx, |panel, cx| {
                                 panel.quick_palette_open = false;
+                                panel.quick_palette_focus_pending = false;
                                 panel.popup_palette_graph_pos = None;
                                 cx.notify();
                             });
