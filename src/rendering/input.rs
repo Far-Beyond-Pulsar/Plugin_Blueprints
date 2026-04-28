@@ -57,12 +57,6 @@ pub fn on_mouse_down_right(
                 panel.right_click_start = Some(mouse_pos);
                 // Don't show menu immediately - wait for mouse up or movement
             }
-
-            // Open the rich quick-palette overlay at the cursor position
-            panel.quick_palette_open = true;
-            panel.quick_palette_focus_pending = true;
-            panel.quick_palette_screen_pos = event.position;
-            cx.notify();
         });
     }
 }
@@ -301,9 +295,18 @@ pub fn on_mouse_up_right(
 
             panel.activate_interaction_view(&view_id);
 
+            let should_open_quick_palette = panel.right_click_start.is_some() && !panel.is_panning();
+
             // Match old behavior: always end panning on RMB release.
             if panel.is_panning() {
                 panel.end_panning(cx);
+            }
+
+            if should_open_quick_palette {
+                panel.quick_palette_open = true;
+                panel.quick_palette_focus_pending = true;
+                panel.quick_palette_screen_pos = event.position;
+                cx.notify();
             }
 
             // Always clear right-click gesture state.
