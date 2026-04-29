@@ -16,7 +16,6 @@ use ui::{
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::{layout, style};
 use crate::{BlueprintGraph, BlueprintNode, Connection, NodeType, Pin};
-use ui::graph::DataType;
 
 pub struct NodeGraphRenderer;
 

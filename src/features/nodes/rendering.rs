@@ -9,14 +9,16 @@
 //! Node rendering - visual representation of blueprint nodes
 use gpui::prelude::*;
 use gpui::*;
-use ui::tooltip::Tooltip;
 use ui::ActiveTheme;
 use ui::PixelsExt;
 use ui::Sizable;
 use ui::StyledExt;
 use ui::{h_flex, v_flex};
+use ui::context_menu::ContextMenu;
+use ui::popup_menu::PopupMenu;
 
 use crate::core::types::*;
+use crate::core::events::{CopyNode, DeleteNode, DisconnectPin, DuplicateNode};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::rendering::{layout, style};
@@ -223,6 +225,24 @@ fn render_blueprint_node(
         .when(!node.is_selected, |s| s.border_1().shadow_md())
         .when(is_dragging, |s| s.opacity(0.92))
         .cursor_pointer()
+        .on_mouse_down(gpui::MouseButton::Right, {
+            let node_id = node_id.clone();
+            cx.listener(move |panel, _event: &MouseDownEvent, _window, cx| {
+                cx.stop_propagation();
+                if !panel.graph.selected_nodes.contains(&node_id) {
+                    panel.select_node(Some(node_id.clone()), cx);
+                }
+            })
+        })
+        .child({
+            let menu_node_id = node_id.clone();
+            ContextMenu::new("node-context-menu").menu(move |menu: PopupMenu, _window, _cx| {
+                menu
+                    .menu("Duplicate Node", Box::new(DuplicateNode { node_id: menu_node_id.clone() }))
+                    .menu("Copy Node", Box::new(CopyNode { node_id: menu_node_id.clone() }))
+                    .menu("Delete Node", Box::new(DeleteNode { node_id: menu_node_id.clone() }))
+            })
+        })
         // Header
         .child(
             div()
@@ -703,6 +723,26 @@ fn render_pin(
             }
             cx.notify();
         }))
+        .on_mouse_down(gpui::MouseButton::Right, {
+            let node_id = node_id.to_string();
+            let pin_id = pin.id.clone();
+            cx.listener(move |panel, _event: &MouseDownEvent, _window, cx| {
+                cx.stop_propagation();
+                if !panel.graph.selected_nodes.contains(&node_id) {
+                    panel.select_node(Some(node_id.clone()), cx);
+                }
+            })
+        })
+        .child({
+            let disconnect_node_id = node_id.to_string();
+            let disconnect_pin_id = pin.id.clone();
+            ContextMenu::new("pin-context-menu").menu(move |menu: PopupMenu, _window, _cx| {
+                menu.menu("Disconnect Pin", Box::new(DisconnectPin {
+                    node_id: disconnect_node_id.clone(),
+                    pin_id: disconnect_pin_id.clone(),
+                }))
+            })
+        })
         .w(px(sz))
         .h(px(sz))
         .relative()
