@@ -693,7 +693,7 @@ fn render_pin(
 
     div()
         .id(ElementId::Name(element_id.into()))
-        .tooltip(move |window, cx| Tooltip::new(tooltip_text.clone()).build(window, cx))
+        .hoverable_tooltip(move |window, cx| Tooltip::new(tooltip_text.clone()).build(window, cx))
         .w(px(sz))
         .h(px(sz))
         .relative()
