@@ -22,14 +22,17 @@ pub struct NodeGraphRenderer;
 
 fn render_pin_hover_tooltip(
     panel: &BlueprintEditorPanel,
+    view_id: &str,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl IntoElement {
     if let Some(text) = panel.hovered_pin_tooltip.as_ref() {
         if let Some(position) = panel.hovered_pin_tooltip_pos {
+            let element_pos =
+                NodeGraphRenderer::window_to_graph_element_pos_for_view(position, panel, view_id);
             return div()
                 .absolute()
-                .left(position.x + px(10.0))
-                .top(position.y + px(10.0))
+                .left(element_pos.x + px(10.0))
+                .top(element_pos.y + px(10.0))
                 .bg(cx.theme().popover)
                 .text_color(cx.theme().popover_foreground)
                 .border_1()
@@ -154,7 +157,7 @@ impl NodeGraphRenderer {
             // })
             // Quick-palette overlay — shown on right-click, same primitive as the color-picker popout
             .child(Self::render_quick_palette_overlay(panel, cx))
-            .child(render_pin_hover_tooltip(panel, cx))
+            .child(render_pin_hover_tooltip(panel, &view_id, cx))
             .on_mouse_down(
                 gpui::MouseButton::Right,
                 crate::rendering::input::on_mouse_down_right(view_id.clone(), cx),
