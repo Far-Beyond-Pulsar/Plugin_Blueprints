@@ -13,6 +13,7 @@ use crate::core::{definitions::NodeDefinitions, events::*, graph::*, types::*};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
 use crate::features::variables::ClassVariable;
+use crate::rendering::graph::NodeGraphRenderer;
 use ui::dock::{DockItem, DockPlacement};
 use ui::graph::DataType;
 use ui::graph::{DataType as GraphDataType, LibraryManager, SubGraphDefinition};
@@ -1137,8 +1138,45 @@ impl BlueprintEditorPanel {
                     clipboard_data.connections.len()
                 );
 
-                // Calculate paste offset (offset by 50px so pasted items appear near originals)
-                let offset = Point::new(50.0, 50.0);
+                // Compute the center of the copied formation so it can be pasted centered
+                // at the current mouse cursor rather than offset from the original location.
+                let mouse_window_pos = window.mouse_position();
+                let mouse_element_pos = NodeGraphRenderer::window_to_graph_element_pos(
+                    mouse_window_pos,
+                    self,
+                );
+                let mouse_graph_pos = NodeGraphRenderer::screen_to_graph_pos(
+                    mouse_element_pos,
+                    &self.graph,
+                );
+
+                let mut min_x = f32::MAX;
+                let mut min_y = f32::MAX;
+                let mut max_x = f32::MIN;
+                let mut max_y = f32::MIN;
+
+                for node in &clipboard_data.nodes {
+                    min_x = min_x.min(node.position.0);
+                    min_y = min_y.min(node.position.1);
+                    max_x = max_x.max(node.position.0 + node.size.0);
+                    max_y = max_y.max(node.position.1 + node.size.1);
+                }
+                for comment in &clipboard_data.comments {
+                    min_x = min_x.min(comment.position.0);
+                    min_y = min_y.min(comment.position.1);
+                    max_x = max_x.max(comment.position.0 + comment.size.0);
+                    max_y = max_y.max(comment.position.1 + comment.size.1);
+                }
+
+                let offset = if min_x <= max_x && min_y <= max_y {
+                    let selection_center = Point::new((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
+                    Point::new(
+                        mouse_graph_pos.x - selection_center.x,
+                        mouse_graph_pos.y - selection_center.y,
+                    )
+                } else {
+                    Point::new(50.0, 50.0)
+                };
 
                 // Convert clipboard data to graph entities with new IDs
                 let (nodes, comments, connections) =
