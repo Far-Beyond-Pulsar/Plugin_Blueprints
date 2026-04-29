@@ -235,8 +235,9 @@ fn render_blueprint_node(
             })
         })
         .child({
+            let menu_id = format!("node-context-menu-{}", node_id);
             let menu_node_id = node_id.clone();
-            ContextMenu::new("node-context-menu").menu(move |menu: PopupMenu, _window, _cx| {
+            ContextMenu::new(menu_id).menu(move |menu: PopupMenu, _window, _cx| {
                 menu
                     .menu("Duplicate Node", Box::new(DuplicateNode { node_id: menu_node_id.clone() }))
                     .menu("Copy Node", Box::new(CopyNode { node_id: menu_node_id.clone() }))
@@ -734,9 +735,10 @@ fn render_pin(
             })
         })
         .child({
+            let menu_id = format!("pin-context-menu-{}-{}", node_id, pin.id);
             let disconnect_node_id = node_id.to_string();
             let disconnect_pin_id = pin.id.clone();
-            ContextMenu::new("pin-context-menu").menu(move |menu: PopupMenu, _window, _cx| {
+            ContextMenu::new(menu_id).menu(move |menu: PopupMenu, _window, _cx| {
                 menu.menu("Disconnect Pin", Box::new(DisconnectPin {
                     node_id: disconnect_node_id.clone(),
                     pin_id: disconnect_pin_id.clone(),
