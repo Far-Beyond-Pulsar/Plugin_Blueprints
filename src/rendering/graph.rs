@@ -11,7 +11,6 @@ use gpui::*;
 use ui::{
     button::{Button, ButtonVariants},
     h_flex,
-    tooltip::Tooltip,
     v_flex, ActiveTheme, Colorize, IconName, PixelsExt, Sizable, StyledExt,
 };
 use crate::editor::panel::BlueprintEditorPanel;
@@ -21,9 +20,30 @@ use ui::graph::DataType;
 
 pub struct NodeGraphRenderer;
 
-/// Helper to create simple text tooltip for pins (still using gpui's built-in tooltip)
-fn create_text_tooltip(text: &'static str) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-    move |window, cx| Tooltip::new(text).build(window, cx)
+fn render_pin_hover_tooltip(
+    panel: &BlueprintEditorPanel,
+    cx: &mut Context<BlueprintEditorPanel>,
+) -> impl IntoElement {
+    if let Some(text) = panel.hovered_pin_tooltip.as_ref() {
+        if let Some(position) = panel.hovered_pin_tooltip_pos {
+            return div()
+                .absolute()
+                .left(position.x + px(10.0))
+                .top(position.y + px(10.0))
+                .bg(cx.theme().popover)
+                .text_color(cx.theme().popover_foreground)
+                .border_1()
+                .border_color(cx.theme().border)
+                .shadow_md()
+                .rounded(px(6.0))
+                .py(px(4.0))
+                .px(px(8.0))
+                .text_sm()
+                .child(text.clone())
+                .into_any_element();
+        }
+    }
+    div().into_any_element()
 }
 
 impl NodeGraphRenderer {
@@ -134,6 +154,7 @@ impl NodeGraphRenderer {
             // })
             // Quick-palette overlay — shown on right-click, same primitive as the color-picker popout
             .child(Self::render_quick_palette_overlay(panel, cx))
+            .child(render_pin_hover_tooltip(panel, cx))
             .on_mouse_down(
                 gpui::MouseButton::Right,
                 crate::rendering::input::on_mouse_down_right(view_id.clone(), cx),

@@ -693,7 +693,16 @@ fn render_pin(
 
     div()
         .id(ElementId::Name(element_id.into()))
-        .hoverable_tooltip(move |window, cx| Tooltip::new(tooltip_text.clone()).build(window, cx))
+        .on_hover(cx.listener(move |panel, hovered: &bool, window, cx| {
+            if *hovered {
+                panel.hovered_pin_tooltip = Some(tooltip_text.clone());
+                panel.hovered_pin_tooltip_pos = Some(window.mouse_position());
+            } else {
+                panel.hovered_pin_tooltip = None;
+                panel.hovered_pin_tooltip_pos = None;
+            }
+            cx.notify();
+        }))
         .w(px(sz))
         .h(px(sz))
         .relative()

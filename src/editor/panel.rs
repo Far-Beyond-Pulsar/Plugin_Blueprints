@@ -115,6 +115,10 @@ pub struct BlueprintEditorPanel {
     /// The shared palette view rendered inside the overlay.
     pub quick_palette_view: Entity<NodePaletteView>,
 
+    // Pin hover tooltip state
+    pub hovered_pin_tooltip: Option<String>,
+    pub hovered_pin_tooltip_pos: Option<Point<Pixels>>,
+
     // Sidebar tab states
     pub left_top_tab: usize,    // 0=Variables, 1=Functions, 2=Macros
     pub left_bottom_tab: usize, // 0=Library, 1=Compiler
@@ -374,6 +378,8 @@ impl BlueprintEditorPanel {
             quick_palette_connection_source: None,
             quick_palette_screen_pos: Point::default(),
             quick_palette_view,
+            hovered_pin_tooltip: None,
+            hovered_pin_tooltip_pos: None,
             left_top_tab: 0,
             left_bottom_tab: 0,
             right_tab: 0,
