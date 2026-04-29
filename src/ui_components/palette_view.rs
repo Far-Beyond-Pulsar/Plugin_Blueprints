@@ -24,8 +24,8 @@ use crate::core::types::BlueprintNode;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::node_library::{
-    build_item_sizes, build_palette_items, count_nodes, filter_palette_items, PaletteItem,
-    CATEGORY_HEADER_H, NODE_ENTRY_H,
+    build_compatible_palette_items, build_item_sizes, build_palette_items, count_nodes,
+    filter_palette_items, PaletteItem, CATEGORY_HEADER_H, NODE_ENTRY_H,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,7 +84,21 @@ impl Render for NodePaletteView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // ── Filtered list ─────────────────────────────────────────────────────
         let query = self.search_input.read(cx).value().to_string();
-        let visible = filter_palette_items(&self.all_items, &query);
+        let connection_filter_type = self
+            .editor
+            .upgrade()
+            .and_then(|editor| {
+                let editor = editor.read(cx);
+                editor.quick_palette_connection_source.as_ref().cloned()
+            })
+            .map(|drag| drag.source_pin_type);
+
+        let items = if let Some(source_type) = connection_filter_type {
+            build_compatible_palette_items(NodeDefinitions::load(), &source_type)
+        } else {
+            self.all_items.clone()
+        };
+        let visible = filter_palette_items(&items, &query);
         let node_count = count_nodes(&visible);
         let item_sizes = build_item_sizes(&visible);
 
@@ -357,8 +371,15 @@ fn palette_node_row(
                         let stagger = (ep.graph.nodes.len() % 8) as f32 * 18.0;
                         let place_pos = Point::new(base.x + stagger, base.y + stagger);
                         let node = BlueprintNode::from_definition(&def_now, place_pos);
+                        let node_clone = node.clone();
                         ep.add_node(node, cx);
+
+                        if let Some(source) = ep.quick_palette_connection_source.take() {
+                            ep.complete_connection_to_new_node(source, &node_clone, cx);
+                        }
+
                         ep.popup_palette_graph_pos = None;
+                        ep.quick_palette_connection_source = None;
                         // Dismiss the quick-palette overlay when it is active.
                         // In the dock-panel context this is always false already.
                         ep.quick_palette_open = false;

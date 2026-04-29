@@ -215,6 +215,7 @@ impl NodeGraphRenderer {
                             panel_entity.update(cx, |panel, cx| {
                                 panel.quick_palette_open = false;
                                 panel.quick_palette_focus_pending = false;
+                                panel.quick_palette_connection_source = None;
                                 panel.popup_palette_graph_pos = None;
                                 cx.notify();
                             });

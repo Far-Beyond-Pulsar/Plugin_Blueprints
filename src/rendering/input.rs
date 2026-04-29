@@ -73,6 +73,7 @@ pub fn on_mouse_down_left(
             if panel.quick_palette_open {
                 panel.quick_palette_open = false;
                 panel.quick_palette_focus_pending = false;
+                panel.quick_palette_connection_source = None;
                 panel.popup_palette_graph_pos = None;
                 cx.notify();
                 return;
@@ -234,7 +235,7 @@ pub fn on_mouse_up_left(
                 Some(owner) => owner == view_id,
                 None => point_in_view_bounds(panel, &view_id, event.position),
             };
-            if !should_process {
+            if !should_process && panel.dragging_connection.is_none() {
                 return;
             }
 
@@ -256,15 +257,20 @@ pub fn on_mouse_up_left(
                 let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
                 panel.finish_dragging_variable(graph_pos, cx);
             } else if panel.dragging_connection.is_some() {
-                // Show node creation menu when dropping connection on empty space
+                // Open quick palette with compatible node targets when dropping a connection on empty space.
                 let element_pos = NodeGraphRenderer::window_to_graph_element_pos_for_view(
                     event.position,
                     panel,
                     &view_id,
                 );
                 let graph_pos = NodeGraphRenderer::screen_to_graph_pos(element_pos, &panel.graph);
-                panel.show_node_picker(graph_pos, window, cx);
-                panel.cancel_connection_drag(cx);
+                panel.popup_palette_graph_pos = Some(graph_pos);
+                panel.quick_palette_connection_source = panel.dragging_connection.clone();
+                panel.quick_palette_open = true;
+                panel.quick_palette_focus_pending = true;
+                panel.quick_palette_screen_pos = event.position;
+                panel.dragging_connection = None;
+                cx.notify();
             } else if panel.is_selecting() {
                 // End selection drag
                 panel.end_selection_drag(cx);

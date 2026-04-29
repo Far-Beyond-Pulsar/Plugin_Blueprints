@@ -114,6 +114,48 @@ pub fn filter_palette_items(all_items: &[PaletteItem], query: &str) -> Vec<Palet
         .collect()
 }
 
+/// Build a palette list containing only nodes that have at least one compatible input pin
+/// for the given source pin type.
+pub fn build_compatible_palette_items(
+    defs: &NodeDefinitions,
+    source_type: &ui::graph::DataType,
+) -> Vec<PaletteItem> {
+    let mut items = Vec::new();
+    for category in &defs.categories {
+        let compatible_nodes: Vec<_> = category
+            .nodes
+            .iter()
+            .filter(|def| {
+                def.inputs.iter().any(|pin| {
+                    crate::features::connections::compatibility::are_types_compatible(
+                        source_type,
+                        &pin.data_type,
+                    )
+                })
+            })
+            .cloned()
+            .collect();
+
+        if compatible_nodes.is_empty() {
+            continue;
+        }
+
+        items.push(PaletteItem::CategoryHeader {
+            name: category.name.clone(),
+            color: category.color.clone(),
+            node_count: compatible_nodes.len(),
+        });
+
+        for def in compatible_nodes {
+            items.push(PaletteItem::NodeEntry {
+                def,
+                category_color: category.color.clone(),
+            });
+        }
+    }
+    items
+}
+
 /// Count the number of `NodeEntry` items in a slice.
 pub fn count_nodes(items: &[PaletteItem]) -> usize {
     items

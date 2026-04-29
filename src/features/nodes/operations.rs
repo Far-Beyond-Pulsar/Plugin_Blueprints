@@ -2,10 +2,11 @@
 //!
 //! All operations related to node manipulation in the graph.
 
-use crate::core::types::BlueprintNode;
+use crate::core::types::{BlueprintNode, Connection, NodeType};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
+use ui::graph::DataType as GraphDataType;
 
 impl BlueprintEditorPanel {
     /// Add a node to the graph
@@ -25,6 +26,80 @@ impl BlueprintEditorPanel {
         // Mark tab as dirty
         if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
             tab.is_dirty = true;
+        }
+    }
+
+    /// Connect a newly added node to the active connection drag source.
+    pub fn complete_connection_to_new_node(
+        &mut self,
+        source: crate::features::connections::operations::ConnectionDrag,
+        new_node: &BlueprintNode,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(target_pin) = new_node.inputs.iter().find(|pin| {
+            crate::features::connections::compatibility::are_types_compatible(
+                &source.source_pin_type,
+                &pin.data_type,
+            )
+        }) {
+            let pin_data_type = target_pin.data_type.clone();
+            let target_pin_id = target_pin.id.clone();
+
+            let source_is_reroute = self.graph.nodes.iter().any(|n| {
+                n.id == source.source_node && n.node_type == NodeType::Reroute
+            });
+            let target_is_reroute = self
+                .graph
+                .nodes
+                .iter()
+                .any(|n| n.id == new_node.id && n.node_type == NodeType::Reroute);
+
+            if source.source_pin_type == GraphDataType::Execution || source_is_reroute {
+                self.graph.connections.retain(|conn| {
+                    !(conn.source_node == source.source_node && conn.source_pin == source.source_pin)
+                });
+            }
+
+            if source.source_pin_type == GraphDataType::Execution
+                || target_is_reroute
+                || pin_data_type != GraphDataType::Execution
+            {
+                self.graph.connections.retain(|conn| {
+                    !(conn.target_node == new_node.id && conn.target_pin == target_pin_id)
+                });
+            }
+
+            println!(
+                "Creating auto-connection from {}:{} to {}:{}",
+                source.source_node, source.source_pin, new_node.id, target_pin_id
+            );
+
+            let connection_type = if pin_data_type == GraphDataType::Execution {
+                ui::graph::ConnectionType::Execution
+            } else {
+                ui::graph::ConnectionType::Data
+            };
+
+            let connection = Connection {
+                id: uuid::Uuid::new_v4().to_string(),
+                source_node: source.source_node.clone(),
+                source_pin: source.source_pin.clone(),
+                target_node: new_node.id.clone(),
+                target_pin: target_pin_id.clone(),
+                connection_type,
+            };
+
+            let mut cmd = crate::features::undo::AddConnectionCommand::new(connection.clone());
+            cmd.execute(self, cx);
+            self.push_undo_command(crate::features::undo::Command::AddConnection(cmd));
+
+            if target_is_reroute {
+                self.propagate_reroute_types(new_node.id.clone(), source.source_pin_type, cx);
+            } else if source_is_reroute {
+                self.propagate_reroute_types(source.source_node.clone(), pin_data_type, cx);
+            }
+
+            cx.notify();
         }
     }
 
