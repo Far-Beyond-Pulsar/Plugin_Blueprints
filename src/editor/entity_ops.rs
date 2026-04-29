@@ -205,7 +205,8 @@ impl BlueprintEditorPanel {
             if !node_moves.is_empty() || !comment_moves.is_empty() {
                 println!("[UNDO] Creating move command: {} nodes, {} comments",
                     node_moves.len(), comment_moves.len());
-                let cmd = crate::features::undo::MoveEntitiesCommand::new(node_moves, comment_moves);
+                // Use new_executed because the move already happened during the drag
+                let cmd = crate::features::undo::MoveEntitiesCommand::new_executed(node_moves, comment_moves);
                 self.push_undo_command(crate::features::undo::Command::MoveEntities(cmd));
             }
         }

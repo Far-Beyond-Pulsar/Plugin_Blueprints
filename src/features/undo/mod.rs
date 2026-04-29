@@ -246,6 +246,18 @@ impl MoveEntitiesCommand {
         }
     }
 
+    /// Create a move command that's already been executed (for recording past moves)
+    pub fn new_executed(
+        node_moves: Vec<(String, Point<f32>, Point<f32>)>,
+        comment_moves: Vec<(String, Point<f32>, Point<f32>)>,
+    ) -> Self {
+        Self {
+            node_moves,
+            comment_moves,
+            executed: true,
+        }
+    }
+
     pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
         if !self.executed {
             println!("[UNDO] Executing MoveEntities: {} nodes, {} comments",
