@@ -61,7 +61,7 @@ fn compute_graph_cull_bounds(panel: &BlueprintEditorPanel) -> GraphCullBounds {
 fn is_node_visible_in_bounds(node: &BlueprintNode, bounds: &GraphCullBounds) -> bool {
     let node_left = node.position.x;
     let node_top = node.position.y;
-    let node_right = node.position.x + node.size.width;
+    let node_right = node.position.x + node.size.width; 
     let node_bottom = node.position.y + node.size.height;
 
     !(node_left > bounds.right
@@ -687,7 +687,11 @@ fn render_pin(
     let z = panel.graph.zoom_level;
     let sz = layout::PIN_SIZE * z;
 
-    let type_string = pin.data_type.rust_type_string();
+    let type_string = if pin.data_type == DataType::Execution {
+        "Execution Pin".to_string()
+    } else {
+        pin.data_type.rust_type_string()
+    };
     let tooltip_text: &'static str = Box::leak(type_string.into_boxed_str());
     let element_id = format!("pin-{}-{}", node_id, pin.id);
 
