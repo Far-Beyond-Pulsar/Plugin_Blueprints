@@ -176,49 +176,6 @@ impl BlueprintEditorPanel {
         }
     }
 
-    /// End entity drag and create undo command
-    pub fn end_entity_drag(&mut self, cx: &mut Context<Self>) {
-        // Create move command for undo/redo
-        if !self.initial_drag_positions.is_empty() || !self.initial_comment_drag_positions.is_empty() {
-            let mut node_moves = Vec::new();
-            let mut comment_moves = Vec::new();
-
-            // Collect node moves
-            for (node_id, old_pos) in &self.initial_drag_positions {
-                if let Some(node) = self.graph.nodes.iter().find(|n| &n.id == node_id) {
-                    if node.position != *old_pos {
-                        node_moves.push((node_id.clone(), *old_pos, node.position));
-                    }
-                }
-            }
-
-            // Collect comment moves
-            for (comment_id, old_pos) in &self.initial_comment_drag_positions {
-                if let Some(comment) = self.graph.comments.iter().find(|c| &c.id == comment_id) {
-                    if comment.position != *old_pos {
-                        comment_moves.push((comment_id.clone(), *old_pos, comment.position));
-                    }
-                }
-            }
-
-            // Only push command if something actually moved
-            if !node_moves.is_empty() || !comment_moves.is_empty() {
-                let cmd = crate::features::undo::MoveEntitiesCommand::new(node_moves, comment_moves);
-                self.push_undo_command(crate::features::undo::Command::MoveEntities(cmd));
-            }
-        }
-
-        // Update comment containment after drag
-        for comment in self.graph.comments.iter_mut() {
-            comment.update_contained_nodes(&self.graph.nodes);
-        }
-
-        // Clear drag state
-        self.dragging_node = None;
-        self.dragging_comment = None;
-        cx.notify();
-    }
-
     /// Delete all selected entities (unified)
     pub fn delete_selected_entities(&mut self, cx: &mut Context<Self>) {
         let node_count = self.graph.selected_nodes.len();

@@ -926,27 +926,6 @@ impl BlueprintEditorPanel {
 
     /// End comment drag and update contained nodes
     pub fn end_comment_drag(&mut self, cx: &mut Context<Self>) {
-        // Create move command for undo/redo if comment was dragged
-        if !self.initial_comment_drag_positions.is_empty() {
-            let mut comment_moves = Vec::new();
-
-            // Collect comment moves
-            for (comment_id, old_pos) in &self.initial_comment_drag_positions {
-                if let Some(comment) = self.graph.comments.iter().find(|c| &c.id == comment_id) {
-                    if comment.position != *old_pos {
-                        comment_moves.push((comment_id.clone(), *old_pos, comment.position));
-                    }
-                }
-            }
-
-            // Only push command if something actually moved
-            if !comment_moves.is_empty() {
-                let cmd = crate::features::undo::MoveEntitiesCommand::new(Vec::new(), comment_moves);
-                self.push_undo_command(crate::features::undo::Command::MoveEntities(cmd));
-            }
-        }
-
-        // Update comment containment
         if let Some(comment_id) = &self.dragging_comment.clone() {
             if let Some(comment) = self.graph.comments.iter_mut().find(|c| c.id == *comment_id) {
                 comment.update_contained_nodes(&self.graph.nodes);
