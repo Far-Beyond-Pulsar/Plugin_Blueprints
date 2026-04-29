@@ -70,11 +70,6 @@ fn is_node_visible_in_bounds(node: &BlueprintNode, bounds: &GraphCullBounds) -> 
         || node_bottom < bounds.top)
 }
 
-/// Helper to create simple text tooltip for pins
-fn create_text_tooltip(text: &'static str) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-    move |window, cx| Tooltip::new(text).build(window, cx)
-}
-
 /// Render all nodes in the graph with virtualization
 pub fn render_all(
     panel: &mut BlueprintEditorPanel,
@@ -687,19 +682,18 @@ fn render_pin(
     let z = panel.graph.zoom_level;
     let sz = layout::PIN_SIZE * z;
 
-    let type_string = if pin.data_type == DataType::Execution {
+    let tooltip_text = if pin.data_type == DataType::Execution {
         "Execution Pin".to_string()
     } else {
         pin.data_type.rust_type_string()
     };
-    let tooltip_text: &'static str = Box::leak(type_string.into_boxed_str());
     let element_id = format!("pin-{}-{}", node_id, pin.id);
 
     let accent = cx.theme().accent;
 
     div()
         .id(ElementId::Name(element_id.into()))
-        .tooltip(create_text_tooltip(tooltip_text))
+        .tooltip(move |window, cx| Tooltip::new(tooltip_text.clone()).build(window, cx))
         .w(px(sz))
         .h(px(sz))
         .relative()
