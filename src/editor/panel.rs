@@ -926,14 +926,8 @@ impl BlueprintEditorPanel {
 
     /// End comment drag and update contained nodes
     pub fn end_comment_drag(&mut self, cx: &mut Context<Self>) {
-        if let Some(comment_id) = &self.dragging_comment.clone() {
-            if let Some(comment) = self.graph.comments.iter_mut().find(|c| c.id == *comment_id) {
-                comment.update_contained_nodes(&self.graph.nodes);
-            }
-        }
-
-        self.dragging_comment = None;
-        cx.notify();
+        // Use unified entity drag end
+        self.end_entity_drag(cx);
     }
 
     /// Update comment resize based on handle being dragged
