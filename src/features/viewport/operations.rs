@@ -50,7 +50,7 @@ impl BlueprintEditorPanel {
 
         // Calculate new zoom level (inverted scroll direction)
         let zoom_factor = if delta_y > 0.0 { 1.1 } else { 0.9 };
-        let new_zoom = (self.graph.zoom_level * zoom_factor).clamp(0.1, 3.0);
+        let new_zoom = (self.graph.zoom_level * zoom_factor).clamp(0.5, 2.0);
 
         // Calculate new pan to keep focus point under cursor
         let mut new_pan_offset = Point::new(
