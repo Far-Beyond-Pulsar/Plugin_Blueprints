@@ -8,6 +8,7 @@
 
 pub mod operations;
 pub mod rendering;
+pub mod rendering_spans;
 pub mod selection;
 
 // Re-export commonly used items

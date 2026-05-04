@@ -106,7 +106,7 @@ pub fn render_all(
     div().absolute().inset_0().children(
         visible_nodes
             .into_iter()
-            .map(|node| render_blueprint_node(&node, panel, cx)),
+            .map(|node| crate::features::nodes::rendering_spans::render_blueprint_node_spans(&node, panel, cx)),
     )
 }
 
@@ -421,7 +421,7 @@ fn render_blueprint_node(
         .into_any_element()
 }
 
-fn render_reroute_node(
+pub fn render_reroute_node(
     node: &BlueprintNode,
     panel: &mut BlueprintEditorPanel,
     cx: &mut Context<BlueprintEditorPanel>,
@@ -894,7 +894,7 @@ fn get_pin_color(data_type: &DataType, _cx: &mut Context<BlueprintEditorPanel>) 
 }
 
 /// Parses a hex color string (e.g., "#4A90E2") into a GPUI Hsla color
-fn parse_hex_color(hex: &str) -> Option<gpui::Hsla> {
+pub fn parse_hex_color(hex: &str) -> Option<gpui::Hsla> {
     let hex = hex.trim_start_matches('#');
 
     // Parse RGB values
