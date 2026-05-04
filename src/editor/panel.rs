@@ -131,6 +131,9 @@ pub struct BlueprintEditorPanel {
 
     // Undo/redo system
     pub undo_manager: crate::features::undo::UndoManager,
+
+    // Connection rendering cache
+    pub connection_render_cache: crate::features::connections::rendering_cached::ConnectionRenderCache,
 }
 
 /// Information about a tab being dragged
@@ -386,6 +389,7 @@ impl BlueprintEditorPanel {
             dragging_tab: None,
             is_dirty: false,
             undo_manager: crate::features::undo::UndoManager::new(),
+            connection_render_cache: crate::features::connections::rendering_cached::ConnectionRenderCache::new(),
         }
     }
 

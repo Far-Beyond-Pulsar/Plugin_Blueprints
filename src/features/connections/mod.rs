@@ -9,6 +9,7 @@
 pub mod compatibility;
 pub mod operations;
 pub mod rendering;
+pub mod rendering_cached;
 
 pub use compatibility::*;
 pub use operations::*;

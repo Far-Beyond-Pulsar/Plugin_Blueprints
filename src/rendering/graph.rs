@@ -372,7 +372,15 @@ impl NodeGraphRenderer {
         panel: &mut BlueprintEditorPanel,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        crate::editor::panel::BlueprintEditorPanel::render_connections(panel, cx)
+        // Use cached renderer for better performance during panning
+        // Temporarily take ownership to avoid borrow conflicts
+        let mut cache = std::mem::replace(
+            &mut panel.connection_render_cache,
+            crate::features::connections::rendering_cached::ConnectionRenderCache::new(),
+        );
+        let result = cache.render(panel, cx);
+        panel.connection_render_cache = cache;
+        result
     }
 
     fn render_nodes(
