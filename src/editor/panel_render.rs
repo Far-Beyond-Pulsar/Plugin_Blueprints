@@ -2,7 +2,15 @@
 
 use gpui::*;
 use gpui::prelude::*;
-use ui::{dock::{Panel, PanelEvent, PanelState}, h_flex, v_flex, ActiveTheme, StyledExt};
+use ui::{
+    dock::{Panel, PanelEvent, PanelState},
+    h_flex,
+    scroll::Scrollbar,
+    v_flex,
+    v_virtual_list,
+    ActiveTheme,
+    StyledExt,
+};
 
 use super::panel::BlueprintEditorPanel;
 use super::toolbar::ToolbarRenderer;
@@ -46,8 +54,19 @@ impl EventEmitter<ShowNodePickerRequest> for BlueprintEditorPanel {}
 
 impl BlueprintEditorPanel {
     /// Render compiler results panel (compilation history and status)
-    pub fn render_compiler_results(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub fn render_compiler_results(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         use crate::core::types::CompilationState;
+
+        let history_entries: Vec<_> = self.compilation_history.iter().rev().cloned().collect();
+        let item_sizes = std::rc::Rc::new(
+            history_entries
+                .iter()
+                .map(|_| size(px(0.0), px(56.0)))
+                .collect::<Vec<_>>(),
+        );
+        let compiler_entity = cx.entity().clone();
+        let scroll_handle = self.compiler_output_scroll_handle.clone();
+        let scrollbar_state = self.compiler_output_scrollbar_state.clone();
 
         v_flex()
             .size_full()
@@ -83,71 +102,154 @@ impl BlueprintEditorPanel {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(format!("{} messages", self.compilation_history.len()))
+                            .child(format!("{} entries", self.compilation_history.len()))
                     )
             )
             .child(
                 div()
                     .flex_1()
+                    .min_h_0()
                     .overflow_hidden()
-                    .child(
-                        v_flex()
-                            .w_full()
-                            .gap_0p5()
-                            .children(self.compilation_history.iter().rev().map(|entry| {
-                                h_flex()
-                                    .w_full()
-                                    .px_2()
-                                    .py_1()
-                                    .gap_2()
-                                    .border_b_1()
-                                    .border_color(cx.theme().border.opacity(0.1))
-                                    .hover(|s| s.bg(cx.theme().muted.opacity(0.05)))
-                                    .child(
-                                        div()
-                                            .flex_shrink_0()
-                                            .text_xs()
-                                            .font_family("JetBrainsMono-Regular")
-                                            .text_color(cx.theme().muted_foreground.opacity(0.7))
-                                            .child(entry.timestamp.clone())
-                                    )
-                                    .child(
-                                        div()
-                                            .flex_shrink_0()
-                                            .w(px(12.0))
-                                            .text_xs()
-                                            .text_color(match entry.state {
-                                                CompilationState::Success => gpui::green(),
-                                                CompilationState::Error => gpui::red(),
-                                                _ => cx.theme().muted_foreground,
-                                            })
-                                            .child(match entry.state {
+                    .relative()
+                    .when(history_entries.is_empty(), |this| {
+                        this.child(
+                            div()
+                                .size_full()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("No compilation messages yet.")
+                        )
+                    })
+                    .when(!history_entries.is_empty(), |this| {
+                        this.child(
+                            v_virtual_list(
+                                compiler_entity,
+                                "compiler-history-list",
+                                item_sizes,
+                                move |_panel, range, _window, cx| {
+                                    range
+                                        .map(|ix| -> AnyElement {
+                                            let Some(entry) = history_entries.get(ix) else {
+                                                return div().h(px(56.0)).into_any_element();
+                                            };
+
+                                            let accent = match entry.state {
+                                                CompilationState::Success => cx.theme().success,
+                                                CompilationState::Error => cx.theme().danger,
+                                                CompilationState::Compiling => cx.theme().warning,
+                                                CompilationState::Idle => {
+                                                    cx.theme().muted_foreground.opacity(0.7)
+                                                }
+                                            };
+
+                                            let icon = match entry.state {
                                                 CompilationState::Success => "✓",
                                                 CompilationState::Error => "✗",
-                                                _ => "•",
-                                            })
-                                    )
-                                    .child(
-                                        div()
-                                            .flex_1()
-                                            .text_xs()
-                                            .text_color(cx.theme().foreground)
-                                            .child(entry.message.clone())
-                                    )
-                            }))
-                            .when(self.compilation_history.is_empty(), |this| {
-                                this.child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .py(px(32.0))
-                                        .text_xs()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child("No compilation messages yet.")
-                                )
-                            })
-                    )
+                                                CompilationState::Compiling => "•",
+                                                CompilationState::Idle => "•",
+                                            };
+
+                                            h_flex()
+                                                .w_full()
+                                                .h(px(56.0))
+                                                .px_2()
+                                                .py_1()
+                                                .gap_2()
+                                                .border_b_1()
+                                                .border_color(cx.theme().border.opacity(0.1))
+                                                .hover(|s| s.bg(cx.theme().muted.opacity(0.06)))
+                                                .child(
+                                                    div()
+                                                        .w(px(2.0))
+                                                        .h_full()
+                                                        .rounded_full()
+                                                        .bg(accent)
+                                                        .flex_shrink_0(),
+                                                )
+                                                .child(
+                                                    v_flex()
+                                                        .w(px(76.0))
+                                                        .gap_0p5()
+                                                        .flex_shrink_0()
+                                                        .child(
+                                                            div()
+                                                                .text_xs()
+                                                                .font_family(
+                                                                    "JetBrainsMono-Regular",
+                                                                )
+                                                                .text_color(
+                                                                    cx.theme()
+                                                                        .muted_foreground
+                                                                        .opacity(0.8),
+                                                                )
+                                                                .child(entry.timestamp.clone()),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .text_xs()
+                                                                .text_color(accent)
+                                                                .child(entry.stage.to_uppercase()),
+                                                        ),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .w(px(14.0))
+                                                        .text_xs()
+                                                        .text_color(accent)
+                                                        .child(icon),
+                                                )
+                                                .child(
+                                                    v_flex()
+                                                        .flex_1()
+                                                        .gap_0p5()
+                                                        .overflow_hidden()
+                                                        .child(
+                                                            div()
+                                                                .text_xs()
+                                                                .font_weight(
+                                                                    gpui::FontWeight::SEMIBOLD,
+                                                                )
+                                                                .text_color(cx.theme().foreground)
+                                                                .child(entry.message.clone()),
+                                                        )
+                                                        .when(
+                                                            entry.detail.is_some(),
+                                                            |this| {
+                                                                this.child(
+                                                                    div()
+                                                                        .text_xs()
+                                                                        .text_color(
+                                                                            cx.theme()
+                                                                                .muted_foreground,
+                                                                        )
+                                                                        .child(
+                                                                            entry
+                                                                                .detail
+                                                                                .clone()
+                                                                                .unwrap_or_default(),
+                                                                        ),
+                                                                )
+                                                            },
+                                                        ),
+                                                )
+                                                .into_any_element()
+                                        })
+                                        .collect()
+                                },
+                            )
+                            .size_full()
+                            .track_scroll(&scroll_handle),
+                        )
+                        .child(
+                            div()
+                                .absolute()
+                                .inset_0()
+                                .child(Scrollbar::vertical(&scrollbar_state, &scroll_handle)),
+                        )
+                    })
             )
     }
 

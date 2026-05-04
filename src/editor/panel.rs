@@ -5,7 +5,12 @@
 
 use gpui::*;
 use std::collections::HashMap;
-use ui::{input::InputState, resizable::ResizableState};
+use ui::{
+    input::InputState,
+    resizable::ResizableState,
+    scroll::ScrollbarState,
+    VirtualListScrollHandle,
+};
 
 use super::tabs::GraphTab;
 use crate::ui_components::palette_view::NodePaletteView;
@@ -86,6 +91,8 @@ pub struct BlueprintEditorPanel {
     // Compilation
     pub compilation_status: CompilationStatus,
     pub compilation_history: Vec<CompilationHistoryEntry>,
+    pub compiler_output_scroll_handle: VirtualListScrollHandle,
+    pub compiler_output_scrollbar_state: ScrollbarState,
 
     // Library/macro system
     pub library_manager: LibraryManager,
@@ -150,7 +157,9 @@ pub struct TabDragInfo {
 pub struct CompilationHistoryEntry {
     pub timestamp: String,
     pub state: CompilationState,
+    pub stage: String,
     pub message: String,
+    pub detail: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -352,6 +361,8 @@ impl BlueprintEditorPanel {
             subscriptions: Vec::new(),
             compilation_status: CompilationStatus::default(),
             compilation_history: Vec::new(),
+            compiler_output_scroll_handle: VirtualListScrollHandle::new(),
+            compiler_output_scrollbar_state: ScrollbarState::default(),
             library_manager: {
                 let mut lib_manager = LibraryManager::default();
                 if let Err(e) = lib_manager.load_all_libraries() {

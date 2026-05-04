@@ -21,8 +21,8 @@ pulsar_std = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/pulsar_s
 engine_backend = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/engine_backend" }
 
 # Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
-graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "0cd1d0c0e8420757f98c480ab9c4ab28e2f63ae0" }
-pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "6ba336a1a90f19766ee0493cd6c3d415d8bd6438" }
+graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "74a993fe51efc00ac5e208af74a3df79f2c0ba47" }
+pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "20f71a4c0d3bcac3eee221ea8255c008e4d891fb" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"

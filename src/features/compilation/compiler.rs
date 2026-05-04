@@ -25,6 +25,30 @@ fn to_graphy_datatype(dt: &ui::graph::DataType) -> graphy::DataType {
 }
 
 impl BlueprintEditorPanel {
+    fn push_compilation_history(
+        &mut self,
+        state: CompilationState,
+        stage: impl Into<String>,
+        message: impl Into<String>,
+        detail: Option<String>,
+    ) {
+        const MAX_HISTORY_ENTRIES: usize = 2000;
+
+        let now = chrono::Local::now();
+        self.compilation_history.push(CompilationHistoryEntry {
+            timestamp: now.format("%H:%M:%S").to_string(),
+            state,
+            stage: stage.into(),
+            message: message.into(),
+            detail,
+        });
+
+        if self.compilation_history.len() > MAX_HISTORY_ENTRIES {
+            let overflow = self.compilation_history.len() - MAX_HISTORY_ENTRIES;
+            self.compilation_history.drain(0..overflow);
+        }
+    }
+
     /// Build a `graphy::GraphDescription` directly from the current BlueprintGraph.
     /// This is the single source-of-truth conversion; both compile functions use it.
     fn build_graphy_description(&self) -> Result<graphy::GraphDescription, String> {
@@ -177,6 +201,8 @@ impl BlueprintEditorPanel {
 
     /// Compile in background with status updates
     pub async fn compile_async(panel_entity: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp) {
+        let started_at = std::time::Instant::now();
+
         // Set compiling state
         let result = panel_entity.update(cx, |panel, cx| {
             panel.compilation_status = CompilationStatus {
@@ -185,6 +211,29 @@ impl BlueprintEditorPanel {
                 progress: 0.0,
                 is_compiling: true,
             };
+
+            let class_path_display = panel
+                .current_class_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "<no class loaded>".to_string());
+
+            panel.push_compilation_history(
+                CompilationState::Compiling,
+                "prepare",
+                "Compilation started",
+                Some(format!("Class path: {}", class_path_display)),
+            );
+            panel.push_compilation_history(
+                CompilationState::Compiling,
+                "build",
+                "Generating Rust event modules",
+                Some(
+                    "Steps: validate event nodes, compile graph, write events/events.rs, write events/mod.rs, refresh vars module"
+                        .to_string(),
+                ),
+            );
+
             cx.notify();
             panel.compile_to_class_directory()
         });
@@ -195,6 +244,18 @@ impl BlueprintEditorPanel {
                     // Success
                     smol::Timer::after(std::time::Duration::from_millis(500)).await;
                     let _ = panel_entity.update(cx, |panel, cx| {
+                        let elapsed_ms = started_at.elapsed().as_millis();
+                        let output_events = panel
+                            .current_class_path
+                            .as_ref()
+                            .map(|p| p.join("events").join("events.rs").display().to_string())
+                            .unwrap_or_else(|| "events/events.rs".to_string());
+                        let output_mod = panel
+                            .current_class_path
+                            .as_ref()
+                            .map(|p| p.join("events").join("mod.rs").display().to_string())
+                            .unwrap_or_else(|| "events/mod.rs".to_string());
+
                         panel.compilation_status = CompilationStatus {
                             state: CompilationState::Success,
                             message: "✓ Compilation successful".to_string(),
@@ -202,13 +263,15 @@ impl BlueprintEditorPanel {
                             is_compiling: false,
                         };
 
-                        // Add to history
-                        let now = chrono::Local::now();
-                        panel.compilation_history.push(CompilationHistoryEntry {
-                            timestamp: now.format("%H:%M:%S").to_string(),
-                            state: CompilationState::Success,
-                            message: "Compilation successful".to_string(),
-                        });
+                        panel.push_compilation_history(
+                            CompilationState::Success,
+                            "complete",
+                            "Compilation successful",
+                            Some(format!(
+                                "Duration: {} ms | Outputs: {}, {}",
+                                elapsed_ms, output_events, output_mod
+                            )),
+                        );
 
                         cx.notify();
                     });
@@ -216,20 +279,25 @@ impl BlueprintEditorPanel {
                 Err(e) => {
                     // Compilation error
                     let _ = panel_entity.update(cx, |panel, cx| {
+                        let elapsed_ms = started_at.elapsed().as_millis();
+                        let error_text = e;
+
                         panel.compilation_status = CompilationStatus {
                             state: CompilationState::Error,
-                            message: format!("✗ Compilation failed: {}", e),
+                            message: format!("✗ Compilation failed: {}", error_text),
                             progress: 0.0,
                             is_compiling: false,
                         };
 
-                        // Add to history
-                        let now = chrono::Local::now();
-                        panel.compilation_history.push(CompilationHistoryEntry {
-                            timestamp: now.format("%H:%M:%S").to_string(),
-                            state: CompilationState::Error,
-                            message: format!("Compilation failed: {}", e),
-                        });
+                        panel.push_compilation_history(
+                            CompilationState::Error,
+                            "error",
+                            "Compilation failed",
+                            Some(format!(
+                                "Duration: {} ms | Reason: {}",
+                                elapsed_ms, error_text
+                            )),
+                        );
 
                         cx.notify();
                     });
@@ -244,6 +312,12 @@ impl BlueprintEditorPanel {
                     progress: 0.0,
                     is_compiling: false,
                 };
+                panel.push_compilation_history(
+                    CompilationState::Error,
+                    "error",
+                    "Compilation aborted",
+                    Some("Editor panel closed before compile completed".to_string()),
+                );
                 cx.notify();
             });
         }
