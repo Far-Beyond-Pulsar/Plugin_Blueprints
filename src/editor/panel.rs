@@ -93,6 +93,8 @@ pub struct BlueprintEditorPanel {
     pub compilation_history: Vec<CompilationHistoryEntry>,
     pub compiler_output_scroll_handle: VirtualListScrollHandle,
     pub compiler_output_scrollbar_state: ScrollbarState,
+    pub find_output_scroll_handle: VirtualListScrollHandle,
+    pub find_output_scrollbar_state: ScrollbarState,
 
     // Library/macro system
     pub library_manager: LibraryManager,
@@ -363,6 +365,8 @@ impl BlueprintEditorPanel {
             compilation_history: Vec::new(),
             compiler_output_scroll_handle: VirtualListScrollHandle::new(),
             compiler_output_scrollbar_state: ScrollbarState::default(),
+            find_output_scroll_handle: VirtualListScrollHandle::new(),
+            find_output_scrollbar_state: ScrollbarState::default(),
             library_manager: {
                 let mut lib_manager = LibraryManager::default();
                 if let Err(e) = lib_manager.load_all_libraries() {

@@ -256,6 +256,17 @@ impl BlueprintEditorPanel {
     pub fn render_find_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let node_count = self.graph.nodes.len();
         let comment_count = self.graph.comments.len();
+        let nodes = self.graph.nodes.clone();
+        let selected_nodes = self.graph.selected_nodes.clone();
+        let item_sizes = std::rc::Rc::new(
+            nodes
+                .iter()
+                .map(|_| size(px(0.0), px(34.0)))
+                .collect::<Vec<_>>(),
+        );
+        let panel_entity = cx.entity().clone();
+        let scroll_handle = self.find_output_scroll_handle.clone();
+        let scrollbar_state = self.find_output_scrollbar_state.clone();
 
         v_flex()
             .size_full()
@@ -291,44 +302,83 @@ impl BlueprintEditorPanel {
                     .flex_1()
                     .min_h_0()
                     .overflow_hidden()
-                    .child(
-                        v_flex()
-                            .gap_1()
-                            .scrollable(Axis::Vertical)
-                            .children(
-                                self.graph.nodes.iter().map(|node| {
-                                    let node_id = node.id.clone();
-                                    let node_title = node.title.clone();
+                    .relative()
+                    .when(nodes.is_empty(), |this| {
+                        this.child(
+                            div()
+                                .size_full()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child("No nodes in graph.")
+                        )
+                    })
+                    .when(!nodes.is_empty(), |this| {
+                        this.child(
+                            v_virtual_list(
+                                panel_entity,
+                                "find-panel-node-list",
+                                item_sizes,
+                                move |_panel, range, _window, cx| {
+                                    range
+                                        .map(|ix| -> AnyElement {
+                                            let Some(node) = nodes.get(ix) else {
+                                                return div().h(px(34.0)).into_any_element();
+                                            };
 
-                                    h_flex()
-                                        .w_full()
-                                        .items_center()
-                                        .justify_between()
-                                        .px_2()
-                                        .py_1p5()
-                                        .rounded(px(4.0))
-                                        .cursor_pointer()
-                                        .hover(|s| s.bg(cx.theme().muted.opacity(0.2)))
-                                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, _, _window, cx| {
-                                            panel.graph.selected_nodes.clear();
-                                            panel.graph.selected_nodes.push(node_id.clone());
-                                            cx.notify();
-                                        }))
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(cx.theme().foreground)
-                                                .child(node_title)
-                                        )
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child(format!("({:.0}, {:.0})", node.position.x, node.position.y))
-                                        )
-                                })
+                                            let node_id = node.id.clone();
+                                            let node_title = node.title.clone();
+                                            let is_selected = selected_nodes.contains(&node_id);
+
+                                            h_flex()
+                                                .w_full()
+                                                .h(px(34.0))
+                                                .items_center()
+                                                .justify_between()
+                                                .px_2()
+                                                .cursor_pointer()
+                                                .bg(if is_selected {
+                                                    cx.theme().accent.opacity(0.12)
+                                                } else {
+                                                    gpui::transparent_black()
+                                                })
+                                                .border_b_1()
+                                                .border_color(cx.theme().border.opacity(0.08))
+                                                .hover(|s| s.bg(cx.theme().muted.opacity(0.2)))
+                                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, _, _window, cx| {
+                                                    panel.graph.selected_nodes.clear();
+                                                    panel.graph.selected_nodes.push(node_id.clone());
+                                                    cx.notify();
+                                                }))
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .text_color(cx.theme().foreground)
+                                                        .child(node_title)
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .text_color(cx.theme().muted_foreground)
+                                                        .child(format!("({:.0}, {:.0})", node.position.x, node.position.y))
+                                                )
+                                                .into_any_element()
+                                        })
+                                        .collect()
+                                },
                             )
-                    )
+                            .size_full()
+                            .track_scroll(&scroll_handle),
+                        )
+                        .child(
+                            div()
+                                .absolute()
+                                .inset_0()
+                                .child(Scrollbar::vertical(&scrollbar_state, &scroll_handle)),
+                        )
+                    })
             )
     }
 
