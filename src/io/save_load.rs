@@ -10,14 +10,22 @@ use crate::editor::tabs::GraphTab;
 use gpui::*;
 use std::path::{Path, PathBuf};
 
+const GRAPH_SAVE_FILE_NAME: &str = "graph_save.json";
+
 impl BlueprintEditorPanel {
     /// Save the current blueprint to its file path
     pub fn plugin_save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(path) = self.current_class_path.clone() {
+        if let Some(path) = self.get_graph_file_path() {
             match self.save_to_path(&path, window, cx) {
                 Ok(()) => {
                     tracing::info!("Blueprint saved successfully to {:?}", path);
                     self.is_dirty = false;
+
+                    // Clear dirty flags for all tabs
+                    for tab in &mut self.open_tabs {
+                        tab.is_dirty = false;
+                    }
+
                     cx.notify();
                 }
                 Err(e) => {
@@ -37,11 +45,17 @@ impl BlueprintEditorPanel {
 
     /// Reload the blueprint from its file path
     pub fn plugin_reload(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(path) = self.current_class_path.clone() {
+        if let Some(path) = self.get_graph_file_path() {
             match self.load_from_path(&path, window, cx) {
                 Ok(()) => {
                     tracing::info!("Blueprint reloaded successfully from {:?}", path);
                     self.is_dirty = false;
+
+                    // Clear dirty flags for all tabs after reload
+                    for tab in &mut self.open_tabs {
+                        tab.is_dirty = false;
+                    }
+
                     cx.notify();
                 }
                 Err(e) => {
@@ -63,14 +77,22 @@ impl BlueprintEditorPanel {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Result<(), String> {
+        let target_path = Self::resolve_blueprint_path(path);
+
         // Convert current graph state to BlueprintAsset
         let asset = self.to_blueprint_asset()?;
 
         // Serialize to JSON with header
         let content = formats::serialize_blueprint_with_header(&asset)?;
 
+        if let Some(parent) = target_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory: {}", e))?;
+        }
+
         // Write to file
-        std::fs::write(path, content).map_err(|e| format!("Failed to write file: {}", e))?;
+        std::fs::write(&target_path, content)
+            .map_err(|e| format!("Failed to write file: {}", e))?;
 
         Ok(())
     }
@@ -82,9 +104,11 @@ impl BlueprintEditorPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
+        let source_path = Self::resolve_blueprint_path(path);
+
         // Read file content
-        let content =
-            std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+        let content = std::fs::read_to_string(&source_path)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
 
         // Try to deserialize as current format first
         let asset = match formats::deserialize_blueprint(&content) {
@@ -108,6 +132,7 @@ impl BlueprintEditorPanel {
 
         // Load the asset into the editor
         self.load_blueprint_asset(asset, window, cx)?;
+        self.set_path(source_path);
 
         Ok(())
     }
@@ -252,7 +277,7 @@ impl BlueprintEditorPanel {
             return; // No changes to save
         }
 
-        if let Some(path) = &self.current_class_path {
+        if let Some(path) = self.get_graph_file_path() {
             // Create autosave path (same location with .autosave extension)
             let autosave_path = path.with_extension("blueprint.autosave");
 
@@ -269,7 +294,7 @@ impl BlueprintEditorPanel {
 
     /// Check if an autosave file exists for the current path
     pub fn has_autosave(&self) -> bool {
-        if let Some(path) = &self.current_class_path {
+        if let Some(path) = self.get_graph_file_path() {
             let autosave_path = path.with_extension("blueprint.autosave");
             autosave_path.exists()
         } else {
@@ -283,7 +308,7 @@ impl BlueprintEditorPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
-        if let Some(path) = &self.current_class_path {
+        if let Some(path) = self.get_graph_file_path() {
             let autosave_path = path.with_extension("blueprint.autosave");
             self.load_from_path(&autosave_path, window, cx)?;
 
@@ -299,8 +324,25 @@ impl BlueprintEditorPanel {
 
     /// Mark the blueprint as dirty (has unsaved changes)
     pub fn mark_dirty(&mut self, cx: &mut Context<Self>) {
+        // Mark current tab as dirty
+        if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
+            tab.is_dirty = true;
+        }
+
+        // Update panel dirty flag
         if !self.is_dirty {
             self.is_dirty = true;
+            cx.notify();
+        }
+    }
+
+    /// Sync panel dirty flag with tab dirty flags
+    /// Call this to update panel.is_dirty based on whether any tabs are dirty
+    pub fn sync_dirty_flag(&mut self, cx: &mut Context<Self>) {
+        let any_tab_dirty = self.open_tabs.iter().any(|tab| tab.is_dirty);
+
+        if self.is_dirty != any_tab_dirty {
+            self.is_dirty = any_tab_dirty;
             cx.notify();
         }
     }
@@ -325,10 +367,36 @@ impl BlueprintEditorPanel {
 
 /// Utility functions for file path handling
 impl BlueprintEditorPanel {
+    fn resolve_blueprint_path(path: &Path) -> PathBuf {
+        if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case(GRAPH_SAVE_FILE_NAME))
+        {
+            return path.to_path_buf();
+        }
+
+        if path.extension().is_none() {
+            return path.join(GRAPH_SAVE_FILE_NAME);
+        }
+
+        path.to_path_buf()
+    }
+
+    fn get_graph_file_path(&self) -> Option<PathBuf> {
+        self.current_class_path
+            .as_ref()
+            .map(|class_path| class_path.join(GRAPH_SAVE_FILE_NAME))
+    }
+
     /// Get the display name for the current blueprint
     pub fn get_display_name(&self) -> String {
+        if let Some(title) = &self.tab_title {
+            return title.clone();
+        }
+
         if let Some(path) = &self.current_class_path {
-            path.file_stem()
+            path.file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Untitled")
                 .to_string()
@@ -339,15 +407,29 @@ impl BlueprintEditorPanel {
 
     /// Get the full path as a string
     pub fn get_path_string(&self) -> Option<String> {
-        self.current_class_path
-            .as_ref()
+        self.get_graph_file_path()
+            .as_deref()
             .and_then(|p| p.to_str())
             .map(|s| s.to_string())
     }
 
     /// Set the current file path
     pub fn set_path(&mut self, path: PathBuf) {
-        self.current_class_path = Some(path);
+        let class_path = if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case(GRAPH_SAVE_FILE_NAME))
+        {
+            path.parent().unwrap_or(&path).to_path_buf()
+        } else {
+            path
+        };
+
+        self.tab_title = class_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.to_string());
+        self.current_class_path = Some(class_path);
     }
 }
 

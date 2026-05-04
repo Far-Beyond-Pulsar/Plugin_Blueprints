@@ -1506,7 +1506,7 @@ impl BlueprintEditorPanel {
     ) -> Result<(), String> {
         let file_path_buf = std::path::Path::new(file_path);
         if let Some(parent) = file_path_buf.parent() {
-            self.current_class_path = Some(parent.to_path_buf());
+            self.set_path(parent.to_path_buf());
         }
 
         // Load main graph
@@ -1713,7 +1713,7 @@ impl BlueprintEditorPanel {
         // Load separate legacy files
         let file_path_buf = std::path::Path::new(file_path);
         if let Some(parent) = file_path_buf.parent() {
-            self.current_class_path = Some(parent.to_path_buf());
+            self.set_path(parent.to_path_buf());
             let _ = self.load_local_macros(parent);
             let _ = self.restore_tabs_state(parent, window, cx);
             let _ = self.load_variables_from_class(parent);
