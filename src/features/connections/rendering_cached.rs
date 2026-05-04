@@ -15,6 +15,8 @@ use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use ui::graph::DataType;
 use ui::PixelsExt;
 use ui::ActiveTheme;
@@ -36,23 +38,36 @@ struct CachedConnectionPath {
 pub struct ConnectionRenderCache {
     /// Cached paths indexed by connection ID (source_node:source_pin -> target_node:target_pin)
     paths: HashMap<String, CachedConnectionPath>,
-    /// Hash of graph state to detect when cache needs invalidation
-    graph_version: u64,
+    /// Hash of node positions to detect when cache needs invalidation
+    node_positions_hash: u64,
+    /// Number of connections to detect when connections change
+    connection_count: usize,
 }
 
 impl ConnectionRenderCache {
     pub fn new() -> Self {
         Self {
             paths: HashMap::new(),
-            graph_version: 0,
+            node_positions_hash: 0,
+            connection_count: 0,
         }
     }
 
     /// Check if cache needs to be invalidated
     fn needs_rebuild(&self, graph: &BlueprintGraph) -> bool {
-        // Simple version check - in production, you'd hash node positions + connections
-        let current_version = graph.nodes.len() as u64 * 1000 + graph.connections.len() as u64;
-        self.graph_version != current_version
+        // Hash node positions to detect movement
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for node in &graph.nodes {
+            // Hash node ID and position
+            use std::hash::{Hash, Hasher};
+            node.id.hash(&mut hasher);
+            (node.position.x as i32).hash(&mut hasher);
+            (node.position.y as i32).hash(&mut hasher);
+        }
+        let current_hash = hasher.finish();
+
+        // Rebuild if positions changed or connection count changed
+        current_hash != self.node_positions_hash || graph.connections.len() != self.connection_count
     }
 
     /// Rebuild the cache from current graph state
@@ -90,9 +105,16 @@ impl ConnectionRenderCache {
             }
         }
 
-        // Update version
-        self.graph_version =
-            panel.graph.nodes.len() as u64 * 1000 + panel.graph.connections.len() as u64;
+        // Update hash and count
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for node in &panel.graph.nodes {
+            use std::hash::{Hash, Hasher};
+            node.id.hash(&mut hasher);
+            (node.position.x as i32).hash(&mut hasher);
+            (node.position.y as i32).hash(&mut hasher);
+        }
+        self.node_positions_hash = hasher.finish();
+        self.connection_count = panel.graph.connections.len();
     }
 
     /// Calculate pin position in graph space (without zoom/pan transform)
