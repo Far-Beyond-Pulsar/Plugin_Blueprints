@@ -95,6 +95,44 @@ impl ConnectionRenderCache {
             panel.graph.nodes.len() as u64 * 1000 + panel.graph.connections.len() as u64;
     }
 
+    /// Calculate pin position in graph space (without zoom/pan transform)
+    fn calculate_pin_position_graph_space(
+        node: &BlueprintNode,
+        pin_id: &str,
+        is_input: bool,
+    ) -> Option<Point<f32>> {
+        use crate::core::types::NodeType;
+        use crate::rendering::layout;
+
+        // Reroute nodes are a single dot at their graph position
+        if node.node_type == NodeType::Reroute {
+            return Some(node.position);
+        }
+
+        let row = if is_input {
+            node.inputs.iter().position(|p| p.id == pin_id)?
+        } else {
+            node.outputs.iter().position(|p| p.id == pin_id)?
+        };
+
+        // Calculate Y position in graph space (no zoom multiplier)
+        let pin_y = node.position.y
+            + layout::HEADER_H
+            + layout::SEP_H
+            + layout::BODY_PAD
+            + row as f32 * (layout::PIN_ROW_H + layout::PIN_GAP)
+            + layout::PIN_ROW_H * 0.5;
+
+        // Calculate X position in graph space
+        let pin_x = if is_input {
+            node.position.x + layout::BODY_PAD
+        } else {
+            node.position.x + node.size.width - layout::BODY_PAD
+        };
+
+        Some(Point::new(pin_x, pin_y))
+    }
+
     /// Calculate a single connection path in graph space
     fn calculate_connection_path(
         connection: &Connection,
@@ -106,17 +144,15 @@ impl ConnectionRenderCache {
         let to_node = node_by_id.get(connection.target_node.as_str()).copied()?;
 
         // Calculate pin positions in GRAPH SPACE (not screen space)
-        let from_pos = BlueprintEditorPanel::calculate_pin_position(
+        let from_pos = Self::calculate_pin_position_graph_space(
             from_node,
             &connection.source_pin,
             false,
-            graph,
         )?;
-        let to_pos = BlueprintEditorPanel::calculate_pin_position(
+        let to_pos = Self::calculate_pin_position_graph_space(
             to_node,
             &connection.target_pin,
             true,
-            graph,
         )?;
 
         // Get pin color
@@ -130,7 +166,7 @@ impl ConnectionRenderCache {
             cx.theme().primary
         };
 
-        // Pre-calculate bezier control points
+        // Pre-calculate bezier control points in graph space
         let dx = to_pos.x - from_pos.x;
         let control_offset = dx.abs().min(200.0).max(80.0);
 
@@ -163,7 +199,7 @@ impl ConnectionRenderCache {
         let pan = panel.graph.pan_offset;
         let zoom = panel.graph.zoom_level;
 
-        // Dragging connection (not cached)
+        // Dragging connection (not cached - in graph space)
         let dragging_shape = panel
             .dragging_connection
             .as_ref()
@@ -171,14 +207,13 @@ impl ConnectionRenderCache {
                 if let Some(from_node) = panel.graph.nodes.iter().find(|n| n.id == drag.source_node)
                 {
                     if let Some(from_pin_pos) =
-                        BlueprintEditorPanel::calculate_pin_position(
+                        Self::calculate_pin_position_graph_space(
                             from_node,
                             &drag.source_pin,
                             false,
-                            &panel.graph,
                         )
                     {
-                        let to_pos = drag.current_mouse_pos;
+                        let to_pos = drag.current_mouse_pos; // Already in graph space
                         let color = if let Some(pin) = from_node
                             .outputs
                             .iter()
