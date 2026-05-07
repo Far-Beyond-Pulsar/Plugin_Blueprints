@@ -1757,6 +1757,7 @@ dependencies = [
  "profiling 0.1.0",
  "pulsar_diagnostics",
  "pulsar_lsp",
+ "pulsar_reflection",
  "rapier3d",
  "ropey",
  "serde",
@@ -6305,6 +6306,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "pulsar_reflection"
+version = "0.1.0"
+dependencies = [
+ "inventory",
+ "once_cell",
+ "serde",
+ "tracing",
 ]
 
 [[package]]
