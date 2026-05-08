@@ -12,7 +12,7 @@ name = "blueprint_editor_plugin"
 plugin_editor_api = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/plugin_editor_api" }
 
 # UI dependencies (local paths so traits resolve to the same crate instance)
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "2f9c88eaf06cc8b0a9be6c6a80236a9d2bace7d2" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "1f6f3843e8bea050ed3882b45b5ca1d433adf61f" }
 ui = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/ui" }
 ui_common = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/ui-crates/ui_common" }
 
@@ -22,7 +22,7 @@ engine_backend = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/engi
 
 # Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "0cd1d0c0e8420757f98c480ab9c4ab28e2f63ae0" }
-pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "6ba336a1a90f19766ee0493cd6c3d415d8bd6438" }
+pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "64ec900fccec26e308edf6d92d1fbaf1b61e60c5" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"
