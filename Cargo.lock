@@ -736,7 +736,7 @@ dependencies = [
 name = "blueprint_compiler"
 version = "0.1.0"
 dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=0cd1d0c0e8420757f98c480ab9c4ab28e2f63ae0)",
+ "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
  "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=64ec900fccec26e308edf6d92d1fbaf1b61e60c5)",
  "tracing",
 ]
@@ -749,7 +749,7 @@ dependencies = [
  "chrono",
  "engine_backend",
  "futures",
- "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=415f90086887dd17114b2ba24c3c42710fedabad)",
+ "gpui-ce",
  "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
  "log",
  "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=20f71a4c0d3bcac3eee221ea8255c008e4d891fb)",
@@ -1925,7 +1925,7 @@ dependencies = [
  "futures",
  "git2",
  "glam 0.29.3",
- "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "gpui-ce",
  "helio 0.17.0 (git+https://github.com/Far-Beyond-Pulsar/Helio?rev=4b006824e44a086651884ace001d76caaa977e7a)",
  "helio-asset-compat",
  "lsp-types",
@@ -2886,72 +2886,6 @@ source = "git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3
 dependencies = [
  "anyhow",
  "arboard",
- "async-task",
- "bytemuck",
- "circular-buffer",
- "core-video",
- "cosmic-text",
- "ctor",
- "derive_more 2.1.1",
- "device_query",
- "etagere",
- "flume 0.12.0",
- "font-kit",
- "futures",
- "gpui-macros",
- "gpui_collections",
- "gpui_http_client",
- "gpui_refineable",
- "gpui_sum_tree",
- "gpui_util",
- "gpui_util_macros",
- "image",
- "inventory",
- "itertools 0.14.0",
- "libc",
- "log",
- "lyon",
- "num_cpus",
- "objc2 0.5.2",
- "objc2-app-kit 0.2.2",
- "objc2-foundation 0.2.2",
- "parking",
- "parking_lot",
- "pathfinder_geometry",
- "pin-project",
- "pollster 0.4.0",
- "postage",
- "priority-threadpool",
- "profiling 1.0.17",
- "rand 0.10.1",
- "raw-window-handle",
- "resvg 0.47.0",
- "schemars",
- "seahash",
- "semver 1.0.28",
- "serde",
- "serde_json",
- "slotmap",
- "smallvec",
- "smol 2.0.2",
- "spin 0.10.0",
- "stacksafe",
- "strum",
- "taffy",
- "thiserror 2.0.18",
- "usvg 0.47.0",
- "uuid",
- "waker-fn",
- "wgpu",
- "winit",
-]
-
-[[package]]
-name = "gpui-ce"
-version = "1.0.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=415f90086887dd17114b2ba24c3c42710fedabad#415f90086887dd17114b2ba24c3c42710fedabad"
-dependencies = [
- "anyhow",
  "async-task",
  "bytemuck",
  "circular-buffer",
@@ -6413,7 +6347,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 name = "plugin_editor_api"
 version = "0.1.0"
 dependencies = [
- "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "gpui-ce",
  "serde",
  "serde_json",
  "tracing",
@@ -6756,7 +6690,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "flume 0.11.1",
- "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "gpui-ce",
  "lsp-types",
  "pulsar_diagnostics",
  "ropey",
@@ -6800,7 +6734,7 @@ dependencies = [
 name = "pulsar_replication"
 version = "0.1.0"
 dependencies = [
- "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "gpui-ce",
  "parking_lot",
  "serde",
  "serde_json",
@@ -9290,7 +9224,7 @@ dependencies = [
  "chrono",
  "directories",
  "enum-iterator",
- "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "gpui-ce",
  "gpui-component-macros",
  "gpui_sum_tree",
  "html5ever",
@@ -9340,7 +9274,7 @@ name = "ui_common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "gpui-ce",
  "parking_lot",
  "rust-i18n",
  "serde",
@@ -10183,7 +10117,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dashmap",
- "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "gpui-ce",
  "parking_lot",
  "serde",
  "thiserror 2.0.18",
