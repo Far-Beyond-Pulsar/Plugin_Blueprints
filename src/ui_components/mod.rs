@@ -9,5 +9,6 @@
 //! - Tooltip system
 
 // Component modules are integrated incrementally as features migrate from src_old.
-pub mod properties;
 pub mod node_library;
+pub mod palette_view;
+pub mod properties;

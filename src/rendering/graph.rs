@@ -6,33 +6,60 @@
 //! - Viewport culling/virtualization helpers
 //! Main graph canvas renderer - orchestrates all rendering features
 use gpui::prelude::FluentBuilder;
-use gpui::*;
 use gpui::prelude::*;
-use ui::{Colorize, PixelsExt, ActiveTheme, button::{Button, ButtonVariants}, h_flex, v_flex, IconName, Sizable, StyledExt, tooltip::Tooltip};
-
-use crate::rendering::{layout, style};
+use gpui::*;
+use ui::{
+    button::{Button, ButtonVariants},
+    h_flex,
+    v_flex, ActiveTheme, Colorize, IconName, PixelsExt, Sizable, StyledExt,
+};
 use crate::editor::panel::BlueprintEditorPanel;
-use crate::{BlueprintNode, BlueprintGraph, Pin, NodeType, Connection};
-use ui::graph::DataType;
+use crate::rendering::{layout, style};
+use crate::{BlueprintGraph, BlueprintNode, Connection, NodeType, Pin};
 
 pub struct NodeGraphRenderer;
 
-/// Helper to create simple text tooltip for pins (still using gpui's built-in tooltip)
-fn create_text_tooltip(text: &'static str) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-    move |window, cx| {
-        Tooltip::new(text).build(window, cx)
+fn render_pin_hover_tooltip(
+    panel: &BlueprintEditorPanel,
+    view_id: &str,
+    cx: &mut Context<BlueprintEditorPanel>,
+) -> impl IntoElement {
+    if let Some(text) = panel.hovered_pin_tooltip.as_ref() {
+        if let Some(position) = panel.hovered_pin_tooltip_pos {
+            let element_pos =
+                NodeGraphRenderer::window_to_graph_element_pos_for_view(position, panel, view_id);
+            return div()
+                .absolute()
+                .left(element_pos.x + px(10.0))
+                .top(element_pos.y + px(10.0))
+                .bg(cx.theme().popover)
+                .text_color(cx.theme().popover_foreground)
+                .border_1()
+                .border_color(cx.theme().border)
+                .shadow_md()
+                .rounded(px(6.0))
+                .py(px(4.0))
+                .px(px(8.0))
+                .text_sm()
+                .child(text.clone())
+                .into_any_element();
+        }
     }
+    div().into_any_element()
 }
 
 impl NodeGraphRenderer {
     /// Main render method that orchestrates all graph rendering
     pub fn render(
         panel: &mut BlueprintEditorPanel,
+        view_id: &str,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         let focus_handle = panel.focus_handle().clone();
         let graph_id = "blueprint-graph";
         let panel_entity = cx.entity().clone();
+
+        let view_id = view_id.to_string();
 
         div()
             .size_full()
@@ -48,6 +75,7 @@ impl NodeGraphRenderer {
             .key_context("BlueprintGraph")
             .on_children_prepainted({
                 let panel_entity = panel_entity.clone();
+                let view_id = view_id.clone();
                 move |children_bounds, _window, cx| {
                     // children_bounds are in WINDOW coordinates!
                     // Calculate the bounding box of all children to get our element's window-relative bounds
@@ -60,11 +88,16 @@ impl NodeGraphRenderer {
                         for child_bounds in &children_bounds {
                             min_x = min_x.min(child_bounds.origin.x.as_f32());
                             min_y = min_y.min(child_bounds.origin.y.as_f32());
-                            max_x = max_x.max((child_bounds.origin.x + child_bounds.size.width).as_f32());
-                            max_y = max_y.max((child_bounds.origin.y + child_bounds.size.height).as_f32());
+                            max_x = max_x
+                                .max((child_bounds.origin.x + child_bounds.size.width).as_f32());
+                            max_y = max_y
+                                .max((child_bounds.origin.y + child_bounds.size.height).as_f32());
                         }
 
-                        let origin = gpui::Point { x: px(min_x), y: px(min_y) };
+                        let origin = gpui::Point {
+                            x: px(min_x),
+                            y: px(min_y),
+                        };
                         let size = gpui::Size {
                             width: px(max_x - min_x),
                             height: px(max_y - min_y),
@@ -72,33 +105,45 @@ impl NodeGraphRenderer {
 
                         // Store the graph element's bounds derived from children (which are in window coords)
                         panel_entity.update(cx, |panel, _cx| {
-                            panel.graph_element_bounds = Some(gpui::Bounds { origin, size });
+                            let bounds = gpui::Bounds { origin, size };
+                            panel.graph_element_bounds = Some(bounds);
+                            panel
+                                .graph_element_bounds_by_view
+                                .insert(view_id.clone(), bounds);
                         });
                     }
                 }
             })
             .id(graph_id)
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, event, window, cx| {
-                // Focus on click to enable keyboard events
-                panel.focus_handle().focus(window);
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |panel, event, window, cx| {
+                    // Focus on click to enable keyboard events
+                    panel.focus_handle().focus(window);
 
-                // If editing a comment, clicking outside should save and exit edit mode
-                if panel.editing_comment.is_some() {
-                    panel.finish_comment_editing(cx);
-                }
+                    // If editing a comment, clicking outside should save and exit edit mode
+                    if panel.editing_comment.is_some() {
+                        panel.finish_comment_editing(cx);
+                    }
 
-                // Close variable drop menu if it's open
-                if panel.variable_drop_menu_position.is_some() {
-                    panel.variable_drop_menu_position = None;
-                    cx.notify();
-                }
-            }))
+                    // Close variable drop menu if it's open
+                    if panel.variable_drop_menu_position.is_some() {
+                        panel.variable_drop_menu_position = None;
+                        cx.notify();
+                    }
+                }),
+            )
             // Render layers in correct z-order
+            .child(Self::render_grid_background(panel, cx))
             .child(Self::render_comments(panel, cx))
             .child(Self::render_connections(panel, cx))
             .child(Self::render_nodes(panel, cx))
-            .child(crate::rendering::overlay::render_selection_box(panel, cx))
-            .child(crate::rendering::overlay::render_viewport_bounds_debug(panel, cx))
+            .child(crate::rendering::overlay::render_selection_box(
+                panel, &view_id, cx,
+            ))
+            .child(crate::rendering::overlay::render_viewport_bounds_debug(
+                panel, cx,
+            ))
             .when(panel.show_debug_overlay, |this| {
                 this.child(crate::rendering::overlay::render_debug_overlay(panel, cx))
             })
@@ -109,119 +154,208 @@ impl NodeGraphRenderer {
             // .when(panel.show_minimap, |this| {
             //     this.child(crate::ui_components::minimap::MinimapRenderer::render(panel, cx))
             // })
-            // Attach all input handlers from rendering::input module
+            // Quick-palette overlay — shown on right-click, same primitive as the color-picker popout
+            .child(Self::render_quick_palette_overlay(panel, cx))
+            .child(render_pin_hover_tooltip(panel, &view_id, cx))
             .on_mouse_down(
                 gpui::MouseButton::Right,
-                crate::rendering::input::on_mouse_down_right(cx),
+                crate::rendering::input::on_mouse_down_right(view_id.clone(), cx),
             )
             .on_mouse_down(
                 gpui::MouseButton::Left,
-                crate::rendering::input::on_mouse_down_left(cx),
+                crate::rendering::input::on_mouse_down_left(view_id.clone(), cx),
             )
-            .on_mouse_move(crate::rendering::input::on_mouse_move(cx))
+            .on_mouse_move(crate::rendering::input::on_mouse_move(view_id.clone(), cx))
             .on_mouse_up(
                 gpui::MouseButton::Left,
-                crate::rendering::input::on_mouse_up_left(cx),
+                crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
+            )
+            .on_mouse_up_out(
+                gpui::MouseButton::Left,
+                crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
             )
             .on_mouse_up(
                 gpui::MouseButton::Right,
-                crate::rendering::input::on_mouse_up_right(cx),
+                crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
             )
-            .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(cx))
-            .on_key_down(crate::rendering::input::on_key_down(cx))
+            .on_mouse_up_out(
+                gpui::MouseButton::Right,
+                crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
+            )
+            .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(
+                view_id.clone(),
+                cx,
+            ))
+            .on_key_down(crate::rendering::input::on_key_down(view_id, cx))
     }
 
-    /// WARNING: For reasons uninvestigated this causes EXTREME performance degradation at some zoom levels
-    pub fn render_grid_background(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
-        // Multi-scale grid system that shows/hides based on zoom level
-        // Grid scales: 50px (fine), 200px (medium), 1000px (coarse)
-        let zoom = panel.graph.zoom_level;
-        let pan = &panel.graph.pan_offset;
-
-        // Define grid scales and their visibility thresholds
-        let grids = [
-            (50.0, 0.5, 1.5, 0.15),   // Fine grid: visible between 0.5x and 1.5x zoom, low opacity
-            (200.0, 0.3, 2.0, 0.25),  // Medium grid: visible between 0.3x and 2.0x zoom
-            (1000.0, 0.1, 10.0, 0.35), // Coarse grid: always visible, higher opacity
-        ];
-
-        let mut grid_layers = Vec::new();
-
-        for (grid_size, min_zoom, max_zoom, base_opacity) in grids {
-            // Skip grids outside their zoom range
-            if zoom < min_zoom || zoom > max_zoom {
-                continue;
-            }
-
-            // Fade in/out at edges of zoom range
-            let fade_range = 0.2_f32;
-            let fade_in = ((zoom - min_zoom) / (min_zoom * fade_range)).min(1.0_f32);
-            let fade_out = ((max_zoom - zoom) / (max_zoom * fade_range)).min(1.0_f32);
-            let fade = fade_in.min(fade_out).max(0.0_f32);
-            let opacity = base_opacity * fade;
-
-            if opacity > 0.01 {
-                grid_layers.push(Self::render_grid_layer(grid_size, opacity, pan, zoom, cx));
-            }
+    /// Render the quick-palette overlay using the same `deferred(anchored(…))` primitive
+    /// as the color-picker popout — no `Popover` wrapper needed.
+    fn render_quick_palette_overlay(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        if !panel.quick_palette_open {
+            return div().into_any_element();
         }
 
-        div().absolute().inset_0()
-            .bg(cx.theme().muted.opacity(0.05))
-            .children(grid_layers)
+        let panel_entity = cx.entity().clone();
+
+        deferred(
+            anchored()
+                .position(panel.quick_palette_screen_pos)
+                .snap_to_window_with_margin(px(8.))
+                .anchor(gpui::Corner::TopLeft)
+                .child(
+                    div()
+                        .occlude()
+                        .w(px(320.0))
+                        .h(px(480.0))
+                        .shadow_lg()
+                        .rounded(px(6.0))
+                        .overflow_hidden()
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .child(panel.quick_palette_view.clone())
+                        .on_children_prepainted({
+                            let panel_entity = panel_entity.clone();
+                            move |_children_bounds, window, cx| {
+                                panel_entity.update(cx, |panel, cx| {
+                                    if !panel.quick_palette_focus_pending {
+                                        return;
+                                    }
+
+                                    let search_handle = panel
+                                        .quick_palette_view
+                                        .read(cx)
+                                        .search_focus_handle(cx);
+                                    panel.quick_palette_focus_pending = false;
+                                    window.focus(&search_handle);
+                                });
+                            }
+                        })
+                        .on_mouse_down_out(move |_, _window, cx| {
+                            panel_entity.update(cx, |panel, cx| {
+                                panel.quick_palette_open = false;
+                                panel.quick_palette_focus_pending = false;
+                                panel.quick_palette_connection_source = None;
+                                panel.popup_palette_graph_pos = None;
+                                cx.notify();
+                            });
+                        }),
+                ),
+        )
+        .with_priority(1)
+        .into_any_element()
     }
 
-    pub fn render_grid_layer(
-        grid_size: f32,
-        opacity: f32,
-        pan: &Point<f32>,
-        zoom: f32,
+    pub fn render_grid_background(
+        panel: &BlueprintEditorPanel,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        // Calculate visible grid range
-        let scaled_grid_size = grid_size * zoom;
+        let zoom = panel.graph.zoom_level;
+        let pan = panel.graph.pan_offset;
+        let background = cx.theme().muted.opacity(0.05);
+        let minor_color = cx.theme().border.opacity(0.08);
+        let major_color = cx.theme().border.opacity(0.18);
 
-        // Calculate grid offset based on pan
-        let offset_x = (pan.x * zoom) % scaled_grid_size;
-        let offset_y = (pan.y * zoom) % scaled_grid_size;
+        gpui::canvas(
+            move |_bounds, _window, _cx| {},
+            move |bounds, _prepaint, window, _cx| {
+                let width = bounds.size.width.as_f32();
+                let height = bounds.size.height.as_f32();
+                let origin_x = bounds.origin.x.as_f32();
+                let origin_y = bounds.origin.y.as_f32();
 
-        // Render grid dots
-        let viewport_width = 3840.0;
-        let viewport_height = 2160.0;
+                Self::paint_grid_rect(window, origin_x, origin_y, width, height, background);
 
-        let grid_color = cx.theme().border.opacity(opacity);
-        let dot_size = 2.0;
+                let minor_step = 10.0 * zoom;
+                let major_step = 50.0 * zoom;
 
-        let mut dots = Vec::new();
-
-        // Calculate number of grid lines needed
-        let num_cols = (viewport_width / scaled_grid_size).ceil() as i32 + 2;
-        let num_rows = (viewport_height / scaled_grid_size).ceil() as i32 + 2;
-
-        for col in 0..num_cols {
-            for row in 0..num_rows {
-                let x = offset_x + (col as f32 * scaled_grid_size);
-                let y = offset_y + (row as f32 * scaled_grid_size);
-
-                if x >= -scaled_grid_size && x <= viewport_width + scaled_grid_size
-                    && y >= -scaled_grid_size && y <= viewport_height + scaled_grid_size {
-                    dots.push(
-                        div()
-                            .absolute()
-                            .left(px(x - dot_size / 2.0))
-                            .top(px(y - dot_size / 2.0))
-                            .w(px(dot_size))
-                            .h(px(dot_size))
-                            .bg(grid_color)
-                            .rounded_full()
+                if minor_step >= 6.0 {
+                    Self::paint_grid_lines(
+                        window,
+                        origin_x,
+                        origin_y,
+                        width,
+                        height,
+                        pan,
+                        zoom,
+                        10.0,
+                        minor_color,
                     );
                 }
-            }
+
+                if major_step >= 4.0 {
+                    Self::paint_grid_lines(
+                        window,
+                        origin_x,
+                        origin_y,
+                        width,
+                        height,
+                        pan,
+                        zoom,
+                        50.0,
+                        major_color,
+                    );
+                }
+            },
+        )
+        .absolute()
+        .inset_0()
+        .size_full()
+    }
+
+    fn paint_grid_lines(
+        window: &mut Window,
+        origin_x: f32,
+        origin_y: f32,
+        width: f32,
+        height: f32,
+        pan: Point<f32>,
+        zoom: f32,
+        grid_size: f32,
+        color: gpui::Hsla,
+    ) {
+        let step = grid_size * zoom;
+        if step <= 0.0 {
+            return;
         }
 
-        div()
-            .absolute()
-            .inset_0()
-            .children(dots)
+        let start_x = (pan.x * zoom).rem_euclid(step);
+        let start_y = (pan.y * zoom).rem_euclid(step);
+
+        let mut x = start_x;
+        while x <= width {
+            Self::paint_grid_rect(window, origin_x + x, origin_y, 1.0, height, color);
+            x += step;
+        }
+
+        let mut y = start_y;
+        while y <= height {
+            Self::paint_grid_rect(window, origin_x, origin_y + y, width, 1.0, color);
+            y += step;
+        }
+    }
+
+    fn paint_grid_rect(
+        window: &mut Window,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: gpui::Hsla,
+    ) {
+        let mut builder = gpui::PathBuilder::fill();
+        builder.move_to(point(px(x), px(y)));
+        builder.line_to(point(px(x + width), px(y)));
+        builder.line_to(point(px(x + width), px(y + height)));
+        builder.line_to(point(px(x), px(y + height)));
+        builder.close();
+
+        if let Ok(path) = builder.build() {
+            window.paint_path(path, color);
+        }
     }
 
     // ── Feature rendering delegation ──────────────────────────────────────
@@ -238,7 +372,15 @@ impl NodeGraphRenderer {
         panel: &mut BlueprintEditorPanel,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        crate::editor::panel::BlueprintEditorPanel::render_connections(panel, cx)
+        // Use cached renderer for better performance during panning
+        // Temporarily take ownership to avoid borrow conflicts
+        let mut cache = std::mem::replace(
+            &mut panel.connection_render_cache,
+            crate::features::connections::rendering_cached::ConnectionRenderCache::new(),
+        );
+        let result = cache.render(panel, cx);
+        panel.connection_render_cache = cache;
+        result
     }
 
     fn render_nodes(
@@ -264,7 +406,51 @@ impl NodeGraphRenderer {
     /// Mouse events from GPUI are relative to window origin.
     /// We already have the graph element's bounds captured during events.
     /// Simple math: element_pos = window_pos - element_origin
-    pub fn window_to_graph_element_pos(window_pos: Point<Pixels>, panel: &BlueprintEditorPanel) -> Point<Pixels> {
+    pub fn window_to_graph_element_pos_for_view(
+        window_pos: Point<Pixels>,
+        panel: &BlueprintEditorPanel,
+        view_id: &str,
+    ) -> Point<Pixels> {
+        if let Some(bounds) = panel.graph_element_bounds_by_view.get(view_id) {
+            Point::new(
+                window_pos.x - bounds.origin.x,
+                window_pos.y - bounds.origin.y,
+            )
+        } else {
+            window_pos
+        }
+    }
+
+    pub fn window_to_graph_element_pos(
+        window_pos: Point<Pixels>,
+        panel: &BlueprintEditorPanel,
+    ) -> Point<Pixels> {
+        if let Some(view_id) = panel.interaction_view_id.as_ref() {
+            if let Some(bounds) = panel.graph_element_bounds_by_view.get(view_id) {
+                return Point::new(
+                    window_pos.x - bounds.origin.x,
+                    window_pos.y - bounds.origin.y,
+                );
+            }
+        }
+
+        // If no interaction owner is set yet (common when child handlers stop propagation),
+        // resolve against whichever graph view currently contains the pointer.
+        let wx = window_pos.x.as_f32();
+        let wy = window_pos.y.as_f32();
+        for bounds in panel.graph_element_bounds_by_view.values() {
+            let left = bounds.origin.x.as_f32();
+            let top = bounds.origin.y.as_f32();
+            let right = left + bounds.size.width.as_f32();
+            let bottom = top + bounds.size.height.as_f32();
+            if wx >= left && wx <= right && wy >= top && wy <= bottom {
+                return Point::new(
+                    window_pos.x - bounds.origin.x,
+                    window_pos.y - bounds.origin.y,
+                );
+            }
+        }
+
         if let Some(bounds) = &panel.graph_element_bounds {
             // Direct subtraction: mouse relative to element = mouse relative to window - element origin relative to window
             Point::new(
@@ -280,7 +466,10 @@ impl NodeGraphRenderer {
 
     /// Convert window-relative coordinates to panel coordinates
     /// For UI elements positioned at panel level: menus, tooltips, etc.
-    pub fn window_to_panel_pos(window_pos: Point<Pixels>, panel: &BlueprintEditorPanel) -> Point<Pixels> {
+    pub fn window_to_panel_pos(
+        window_pos: Point<Pixels>,
+        panel: &BlueprintEditorPanel,
+    ) -> Point<Pixels> {
         // Same calculation as graph element since they share the same coordinate space
         Self::window_to_graph_element_pos(window_pos, panel)
     }
@@ -293,19 +482,9 @@ impl NodeGraphRenderer {
         )
     }
 
-    /// Snaps a position to the appropriate grid size based on zoom level
-    pub fn snap_to_grid(pos: Point<f32>, zoom_level: f32) -> Point<f32> {
-        // Choose grid size based on zoom level
-        // Use finer grids when zoomed in, coarser grids when zoomed out
-        let grid_size = if zoom_level >= 1.5 {
-            50.0  // Fine grid
-        } else if zoom_level >= 0.5 {
-            50.0  // Fine grid
-        } else if zoom_level >= 0.3 {
-            200.0 // Medium grid
-        } else {
-            1000.0 // Coarse grid
-        };
+    /// Snaps a position to the fixed 10px graph grid.
+    pub fn snap_to_grid(pos: Point<f32>, _zoom_level: f32) -> Point<f32> {
+        let grid_size = 10.0;
 
         Point::new(
             (pos.x / grid_size).round() * grid_size,
@@ -408,12 +587,12 @@ impl NodeGraphRenderer {
 
         // These MUST match the values used in render_blueprint_node / render_node_pins.
         const HEADER_H: f32 = 27.0;
-        const SEP_H: f32    =  1.0;
-        const BODY_PAD: f32 =  8.0;
+        const SEP_H: f32 = 1.0;
+        const BODY_PAD: f32 = 8.0;
         const PIN_ROW_H: f32 = 16.0;
-        const PIN_GAP: f32  =  4.0;
+        const PIN_GAP: f32 = 4.0;
 
-        let z   = graph.zoom_level;
+        let z = graph.zoom_level;
         let nsp = Self::graph_to_screen_pos(node.position, graph);
 
         let row = if is_input {

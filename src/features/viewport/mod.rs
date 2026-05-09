@@ -10,12 +10,11 @@
 //! - `operations.rs`: Pan and zoom state mutations (impl methods on BlueprintEditorPanel)
 //! - `coordinates.rs`: Coordinate conversion utilities (free functions)
 
-pub mod operations;
 pub mod coordinates;
+pub mod operations;
 
 // Re-export commonly used coordinate conversion functions
 pub use coordinates::{
+    graph_to_screen_pos, parse_hex_color, screen_to_graph_pos, snap_to_grid,
     window_to_graph_element_pos, window_to_panel_pos,
-    screen_to_graph_pos, graph_to_screen_pos,
-    snap_to_grid, parse_hex_color,
 };

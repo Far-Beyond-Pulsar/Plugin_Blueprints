@@ -6,10 +6,7 @@
 
 use gpui::*;
 use ui::{
-    button::ButtonVariants as _,
-    h_flex, v_flex,
-    ActiveTheme as _, StyledExt, Colorize,
-    IconName,
+    button::ButtonVariants as _, h_flex, v_flex, ActiveTheme as _, Colorize, IconName, StyledExt,
 };
 
 use crate::core::types::{BlueprintNode, NodeType, Pin};
@@ -19,7 +16,10 @@ use crate::editor::panel::BlueprintEditorPanel;
 pub struct PropertiesRenderer;
 
 impl PropertiesRenderer {
-    pub fn render(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    pub fn render(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         v_flex()
             .size_full()
             .bg(cx.theme().sidebar)
@@ -41,32 +41,29 @@ impl PropertiesRenderer {
                             .child(
                                 ui::Icon::new(IconName::Settings)
                                     .size(px(16.0))
-                                    .text_color(cx.theme().info)
+                                    .text_color(cx.theme().info),
                             )
                             .child(
                                 div()
                                     .text_sm()
                                     .font_semibold()
                                     .text_color(cx.theme().foreground)
-                                    .child("Details")
+                                    .child("Details"),
                             )
                             .child(
-                                div()
-                                    .flex_1()
-                                    .text_right()
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(if panel.graph.selected_nodes.len() > 1 {
-                                                format!("{} items", panel.graph.selected_nodes.len())
-                                            } else if panel.graph.selected_nodes.len() == 1 {
-                                                "1 item".to_string()
-                                            } else {
-                                                "None".to_string()
-                                            })
-                                    )
-                            )
+                                div().flex_1().text_right().child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(if panel.graph.selected_nodes.len() > 1 {
+                                            format!("{} items", panel.graph.selected_nodes.len())
+                                        } else if panel.graph.selected_nodes.len() == 1 {
+                                            "1 item".to_string()
+                                        } else {
+                                            "None".to_string()
+                                        }),
+                                ),
+                            ),
                     )
                     .child(
                         // Compact selection type indicator
@@ -86,7 +83,7 @@ impl PropertiesRenderer {
                                     IconName::Component
                                 })
                                 .size(px(12.0))
-                                .text_color(cx.theme().info.opacity(0.8))
+                                .text_color(cx.theme().info.opacity(0.8)),
                             )
                             .child(
                                 div()
@@ -98,24 +95,22 @@ impl PropertiesRenderer {
                                         "Properties"
                                     } else {
                                         "NO SELECTION"
-                                    })
+                                    }),
                             )
-                            .child(
-                                if !panel.graph.selected_nodes.is_empty() {
-                                    div()
-                                        .px_2()
-                                        .py_1()
-                                        .rounded(px(4.0))
-                                        .bg(cx.theme().info.opacity(0.15))
-                                        .text_xs()
-                                        .font_family("JetBrainsMono-Regular")
-                                        .text_color(cx.theme().info)
-                                        .child(format!("{}", panel.graph.selected_nodes.len()))
-                                } else {
-                                    div() // Empty div when no selection
-                                }
-                            )
-                    )
+                            .child(if !panel.graph.selected_nodes.is_empty() {
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded(px(4.0))
+                                    .bg(cx.theme().info.opacity(0.15))
+                                    .text_xs()
+                                    .font_family("JetBrainsMono-Regular")
+                                    .text_color(cx.theme().info)
+                                    .child(format!("{}", panel.graph.selected_nodes.len()))
+                            } else {
+                                div() // Empty div when no selection
+                            }),
+                    ),
             )
             .child(
                 // CONTENT AREA - clean scrollable content
@@ -124,26 +119,34 @@ impl PropertiesRenderer {
                     .overflow_hidden()
                     .p_3()
                     .scrollable(Axis::Vertical)
-                    .child(Self::render_properties_content(panel, cx))
+                    .child(Self::render_properties_content(panel, cx)),
             )
     }
 
-    fn render_properties_content(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    fn render_properties_content(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         // Check if we're inside a macro tab (not the main event graph)
-        let is_in_macro = panel.active_tab_index < panel.open_tabs.len() && !panel.open_tabs[panel.active_tab_index].is_main;
+        let is_in_macro = panel.active_tab_index < panel.open_tabs.len()
+            && !panel.open_tabs[panel.active_tab_index].is_main;
 
         // If in macro and nothing selected, or subgraph_input/output selected, show interface editor
         if is_in_macro {
-            let show_interface_editor = if let Some(selected_node_id) = panel.graph.selected_nodes.first() {
-                if let Some(selected_node) = panel.graph.nodes.iter().find(|n| n.id == *selected_node_id) {
-                    selected_node.definition_id == "subgraph_input" || selected_node.definition_id == "subgraph_output"
+            let show_interface_editor =
+                if let Some(selected_node_id) = panel.graph.selected_nodes.first() {
+                    if let Some(selected_node) =
+                        panel.graph.nodes.iter().find(|n| n.id == *selected_node_id)
+                    {
+                        selected_node.definition_id == "subgraph_input"
+                            || selected_node.definition_id == "subgraph_output"
+                    } else {
+                        false
+                    }
                 } else {
-                    false
-                }
-            } else {
-                // Nothing selected in sub-graph - show interface editor as default
-                true
-            };
+                    // Nothing selected in sub-graph - show interface editor as default
+                    true
+                };
 
             if show_interface_editor {
                 return Self::render_interface_editor(panel, cx);
@@ -151,7 +154,9 @@ impl PropertiesRenderer {
         }
 
         if let Some(selected_node_id) = panel.graph.selected_nodes.first() {
-            if let Some(selected_node) = panel.graph.nodes.iter().find(|n| n.id == *selected_node_id) {
+            if let Some(selected_node) =
+                panel.graph.nodes.iter().find(|n| n.id == *selected_node_id)
+            {
                 v_flex()
                     .gap_4()
                     .child(
@@ -162,40 +167,47 @@ impl PropertiesRenderer {
                                 h_flex()
                                     .items_center()
                                     .gap_3()
-                                    .child(
-                                        div()
-                                            .text_2xl()
-                                            .child(selected_node.icon.clone())
-                                    )
+                                    .child(div().text_2xl().child(selected_node.icon.clone()))
                                     .child(
                                         div()
                                             .text_lg()
                                             .font_bold()
                                             .text_color(cx.theme().foreground)
-                                            .child(selected_node.title.clone())
-                                    )
+                                            .child(selected_node.title.clone()),
+                                    ),
                             )
                             .child(
                                 div()
                                     .px_2()
                                     .py_1()
                                     .rounded(px(4.0))
-                                    .bg(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.15))
+                                    .bg(Self::get_node_type_color(&selected_node.node_type, cx)
+                                        .opacity(0.15))
                                     .border_1()
-                                    .border_color(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.3))
+                                    .border_color(
+                                        Self::get_node_type_color(&selected_node.node_type, cx)
+                                            .opacity(0.3),
+                                    )
                                     .text_xs()
                                     .font_semibold()
-                                    .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
-                                    .child(format!("{:?} Node", selected_node.node_type))
-                            )
+                                    .text_color(Self::get_node_type_color(
+                                        &selected_node.node_type,
+                                        cx,
+                                    ))
+                                    .child(format!("{:?} Node", selected_node.node_type)),
+                            ),
                     )
                     .child(Self::render_separator(cx))
                     .child(
                         // Properties section
                         v_flex()
                             .gap_3()
-                            .child(Self::render_section_header("Properties", IconName::Settings, cx))
-                            .child(Self::render_node_properties(selected_node, cx))
+                            .child(Self::render_section_header(
+                                "Properties",
+                                IconName::Settings,
+                                cx,
+                            ))
+                            .child(Self::render_node_properties(selected_node, cx)),
                     )
                     .child(Self::render_separator(cx))
                     .child(
@@ -203,7 +215,7 @@ impl PropertiesRenderer {
                         v_flex()
                             .gap_3()
                             .child(Self::render_section_header("Node Info", IconName::Info, cx))
-                            .child(Self::render_node_info(selected_node, cx))
+                            .child(Self::render_node_info(selected_node, cx)),
                     )
                     .into_any_element()
             } else {
@@ -214,36 +226,52 @@ impl PropertiesRenderer {
         }
     }
 
-    fn render_section_header(title: &str, _icon: IconName, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
-        h_flex()
-            .items_center()
-            .gap_2()
-            .child(
-                div()
-                    .text_xs()
-                    .font_bold()
-                    .text_color(cx.theme().accent)
-                    .child(title.to_uppercase())
-            )
+    fn render_section_header(
+        title: &str,
+        _icon: IconName,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
+        h_flex().items_center().gap_2().child(
+            div()
+                .text_xs()
+                .font_bold()
+                .text_color(cx.theme().accent)
+                .child(title.to_uppercase()),
+        )
     }
 
     fn render_separator(cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
-        div()
-            .w_full()
-            .h_px()
-            .bg(cx.theme().border.opacity(0.3))
+        div().w_full().h_px().bg(cx.theme().border.opacity(0.3))
     }
 
-    fn get_node_type_color(node_type: &NodeType, cx: &mut Context<BlueprintEditorPanel>) -> gpui::Hsla {
+    fn get_node_type_color(
+        node_type: &NodeType,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> gpui::Hsla {
         match node_type {
             NodeType::Event => cx.theme().danger,
             NodeType::Logic => cx.theme().primary,
             NodeType::Math => cx.theme().success,
             NodeType::Object => cx.theme().warning,
             NodeType::Reroute => cx.theme().accent,
-            NodeType::MacroEntry => gpui::Hsla { h: 0.75, s: 0.7, l: 0.6, a: 1.0 },
-            NodeType::MacroExit => gpui::Hsla { h: 0.75, s: 0.7, l: 0.6, a: 1.0 },
-            NodeType::MacroInstance => gpui::Hsla { h: 0.75, s: 0.5, l: 0.5, a: 1.0 },
+            NodeType::MacroEntry => gpui::Hsla {
+                h: 0.75,
+                s: 0.7,
+                l: 0.6,
+                a: 1.0,
+            },
+            NodeType::MacroExit => gpui::Hsla {
+                h: 0.75,
+                s: 0.7,
+                l: 0.6,
+                a: 1.0,
+            },
+            NodeType::MacroInstance => gpui::Hsla {
+                h: 0.75,
+                s: 0.5,
+                l: 0.5,
+                a: 1.0,
+            },
         }
     }
 
@@ -253,38 +281,39 @@ impl PropertiesRenderer {
             .items_center()
             .justify_center()
             .gap_3()
-            .child(
-                div()
-                    .text_xl()
-                    .child("📋📋📋")
-            )
+            .child(div().text_xl().child("📋📋📋"))
             .child(
                 div()
                     .text_sm()
                     .font_medium()
                     .text_color(cx.theme().muted_foreground)
-                    .child("No node selected")
+                    .child("No node selected"),
             )
             .child(
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground.opacity(0.7))
-                    .child("Select a node to view its properties")
+                    .child("Select a node to view its properties"),
             )
             .into_any_element()
     }
 
-    fn render_node_properties(node: &BlueprintNode, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .children(
-                node.properties.iter().map(|(key, value)| {
-                    Self::render_property_field(key, value, cx)
-                })
-            )
+    fn render_node_properties(
+        node: &BlueprintNode,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
+        v_flex().gap_3().children(
+            node.properties
+                .iter()
+                .map(|(key, value)| Self::render_property_field(key, value, cx)),
+        )
     }
 
-    fn render_property_field(key: &str, value: &str, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    fn render_property_field(
+        key: &str,
+        value: &str,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         v_flex()
             .gap_2()
             .child(
@@ -292,7 +321,7 @@ impl PropertiesRenderer {
                     .text_xs()
                     .font_semibold()
                     .text_color(cx.theme().muted_foreground)
-                    .child(Self::format_property_name(key))
+                    .child(Self::format_property_name(key)),
             )
             .child(
                 div()
@@ -311,22 +340,45 @@ impl PropertiesRenderer {
                         style
                             .border_color(cx.theme().accent.opacity(0.8))
                             .bg(cx.theme().input.lighten(0.02))
-                    })
+                    }),
             )
     }
 
-    fn render_node_info(node: &BlueprintNode, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    fn render_node_info(
+        node: &BlueprintNode,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         v_flex()
             .gap_2p5()
             .child(Self::render_info_row("Node ID", &node.id, cx))
-            .child(Self::render_info_row("Position", &format!("({:.0}, {:.0})", node.position.x, node.position.y), cx))
-            .child(Self::render_info_row("Size", &format!("{:.0} × {:.0} px", node.size.width, node.size.height), cx))
+            .child(Self::render_info_row(
+                "Position",
+                &format!("({:.0}, {:.0})", node.position.x, node.position.y),
+                cx,
+            ))
+            .child(Self::render_info_row(
+                "Size",
+                &format!("{:.0} × {:.0} px", node.size.width, node.size.height),
+                cx,
+            ))
             .child(Self::render_separator(cx))
-            .child(Self::render_info_row("Input Pins", &node.inputs.len().to_string(), cx))
-            .child(Self::render_info_row("Output Pins", &node.outputs.len().to_string(), cx))
+            .child(Self::render_info_row(
+                "Input Pins",
+                &node.inputs.len().to_string(),
+                cx,
+            ))
+            .child(Self::render_info_row(
+                "Output Pins",
+                &node.outputs.len().to_string(),
+                cx,
+            ))
     }
 
-    fn render_info_row(label: &str, value: &str, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    fn render_info_row(
+        label: &str,
+        value: &str,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         h_flex()
             .w_full()
             .justify_between()
@@ -340,7 +392,7 @@ impl PropertiesRenderer {
                     .text_xs()
                     .font_medium()
                     .text_color(cx.theme().muted_foreground)
-                    .child(label.to_string())
+                    .child(label.to_string()),
             )
             .child(
                 div()
@@ -351,7 +403,7 @@ impl PropertiesRenderer {
                     .text_xs()
                     .font_family("JetBrainsMono-Regular")
                     .text_color(cx.theme().foreground)
-                    .child(value.to_string())
+                    .child(value.to_string()),
             )
     }
 
@@ -369,10 +421,21 @@ impl PropertiesRenderer {
             .join(" ")
     }
 
-    fn render_interface_editor(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> AnyElement {
+    fn render_interface_editor(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
         // Find subgraph_input and subgraph_output nodes
-        let input_node = panel.graph.nodes.iter().find(|n| n.definition_id == "subgraph_input");
-        let output_node = panel.graph.nodes.iter().find(|n| n.definition_id == "subgraph_output");
+        let input_node = panel
+            .graph
+            .nodes
+            .iter()
+            .find(|n| n.definition_id == "subgraph_input");
+        let output_node = panel
+            .graph
+            .nodes
+            .iter()
+            .find(|n| n.definition_id == "subgraph_output");
 
         v_flex()
             .gap_4()
@@ -521,25 +584,36 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
-    fn render_interface_pins(pins: &[Pin], is_input: bool, cx: &mut Context<BlueprintEditorPanel>) -> AnyElement {
+    fn render_interface_pins(
+        pins: &[Pin],
+        is_input: bool,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
         if pins.is_empty() {
             return Self::render_no_pins_message(
-                if is_input { "No inputs defined" } else { "No outputs defined" },
-                cx
+                if is_input {
+                    "No inputs defined"
+                } else {
+                    "No outputs defined"
+                },
+                cx,
             );
         }
 
         v_flex()
             .gap_2()
             .children(
-                pins.iter().map(|pin| {
-                    Self::render_interface_pin_row(pin, is_input, cx)
-                })
+                pins.iter()
+                    .map(|pin| Self::render_interface_pin_row(pin, is_input, cx)),
             )
             .into_any_element()
     }
 
-    fn render_interface_pin_row(pin: &Pin, is_input: bool, cx: &mut Context<BlueprintEditorPanel>) -> AnyElement {
+    fn render_interface_pin_row(
+        pin: &Pin,
+        is_input: bool,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
         let type_info = ui::graph::TypeInfo::parse(&format!("{:?}", pin.data_type));
         let pin_color = type_info.generate_color();
         let pin_id = pin.id.clone();
@@ -567,10 +641,15 @@ impl PropertiesRenderer {
                     .w(px(14.))
                     .h(px(14.))
                     .rounded_full()
-                    .bg(gpui::Rgba { r: pin_color.r, g: pin_color.g, b: pin_color.b, a: pin_color.a })
+                    .bg(gpui::Rgba {
+                        r: pin_color.r,
+                        g: pin_color.g,
+                        b: pin_color.b,
+                        a: pin_color.a,
+                    })
                     .border_2()
                     .border_color(cx.theme().border)
-                    .shadow_sm()
+                    .shadow_sm(),
             )
             .child(
                 // Pin details
@@ -582,7 +661,7 @@ impl PropertiesRenderer {
                             .text_sm()
                             .font_semibold()
                             .text_color(cx.theme().foreground)
-                            .child(pin.name.clone())
+                            .child(pin.name.clone()),
                     )
                     .child(
                         div()
@@ -593,15 +672,19 @@ impl PropertiesRenderer {
                             .text_xs()
                             .font_family("JetBrainsMono-Regular")
                             .text_color(cx.theme().muted_foreground)
-                            .child(format!("{}", pin.data_type))
-                    )
+                            .child(format!("{}", pin.data_type)),
+                    ),
             )
             .child(
                 // Direction indicator
                 div()
                     .text_xs()
-                    .text_color(if is_input { cx.theme().success } else { cx.theme().warning })
-                    .child(if is_input { "→" } else { "←" })
+                    .text_color(if is_input {
+                        cx.theme().success
+                    } else {
+                        cx.theme().warning
+                    })
+                    .child(if is_input { "→" } else { "←" }),
             )
             .child(
                 // Remove button
@@ -615,7 +698,7 @@ impl PropertiesRenderer {
                         } else {
                             panel.remove_output_pin(&pin_id, cx);
                         }
-                    }))
+                    })),
             )
             .into_any_element()
     }

@@ -1,8 +1,11 @@
 //! Compiler panel - Dockable panel for compilation results
 
-use gpui::*;
-use ui::{ActiveTheme, StyledExt, dock::{Panel, PanelEvent}};
 use crate::editor::panel::BlueprintEditorPanel;
+use gpui::*;
+use ui::{
+    dock::{Panel, PanelEvent},
+    ActiveTheme, StyledExt,
+};
 
 /// Compiler Panel - renders compilation results
 pub struct CompilerPanel {
@@ -26,11 +29,7 @@ impl Render for CompilerPanel {
         if let Some(editor) = self.editor.upgrade() {
             div()
                 .size_full()
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        editor.render_compiler_results(cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| editor.render_compiler_results(cx)))
         } else {
             div().child("Editor not available")
         }

@@ -1,73 +1,102 @@
 //! Compiler - Compile blueprints to Rust code
 
-use gpui::*;
 use crate::editor::panel::{BlueprintEditorPanel, CompilationHistoryEntry};
-use crate::{CompilationStatus, CompilationState};
+use crate::{CompilationState, CompilationStatus};
+use gpui::*;
 use ui::compiler;
 
 // Convert a pulsar_graph DataType into the graphy DataType the compiler expects.
 fn to_graphy_datatype(dt: &ui::graph::DataType) -> graphy::DataType {
-    use ui::graph::DataType as PG;
     use graphy::DataType as GD;
+    use ui::graph::DataType as PG;
     match dt {
-        PG::Execution          => GD::Execution,
-        PG::Typed(ti)          => GD::Typed(graphy::core::TypeInfo::new(ti.to_string())),
-        PG::Any                => GD::Any,
-        PG::String             => GD::String,
-        PG::Number             => GD::Number,
-        PG::Boolean            => GD::Boolean,
-        PG::Vector2            => GD::Vector2,
-        PG::Vector3            => GD::Vector3,
-        PG::Color              => GD::Color,
-        PG::Object             => GD::Typed(graphy::core::TypeInfo::new("Object")),
-        PG::Array(inner)       => GD::Typed(graphy::core::TypeInfo::new(
-            format!("Vec<{}>", inner)
-        )),
+        PG::Execution => GD::Execution,
+        PG::Typed(ti) => GD::Typed(graphy::core::TypeInfo::new(ti.to_string())),
+        PG::Any => GD::Any,
+        PG::String => GD::String,
+        PG::Number => GD::Number,
+        PG::Boolean => GD::Boolean,
+        PG::Vector2 => GD::Vector2,
+        PG::Vector3 => GD::Vector3,
+        PG::Color => GD::Color,
+        PG::Object => GD::Typed(graphy::core::TypeInfo::new("Object")),
+        PG::Array(inner) => GD::Typed(graphy::core::TypeInfo::new(format!("Vec<{}>", inner))),
     }
 }
 
 impl BlueprintEditorPanel {
+    fn push_compilation_history(
+        &mut self,
+        state: CompilationState,
+        stage: impl Into<String>,
+        message: impl Into<String>,
+        detail: Option<String>,
+    ) {
+        const MAX_HISTORY_ENTRIES: usize = 2000;
+
+        let now = chrono::Local::now();
+        self.compilation_history.push(CompilationHistoryEntry {
+            timestamp: now.format("%H:%M:%S").to_string(),
+            state,
+            stage: stage.into(),
+            message: message.into(),
+            detail,
+        });
+
+        if self.compilation_history.len() > MAX_HISTORY_ENTRIES {
+            let overflow = self.compilation_history.len() - MAX_HISTORY_ENTRIES;
+            self.compilation_history.drain(0..overflow);
+        }
+    }
+
     /// Build a `graphy::GraphDescription` directly from the current BlueprintGraph.
     /// This is the single source-of-truth conversion; both compile functions use it.
     fn build_graphy_description(&self) -> Result<graphy::GraphDescription, String> {
-        use graphy::{GraphDescription, NodeInstance,
-                     PinInstance, Pin, PinType, ConnectionType, PropertyValue, Position};
         use graphy::Connection as GConnection;
+        use graphy::{
+            ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
+            PropertyValue,
+        };
 
         let mut graph = GraphDescription::new("Blueprint Graph");
 
         // Nodes
         for bp_node in &self.graph.nodes {
             let mut node = NodeInstance {
-                id:         bp_node.id.clone(),
-                node_type:  bp_node.definition_id.clone(),
-                position:   Position { x: bp_node.position.x as f64, y: bp_node.position.y as f64 },
-                inputs:     Vec::new(),
-                outputs:    Vec::new(),
-                properties: bp_node.properties.iter()
+                id: bp_node.id.clone(),
+                node_type: bp_node.definition_id.clone(),
+                position: Position {
+                    x: bp_node.position.x as f64,
+                    y: bp_node.position.y as f64,
+                },
+                inputs: Vec::new(),
+                outputs: Vec::new(),
+                properties: bp_node
+                    .properties
+                    .iter()
                     .map(|(k, v)| (k.clone(), PropertyValue::String(v.clone())))
                     .collect(),
             };
 
             for pin in &bp_node.inputs {
                 node.inputs.push(PinInstance {
-                    id:  pin.id.clone(),
+                    id: pin.id.clone(),
                     pin: Pin {
-                        id:        pin.id.clone(),
-                        name:      pin.name.clone(),
+                        id: pin.id.clone(),
+                        name: pin.name.clone(),
                         data_type: to_graphy_datatype(&pin.data_type),
-                        pin_type:  PinType::Input,
+                        pin_type: PinType::Input,
                     },
                 });
             }
             for pin in &bp_node.outputs {
                 node.outputs.push(PinInstance {
-                    id:  pin.id.clone(),
+                    id: pin.id.clone(),
                     pin: Pin {
-                        id:        pin.id.clone(),
-                        name:      pin.name.clone(),
+                        id: pin.id.clone(),
+                        name: pin.name.clone(),
                         data_type: to_graphy_datatype(&pin.data_type),
-                        pin_type:  PinType::Output,
+                        pin_type: PinType::Output,
                     },
                 });
             }
@@ -79,13 +108,13 @@ impl BlueprintEditorPanel {
         for conn in &self.graph.connections {
             let conn_type = match conn.connection_type {
                 ui::graph::ConnectionType::Execution => ConnectionType::Execution,
-                ui::graph::ConnectionType::Data      => ConnectionType::Data,
+                ui::graph::ConnectionType::Data => ConnectionType::Data,
             };
             graph.connections.push(GConnection {
-                source_node:     conn.source_node.clone(),
-                source_pin:      conn.source_pin.clone(),
-                target_node:     conn.target_node.clone(),
-                target_pin:      conn.target_pin.clone(),
+                source_node: conn.source_node.clone(),
+                source_pin: conn.source_pin.clone(),
+                target_node: conn.target_node.clone(),
+                target_pin: conn.target_pin.clone(),
                 connection_type: conn_type,
             });
         }
@@ -96,13 +125,14 @@ impl BlueprintEditorPanel {
     /// Compile current graph to Rust source code
     pub fn compile_to_rust(&self) -> Result<String, String> {
         let graph = self.build_graphy_description()?;
-        compiler::compile_graph(&graph)
-            .map_err(|e| format!("Compilation failed: {}", e))
+        compiler::compile_graph(&graph).map_err(|e| format!("Compilation failed: {}", e))
     }
 
     /// Compile and save events to class directory structure
     pub fn compile_to_class_directory(&self) -> Result<(), String> {
-        let class_path = self.current_class_path.as_ref()
+        let class_path = self
+            .current_class_path
+            .as_ref()
             .ok_or("No class loaded - cannot compile")?;
 
         // Ensure variables are persisted first
@@ -113,7 +143,10 @@ impl BlueprintEditorPanel {
         std::fs::create_dir_all(&events_dir)
             .map_err(|e| format!("Failed to create events directory: {}", e))?;
 
-        let has_events = self.graph.nodes.iter()
+        let has_events = self
+            .graph
+            .nodes
+            .iter()
             .any(|n| n.node_type == crate::NodeType::Event);
         if !has_events {
             return Err("No event nodes found in graph".to_string());
@@ -121,7 +154,9 @@ impl BlueprintEditorPanel {
 
         // Build the graphy graph and compile all events in one pass
         let graph = self.build_graphy_description()?;
-        let variables: std::collections::HashMap<String, String> = self.class_variables.iter()
+        let variables: std::collections::HashMap<String, String> = self
+            .class_variables
+            .iter()
             .map(|v| (v.name.clone(), v.var_type.clone()))
             .collect();
 
@@ -166,6 +201,8 @@ impl BlueprintEditorPanel {
 
     /// Compile in background with status updates
     pub async fn compile_async(panel_entity: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp) {
+        let started_at = std::time::Instant::now();
+
         // Set compiling state
         let result = panel_entity.update(cx, |panel, cx| {
             panel.compilation_status = CompilationStatus {
@@ -174,6 +211,29 @@ impl BlueprintEditorPanel {
                 progress: 0.0,
                 is_compiling: true,
             };
+
+            let class_path_display = panel
+                .current_class_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "<no class loaded>".to_string());
+
+            panel.push_compilation_history(
+                CompilationState::Compiling,
+                "prepare",
+                "Compilation started",
+                Some(format!("Class path: {}", class_path_display)),
+            );
+            panel.push_compilation_history(
+                CompilationState::Compiling,
+                "build",
+                "Generating Rust event modules",
+                Some(
+                    "Steps: validate event nodes, compile graph, write events/events.rs, write events/mod.rs, refresh vars module"
+                        .to_string(),
+                ),
+            );
+
             cx.notify();
             panel.compile_to_class_directory()
         });
@@ -184,6 +244,18 @@ impl BlueprintEditorPanel {
                     // Success
                     smol::Timer::after(std::time::Duration::from_millis(500)).await;
                     let _ = panel_entity.update(cx, |panel, cx| {
+                        let elapsed_ms = started_at.elapsed().as_millis();
+                        let output_events = panel
+                            .current_class_path
+                            .as_ref()
+                            .map(|p| p.join("events").join("events.rs").display().to_string())
+                            .unwrap_or_else(|| "events/events.rs".to_string());
+                        let output_mod = panel
+                            .current_class_path
+                            .as_ref()
+                            .map(|p| p.join("events").join("mod.rs").display().to_string())
+                            .unwrap_or_else(|| "events/mod.rs".to_string());
+
                         panel.compilation_status = CompilationStatus {
                             state: CompilationState::Success,
                             message: "✓ Compilation successful".to_string(),
@@ -191,13 +263,15 @@ impl BlueprintEditorPanel {
                             is_compiling: false,
                         };
 
-                        // Add to history
-                        let now = chrono::Local::now();
-                        panel.compilation_history.push(CompilationHistoryEntry {
-                            timestamp: now.format("%H:%M:%S").to_string(),
-                            state: CompilationState::Success,
-                            message: "Compilation successful".to_string(),
-                        });
+                        panel.push_compilation_history(
+                            CompilationState::Success,
+                            "complete",
+                            "Compilation successful",
+                            Some(format!(
+                                "Duration: {} ms | Outputs: {}, {}",
+                                elapsed_ms, output_events, output_mod
+                            )),
+                        );
 
                         cx.notify();
                     });
@@ -205,20 +279,25 @@ impl BlueprintEditorPanel {
                 Err(e) => {
                     // Compilation error
                     let _ = panel_entity.update(cx, |panel, cx| {
+                        let elapsed_ms = started_at.elapsed().as_millis();
+                        let error_text = e;
+
                         panel.compilation_status = CompilationStatus {
                             state: CompilationState::Error,
-                            message: format!("✗ Compilation failed: {}", e),
+                            message: format!("✗ Compilation failed: {}", error_text),
                             progress: 0.0,
                             is_compiling: false,
                         };
 
-                        // Add to history
-                        let now = chrono::Local::now();
-                        panel.compilation_history.push(CompilationHistoryEntry {
-                            timestamp: now.format("%H:%M:%S").to_string(),
-                            state: CompilationState::Error,
-                            message: format!("Compilation failed: {}", e),
-                        });
+                        panel.push_compilation_history(
+                            CompilationState::Error,
+                            "error",
+                            "Compilation failed",
+                            Some(format!(
+                                "Duration: {} ms | Reason: {}",
+                                elapsed_ms, error_text
+                            )),
+                        );
 
                         cx.notify();
                     });
@@ -227,14 +306,20 @@ impl BlueprintEditorPanel {
         } else {
             // Panel entity no longer exists - try to update anyway
             let _ = panel_entity.update(cx, |panel, cx| {
-                        panel.compilation_status = CompilationStatus {
-                            state: CompilationState::Error,
-                            message: "✗ Compilation failed: panel closed".to_string(),
-                            progress: 0.0,
-                            is_compiling: false,
-                        };
-                        cx.notify();
-                    });
+                panel.compilation_status = CompilationStatus {
+                    state: CompilationState::Error,
+                    message: "✗ Compilation failed: panel closed".to_string(),
+                    progress: 0.0,
+                    is_compiling: false,
+                };
+                panel.push_compilation_history(
+                    CompilationState::Error,
+                    "error",
+                    "Compilation aborted",
+                    Some("Editor panel closed before compile completed".to_string()),
+                );
+                cx.notify();
+            });
         }
 
         // Clear status after 3 seconds

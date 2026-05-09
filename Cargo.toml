@@ -12,7 +12,7 @@ name = "blueprint_editor_plugin"
 plugin_editor_api = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/plugin_editor_api" }
 
 # UI dependencies (local paths so traits resolve to the same crate instance)
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "2c87d4728e3675caa336f85be724af6e197c5c4a" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "1f6f3843e8bea050ed3882b45b5ca1d433adf61f" }
 ui = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/ui" }
 ui_common = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/ui-crates/ui_common" }
 
@@ -21,8 +21,8 @@ pulsar_std = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/pulsar_s
 engine_backend = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/engine_backend" }
 
 # Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
-graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "0cd1d0c0e8420757f98c480ab9c4ab28e2f63ae0" }
-pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "64ec900fccec26e308edf6d92d1fbaf1b61e60c5" }
+graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "74a993fe51efc00ac5e208af74a3df79f2c0ba47" }
+pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "20f71a4c0d3bcac3eee221ea8255c008e4d891fb" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"
@@ -37,6 +37,7 @@ schemars = "1.0"
 
 # For async operations
 futures = "0.3"
+arboard = "3.4"
 
 # Force windows 0.62 to match wgpu-hal and avoid gpu-allocator version conflict
 [target.'cfg(windows)'.dependencies]

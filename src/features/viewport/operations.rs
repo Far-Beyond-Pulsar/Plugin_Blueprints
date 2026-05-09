@@ -1,9 +1,9 @@
 //! Viewport operations - pan, zoom, and camera controls
 
-use gpui::*;
+use super::coordinates::screen_to_graph_pos;
 use crate::core::BlueprintGraph;
 use crate::editor::panel::BlueprintEditorPanel;
-use super::coordinates::screen_to_graph_pos;
+use gpui::*;
 
 impl BlueprintEditorPanel {
     /// Start panning the viewport
@@ -45,14 +45,12 @@ impl BlueprintEditorPanel {
         let screen: Point<f32> = Point::new(screen_pos.x.into(), screen_pos.y.into());
 
         // Get graph position under cursor before zoom
-        let focus_graph_pos = screen_to_graph_pos(
-            Point::new(px(screen.x), px(screen.y)),
-            &self.graph,
-        );
+        let focus_graph_pos =
+            screen_to_graph_pos(Point::new(px(screen.x), px(screen.y)), &self.graph);
 
         // Calculate new zoom level (inverted scroll direction)
         let zoom_factor = if delta_y > 0.0 { 1.1 } else { 0.9 };
-        let new_zoom = (self.graph.zoom_level * zoom_factor).clamp(0.1, 3.0);
+        let new_zoom = (self.graph.zoom_level * zoom_factor).clamp(0.5, 2.0);
 
         // Calculate new pan to keep focus point under cursor
         let mut new_pan_offset = Point::new(

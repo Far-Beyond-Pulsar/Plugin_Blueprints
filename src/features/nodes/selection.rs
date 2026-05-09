@@ -1,8 +1,10 @@
 //! Selection operations - selection box and multi-selection
 
-use gpui::*;
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::core::graph_entity::GraphEntity;
 use crate::core::types::{BlueprintNode, Connection};
+use crate::editor::panel::BlueprintEditorPanel;
+use crate::rendering::graph::NodeGraphRenderer;
+use gpui::*;
 
 impl BlueprintEditorPanel {
     /// Select a single node (or clear selection if None)
@@ -55,69 +57,48 @@ impl BlueprintEditorPanel {
         cx.notify();
     }
 
-    /// Update node selection based on current drag area
+    /// Update node selection based on current drag area (using GraphEntity trait)
     fn update_node_selection_from_drag(&mut self, cx: &mut Context<Self>) {
         if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
-            let min_x = start.x.min(end.x);
-            let max_x = start.x.max(end.x);
-            let min_y = start.y.min(end.y);
-            let max_y = start.y.max(end.y);
+            let min = Point::new(start.x.min(end.x), start.y.min(end.y));
+            let max = Point::new(start.x.max(end.x), start.y.max(end.y));
 
-            // Check all nodes for intersection with selection box
+            // Check all nodes using GraphEntity trait
             for node in &self.graph.nodes {
-                let node_left = node.position.x;
-                let node_top = node.position.y;
-                let node_right = node.position.x + node.size.width;
-                let node_bottom = node.position.y + node.size.height;
-
-                // Check intersection
-                let intersects = !(node_right < min_x
-                    || node_left > max_x
-                    || node_bottom < min_y
-                    || node_top > max_y);
+                let intersects = node.intersects_rect(min, max);
 
                 if intersects {
-                    if !self.graph.selected_nodes.contains(&node.id) {
-                        self.graph.selected_nodes.push(node.id.clone());
+                    let node_id = node.id().to_string();
+                    if !self.graph.selected_nodes.contains(&node_id) {
+                        self.graph.selected_nodes.push(node_id);
                     }
                 } else {
-                    self.graph.selected_nodes.retain(|id| id != &node.id);
+                    self.graph.selected_nodes.retain(|id| id != node.id());
                 }
             }
+
+            // Check all comments using GraphEntity trait
+            for comment in &self.graph.comments {
+                let intersects = comment.intersects_rect(min, max);
+
+                if intersects {
+                    let comment_id = comment.id().to_string();
+                    if !self.graph.selected_comments.contains(&comment_id) {
+                        self.graph.selected_comments.push(comment_id);
+                    }
+                } else {
+                    self.graph.selected_comments.retain(|id| id != comment.id());
+                }
+            }
+
             cx.notify();
         }
     }
 
-    /// Delete all selected nodes
+    /// Delete all selected nodes and comments (unified)
     pub fn delete_selected_nodes(&mut self, cx: &mut Context<Self>) {
-        tracing::info!("[DELETE] Selected nodes count: {}", self.graph.selected_nodes.len());
-        tracing::info!("[DELETE] Selected node IDs: {:?}", self.graph.selected_nodes);
-
-        if !self.graph.selected_nodes.is_empty() {
-            let node_count_before = self.graph.nodes.len();
-
-            // Remove selected nodes
-            self.graph.nodes.retain(|node| !self.graph.selected_nodes.contains(&node.id));
-
-            let node_count_after = self.graph.nodes.len();
-            tracing::info!(
-                "[DELETE] Deleted {} nodes ({} -> {})",
-                node_count_before - node_count_after,
-                node_count_before,
-                node_count_after
-            );
-
-            // Remove connections involving deleted nodes
-            self.graph.connections.retain(|connection| {
-                !self.graph.selected_nodes.contains(&connection.source_node)
-                    && !self.graph.selected_nodes.contains(&connection.target_node)
-            });
-
-            self.graph.selected_nodes.clear();
-            cx.notify();
-        } else {
-            tracing::info!("[DELETE] No nodes selected, nothing to delete");
-        }
+        // Use unified entity deletion
+        self.delete_selected_entities(cx);
     }
 
     /// Handle double-click on connection to create reroute node
@@ -135,7 +116,8 @@ impl BlueprintEditorPanel {
                 ((graph_pos.x - last_pos.x).powi(2) + (graph_pos.y - last_pos.y).powi(2)).sqrt();
             tracing::info!(
                 "[REROUTE] Double-click check: time_diff={}ms, pos_diff={:.2}px",
-                time_diff, pos_diff
+                time_diff,
+                pos_diff
             );
             time_diff < 500 && pos_diff < 50.0
         } else {
@@ -150,7 +132,9 @@ impl BlueprintEditorPanel {
 
                 if let Some(data_type) = self.get_connection_data_type(&connection) {
                     // Create reroute node
-                    let reroute_node = BlueprintNode::create_reroute(graph_pos);
+                    let reroute_pos =
+                        NodeGraphRenderer::snap_to_grid(graph_pos, self.graph.zoom_level);
+                    let reroute_node = BlueprintNode::create_reroute(reroute_pos);
                     let reroute_id = reroute_node.id.clone();
 
                     self.graph.nodes.push(reroute_node);

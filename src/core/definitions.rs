@@ -5,10 +5,10 @@
 //! metadata into UI-ready node definitions. It uses a global singleton pattern
 //! for efficient access to node metadata throughout the application.
 
-use std::collections::HashMap;
-use serde::Deserialize;
-use ui::graph::DataType;
 use super::types::PinType;
+use serde::Deserialize;
+use std::collections::HashMap;
+use ui::graph::DataType;
 
 // ============================================================================
 // Node Definition Types
@@ -34,8 +34,8 @@ pub struct NodeDefinition {
     pub id: String,
     pub name: String,
     pub icon: String,
-    pub description: String,  // Short one-line description for list display
-    pub documentation: String,  // Full markdown documentation for docs panel
+    pub description: String,   // Short one-line description for list display
+    pub documentation: String, // Full markdown documentation for docs panel
     pub inputs: Vec<PinDefinition>,
     pub outputs: Vec<PinDefinition>,
     pub properties: HashMap<String, String>,
@@ -64,11 +64,10 @@ impl NodeDefinitions {
     pub fn load() -> &'static NodeDefinitions {
         NODE_DEFINITIONS.get_or_init(|| {
             // Load dynamic node definitions from pulsar_std
-            let metadata = pbgc::extract_node_metadata()
-                .unwrap_or_else(|e| {
-                    eprintln!("Failed to load node metadata: {}", e);
-                    std::collections::HashMap::new()
-                });
+            let metadata = pbgc::extract_node_metadata().unwrap_or_else(|e| {
+                eprintln!("Failed to load node metadata: {}", e);
+                std::collections::HashMap::new()
+            });
 
             // Load sub-graph libraries
             let mut lib_manager = ui::graph::LibraryManager::default();
@@ -83,9 +82,10 @@ impl NodeDefinitions {
 
     fn from_node_metadata_and_libraries(
         metadata: std::collections::HashMap<String, graphy::NodeMetadata>,
-        lib_manager: ui::graph::LibraryManager
+        lib_manager: ui::graph::LibraryManager,
     ) -> NodeDefinitions {
-        let mut categories_map: std::collections::HashMap<String, Vec<NodeDefinition>> = std::collections::HashMap::new();
+        let mut categories_map: std::collections::HashMap<String, Vec<NodeDefinition>> =
+            std::collections::HashMap::new();
 
         // First, add all sub-graphs from libraries
         for library in lib_manager.get_libraries().values() {
@@ -93,31 +93,37 @@ impl NodeDefinitions {
 
             for subgraph in &library.subgraphs {
                 // Convert sub-graph inputs to pin definitions
-                let inputs: Vec<PinDefinition> = subgraph.interface.inputs.iter().map(|pin| {
-                    PinDefinition {
+                let inputs: Vec<PinDefinition> = subgraph
+                    .interface
+                    .inputs
+                    .iter()
+                    .map(|pin| PinDefinition {
                         id: pin.id.clone(),
                         name: pin.name.clone(),
                         data_type: pin.data_type.clone(),
                         pin_type: PinType::Input,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 // Convert sub-graph outputs to pin definitions
-                let outputs: Vec<PinDefinition> = subgraph.interface.outputs.iter().map(|pin| {
-                    PinDefinition {
+                let outputs: Vec<PinDefinition> = subgraph
+                    .interface
+                    .outputs
+                    .iter()
+                    .map(|pin| PinDefinition {
                         id: pin.id.clone(),
                         name: pin.name.clone(),
                         data_type: pin.data_type.clone(),
                         pin_type: PinType::Output,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 let node_def = NodeDefinition {
                     id: format!("subgraph:{}", subgraph.id),
                     name: subgraph.name.clone(),
                     icon: "📦".to_string(), // Macro icon
                     description: subgraph.description.clone(),
-                    documentation: subgraph.description.clone(),  // Use same text for docs
+                    documentation: subgraph.description.clone(), // Use same text for docs
                     inputs,
                     outputs,
                     properties: std::collections::HashMap::new(),
@@ -138,15 +144,18 @@ impl NodeDefinitions {
         Self::categories_to_definitions(categories_map)
     }
 
-    fn from_node_metadata(metadata: std::collections::HashMap<String, graphy::NodeMetadata>) -> NodeDefinitions {
-        let mut categories_map: std::collections::HashMap<String, Vec<NodeDefinition>> = std::collections::HashMap::new();
+    fn from_node_metadata(
+        metadata: std::collections::HashMap<String, graphy::NodeMetadata>,
+    ) -> NodeDefinitions {
+        let mut categories_map: std::collections::HashMap<String, Vec<NodeDefinition>> =
+            std::collections::HashMap::new();
         Self::populate_categories_from_metadata(metadata, &mut categories_map);
         Self::categories_to_definitions(categories_map)
     }
 
     fn populate_categories_from_metadata(
         metadata: std::collections::HashMap<String, graphy::NodeMetadata>,
-        categories_map: &mut std::collections::HashMap<String, Vec<NodeDefinition>>
+        categories_map: &mut std::collections::HashMap<String, Vec<NodeDefinition>>,
     ) {
         // Add special reroute node to Utility category
         categories_map
@@ -156,8 +165,12 @@ impl NodeDefinitions {
                 id: "reroute".to_string(),
                 name: "Reroute".to_string(),
                 icon: "•".to_string(),
-                description: "Organize connections with a pass-through node (typeless until connected)".to_string(),
-                documentation: "Organize connections with a pass-through node (typeless until connected)".to_string(),
+                description:
+                    "Organize connections with a pass-through node (typeless until connected)"
+                        .to_string(),
+                documentation:
+                    "Organize connections with a pass-through node (typeless until connected)"
+                        .to_string(),
                 inputs: vec![],
                 outputs: vec![],
                 properties: std::collections::HashMap::new(),
@@ -170,7 +183,10 @@ impl NodeDefinitions {
             let mut outputs = Vec::new();
 
             // Add execution input for nodes that need sequencing (fn_ and control_flow)
-            if matches!(node_meta.node_type, graphy::NodeTypes::fn_ | graphy::NodeTypes::control_flow) {
+            if matches!(
+                node_meta.node_type,
+                graphy::NodeTypes::fn_ | graphy::NodeTypes::control_flow
+            ) {
                 inputs.push(PinDefinition {
                     id: "exec".to_string(),
                     name: "exec".to_string(),
@@ -233,7 +249,9 @@ impl NodeDefinitions {
         }
     }
 
-    fn categories_to_definitions(categories_map: std::collections::HashMap<String, Vec<NodeDefinition>>) -> NodeDefinitions {
+    fn categories_to_definitions(
+        categories_map: std::collections::HashMap<String, Vec<NodeDefinition>>,
+    ) -> NodeDefinitions {
         // Convert to categories
         let categories = categories_map
             .into_iter()

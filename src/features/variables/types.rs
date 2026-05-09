@@ -56,22 +56,33 @@ impl DropdownItem for TypeItem {
                         .w(px(10.))
                         .h(px(10.))
                         .rounded_full()
-                        .bg(gpui::Rgba { r: pin_color.r, g: pin_color.g, b: pin_color.b, a: pin_color.a })
+                        .bg(gpui::Rgba {
+                            r: pin_color.r,
+                            g: pin_color.g,
+                            b: pin_color.b,
+                            a: pin_color.a,
+                        })
                         .border_1()
-                        .border_color(gpui::Rgba { r: 0.3, g: 0.3, b: 0.3, a: 1.0 })
+                        .border_color(gpui::Rgba {
+                            r: 0.3,
+                            g: 0.3,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
                 )
-                .child(
-                    div()
-                        .flex_1()
-                        .child(self.display_name.clone())
-                )
+                .child(div().flex_1().child(self.display_name.clone()))
                 .child(
                     div()
                         .text_xs()
-                        .text_color(gpui::Rgba { r: 0.5, g: 0.5, b: 0.5, a: 1.0 })
-                        .child(format!("({})", self.type_str))
+                        .text_color(gpui::Rgba {
+                            r: 0.5,
+                            g: 0.5,
+                            b: 0.5,
+                            a: 1.0,
+                        })
+                        .child(format!("({})", self.type_str)),
                 )
-                .into_any_element()
+                .into_any_element(),
         )
     }
 

@@ -4,22 +4,23 @@
 //! constructors, and basic accessors.
 
 use gpui::*;
+use std::collections::HashMap;
 use ui::{
     input::InputState,
     resizable::ResizableState,
+    scroll::ScrollbarState,
+    VirtualListScrollHandle,
 };
-use std::collections::HashMap;
 
-use crate::core::{
-    types::*,
-    graph::*,
-    events::*,
-    definitions::NodeDefinitions,
-};
-use ui::graph::DataType;
-use crate::features::variables::ClassVariable;
-use crate::features::connections::operations::ConnectionDrag;
 use super::tabs::GraphTab;
+use crate::ui_components::palette_view::NodePaletteView;
+use crate::core::{definitions::NodeDefinitions, events::*, graph::*, types::*};
+use crate::editor::workspace_panels::GraphCanvasPanel;
+use crate::features::connections::operations::ConnectionDrag;
+use crate::features::variables::ClassVariable;
+use crate::rendering::graph::NodeGraphRenderer;
+use ui::dock::{DockItem, DockPlacement};
+use ui::graph::DataType;
 use ui::graph::{DataType as GraphDataType, LibraryManager, SubGraphDefinition};
 
 /// Main Blueprint Editor Panel struct
@@ -38,6 +39,7 @@ pub struct BlueprintEditorPanel {
     pub dragging_node: Option<String>,
     pub drag_offset: Point<f32>,
     pub initial_drag_positions: HashMap<String, Point<f32>>,
+    pub initial_comment_drag_positions: HashMap<String, Point<f32>>,
     pub node_clipboard: Option<BlueprintNode>,
 
     // Connection drag state
@@ -63,12 +65,16 @@ pub struct BlueprintEditorPanel {
 
     // Coordinate conversion
     pub graph_element_bounds: Option<Bounds<Pixels>>,
+    pub graph_element_bounds_by_view: HashMap<String, Bounds<Pixels>>,
+    pub interaction_view_id: Option<String>,
+    pub interaction_state_by_view: HashMap<String, GraphInteractionState>,
 
     // Variables system
     pub class_variables: Vec<ClassVariable>,
     pub is_creating_variable: bool,
     pub variable_name_input: Entity<InputState>,
-    pub variable_type_dropdown: Entity<ui::dropdown::DropdownState<Vec<crate::features::variables::TypeItem>>>,
+    pub variable_type_dropdown:
+        Entity<ui::dropdown::DropdownState<Vec<crate::features::variables::TypeItem>>>,
     pub dragging_variable: Option<crate::features::variables::VariableDrag>,
     pub variable_drop_menu_position: Option<Point<f32>>,
 
@@ -77,6 +83,7 @@ pub struct BlueprintEditorPanel {
     pub resizing_comment: Option<(String, ResizeHandle)>,
     pub editing_comment: Option<String>,
     pub comment_text_input: Entity<InputState>,
+    pub comment_color_bindings_dirty: bool,
 
     // Subscriptions
     pub subscriptions: Vec<Subscription>,
@@ -84,6 +91,10 @@ pub struct BlueprintEditorPanel {
     // Compilation
     pub compilation_status: CompilationStatus,
     pub compilation_history: Vec<CompilationHistoryEntry>,
+    pub compiler_output_scroll_handle: VirtualListScrollHandle,
+    pub compiler_output_scrollbar_state: ScrollbarState,
+    pub find_output_scroll_handle: VirtualListScrollHandle,
+    pub find_output_scrollbar_state: ScrollbarState,
 
     // Library/macro system
     pub library_manager: LibraryManager,
@@ -92,21 +103,46 @@ pub struct BlueprintEditorPanel {
     // Tab system
     pub open_tabs: Vec<GraphTab>,
     pub active_tab_index: usize,
+    pub graph_panels: Vec<(String, Entity<GraphCanvasPanel>)>,
+    pub graph_workspace_tabs_dirty: bool,
 
     // Overlay toggles
     pub show_debug_overlay: bool,
     pub show_minimap: bool,
     pub show_graph_controls: bool,
 
+    // Quick palette overlay (right-click on graph canvas)
+    pub popup_palette_graph_pos: Option<Point<f32>>,
+    /// Whether the right-click quick-palette overlay is currently visible.
+    pub quick_palette_open: bool,
+    /// Whether the quick-palette search input should be focused on next paint.
+    pub quick_palette_focus_pending: bool,
+    /// When opening quick palette from a connection drag, this is the source drag metadata.
+    pub quick_palette_connection_source: Option<crate::features::connections::operations::ConnectionDrag>,
+    /// Window-space position where the user right-clicked (used to anchor the overlay).
+    pub quick_palette_screen_pos: Point<Pixels>,
+    /// The shared palette view rendered inside the overlay.
+    pub quick_palette_view: Entity<NodePaletteView>,
+
+    // Pin hover tooltip state
+    pub hovered_pin_tooltip: Option<String>,
+    pub hovered_pin_tooltip_pos: Option<Point<Pixels>>,
+
     // Sidebar tab states
-    pub left_top_tab: usize,      // 0=Variables, 1=Functions, 2=Macros
-    pub left_bottom_tab: usize,   // 0=Library, 1=Compiler
-    pub right_tab: usize,          // 0=Details, 1=Palette
+    pub left_top_tab: usize,    // 0=Variables, 1=Functions, 2=Macros
+    pub left_bottom_tab: usize, // 0=Library, 1=Compiler
+    pub right_tab: usize,       // 0=Details, 1=Palette
 
     // Tab drag state
     pub dragging_tab: Option<TabDragInfo>,
 
     pub is_dirty: bool, // Whether there are unsaved changes
+
+    // Undo/redo system
+    pub undo_manager: crate::features::undo::UndoManager,
+
+    // Connection rendering cache
+    pub connection_render_cache: crate::features::connections::rendering_cached::ConnectionRenderCache,
 }
 
 /// Information about a tab being dragged
@@ -123,7 +159,58 @@ pub struct TabDragInfo {
 pub struct CompilationHistoryEntry {
     pub timestamp: String,
     pub state: CompilationState,
+    pub stage: String,
     pub message: String,
+    pub detail: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct GraphInteractionState {
+    pub dragging_node: Option<String>,
+    pub drag_offset: Point<f32>,
+    pub initial_drag_positions: HashMap<String, Point<f32>>,
+    pub initial_comment_drag_positions: HashMap<String, Point<f32>>,
+    pub dragging_connection: Option<ConnectionDrag>,
+    pub is_panning: bool,
+    pub pan_start: Point<f32>,
+    pub pan_start_offset: Point<f32>,
+    pub selection_start: Option<Point<f32>>,
+    pub selection_end: Option<Point<f32>>,
+    pub last_mouse_pos: Option<Point<f32>>,
+    pub right_click_start: Option<Point<f32>>,
+    pub last_click_time: Option<std::time::Instant>,
+    pub last_click_pos: Option<Point<f32>>,
+    pub dragging_variable: Option<crate::features::variables::VariableDrag>,
+    pub variable_drop_menu_position: Option<Point<f32>>,
+    pub dragging_comment: Option<String>,
+    pub resizing_comment: Option<(String, ResizeHandle)>,
+    pub editing_comment: Option<String>,
+}
+
+impl Default for GraphInteractionState {
+    fn default() -> Self {
+        Self {
+            dragging_node: None,
+            drag_offset: Point::new(0.0, 0.0),
+            initial_drag_positions: HashMap::new(),
+            initial_comment_drag_positions: HashMap::new(),
+            dragging_connection: None,
+            is_panning: false,
+            pan_start: Point::new(0.0, 0.0),
+            pan_start_offset: Point::new(0.0, 0.0),
+            selection_start: None,
+            selection_end: None,
+            last_mouse_pos: None,
+            right_click_start: None,
+            last_click_time: None,
+            last_click_pos: None,
+            dragging_variable: None,
+            variable_drop_menu_position: None,
+            dragging_comment: None,
+            resizing_comment: None,
+            editing_comment: None,
+        }
+    }
 }
 
 /// Resize handle for comment boxes
@@ -167,14 +254,18 @@ impl BlueprintEditorPanel {
     }
 
     /// Create a new blueprint editor panel with a file to load
-    pub fn new_with_file(file_path: std::path::PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new_with_file(
+        file_path: std::path::PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let mut panel = Self::new_internal(Some(file_path.clone()), window, cx);
 
         // Try to load the blueprint file
         if let Err(e) = panel.load_blueprint(file_path.to_str().unwrap(), window, cx) {
             eprintln!("Failed to load blueprint: {}", e);
         } else {
-            tracing::info!("Loaded blueprint from {:?}", file_path);
+            println!("Loaded blueprint from {:?}", file_path);
         }
 
         panel
@@ -185,7 +276,7 @@ impl BlueprintEditorPanel {
         library_id: String,
         library_name: String,
         window: &mut Window,
-        cx: &mut Context<Self>
+        cx: &mut Context<Self>,
     ) -> Self {
         let mut panel = Self::new_internal(None, window, cx);
         panel.tab_title = Some(format!("Library: {}", library_name));
@@ -194,7 +285,7 @@ impl BlueprintEditorPanel {
             main_tab.name = format!("{} Overview", library_name);
         }
 
-        tracing::info!("Created blueprint editor for library: {}", library_name);
+        println!("Created blueprint editor for library: {}", library_name);
         panel
     }
 
@@ -202,7 +293,7 @@ impl BlueprintEditorPanel {
     fn new_internal(
         project_path: Option<std::path::PathBuf>,
         window: &mut Window,
-        cx: &mut Context<Self>
+        cx: &mut Context<Self>,
     ) -> Self {
         let _resizable_state = ResizableState::new(cx);
         let _left_sidebar_resizable_state = ResizableState::new(cx);
@@ -225,15 +316,20 @@ impl BlueprintEditorPanel {
             Self::create_sample_graph()
         };
 
+        let editor_weak = cx.entity().downgrade();
+        let quick_palette_view =
+            cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
+
         Self {
             focus_handle: cx.focus_handle(),
             graph: main_graph.clone(),
-            workspace: None,  // Will be initialized in render
+            workspace: None, // Will be initialized in render
             current_class_path: None,
             tab_title: None,
             dragging_node: None,
             drag_offset: Point::new(0.0, 0.0),
             initial_drag_positions: HashMap::new(),
+            initial_comment_drag_positions: HashMap::new(),
             node_clipboard: None,
             dragging_connection: None,
             is_panning: false,
@@ -247,25 +343,30 @@ impl BlueprintEditorPanel {
             last_click_time: None,
             last_click_pos: None,
             graph_element_bounds: None,
+            graph_element_bounds_by_view: HashMap::new(),
+            interaction_view_id: None,
+            interaction_state_by_view: HashMap::new(),
             class_variables: Vec::new(),
             is_creating_variable: false,
-            variable_name_input: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("Variable name...")
-            }),
-            variable_type_dropdown: cx.new(|cx| {
-                ui::dropdown::DropdownState::new(Vec::new(), None, window, cx)
-            }),
+            variable_name_input: cx
+                .new(|cx| InputState::new(window, cx).placeholder("Variable name...")),
+            variable_type_dropdown: cx
+                .new(|cx| ui::dropdown::DropdownState::new(Vec::new(), None, window, cx)),
             dragging_variable: None,
             variable_drop_menu_position: None,
             dragging_comment: None,
             resizing_comment: None,
             editing_comment: None,
-            comment_text_input: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("Comment text...")
-            }),
+            comment_text_input: cx
+                .new(|cx| InputState::new(window, cx).placeholder("Comment text...")),
+            comment_color_bindings_dirty: true,
             subscriptions: Vec::new(),
             compilation_status: CompilationStatus::default(),
             compilation_history: Vec::new(),
+            compiler_output_scroll_handle: VirtualListScrollHandle::new(),
+            compiler_output_scrollbar_state: ScrollbarState::default(),
+            find_output_scroll_handle: VirtualListScrollHandle::new(),
+            find_output_scrollbar_state: ScrollbarState::default(),
             library_manager: {
                 let mut lib_manager = LibraryManager::default();
                 if let Err(e) = lib_manager.load_all_libraries() {
@@ -284,14 +385,26 @@ impl BlueprintEditorPanel {
                 library_id: None,
             }],
             active_tab_index: 0,
+            graph_panels: Vec::new(),
+            graph_workspace_tabs_dirty: true,
             show_debug_overlay: true,
             show_minimap: true,
             show_graph_controls: true,
+            popup_palette_graph_pos: None,
+            quick_palette_open: false,
+            quick_palette_focus_pending: false,
+            quick_palette_connection_source: None,
+            quick_palette_screen_pos: Point::default(),
+            quick_palette_view,
+            hovered_pin_tooltip: None,
+            hovered_pin_tooltip_pos: None,
             left_top_tab: 0,
             left_bottom_tab: 0,
             right_tab: 0,
             dragging_tab: None,
             is_dirty: false,
+            undo_manager: crate::features::undo::UndoManager::new(),
+            connection_render_cache: crate::features::connections::rendering_cached::ConnectionRenderCache::new(),
         }
     }
 
@@ -598,31 +711,240 @@ impl BlueprintEditorPanel {
         &self.focus_handle
     }
 
+    fn capture_interaction_state(&self) -> GraphInteractionState {
+        GraphInteractionState {
+            dragging_node: self.dragging_node.clone(),
+            drag_offset: self.drag_offset,
+            initial_drag_positions: self.initial_drag_positions.clone(),
+            initial_comment_drag_positions: self.initial_comment_drag_positions.clone(),
+            dragging_connection: self.dragging_connection.clone(),
+            is_panning: self.is_panning,
+            pan_start: self.pan_start,
+            pan_start_offset: self.pan_start_offset,
+            selection_start: self.selection_start,
+            selection_end: self.selection_end,
+            last_mouse_pos: self.last_mouse_pos,
+            right_click_start: self.right_click_start,
+            last_click_time: self.last_click_time,
+            last_click_pos: self.last_click_pos,
+            dragging_variable: self.dragging_variable.clone(),
+            variable_drop_menu_position: self.variable_drop_menu_position,
+            dragging_comment: self.dragging_comment.clone(),
+            resizing_comment: self.resizing_comment.clone(),
+            editing_comment: self.editing_comment.clone(),
+        }
+    }
+
+    fn apply_interaction_state(&mut self, state: GraphInteractionState) {
+        self.dragging_node = state.dragging_node;
+        self.drag_offset = state.drag_offset;
+        self.initial_drag_positions = state.initial_drag_positions;
+        self.initial_comment_drag_positions = state.initial_comment_drag_positions;
+        self.dragging_connection = state.dragging_connection;
+        self.is_panning = state.is_panning;
+        self.pan_start = state.pan_start;
+        self.pan_start_offset = state.pan_start_offset;
+        self.selection_start = state.selection_start;
+        self.selection_end = state.selection_end;
+        self.last_mouse_pos = state.last_mouse_pos;
+        self.right_click_start = state.right_click_start;
+        self.last_click_time = state.last_click_time;
+        self.last_click_pos = state.last_click_pos;
+        self.dragging_variable = state.dragging_variable;
+        self.variable_drop_menu_position = state.variable_drop_menu_position;
+        self.dragging_comment = state.dragging_comment;
+        self.resizing_comment = state.resizing_comment;
+        self.editing_comment = state.editing_comment;
+    }
+
+    pub(crate) fn activate_interaction_view(&mut self, view_id: &str) {
+        self.ensure_active_graph_panel_state(view_id);
+
+        if self.interaction_view_id.as_deref() == Some(view_id) {
+            return;
+        }
+
+        if let Some(previous_view) = self.interaction_view_id.clone() {
+            self.interaction_state_by_view
+                .insert(previous_view, self.capture_interaction_state());
+        }
+
+        let next_state = self
+            .interaction_state_by_view
+            .get(view_id)
+            .cloned()
+            .unwrap_or_default();
+
+        self.apply_interaction_state(next_state);
+        self.interaction_view_id = Some(view_id.to_string());
+    }
+
+    pub(crate) fn persist_active_interaction_state(&mut self) {
+        if let Some(view_id) = self.interaction_view_id.clone() {
+            self.interaction_state_by_view
+                .insert(view_id, self.capture_interaction_state());
+        }
+    }
+
+    pub(crate) fn clear_interaction_view_owner(&mut self) {
+        self.persist_active_interaction_state();
+        self.interaction_view_id = None;
+    }
+
     // ============================================================================
     // Comment Operations
     // ============================================================================
 
+    pub(crate) fn snap_comment_position(&self, position: Point<f32>) -> Point<f32> {
+        crate::rendering::graph::NodeGraphRenderer::snap_to_grid(position, self.graph.zoom_level)
+    }
+
+    fn snap_comment_size(size: Size<f32>) -> Size<f32> {
+        let grid = 10.0;
+        Size::new(
+            (size.width / grid).round() * grid,
+            (size.height / grid).round() * grid,
+        )
+    }
+
+    fn snap_comment_bounds(comment: &mut BlueprintComment) {
+        let left = (comment.position.x / 10.0).round() * 10.0;
+        let top = (comment.position.y / 10.0).round() * 10.0;
+        let right = ((comment.position.x + comment.size.width) / 10.0).round() * 10.0;
+        let bottom = ((comment.position.y + comment.size.height) / 10.0).round() * 10.0;
+
+        comment.position = Point::new(left, top);
+        comment.size = Self::snap_comment_size(Size::new(
+            (right - left).max(100.0),
+            (bottom - top).max(50.0),
+        ));
+    }
+
+    pub(crate) fn refresh_comment_color_bindings(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.comment_color_bindings_dirty {
+            return;
+        }
+
+        self.subscriptions.clear();
+
+        for comment in &self.graph.comments {
+            if let Some(picker_state) = comment.color_picker_state.as_ref() {
+                let comment_id = comment.id.clone();
+                let subscription = cx.subscribe_in(
+                    picker_state,
+                    window,
+                    move |this: &mut BlueprintEditorPanel,
+                          _picker,
+                          event: &ui::color_picker::ColorPickerEvent,
+                          _window,
+                          cx| {
+                        if let ui::color_picker::ColorPickerEvent::Change(Some(color)) = event {
+                            if let Some(comment) =
+                                this.graph.comments.iter_mut().find(|c| c.id == comment_id)
+                            {
+                                comment.color = *color;
+                                cx.notify();
+                            }
+                        }
+                    },
+                );
+
+                self.subscriptions.push(subscription);
+            }
+        }
+
+        self.comment_color_bindings_dirty = false;
+    }
+
+    /// Start dragging a comment (stores initial positions of all selected items)
+    pub fn start_comment_drag(&mut self, comment_id: String, mouse_pos: Point<f32>, _cx: &mut Context<Self>) {
+        println!(
+            "[DRAG] Starting drag for comment {} at mouse position {:?}",
+            comment_id,
+            mouse_pos
+        );
+
+        if let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) {
+            self.dragging_comment = Some(comment_id.clone());
+            self.drag_offset = Point::new(
+                mouse_pos.x - comment.position.x,
+                mouse_pos.y - comment.position.y,
+            );
+
+            // Store initial positions for multi-select drag
+            self.initial_drag_positions.clear();
+            self.initial_comment_drag_positions.clear();
+
+            if self.graph.selected_comments.contains(&comment_id) {
+                // Drag all selected comments
+                println!(
+                    "[DRAG] Multi-select: dragging {} selected comments",
+                    self.graph.selected_comments.len()
+                );
+                for selected_id in &self.graph.selected_comments {
+                    if let Some(selected_comment) =
+                        self.graph.comments.iter().find(|c| c.id == *selected_id)
+                    {
+                        self.initial_comment_drag_positions
+                            .insert(selected_id.clone(), selected_comment.position);
+                    }
+                }
+
+                // Also drag all selected nodes
+                println!(
+                    "[DRAG] Multi-select: also dragging {} selected nodes",
+                    self.graph.selected_nodes.len()
+                );
+                for node_id in &self.graph.selected_nodes {
+                    if let Some(node) = self.graph.nodes.iter().find(|n| n.id == *node_id) {
+                        self.initial_drag_positions.insert(node_id.clone(), node.position);
+                    }
+                }
+            } else {
+                // Drag only this comment
+                self.initial_comment_drag_positions
+                    .insert(comment_id.clone(), comment.position);
+            }
+        }
+    }
+
     /// Update comment drag position
     pub fn update_comment_drag(&mut self, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
         if let Some(comment_id) = &self.dragging_comment.clone() {
-            let new_position = Point::new(
+            let raw_position = Point::new(
                 mouse_pos.x - self.drag_offset.x,
                 mouse_pos.y - self.drag_offset.y,
             );
+            let new_position = self.snap_comment_position(raw_position);
 
-            if let Some(comment) = self.graph.comments.iter_mut().find(|c| c.id == *comment_id) {
+            if let Some(initial_pos) = self.initial_comment_drag_positions.get(comment_id) {
                 let delta = Point::new(
-                    new_position.x - comment.position.x,
-                    new_position.y - comment.position.y,
+                    new_position.x - initial_pos.x,
+                    new_position.y - initial_pos.y,
                 );
 
-                comment.position = new_position;
+                // Move all comments that were selected when dragging started
+                for (cid, initial_position) in &self.initial_comment_drag_positions.clone() {
+                    let new_pos = self.snap_comment_position(Point::new(
+                        initial_position.x + delta.x,
+                        initial_position.y + delta.y,
+                    ));
+                    if let Some(comment) = self.graph.comments.iter_mut().find(|c| c.id == *cid) {
+                        comment.position = new_pos;
+                    }
+                }
 
-                // Move all contained nodes with the comment
-                for node_id in &comment.contained_node_ids.clone() {
+                // Move all nodes that were selected when dragging started
+                for (node_id, initial_position) in &self.initial_drag_positions.clone() {
                     if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *node_id) {
-                        node.position.x += delta.x;
-                        node.position.y += delta.y;
+                        node.position = crate::rendering::graph::NodeGraphRenderer::snap_to_grid(
+                            Point::new(initial_position.x + delta.x, initial_position.y + delta.y),
+                            self.graph.zoom_level,
+                        );
                     }
                 }
 
@@ -633,14 +955,8 @@ impl BlueprintEditorPanel {
 
     /// End comment drag and update contained nodes
     pub fn end_comment_drag(&mut self, cx: &mut Context<Self>) {
-        if let Some(comment_id) = &self.dragging_comment.clone() {
-            if let Some(comment) = self.graph.comments.iter_mut().find(|c| c.id == *comment_id) {
-                comment.update_contained_nodes(&self.graph.nodes);
-            }
-        }
-
-        self.dragging_comment = None;
-        cx.notify();
+        // Use unified entity drag end
+        self.end_entity_drag(cx);
     }
 
     /// Update comment resize based on handle being dragged
@@ -690,6 +1006,7 @@ impl BlueprintEditorPanel {
                 // Enforce minimum size
                 comment.size.width = comment.size.width.max(100.0);
                 comment.size.height = comment.size.height.max(50.0);
+                Self::snap_comment_bounds(comment);
 
                 self.drag_offset = mouse_pos;
                 cx.notify();
@@ -740,44 +1057,317 @@ impl BlueprintEditorPanel {
     }
 
     /// Add a new comment at the specified position
-    pub fn add_comment(&mut self, position: Point<f32>, window: &mut Window, cx: &mut Context<Self>) {
-        let new_comment = BlueprintComment::new(position, window, cx);
+    pub fn add_comment(
+        &mut self,
+        position: Point<f32>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let new_comment = BlueprintComment::new(self.snap_comment_position(position), window, cx);
 
-        // Subscribe to color picker changes
-        if let Some(picker_state) = new_comment.color_picker_state.as_ref() {
-            let comment_id = new_comment.id.clone();
-            let _ = cx.subscribe_in(
-                picker_state,
-                window,
-                move |this: &mut BlueprintEditorPanel,
-                      _picker,
-                      event: &ui::color_picker::ColorPickerEvent,
-                      _window,
-                      cx| {
-                    if let ui::color_picker::ColorPickerEvent::Change(Some(color)) = event {
-                        if let Some(comment) = this.graph.comments.iter_mut().find(|c| c.id == comment_id) {
-                            comment.color = *color;
-                            cx.notify();
-                        }
-                    }
-                },
-            );
+        // Create and execute undo command
+        let mut cmd = crate::features::undo::AddCommentCommand::new(new_comment.clone());
+        cmd.execute(self, cx);
+        self.push_undo_command(crate::features::undo::Command::AddComment(cmd));
+
+        self.comment_color_bindings_dirty = true;
+    }
+
+    // ============================================================================
+    // Clipboard Operations
+    // ============================================================================
+
+    /// Copy selected entities to clipboard
+    pub fn copy_selected_entities(&mut self, cx: &mut Context<Self>) {
+        use crate::features::clipboard::ClipboardData;
+
+        // Check if there's anything selected
+        if self.graph.selected_nodes.is_empty() && self.graph.selected_comments.is_empty() {
+            println!("[CLIPBOARD] Nothing selected to copy");
+            return;
         }
 
-        self.graph.comments.push(new_comment);
-        cx.notify();
+        // Create clipboard data from selection
+        let clipboard_data = ClipboardData::from_selection(
+            &self.graph.nodes,
+            &self.graph.comments,
+            &self.graph.connections,
+            &self.graph.selected_nodes,
+            &self.graph.selected_comments,
+        );
+
+        // Serialize to JSON
+        match clipboard_data.to_json() {
+            Ok(json) => {
+                println!("[CLIPBOARD] Serialized JSON length: {} bytes", json.len());
+
+                // Write to system clipboard using arboard
+                match arboard::Clipboard::new() {
+                    Ok(mut clipboard) => {
+                        match clipboard.set_text(&json) {
+                            Ok(_) => {
+                                println!("[CLIPBOARD] Successfully wrote to clipboard via arboard");
+                                println!(
+                                    "[CLIPBOARD] Copied {} nodes, {} comments, {} connections",
+                                    clipboard_data.nodes.len(),
+                                    clipboard_data.comments.len(),
+                                    clipboard_data.connections.len()
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!("[CLIPBOARD] arboard set_text failed: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[CLIPBOARD] Failed to create arboard clipboard: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[CLIPBOARD] Failed to serialize clipboard data: {}", e);
+            }
+        }
+    }
+
+    /// Paste entities from clipboard
+    pub fn paste_entities(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::features::clipboard::ClipboardData;
+
+        println!("[CLIPBOARD] Attempting to read from clipboard via arboard...");
+
+        // Read from system clipboard using arboard
+        let json = match arboard::Clipboard::new() {
+            Ok(mut clipboard) => {
+                match clipboard.get_text() {
+                    Ok(text) => {
+                        println!("[CLIPBOARD] Successfully read from clipboard, length: {} bytes", text.len());
+                        text
+                    }
+                    Err(e) => {
+                        println!("[CLIPBOARD] arboard get_text failed: {}", e);
+                        return;
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[CLIPBOARD] Failed to create arboard clipboard: {}", e);
+                return;
+            }
+        };
+
+        // Try to deserialize
+        match ClipboardData::from_json(&json) {
+            Ok(clipboard_data) => {
+                println!(
+                    "[CLIPBOARD] Pasting {} nodes, {} comments, {} connections",
+                    clipboard_data.nodes.len(),
+                    clipboard_data.comments.len(),
+                    clipboard_data.connections.len()
+                );
+
+                // Compute the center of the copied formation so it can be pasted centered
+                // at the current mouse cursor rather than offset from the original location.
+                let mouse_window_pos = window.mouse_position();
+                let mouse_element_pos = NodeGraphRenderer::window_to_graph_element_pos(
+                    mouse_window_pos,
+                    self,
+                );
+                let mouse_graph_pos = NodeGraphRenderer::screen_to_graph_pos(
+                    mouse_element_pos,
+                    &self.graph,
+                );
+
+                let mut min_x = f32::MAX;
+                let mut min_y = f32::MAX;
+                let mut max_x = f32::MIN;
+                let mut max_y = f32::MIN;
+
+                for node in &clipboard_data.nodes {
+                    min_x = min_x.min(node.position.0);
+                    min_y = min_y.min(node.position.1);
+                    max_x = max_x.max(node.position.0 + node.size.0);
+                    max_y = max_y.max(node.position.1 + node.size.1);
+                }
+                for comment in &clipboard_data.comments {
+                    min_x = min_x.min(comment.position.0);
+                    min_y = min_y.min(comment.position.1);
+                    max_x = max_x.max(comment.position.0 + comment.size.0);
+                    max_y = max_y.max(comment.position.1 + comment.size.1);
+                }
+
+                let offset = if min_x <= max_x && min_y <= max_y {
+                    let selection_center = Point::new((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
+                    Point::new(
+                        mouse_graph_pos.x - selection_center.x,
+                        mouse_graph_pos.y - selection_center.y,
+                    )
+                } else {
+                    Point::new(50.0, 50.0)
+                };
+
+                // Convert clipboard data to graph entities with new IDs
+                let (nodes, comments, connections) =
+                    clipboard_data.to_graph_entities(offset, window, cx);
+
+                // Clear current selection
+                self.graph.selected_nodes.clear();
+                self.graph.selected_comments.clear();
+
+                // Add pasted entities to graph
+                for node in &nodes {
+                    self.graph.nodes.push(node.clone());
+                    self.graph.selected_nodes.push(node.id.clone());
+                }
+
+                for comment in &comments {
+                    self.graph.comments.push(comment.clone());
+                    self.graph.selected_comments.push(comment.id.clone());
+                }
+
+                for connection in &connections {
+                    self.graph.connections.push(connection.clone());
+                }
+
+                // Mark comment color bindings as dirty so new comments get subscriptions
+                self.comment_color_bindings_dirty = true;
+
+                println!(
+                    "[CLIPBOARD] Successfully pasted {} nodes, {} comments, {} connections",
+                    nodes.len(),
+                    comments.len(),
+                    connections.len()
+                );
+
+                cx.notify();
+            }
+            Err(e) => {
+                println!(
+                    "[CLIPBOARD] Failed to parse clipboard data (probably not graph data): {}",
+                    e
+                );
+            }
+        }
     }
 
     // ============================================================================
     // Tab Operations
     // ============================================================================
 
+    pub(crate) fn ensure_active_graph_panel_state(&mut self, tab_id: &str) {
+        if let Some(tab_index) = self.open_tabs.iter().position(|tab| tab.id == tab_id) {
+            if tab_index != self.active_tab_index {
+                self.sync_graph_to_active_tab();
+                self.active_tab_index = tab_index;
+                self.load_active_tab_graph();
+            }
+        }
+    }
+
+    pub(crate) fn refresh_graph_workspace_tabs(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.graph_workspace_tabs_dirty {
+            return;
+        }
+
+        let Some(workspace_entity) = self.workspace.clone() else {
+            return;
+        };
+
+        let desired_ids: Vec<String> = self.open_tabs.iter().map(|tab| tab.id.clone()).collect();
+
+        let stale_panels: Vec<Entity<GraphCanvasPanel>> = self
+            .graph_panels
+            .iter()
+            .filter(|(tab_id, _)| !desired_ids.contains(tab_id))
+            .map(|(_, panel)| panel.clone())
+            .collect();
+
+        for panel in stale_panels {
+            workspace_entity.update(cx, |workspace, cx| {
+                workspace.remove_panel(panel.clone(), DockPlacement::Center, window, cx);
+            });
+        }
+
+        self.graph_panels
+            .retain(|(tab_id, _)| desired_ids.contains(tab_id));
+
+        let editor_weak = cx.entity().downgrade();
+        for tab in &self.open_tabs {
+            if self
+                .graph_panels
+                .iter()
+                .any(|(tab_id, _)| tab_id == &tab.id)
+            {
+                continue;
+            }
+
+            let tab_id = tab.id.clone();
+            let panel = cx.new(|cx| GraphCanvasPanel::new(editor_weak.clone(), tab_id.clone(), cx));
+
+            workspace_entity.update(cx, |workspace, cx| {
+                workspace.add_panel(panel.clone(), DockPlacement::Center, window, cx);
+            });
+
+            self.graph_panels.push((tab.id.clone(), panel));
+        }
+
+        self.activate_graph_workspace_tab(self.active_tab_index, window, cx);
+        self.graph_workspace_tabs_dirty = false;
+    }
+
+    pub(crate) fn activate_graph_workspace_tab(
+        &mut self,
+        tab_index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(workspace_entity) = self.workspace.clone() else {
+            return;
+        };
+
+        workspace_entity.update(cx, |workspace, cx| {
+            workspace.dock_area().update(cx, |dock_area, cx| {
+                fn activate_tab_item(
+                    item: &mut DockItem,
+                    tab_index: usize,
+                    window: &mut Window,
+                    cx: &mut App,
+                ) -> bool {
+                    match item {
+                        DockItem::Tabs { view, .. } => {
+                            view.update(cx, |tab_panel, cx| {
+                                tab_panel.set_active_tab(tab_index, window, cx);
+                            });
+                            true
+                        }
+                        DockItem::Split { items, .. } => {
+                            for child in items.iter_mut() {
+                                if activate_tab_item(child, tab_index, window, cx) {
+                                    return true;
+                                }
+                            }
+                            false
+                        }
+                        _ => false,
+                    }
+                }
+
+                let _ = activate_tab_item(dock_area.items_mut(), tab_index, window, cx);
+            });
+        });
+    }
+
     /// Switch to a different tab
-    pub fn switch_to_tab(&mut self, tab_index: usize, cx: &mut Context<Self>) {
+    pub fn switch_to_tab(&mut self, tab_index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if tab_index < self.open_tabs.len() && tab_index != self.active_tab_index {
             self.sync_graph_to_active_tab();
             self.active_tab_index = tab_index;
             self.load_active_tab_graph();
+            self.activate_graph_workspace_tab(tab_index, window, cx);
             cx.notify();
         }
     }
@@ -813,6 +1403,7 @@ impl BlueprintEditorPanel {
     pub fn load_active_tab_graph(&mut self) {
         if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
             self.graph = tab.graph.clone();
+            self.comment_color_bindings_dirty = true;
         }
     }
 
@@ -844,22 +1435,22 @@ impl BlueprintEditorPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
-        tracing::info!("📂 ═══════════════════════════════════════════════════════════════");
-        tracing::info!("📂 LOADING BLUEPRINT FROM FILE");
-        tracing::info!("📂 ═══════════════════════════════════════════════════════════════");
-        tracing::info!("📂 File: {}", file_path);
+        println!("📂 ═══════════════════════════════════════════════════════════════");
+        println!("📂 LOADING BLUEPRINT FROM FILE");
+        println!("📂 ═══════════════════════════════════════════════════════════════");
+        println!("📂 File: {}", file_path);
 
-        let content = std::fs::read_to_string(file_path)
-            .map_err(|e| {
-                let error_msg = format!("Failed to read file: {}", e);
-                eprintln!("❌ {}", error_msg);
-                error_msg
-            })?;
+        let content = std::fs::read_to_string(file_path).map_err(|e| {
+            let error_msg = format!("Failed to read file: {}", e);
+            eprintln!("❌ {}", error_msg);
+            error_msg
+        })?;
 
-        tracing::info!("📂 ✓ File read successfully ({} bytes)", content.len());
+        println!("📂 ✓ File read successfully ({} bytes)", content.len());
 
         // Strip header comments
-        let json = content.lines()
+        let json = content
+            .lines()
             .skip_while(|line| line.trim().starts_with("//"))
             .collect::<Vec<_>>()
             .join("\n");
@@ -867,21 +1458,30 @@ impl BlueprintEditorPanel {
         // Try new unified format first
         match serde_json::from_str::<ui::graph::BlueprintAsset>(&json) {
             Ok(blueprint_asset) => {
-                tracing::info!("📂 ✓ Detected unified blueprint format");
+                println!("📂 ✓ Detected unified blueprint format");
                 self.load_from_blueprint_asset(blueprint_asset, file_path, window, cx)?;
-            },
+            }
             Err(unified_err) => {
-                tracing::info!("📂 ⚠️  Unified format parse failed:");
-                tracing::info!("📂    Error: {}", unified_err);
-                tracing::info!("📂    Line: {}, Column: {}", unified_err.line(), unified_err.column());
+                println!("📂 ⚠️  Unified format parse failed:");
+                println!("📂    Error: {}", unified_err);
+                println!(
+                    "📂    Line: {}, Column: {}",
+                    unified_err.line(),
+                    unified_err.column()
+                );
 
                 // Show context around the error location
                 let lines: Vec<&str> = json.lines().collect();
                 let error_line = unified_err.line().saturating_sub(1);
                 if error_line < lines.len() {
-                    tracing::info!("📂    Context:");
-                    for i in error_line.saturating_sub(2)..=error_line.saturating_add(2).min(lines.len().saturating_sub(1)) {
-                        tracing::info!("📂      {}{}: {}",
+                    println!("📂    Context:");
+                    for i in error_line.saturating_sub(2)
+                        ..=error_line
+                            .saturating_add(2)
+                            .min(lines.len().saturating_sub(1))
+                    {
+                        println!(
+                            "📂      {}{}: {}",
                             if i == error_line { ">>> " } else { "    " },
                             i + 1,
                             lines.get(i).unwrap_or(&"")
@@ -889,7 +1489,7 @@ impl BlueprintEditorPanel {
                     }
                 }
 
-                tracing::info!("📂 ✓ Trying legacy format...");
+                println!("📂 ✓ Trying legacy format...");
 
                 // Try parsing as legacy format
                 self.load_legacy_format(&json, file_path, window, cx)
@@ -921,23 +1521,26 @@ impl BlueprintEditorPanel {
     ) -> Result<(), String> {
         let file_path_buf = std::path::Path::new(file_path);
         if let Some(parent) = file_path_buf.parent() {
-            self.current_class_path = Some(parent.to_path_buf());
+            self.set_path(parent.to_path_buf());
         }
 
         // Load main graph
         self.graph = self.convert_graph_description_to_blueprint(&asset.main_graph, window, cx)?;
+        self.comment_color_bindings_dirty = true;
 
         // Load local macros
         self.local_macros = asset.local_macros;
 
         // Load variables
-        self.class_variables = asset.variables.iter().map(|v| {
-            ClassVariable {
+        self.class_variables = asset
+            .variables
+            .iter()
+            .map(|v| ClassVariable {
                 name: v.name.clone(),
                 var_type: format!("{:?}", v.data_type),
                 default_value: v.default_value.clone(),
-            }
-        }).collect();
+            })
+            .collect();
 
         // Restore main tab
         self.open_tabs = vec![GraphTab {
@@ -960,12 +1563,16 @@ impl BlueprintEditorPanel {
                 }
 
                 // Check if this is a local macro
-                let macro_data = self.local_macros.iter()
+                let macro_data = self
+                    .local_macros
+                    .iter()
                     .find(|m| &m.id == tab_id)
                     .map(|m| (m.name.clone(), m.graph.clone()));
 
                 if let Some((macro_name, macro_graph)) = macro_data {
-                    if let Ok(mut blueprint_graph) = self.convert_graph_description_to_blueprint(&macro_graph, window, cx) {
+                    if let Ok(mut blueprint_graph) =
+                        self.convert_graph_description_to_blueprint(&macro_graph, window, cx)
+                    {
                         // Restore view state for this tab if available
                         if let Some(view_state) = editor_state.graph_view_states.get(tab_id) {
                             blueprint_graph.pan_offset = Point {
@@ -1006,21 +1613,24 @@ impl BlueprintEditorPanel {
             }
 
             // Restore active tab index (with bounds check)
-            self.active_tab_index = editor_state.active_tab_index.min(self.open_tabs.len().saturating_sub(1));
+            self.active_tab_index = editor_state
+                .active_tab_index
+                .min(self.open_tabs.len().saturating_sub(1));
 
             // Load the active tab's graph into self.graph
             if let Some(active_tab) = self.open_tabs.get(self.active_tab_index) {
                 self.graph = active_tab.graph.clone();
+                self.comment_color_bindings_dirty = true;
             }
         }
 
-        tracing::info!("📂 Loaded unified blueprint format");
-        tracing::info!("📂   ✓ Main Graph: {} nodes", self.graph.nodes.len());
-        tracing::info!("📂   ✓ Local Macros: {}", self.local_macros.len());
-        tracing::info!("📂   ✓ Variables: {}", self.class_variables.len());
-        tracing::info!("📂   ✓ Open Tabs: {}", self.open_tabs.len());
-        tracing::info!("📂   ✓ Active Tab Index: {}", self.active_tab_index);
-        tracing::info!("📂 ═══════════════════════════════════════════════════════════════");
+        println!("📂 Loaded unified blueprint format");
+        println!("📂   ✓ Main Graph: {} nodes", self.graph.nodes.len());
+        println!("📂   ✓ Local Macros: {}", self.local_macros.len());
+        println!("📂   ✓ Variables: {}", self.class_variables.len());
+        println!("📂   ✓ Open Tabs: {}", self.open_tabs.len());
+        println!("📂   ✓ Active Tab Index: {}", self.active_tab_index);
+        println!("📂 ═══════════════════════════════════════════════════════════════");
 
         Ok(())
     }
@@ -1076,27 +1686,32 @@ impl BlueprintEditorPanel {
         let legacy_graph: LegacyGraphDescription = serde_json::from_str(json)
             .map_err(|e| format!("Failed to parse legacy format: {}", e))?;
 
-        tracing::info!("📂 ✓ Legacy format parsed successfully");
+        println!("📂 ✓ Legacy format parsed successfully");
 
         // Convert legacy format to current format
         let graph_description = ui::graph::GraphDescription {
             nodes: legacy_graph.nodes,
             connections: legacy_graph.connections,
             metadata: legacy_graph.metadata,
-            comments: legacy_graph.comments.into_iter().map(|c| {
-                let (r, g, b) = hsl_to_rgb(c.color.h, c.color.s, c.color.l);
-                ui::graph::BlueprintComment {
-                    id: c.id,
-                    text: c.text,
-                    position: (c.position.x, c.position.y),
-                    size: (c.size.width, c.size.height),
-                    color: [r, g, b, c.color.a],
-                    contained_node_ids: c.contained_node_ids,
-                }
-            }).collect(),
+            comments: legacy_graph
+                .comments
+                .into_iter()
+                .map(|c| {
+                    let (r, g, b) = hsl_to_rgb(c.color.h, c.color.s, c.color.l);
+                    ui::graph::BlueprintComment {
+                        id: c.id,
+                        text: c.text,
+                        position: (c.position.x, c.position.y),
+                        size: (c.size.width, c.size.height),
+                        color: [r, g, b, c.color.a],
+                        contained_node_ids: c.contained_node_ids,
+                    }
+                })
+                .collect(),
         };
 
         self.graph = self.convert_graph_description_to_blueprint(&graph_description, window, cx)?;
+        self.comment_color_bindings_dirty = true;
 
         // Reset to main tab
         self.open_tabs = vec![GraphTab {
@@ -1113,13 +1728,13 @@ impl BlueprintEditorPanel {
         // Load separate legacy files
         let file_path_buf = std::path::Path::new(file_path);
         if let Some(parent) = file_path_buf.parent() {
-            self.current_class_path = Some(parent.to_path_buf());
+            self.set_path(parent.to_path_buf());
             let _ = self.load_local_macros(parent);
             let _ = self.restore_tabs_state(parent, window, cx);
             let _ = self.load_variables_from_class(parent);
         }
 
-        tracing::info!("📂 Loaded blueprint in legacy format");
+        println!("📂 Loaded blueprint in legacy format");
         Ok(())
     }
 
@@ -1137,7 +1752,10 @@ impl BlueprintEditorPanel {
             .map_err(|e| format!("Failed to parse macros.json: {}", e))?;
 
         self.local_macros = macros;
-        tracing::info!("📂 Loaded {} local macros from macros.json", self.local_macros.len());
+        println!(
+            "📂 Loaded {} local macros from macros.json",
+            self.local_macros.len()
+        );
         Ok(())
     }
 
@@ -1146,7 +1764,7 @@ impl BlueprintEditorPanel {
         &mut self,
         class_path: &std::path::Path,
         window: &mut Window,
-        cx: &mut Context<Self>
+        cx: &mut Context<Self>,
     ) -> Result<(), String> {
         #[derive(serde::Deserialize)]
         struct SerializedGraphTab {
@@ -1176,11 +1794,15 @@ impl BlueprintEditorPanel {
             }
 
             if ser_tab.is_library_macro {
-                let macro_graph = self.library_manager.get_subgraph(&ser_tab.id)
+                let macro_graph = self
+                    .library_manager
+                    .get_subgraph(&ser_tab.id)
                     .map(|m| m.graph.clone());
 
                 if let Some(graph) = macro_graph {
-                    if let Ok(blueprint_graph) = self.convert_graph_description_to_blueprint(&graph, window, cx) {
+                    if let Ok(blueprint_graph) =
+                        self.convert_graph_description_to_blueprint(&graph, window, cx)
+                    {
                         self.open_tabs.push(GraphTab {
                             id: ser_tab.id.clone(),
                             name: ser_tab.name.clone(),
@@ -1193,12 +1815,16 @@ impl BlueprintEditorPanel {
                     }
                 }
             } else {
-                let macro_graph = self.local_macros.iter()
+                let macro_graph = self
+                    .local_macros
+                    .iter()
                     .find(|m| m.id == ser_tab.id)
                     .map(|m| m.graph.clone());
 
                 if let Some(graph) = macro_graph {
-                    if let Ok(blueprint_graph) = self.convert_graph_description_to_blueprint(&graph, window, cx) {
+                    if let Ok(blueprint_graph) =
+                        self.convert_graph_description_to_blueprint(&graph, window, cx)
+                    {
                         self.open_tabs.push(GraphTab {
                             id: ser_tab.id.clone(),
                             name: ser_tab.name.clone(),
@@ -1213,7 +1839,7 @@ impl BlueprintEditorPanel {
             }
         }
 
-        tracing::info!("📂 Restored {} tabs from tabs.json", self.open_tabs.len());
+        println!("📂 Restored {} tabs from tabs.json", self.open_tabs.len());
         Ok(())
     }
 }
@@ -1232,11 +1858,21 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (f32, f32, f32) {
     let p = 2.0 * l - q;
 
     let hue_to_rgb = |p: f32, q: f32, mut t: f32| -> f32 {
-        if t < 0.0 { t += 1.0; }
-        if t > 1.0 { t -= 1.0; }
-        if t < 1.0 / 6.0 { return p + (q - p) * 6.0 * t; }
-        if t < 1.0 / 2.0 { return q; }
-        if t < 2.0 / 3.0 { return p + (q - p) * (2.0 / 3.0 - t) * 6.0; }
+        if t < 0.0 {
+            t += 1.0;
+        }
+        if t > 1.0 {
+            t -= 1.0;
+        }
+        if t < 1.0 / 6.0 {
+            return p + (q - p) * 6.0 * t;
+        }
+        if t < 1.0 / 2.0 {
+            return q;
+        }
+        if t < 2.0 / 3.0 {
+            return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+        }
         p
     };
 

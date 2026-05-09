@@ -13,27 +13,27 @@
 //! - **ui**: Reusable UI components and panels
 //! - **io**: File I/O and persistence
 
+use gpui::*;
 use plugin_editor_api::*;
 use serde_json::json;
-use std::{path::PathBuf, sync::Arc};
-use std::sync::Mutex;
 use std::collections::HashMap;
-use gpui::*;
+use std::sync::Mutex;
+use std::{path::PathBuf, sync::Arc};
 use ui::dock::PanelView;
 
 // Module declarations
 mod core;
 mod editor;
 mod features;
+mod io;
 mod rendering;
 mod ui_components;
-mod io;
 
 // Re-export main types for plugin API compatibility
-pub use core::types::*;
-pub use core::graph::*;
-pub use core::events::*;
 pub use core::definitions::*;
+pub use core::events::*;
+pub use core::graph::*;
+pub use core::types::*;
 pub use editor::panel::BlueprintEditorPanel;
 
 /// Storage for editor instances owned by the plugin
@@ -70,34 +70,30 @@ impl EditorPlugin for BlueprintEditorPlugin {
     }
 
     fn file_types(&self) -> Vec<FileTypeDefinition> {
-        vec![
-            FileTypeDefinition {
-                id: FileTypeId::new("class"),
-                extension: "class".to_string(),
-                display_name: "Blueprint Class".to_string(),
-                icon: ui::IconName::Component,
-                color: gpui::rgb(0x9C27B0).into(),
-                structure: FileStructure::FolderBased {
-                    marker_file: "graph_save.json".to_string(),
-                    template_structure: vec![
-                        PathTemplate::Folder {
-                            path: "events".into(),
-                        },
-                    ],
-                },
-                default_content: json!({
-                    "graph": {
-                        "nodes": [],
-                        "connections": [],
-                        "comments": [],
-                        "metadata": {
-                            "version": "0.1.0"
-                        }
+        vec![FileTypeDefinition {
+            id: FileTypeId::new("class"),
+            extension: "class".to_string(),
+            display_name: "Blueprint Class".to_string(),
+            icon: ui::IconName::Component,
+            color: gpui::rgb(0x9C27B0).into(),
+            structure: FileStructure::FolderBased {
+                marker_file: "graph_save.json".to_string(),
+                template_structure: vec![PathTemplate::Folder {
+                    path: "events".into(),
+                }],
+            },
+            default_content: json!({
+                "graph": {
+                    "nodes": [],
+                    "connections": [],
+                    "comments": [],
+                    "metadata": {
+                        "version": "0.1.0"
                     }
-                }),
-                categories: vec!["Blueprints".to_string()],
-            }
-        ]
+                }
+            }),
+            categories: vec!["Blueprints".to_string()],
+        }]
     }
 
     fn editors(&self) -> Vec<EditorMetadata> {
@@ -144,11 +140,18 @@ impl EditorPlugin for BlueprintEditorPlugin {
             };
 
             // CRITICAL: Store Arc in plugin's HashMap to keep it alive!
-            self.editors.lock().unwrap().insert(id, EditorStorage {
-                panel: panel_arc.clone(),
-            });
+            self.editors.lock().unwrap().insert(
+                id,
+                EditorStorage {
+                    panel: panel_arc.clone(),
+                },
+            );
 
-            log::info!("Created blueprint editor instance {} for {:?}", id, file_path);
+            log::info!(
+                "Created blueprint editor instance {} for {:?}",
+                id,
+                file_path
+            );
 
             Ok(panel_arc)
         } else {

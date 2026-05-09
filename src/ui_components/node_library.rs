@@ -1,139 +1,165 @@
-//! Node library panel renderer.
+//! Palette item types and flat-list helpers for the virtual-list Palette panel.
 //!
-//! Provides a categorized list of available nodes and lets users add a node
-//! to the graph by clicking it.
+//! The `PalettePanel` renders its node library as a single flat `Vec<PaletteItem>`
+//! fed into `v_virtual_list`.  This module owns:
+//!
+//! - The [`PaletteItem`] enum (category headers + node rows)
+//! - Row-height constants
+//! - Helper functions for building, filtering, and sizing the list
 
-use gpui::*;
-use ui::{h_flex, v_flex, ActiveTheme as _, StyledExt};
+use crate::core::definitions::{NodeDefinition, NodeDefinitions};
+use gpui::{px, size, Pixels, Size};
+use std::rc::Rc;
 
-use crate::core::definitions::{NodeCategory, NodeDefinitions};
-use crate::core::types::BlueprintNode;
-use crate::editor::panel::BlueprintEditorPanel;
-use crate::rendering::graph::NodeGraphRenderer;
+// ─────────────────────────────────────────────────────────────────────────────
+// Row-height constants
+// ─────────────────────────────────────────────────────────────────────────────
 
-pub struct NodeLibraryRenderer;
+/// Height of a category-header row in the palette list.
+pub const CATEGORY_HEADER_H: f32 = 28.0;
 
-impl NodeLibraryRenderer {
-    pub fn render(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
-        let node_definitions = NodeDefinitions::load();
+/// Height of a node-entry row in the palette list.
+pub const NODE_ENTRY_H: f32 = 52.0;
 
-        v_flex()
-            .size_full()
-            .bg(cx.theme().sidebar)
-            .child(
-                h_flex()
-                    .w_full()
-                    .px_3()
-                    .py_2()
-                    .bg(cx.theme().secondary)
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(cx.theme().foreground)
-                            .child("Palette")
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(format!("{} categories", node_definitions.categories.len()))
-                    )
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_hidden()
-                    .child(
-                        v_flex()
-                            .p_3()
-                            .gap_3()
-                            .scrollable(Axis::Vertical)
-                            .children(
-                                node_definitions
-                                    .categories
-                                    .iter()
-                                    .map(|category| Self::render_category(category, cx))
-                            )
-                    )
-            )
+// ─────────────────────────────────────────────────────────────────────────────
+// Item type
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A single row in the palette's virtual list.
+#[derive(Clone, Debug)]
+pub enum PaletteItem {
+    /// A section separator labelled with the category name.
+    CategoryHeader {
+        name: String,
+        color: String,
+        node_count: usize,
+    },
+    /// A draggable / clickable node entry.
+    NodeEntry {
+        def: NodeDefinition,
+        category_color: String,
+    },
+}
+
+impl PaletteItem {
+    /// Pixel height for this row type.
+    #[inline]
+    pub fn height(&self) -> f32 {
+        match self {
+            Self::CategoryHeader { .. } => CATEGORY_HEADER_H,
+            Self::NodeEntry { .. } => NODE_ENTRY_H,
+        }
     }
+}
 
-    fn render_category(category: &NodeCategory, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
-        v_flex()
-            .gap_1p5()
-            .child(
-                h_flex()
-                    .w_full()
-                    .px_2()
-                    .py_1()
-                    .rounded(px(4.0))
-                    .bg(cx.theme().muted.opacity(0.2))
-                    .child(
-                        div()
-                            .text_xs()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(cx.theme().foreground)
-                            .child(category.name.clone())
-                    )
-            )
-            .child(
-                v_flex()
-                    .gap_1()
-                    .children(category.nodes.iter().map(|node_def| {
-                        let def = node_def.clone();
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
-                        h_flex()
-                            .w_full()
-                            .items_center()
-                            .gap_2()
-                            .px_2()
-                            .py_1p5()
-                            .rounded(px(4.0))
-                            .cursor_pointer()
-                            .hover(|s| s.bg(cx.theme().muted.opacity(0.25)))
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .child(def.icon.clone())
-                            )
-                            .child(
-                                v_flex()
-                                    .flex_1()
-                                    .gap_0p5()
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(cx.theme().foreground)
-                                            .child(def.name.clone())
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child(def.description.clone())
-                                    )
-                            )
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, _event, _window, cx| {
-                                let screen_pos = if let Some(bounds) = panel.graph_element_bounds {
-                                    bounds.center()
-                                } else {
-                                    Point::new(px(640.0), px(360.0))
-                                };
-
-                                let graph_pos = NodeGraphRenderer::screen_to_graph_pos(screen_pos, &panel.graph);
-                                let stagger = (panel.graph.nodes.len() % 8) as f32 * 18.0;
-                                let place_pos = Point::new(graph_pos.x + stagger, graph_pos.y + stagger);
-
-                                let node = BlueprintNode::from_definition(&def, place_pos);
-                                panel.add_node(node, cx);
-                            }))
-                    }))
-            )
+/// Build the complete flat list from the global node definitions.
+///
+/// The list is ordered: category header, then all nodes in that category,
+/// then the next category header, and so on.
+pub fn build_palette_items(defs: &NodeDefinitions) -> Vec<PaletteItem> {
+    let mut items = Vec::new();
+    for category in &defs.categories {
+        items.push(PaletteItem::CategoryHeader {
+            name: category.name.clone(),
+            color: category.color.clone(),
+            node_count: category.nodes.len(),
+        });
+        for def in &category.nodes {
+            items.push(PaletteItem::NodeEntry {
+                def: def.clone(),
+                category_color: category.color.clone(),
+            });
+        }
     }
+    items
+}
+
+/// Build the `Rc<Vec<Size<Pixels>>>` required by `v_virtual_list`.
+///
+/// Width is `px(0.0)` (stretch to available width); height is taken from
+/// [`PaletteItem::height`].
+pub fn build_item_sizes(items: &[PaletteItem]) -> Rc<Vec<Size<Pixels>>> {
+    Rc::new(
+        items
+            .iter()
+            .map(|item| size(px(0.0), px(item.height())))
+            .collect(),
+    )
+}
+
+/// Return a filtered copy of `all_items`.
+///
+/// - **Empty query** → returns a clone of the full list (category headers
+///   included).
+/// - **Non-empty query** → strips all category headers and returns only node
+///   entries whose `name` or `description` match the query (case-insensitive).
+pub fn filter_palette_items(all_items: &[PaletteItem], query: &str) -> Vec<PaletteItem> {
+    if query.is_empty() {
+        return all_items.to_vec();
+    }
+    let q = query.to_lowercase();
+    all_items
+        .iter()
+        .filter(|item| match item {
+            PaletteItem::CategoryHeader { .. } => false,
+            PaletteItem::NodeEntry { def, .. } => {
+                def.name.to_lowercase().contains(&q) || def.description.to_lowercase().contains(&q)
+            }
+        })
+        .cloned()
+        .collect()
+}
+
+/// Build a palette list containing only nodes that have at least one compatible input pin
+/// for the given source pin type.
+pub fn build_compatible_palette_items(
+    defs: &NodeDefinitions,
+    source_type: &ui::graph::DataType,
+) -> Vec<PaletteItem> {
+    let mut items = Vec::new();
+    for category in &defs.categories {
+        let compatible_nodes: Vec<_> = category
+            .nodes
+            .iter()
+            .filter(|def| {
+                def.inputs.iter().any(|pin| {
+                    crate::features::connections::compatibility::are_types_compatible(
+                        source_type,
+                        &pin.data_type,
+                    )
+                })
+            })
+            .cloned()
+            .collect();
+
+        if compatible_nodes.is_empty() {
+            continue;
+        }
+
+        items.push(PaletteItem::CategoryHeader {
+            name: category.name.clone(),
+            color: category.color.clone(),
+            node_count: compatible_nodes.len(),
+        });
+
+        for def in compatible_nodes {
+            items.push(PaletteItem::NodeEntry {
+                def,
+                category_color: category.color.clone(),
+            });
+        }
+    }
+    items
+}
+
+/// Count the number of `NodeEntry` items in a slice.
+pub fn count_nodes(items: &[PaletteItem]) -> usize {
+    items
+        .iter()
+        .filter(|i| matches!(i, PaletteItem::NodeEntry { .. }))
+        .count()
 }

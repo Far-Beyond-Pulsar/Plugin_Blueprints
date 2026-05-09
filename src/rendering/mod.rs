@@ -6,11 +6,11 @@
 //! - Visual overlays (selection box, debug info, minimap)
 //! - Styling and layout constants
 
-pub mod layout;
-pub mod style;
 pub mod graph;
 pub mod input;
+pub mod layout;
 pub mod overlay;
+pub mod style;
 
 pub use layout::*;
 pub use style::*;

@@ -1,8 +1,8 @@
 //! Type compatibility and inference for connections
 
-use ui::graph::DataType as GraphDataType;
-use crate::core::types::{Connection, NodeType};
 use crate::core::graph::BlueprintGraph;
+use crate::core::types::{Connection, NodeType};
+use ui::graph::DataType as GraphDataType;
 
 /// Check if two data types are compatible for connection
 pub fn are_types_compatible(from_type: &GraphDataType, to_type: &GraphDataType) -> bool {
@@ -10,10 +10,7 @@ pub fn are_types_compatible(from_type: &GraphDataType, to_type: &GraphDataType) 
 }
 
 /// Infer the type of a reroute node based on its connections
-pub fn infer_reroute_type(
-    node_id: &str,
-    graph: &BlueprintGraph,
-) -> Option<GraphDataType> {
+pub fn infer_reroute_type(node_id: &str, graph: &BlueprintGraph) -> Option<GraphDataType> {
     // Check if this is actually a reroute node
     let node = graph.nodes.iter().find(|n| n.id == node_id)?;
     if node.node_type != NodeType::Reroute {
@@ -25,14 +22,22 @@ pub fn infer_reroute_type(
         if connection.source_node == node_id {
             // This reroute is a source - get the target pin type
             if let Some(target_node) = graph.nodes.iter().find(|n| n.id == connection.target_node) {
-                if let Some(pin) = target_node.inputs.iter().find(|p| p.id == connection.target_pin) {
+                if let Some(pin) = target_node
+                    .inputs
+                    .iter()
+                    .find(|p| p.id == connection.target_pin)
+                {
                     return Some(pin.data_type.clone());
                 }
             }
         } else if connection.target_node == node_id {
             // This reroute is a target - get the source pin type
             if let Some(source_node) = graph.nodes.iter().find(|n| n.id == connection.source_node) {
-                if let Some(pin) = source_node.outputs.iter().find(|p| p.id == connection.source_pin) {
+                if let Some(pin) = source_node
+                    .outputs
+                    .iter()
+                    .find(|p| p.id == connection.source_pin)
+                {
                     return Some(pin.data_type.clone());
                 }
             }
@@ -44,25 +49,30 @@ pub fn infer_reroute_type(
 }
 
 /// Validate that a connection is valid
-pub fn validate_connection(
-    connection: &Connection,
-    graph: &BlueprintGraph,
-) -> Result<(), String> {
+pub fn validate_connection(connection: &Connection, graph: &BlueprintGraph) -> Result<(), String> {
     // Check that both nodes exist
-    let source_node = graph.nodes.iter()
+    let source_node = graph
+        .nodes
+        .iter()
         .find(|n| n.id == connection.source_node)
         .ok_or_else(|| format!("Source node {} not found", connection.source_node))?;
 
-    let target_node = graph.nodes.iter()
+    let target_node = graph
+        .nodes
+        .iter()
         .find(|n| n.id == connection.target_node)
         .ok_or_else(|| format!("Target node {} not found", connection.target_node))?;
 
     // Check that both pins exist
-    let source_pin = source_node.outputs.iter()
+    let source_pin = source_node
+        .outputs
+        .iter()
         .find(|p| p.id == connection.source_pin)
         .ok_or_else(|| format!("Source pin {} not found", connection.source_pin))?;
 
-    let target_pin = target_node.inputs.iter()
+    let target_pin = target_node
+        .inputs
+        .iter()
         .find(|p| p.id == connection.target_pin)
         .ok_or_else(|| format!("Target pin {} not found", connection.target_pin))?;
 
@@ -88,7 +98,9 @@ pub fn get_connections_from_pin<'a>(
     pin_id: &str,
     graph: &'a BlueprintGraph,
 ) -> Vec<&'a Connection> {
-    graph.connections.iter()
+    graph
+        .connections
+        .iter()
         .filter(|conn| conn.source_node == node_id && conn.source_pin == pin_id)
         .collect()
 }
@@ -99,7 +111,9 @@ pub fn get_connections_to_pin<'a>(
     pin_id: &str,
     graph: &'a BlueprintGraph,
 ) -> Vec<&'a Connection> {
-    graph.connections.iter()
+    graph
+        .connections
+        .iter()
         .filter(|conn| conn.target_node == node_id && conn.target_pin == pin_id)
         .collect()
 }
@@ -112,10 +126,14 @@ pub fn is_pin_connected(
     graph: &BlueprintGraph,
 ) -> bool {
     if is_input {
-        graph.connections.iter()
+        graph
+            .connections
+            .iter()
             .any(|conn| conn.target_node == node_id && conn.target_pin == pin_id)
     } else {
-        graph.connections.iter()
+        graph
+            .connections
+            .iter()
             .any(|conn| conn.source_node == node_id && conn.source_pin == pin_id)
     }
 }

@@ -6,12 +6,12 @@
 //! - Variables panel UI
 //! - Variable list rendering
 
-pub mod types;
 pub mod operations;
 pub mod panel;
 pub mod rendering;
+pub mod types;
 
 // Re-export commonly used types
-pub use types::{ClassVariable, VariableDrag, TypeItem};
 pub use panel::VariablesPanel;
 pub use rendering::VariablesRenderer;
+pub use types::{ClassVariable, TypeItem, VariableDrag};

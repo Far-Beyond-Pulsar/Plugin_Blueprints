@@ -1,23 +1,20 @@
 //! Variable list rendering
+use super::types::ClassVariable;
+use crate::editor::panel::BlueprintEditorPanel;
 use gpui::*;
 use ui::{
-    ActiveTheme,
-    PixelsExt,
-    StyledExt,
-    Sizable,
     button::{Button, ButtonVariants as _},
     dropdown::Dropdown,
-    h_flex, v_flex,
-    IconName,
-    Colorize,
+    h_flex, v_flex, ActiveTheme, Colorize, IconName, PixelsExt, Sizable, StyledExt,
 };
-use crate::editor::panel::BlueprintEditorPanel;
-use super::types::ClassVariable;
 
 pub struct VariablesRenderer;
 
 impl VariablesRenderer {
-    pub fn render(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    pub fn render(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         v_flex()
             .size_full()
             .bg(cx.theme().sidebar)
@@ -43,15 +40,15 @@ impl VariablesRenderer {
                                     .child(
                                         ui::Icon::new(IconName::Code)
                                             .size(px(16.0))
-                                            .text_color(cx.theme().accent)
+                                            .text_color(cx.theme().accent),
                                     )
                                     .child(
                                         div()
                                             .text_sm()
                                             .font_semibold()
                                             .text_color(cx.theme().foreground)
-                                            .child("My Blueprint")
-                                    )
+                                            .child("My Blueprint"),
+                                    ),
                             )
                             .child(
                                 h_flex()
@@ -61,7 +58,7 @@ impl VariablesRenderer {
                                         div()
                                             .text_xs()
                                             .text_color(cx.theme().muted_foreground)
-                                            .child(format!("{}", panel.class_variables.len()))
+                                            .child(format!("{}", panel.class_variables.len())),
                                     )
                                     .child(
                                         Button::new("add-variable")
@@ -71,9 +68,9 @@ impl VariablesRenderer {
                                             .tooltip("Add Variable (Ctrl+Shift+V)")
                                             .on_click(cx.listener(|panel, _, window, cx| {
                                                 panel.start_creating_variable(window, cx);
-                                            }))
-                                    )
-                            )
+                                            })),
+                                    ),
+                            ),
                     )
                     .child(
                         // Compact category bar with search
@@ -89,14 +86,14 @@ impl VariablesRenderer {
                             .child(
                                 ui::Icon::new(IconName::Code)
                                     .size(px(12.0))
-                                    .text_color(cx.theme().accent.opacity(0.8))
+                                    .text_color(cx.theme().accent.opacity(0.8)),
                             )
                             .child(
                                 div()
                                     .flex_1()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("Variables")
+                                    .child("Variables"),
                             )
                             .child(
                                 Button::new("functions-section")
@@ -107,7 +104,7 @@ impl VariablesRenderer {
                                     .on_click(cx.listener(|panel, _, _window, cx| {
                                         panel.left_top_tab = 1;
                                         cx.notify();
-                                    }))
+                                    })),
                             )
                             .child(
                                 Button::new("macros-section")
@@ -118,9 +115,9 @@ impl VariablesRenderer {
                                     .on_click(cx.listener(|panel, _, _window, cx| {
                                         panel.left_top_tab = 2;
                                         cx.notify();
-                                    }))
-                            )
-                    )
+                                    })),
+                            ),
+                    ),
             )
             .child(
                 // CONTENT AREA - clean scrollable list
@@ -129,11 +126,14 @@ impl VariablesRenderer {
                     .overflow_hidden()
                     .p_1p5()
                     .scrollable(Axis::Vertical)
-                    .child(Self::render_variables_list(panel, cx))
+                    .child(Self::render_variables_list(panel, cx)),
             )
     }
 
-    fn render_variables_list(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    fn render_variables_list(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         v_flex()
             .gap_1()
             .children(if panel.is_creating_variable {
@@ -143,26 +143,29 @@ impl VariablesRenderer {
             })
             .children(
                 if panel.class_variables.is_empty() && !panel.is_creating_variable {
-                    vec![
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .h(px(100.))
-                            .text_color(cx.theme().muted_foreground)
-                            .text_sm()
-                            .child("No variables defined")
-                            .into_any_element()
-                    ]
+                    vec![div()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .h(px(100.))
+                        .text_color(cx.theme().muted_foreground)
+                        .text_sm()
+                        .child("No variables defined")
+                        .into_any_element()]
                 } else {
-                    panel.class_variables.iter().map(|var| {
-                        Self::render_variable_row(var, cx)
-                    }).collect()
-                }
+                    panel
+                        .class_variables
+                        .iter()
+                        .map(|var| Self::render_variable_row(var, cx))
+                        .collect()
+                },
             )
     }
 
-    fn render_variable_row(var: &ClassVariable, cx: &mut Context<BlueprintEditorPanel>) -> AnyElement {
+    fn render_variable_row(
+        var: &ClassVariable,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
         let var_name = var.name.clone();
         let var_type = var.var_type.clone();
         use std::collections::hash_map::DefaultHasher;
@@ -195,13 +198,16 @@ impl VariablesRenderer {
                     .bg(cx.theme().accent.opacity(0.05))
                     .border_color(cx.theme().accent.opacity(0.5))
             })
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, _event, _window, cx| {
-                panel.start_dragging_variable(drag_var_name.clone(), drag_var_type.clone(), cx);
-            }))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |panel, _event, _window, cx| {
+                    panel.start_dragging_variable(drag_var_name.clone(), drag_var_type.clone(), cx);
+                }),
+            )
             .child(
                 ui::Icon::new(IconName::Menu)
                     .size(px(12.0))
-                    .text_color(cx.theme().muted_foreground.opacity(0.5))
+                    .text_color(cx.theme().muted_foreground.opacity(0.5)),
             )
             .child(
                 // Type indicator
@@ -210,9 +216,14 @@ impl VariablesRenderer {
                     .w(px(10.))
                     .h(px(10.))
                     .rounded_full()
-                    .bg(gpui::Rgba { r: pin_color.r, g: pin_color.g, b: pin_color.b, a: pin_color.a })
+                    .bg(gpui::Rgba {
+                        r: pin_color.r,
+                        g: pin_color.g,
+                        b: pin_color.b,
+                        a: pin_color.a,
+                    })
                     .border_1()
-                    .border_color(cx.theme().border.opacity(0.5))
+                    .border_color(cx.theme().border.opacity(0.5)),
             )
             .child(
                 // Variable name
@@ -221,7 +232,7 @@ impl VariablesRenderer {
                     .text_sm()
                     .font_medium()
                     .text_color(cx.theme().foreground)
-                    .child(var.name.clone())
+                    .child(var.name.clone()),
             )
             .child(
                 // Type badge
@@ -229,13 +240,23 @@ impl VariablesRenderer {
                     .px_1p5()
                     .py_0p5()
                     .rounded(px(3.0))
-                    .bg(gpui::Rgba { r: pin_color.r, g: pin_color.g, b: pin_color.b, a: 0.15 })
+                    .bg(gpui::Rgba {
+                        r: pin_color.r,
+                        g: pin_color.g,
+                        b: pin_color.b,
+                        a: 0.15,
+                    })
                     .child(
                         div()
                             .text_xs()
-                            .text_color(gpui::Rgba { r: pin_color.r, g: pin_color.g, b: pin_color.b, a: 1.0 })
-                            .child(var.var_type.clone())
-                    )
+                            .text_color(gpui::Rgba {
+                                r: pin_color.r,
+                                g: pin_color.g,
+                                b: pin_color.b,
+                                a: 1.0,
+                            })
+                            .child(var.var_type.clone()),
+                    ),
             )
             .child(
                 Button::new(("delete-var", var_hash))
@@ -245,12 +266,15 @@ impl VariablesRenderer {
                     .tooltip("Delete")
                     .on_click(cx.listener(move |panel, _, _, cx| {
                         panel.remove_variable(&var_name, cx);
-                    }))
+                    })),
             )
             .into_any_element()
     }
 
-    fn render_variable_creation_form(panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    fn render_variable_creation_form(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         use ui::input::TextInput;
 
         v_flex()
@@ -266,7 +290,7 @@ impl VariablesRenderer {
                     .text_sm()
                     .font_semibold()
                     .text_color(cx.theme().foreground)
-                    .child("New Variable")
+                    .child("New Variable"),
             )
             .child(
                 v_flex()
@@ -278,11 +302,9 @@ impl VariablesRenderer {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("Name")
+                                    .child("Name"),
                             )
-                            .child(
-                                TextInput::new(&panel.variable_name_input)
-                            )
+                            .child(TextInput::new(&panel.variable_name_input)),
                     )
                     .child(
                         v_flex()
@@ -291,12 +313,10 @@ impl VariablesRenderer {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child("Type")
+                                    .child("Type"),
                             )
-                            .child(
-                                Dropdown::new(&panel.variable_type_dropdown)
-                            )
-                    )
+                            .child(Dropdown::new(&panel.variable_type_dropdown)),
+                    ),
             )
             .child(
                 h_flex()
@@ -308,7 +328,7 @@ impl VariablesRenderer {
                             .label("Cancel")
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.cancel_creating_variable(cx);
-                            }))
+                            })),
                     )
                     .child(
                         Button::new("create-var")
@@ -316,8 +336,8 @@ impl VariablesRenderer {
                             .label("Create")
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.complete_creating_variable(cx);
-                            }))
-                    )
+                            })),
+                    ),
             )
     }
 }

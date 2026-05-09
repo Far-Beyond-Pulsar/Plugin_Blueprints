@@ -1,15 +1,64 @@
 //! Connection rendering - bezier curves and visual presentation
 use ui::ActiveTheme;
 use ui::PixelsExt;
-use ui::StyledExt;
 use ui::Sizable;
+use ui::StyledExt;
 
-use gpui::*;
-use crate::editor::panel::BlueprintEditorPanel;
-use crate::core::types::{Connection, BlueprintNode, NodeType};
-use crate::core::graph::BlueprintGraph;
-use ui::graph::DataType;
 use super::operations::ConnectionDrag;
+use crate::core::graph::BlueprintGraph;
+use crate::core::types::{BlueprintNode, Connection, NodeType};
+use crate::editor::panel::BlueprintEditorPanel;
+use crate::rendering::graph::NodeGraphRenderer;
+use gpui::*;
+use std::collections::{HashMap, HashSet};
+use ui::graph::DataType;
+
+struct GraphCullBounds {
+    left: f32,
+    top: f32,
+    right: f32,
+    bottom: f32,
+}
+
+fn compute_graph_cull_bounds(panel: &BlueprintEditorPanel) -> GraphCullBounds {
+    let graph = &panel.graph;
+    let viewport_size = panel
+        .graph_element_bounds
+        .map(|b| {
+            (
+                b.size.width.as_f32().max(1.0),
+                b.size.height.as_f32().max(1.0),
+            )
+        })
+        .unwrap_or((3840.0, 2160.0));
+
+    let graph_origin = NodeGraphRenderer::screen_to_graph_pos(Point::new(px(0.0), px(0.0)), graph);
+    let graph_end = NodeGraphRenderer::screen_to_graph_pos(
+        Point::new(px(viewport_size.0), px(viewport_size.1)),
+        graph,
+    );
+
+    let padding = (260.0 / graph.zoom_level.max(0.05)).max(120.0);
+
+    GraphCullBounds {
+        left: graph_origin.x.min(graph_end.x) - padding,
+        top: graph_origin.y.min(graph_end.y) - padding,
+        right: graph_origin.x.max(graph_end.x) + padding,
+        bottom: graph_origin.y.max(graph_end.y) + padding,
+    }
+}
+
+fn is_node_visible_in_bounds(node: &BlueprintNode, bounds: &GraphCullBounds) -> bool {
+    let node_left = node.position.x;
+    let node_top = node.position.y;
+    let node_right = node.position.x + node.size.width;
+    let node_bottom = node.position.y + node.size.height;
+
+    !(node_left > bounds.right
+        || node_right < bounds.left
+        || node_top > bounds.bottom
+        || node_bottom < bounds.top)
+}
 
 impl BlueprintEditorPanel {
     /// Render all connections in the graph
@@ -18,13 +67,28 @@ impl BlueprintEditorPanel {
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         let mut connection_shapes: Vec<(Point<f32>, Point<f32>, gpui::Hsla)> = Vec::new();
+        let cull_bounds = compute_graph_cull_bounds(panel);
+
+        let mut node_by_id: HashMap<&str, &BlueprintNode> =
+            HashMap::with_capacity(panel.graph.nodes.len());
+        let mut visible_node_ids: HashSet<&str> = HashSet::with_capacity(panel.graph.nodes.len());
+        for node in &panel.graph.nodes {
+            let node_id = node.id.as_str();
+            node_by_id.insert(node_id, node);
+            if is_node_visible_in_bounds(node, &cull_bounds) {
+                visible_node_ids.insert(node_id);
+            }
+        }
 
         // Only render connections that connect to visible nodes
         let visible_connections: Vec<&Connection> = panel
             .graph
             .connections
             .iter()
-            .filter(|connection| Self::is_connection_visible_simple(connection, &panel.graph))
+            .filter(|connection| {
+                visible_node_ids.contains(connection.source_node.as_str())
+                    || visible_node_ids.contains(connection.target_node.as_str())
+            })
             .collect();
 
         // Note: We can't mutate panel here since it's borrowed immutably
@@ -46,7 +110,9 @@ impl BlueprintEditorPanel {
         }
 
         for connection in visible_connections {
-            if let Some((from, to, color)) = Self::build_connection_shape(connection, panel, cx) {
+            if let Some((from, to, color)) =
+                Self::build_connection_shape(connection, &panel.graph, &node_by_id, cx)
+            {
                 connection_shapes.push((from, to, color));
             }
         }
@@ -92,29 +158,17 @@ impl BlueprintEditorPanel {
     /// Build connection shape for rendering
     fn build_connection_shape(
         connection: &Connection,
-        panel: &BlueprintEditorPanel,
+        graph: &BlueprintGraph,
+        node_by_id: &HashMap<&str, &BlueprintNode>,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> Option<(Point<f32>, Point<f32>, gpui::Hsla)> {
-        let from_node = panel
-            .graph
-            .nodes
-            .iter()
-            .find(|n| n.id == connection.source_node);
-        let to_node = panel
-            .graph
-            .nodes
-            .iter()
-            .find(|n| n.id == connection.target_node);
+        let from_node = node_by_id.get(connection.source_node.as_str()).copied();
+        let to_node = node_by_id.get(connection.target_node.as_str()).copied();
 
         if let (Some(from_node), Some(to_node)) = (from_node, to_node) {
             if let (Some(from_pin_pos), Some(to_pin_pos)) = (
-                Self::calculate_pin_position(
-                    from_node,
-                    &connection.source_pin,
-                    false,
-                    &panel.graph,
-                ),
-                Self::calculate_pin_position(to_node, &connection.target_pin, true, &panel.graph),
+                Self::calculate_pin_position(from_node, &connection.source_pin, false, graph),
+                Self::calculate_pin_position(to_node, &connection.target_pin, true, graph),
             ) {
                 let pin_color = if let Some(pin) = from_node
                     .outputs
@@ -147,7 +201,9 @@ impl BlueprintEditorPanel {
             {
                 let pin_color = Self::get_pin_color(&drag.source_pin_type, cx);
                 let end_pos = if let Some((target_node_id, target_pin_id)) = &drag.target_pin {
-                    if let Some(target_node) = panel.graph.nodes.iter().find(|n| n.id == *target_node_id) {
+                    if let Some(target_node) =
+                        panel.graph.nodes.iter().find(|n| n.id == *target_node_id)
+                    {
                         Self::calculate_pin_position(target_node, target_pin_id, true, &panel.graph)
                             .unwrap_or(drag.current_mouse_pos)
                     } else {
@@ -183,17 +239,47 @@ impl BlueprintEditorPanel {
         let segments = ((distance / 14.0).ceil() as usize).clamp(28, 80);
 
         // Paint soft outer glow first (wider, transparent)
-        let glow_color = gpui::Hsla { h: color.h, s: color.s, l: color.l, a: 0.12 };
+        let glow_color = gpui::Hsla {
+            h: color.h,
+            s: color.s,
+            l: color.l,
+            a: 0.12,
+        };
         let glow_thickness = thickness * 3.0;
-        Self::paint_bezier_stroke(window, from_pos, to_pos, control1, control2, glow_color, glow_thickness, segments);
+        Self::paint_bezier_stroke(
+            window,
+            from_pos,
+            to_pos,
+            control1,
+            control2,
+            glow_color,
+            glow_thickness,
+            segments,
+        );
 
         // Paint the main wire
-        Self::paint_bezier_stroke(window, from_pos, to_pos, control1, control2, color, thickness, segments);
+        Self::paint_bezier_stroke(
+            window, from_pos, to_pos, control1, control2, color, thickness, segments,
+        );
 
         // Paint bright center highlight for a glossy wire look
-        let highlight = gpui::Hsla { h: color.h, s: color.s * 0.5, l: (color.l + 0.25).min(0.95), a: 0.5 };
+        let highlight = gpui::Hsla {
+            h: color.h,
+            s: color.s * 0.5,
+            l: (color.l + 0.25).min(0.95),
+            a: 0.5,
+        };
         let highlight_thickness = thickness * 0.35;
-        Self::paint_bezier_stroke(window, from_pos, to_pos, control1, control2, highlight, highlight_thickness, segments);
+        Self::paint_bezier_stroke(
+            window,
+            from_pos,
+            to_pos,
+            control1,
+            control2,
+            highlight,
+            highlight_thickness,
+            segments,
+        );
     }
 
     /// Paint a single bezier stroke
@@ -308,57 +394,6 @@ impl BlueprintEditorPanel {
             .into_any_element()
     }
 
-    /// Check if a connection is visible in the current viewport
-    fn is_connection_visible_simple(connection: &Connection, graph: &BlueprintGraph) -> bool {
-        // A connection is visible if either of its nodes is visible
-        let from_node = graph.nodes.iter().find(|n| n.id == connection.source_node);
-        let to_node = graph.nodes.iter().find(|n| n.id == connection.target_node);
-
-        match (from_node, to_node) {
-            (Some(from), Some(to)) => {
-                Self::is_node_visible_simple(from, graph) || Self::is_node_visible_simple(to, graph)
-            }
-            _ => false, // If either node doesn't exist, don't render the connection
-        }
-    }
-
-    /// Check if a node is visible in the current viewport (simplified culling)
-    fn is_node_visible_simple(node: &BlueprintNode, graph: &BlueprintGraph) -> bool {
-        // Calculate node position in screen coordinates
-        let node_screen_pos = Self::graph_to_screen_pos(node.position, graph);
-        let node_screen_size = gpui::Size::new(
-            node.size.width * graph.zoom_level,
-            node.size.height * graph.zoom_level,
-        );
-
-        // Calculate the visible area based on the inverse of current pan/zoom
-        // This creates a dynamic culling frustum that properly accounts for viewport transformations
-
-        // Convert screen bounds back to graph space for accurate culling
-        let screen_to_graph_origin = Self::screen_to_graph_pos(Point::new(px(0.0), px(0.0)), graph);
-        let screen_to_graph_end =
-            Self::screen_to_graph_pos(Point::new(px(3840.0), px(2160.0)), graph); // 4K bounds
-
-        // Add generous padding in graph space to prevent premature culling
-        let padding_in_graph_space = 200.0 / graph.zoom_level; // Padding scales with zoom
-
-        let visible_left = screen_to_graph_origin.x - padding_in_graph_space;
-        let visible_top = screen_to_graph_origin.y - padding_in_graph_space;
-        let visible_right = screen_to_graph_end.x + padding_in_graph_space;
-        let visible_bottom = screen_to_graph_end.y + padding_in_graph_space;
-
-        // Check if node intersects with visible bounds in graph space
-        let node_left = node.position.x;
-        let node_top = node.position.y;
-        let node_right = node.position.x + node.size.width;
-        let node_bottom = node.position.y + node.size.height;
-
-        !(node_left > visible_right
-            || node_right < visible_left
-            || node_top > visible_bottom
-            || node_bottom < visible_top)
-    }
-
     /// Calculate the position of a pin in screen coordinates
     pub fn calculate_pin_position(
         node: &BlueprintNode,
@@ -373,12 +408,12 @@ impl BlueprintEditorPanel {
 
         // These MUST match the values used in render_blueprint_node / render_node_pins.
         const HEADER_H: f32 = 27.0;
-        const SEP_H: f32    =  1.0;
-        const BODY_PAD: f32 =  8.0;
+        const SEP_H: f32 = 1.0;
+        const BODY_PAD: f32 = 8.0;
         const PIN_ROW_H: f32 = 16.0;
-        const PIN_GAP: f32  =  4.0;
+        const PIN_GAP: f32 = 4.0;
 
-        let z   = graph.zoom_level;
+        let z = graph.zoom_level;
         let nsp = Self::graph_to_screen_pos(node.position, graph);
 
         let row = if is_input {
@@ -405,7 +440,10 @@ impl BlueprintEditorPanel {
     }
 
     /// Get the color for a pin based on its data type
-    pub fn get_pin_color(data_type: &DataType, _cx: &mut Context<BlueprintEditorPanel>) -> gpui::Hsla {
+    pub fn get_pin_color(
+        data_type: &DataType,
+        _cx: &mut Context<BlueprintEditorPanel>,
+    ) -> gpui::Hsla {
         // Use the new type system to generate pin colors
         let pin_style = data_type.generate_pin_style();
         // Convert RGB to HSLA using the proper GPUI color API

@@ -3,13 +3,16 @@
 //! These panels wrap the editor entity and render specific content.
 
 use gpui::*;
-use ui::{ActiveTheme, dock::{Panel, PanelEvent}};
+use ui::{
+    dock::{Panel, PanelEvent},
+    h_flex, v_flex, ActiveTheme,
+};
 
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::macros::panel::MacrosRenderer;
 use crate::features::variables::rendering::VariablesRenderer;
 use crate::rendering::graph::NodeGraphRenderer;
-use crate::ui_components::node_library::NodeLibraryRenderer;
+use crate::ui_components::palette_view::NodePaletteView;
 use crate::ui_components::properties::PropertiesRenderer;
 
 /// Variables Panel
@@ -35,11 +38,7 @@ impl Render for VariablesPanel {
             div()
                 .size_full()
                 .bg(cx.theme().sidebar)
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        VariablesRenderer::render(editor, cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| VariablesRenderer::render(editor, cx)))
         } else {
             div().child("Editor not available")
         }
@@ -85,11 +84,7 @@ impl Render for MacrosPanel {
             div()
                 .size_full()
                 .bg(cx.theme().sidebar)
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        MacrosRenderer::render(editor, cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| MacrosRenderer::render(editor, cx)))
         } else {
             div().child("Editor not available")
         }
@@ -134,11 +129,7 @@ impl Render for CompilerPanel {
         if let Some(editor) = self.editor.upgrade() {
             div()
                 .size_full()
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        editor.render_compiler_results(cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| editor.render_compiler_results(cx)))
         } else {
             div().child("Editor not available")
         }
@@ -183,11 +174,7 @@ impl Render for FindPanel {
         if let Some(editor) = self.editor.upgrade() {
             div()
                 .size_full()
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        editor.render_find_panel(cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| editor.render_find_panel(cx)))
         } else {
             div().child("Editor not available")
         }
@@ -233,11 +220,7 @@ impl Render for PropertiesPanel {
             div()
                 .size_full()
                 .bg(cx.theme().sidebar)
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        PropertiesRenderer::render(editor, cx)
-                    })
-                )
+                .child(editor.update(cx, |editor, cx| PropertiesRenderer::render(editor, cx)))
         } else {
             div().child("Editor not available")
         }
@@ -260,17 +243,30 @@ impl Panel for PropertiesPanel {
     }
 }
 
-/// Palette Panel
+// ─────────────────────────────────────────────────────────────────────────────
+// Palette Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Palette panel – thin dock wrapper around [`NodePaletteView`].
+///
+/// All palette logic (search, category headers, virtual list, node placement)
+/// lives in `NodePaletteView` so the same component can be reused in both this
+/// panel and the quick right-click overlay on the graph canvas.
 pub struct PalettePanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
     focus_handle: FocusHandle,
+    palette_view: Entity<NodePaletteView>,
 }
 
 impl PalettePanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        editor: WeakEntity<BlueprintEditorPanel>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let palette_view = cx.new(|cx| NodePaletteView::new(editor, window, cx));
         Self {
-            editor,
             focus_handle: cx.focus_handle(),
+            palette_view,
         }
     }
 }
@@ -278,19 +274,8 @@ impl PalettePanel {
 impl EventEmitter<PanelEvent> for PalettePanel {}
 
 impl Render for PalettePanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if let Some(editor) = self.editor.upgrade() {
-            div()
-                .size_full()
-                .bg(cx.theme().sidebar)
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        NodeLibraryRenderer::render(editor, cx)
-                    })
-                )
-        } else {
-            div().child("Editor not available")
-        }
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(self.palette_view.clone())
     }
 }
 
@@ -299,6 +284,7 @@ impl Focusable for PalettePanel {
         self.focus_handle.clone()
     }
 }
+
 
 impl Panel for PalettePanel {
     fn panel_name(&self) -> &'static str {
@@ -313,13 +299,19 @@ impl Panel for PalettePanel {
 /// Main graph canvas panel with tab bar
 pub struct GraphCanvasPanel {
     editor: WeakEntity<BlueprintEditorPanel>,
+    tab_id: String,
     focus_handle: FocusHandle,
 }
 
 impl GraphCanvasPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        editor: WeakEntity<BlueprintEditorPanel>,
+        tab_id: String,
+        cx: &mut Context<Self>,
+    ) -> Self {
         Self {
             editor,
+            tab_id,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -330,25 +322,10 @@ impl EventEmitter<PanelEvent> for GraphCanvasPanel {}
 impl Render for GraphCanvasPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if let Some(editor) = self.editor.upgrade() {
-            div()
-                .flex()
-                .flex_col()
-                .size_full()
-                .child(
-                    editor.update(cx, |editor, cx| {
-                        editor.render_tab_bar(cx)
-                    })
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_h_0()
-                        .child(
-                            editor.update(cx, |editor, cx| {
-                                NodeGraphRenderer::render(editor, cx)
-                            })
-                        )
-                )
+            div().size_full().child(editor.update(cx, |editor, cx| {
+                editor.ensure_active_graph_panel_state(&self.tab_id);
+                NodeGraphRenderer::render(editor, &self.tab_id, cx)
+            }))
         } else {
             div().child("Editor not available")
         }
@@ -366,7 +343,19 @@ impl Panel for GraphCanvasPanel {
         "graph-canvas"
     }
 
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+    fn title(&self, _window: &Window, cx: &App) -> AnyElement {
+        if let Some(editor) = self.editor.upgrade() {
+            let editor = editor.read(cx);
+            if let Some(tab) = editor.open_tabs.iter().find(|tab| tab.id == self.tab_id) {
+                let title = if tab.is_dirty {
+                    format!("{} *", tab.name)
+                } else {
+                    tab.name.clone()
+                };
+                return title.into_any_element();
+            }
+        }
+
         "Event Graph".into_any_element()
     }
 }

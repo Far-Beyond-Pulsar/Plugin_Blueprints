@@ -11,5 +11,7 @@ pub mod legacy;
 pub mod save_load;
 
 // Re-export main types and functions
-pub use formats::{BlueprintAsset, BlueprintEditorState, serialize_blueprint_with_header, deserialize_blueprint};
-pub use legacy::{try_parse_legacy_format, is_legacy_format};
+pub use formats::{
+    deserialize_blueprint, serialize_blueprint_with_header, BlueprintAsset, BlueprintEditorState,
+};
+pub use legacy::{is_legacy_format, try_parse_legacy_format};
