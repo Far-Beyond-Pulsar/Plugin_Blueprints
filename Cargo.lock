@@ -737,13 +737,13 @@ name = "blueprint_compiler"
 version = "0.1.0"
 dependencies = [
  "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
- "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=64ec900fccec26e308edf6d92d1fbaf1b61e60c5)",
+ "pbgc",
  "tracing",
 ]
 
 [[package]]
 name = "blueprint_editor_plugin"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -752,7 +752,7 @@ dependencies = [
  "gpui-ce",
  "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
  "log",
- "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=20f71a4c0d3bcac3eee221ea8255c008e4d891fb)",
+ "pbgc",
  "plugin_editor_api",
  "pulsar_std 0.1.0",
  "schemars",
@@ -6114,19 +6114,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf9027960355bf3afff9841918474a81a5f972ac6d226d518060bba758b5ad57"
 dependencies = [
  "rustc_version 0.4.1",
-]
-
-[[package]]
-name = "pbgc"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=20f71a4c0d3bcac3eee221ea8255c008e4d891fb#20f71a4c0d3bcac3eee221ea8255c008e4d891fb"
-dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
- "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=812db780cb2b4d7b3882d6fda3d4a4ab076ae4ba)",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
