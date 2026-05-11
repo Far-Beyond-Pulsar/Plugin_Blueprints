@@ -3,15 +3,14 @@
 use crate::editor::panel::{BlueprintEditorPanel, CompilationHistoryEntry};
 use crate::{CompilationState, CompilationStatus};
 use gpui::*;
-use ui::compiler;
 
-// Convert a pulsar_graph DataType into the graphy DataType the compiler expects.
-fn to_graphy_datatype(dt: &ui::graph::DataType) -> graphy::DataType {
-    use graphy::DataType as GD;
+// Convert a pulsar_graph DataType into the PBGC DataType the compiler expects.
+fn to_graphy_datatype(dt: &ui::graph::DataType) -> pbgc::DataType {
+    use pbgc::DataType as GD;
     use ui::graph::DataType as PG;
     match dt {
         PG::Execution => GD::Execution,
-        PG::Typed(ti) => GD::Typed(graphy::core::TypeInfo::new(ti.to_string())),
+        PG::Typed(ti) => GD::Typed(pbgc::TypeInfo::new(ti.to_string())),
         PG::Any => GD::Any,
         PG::String => GD::String,
         PG::Number => GD::Number,
@@ -19,8 +18,8 @@ fn to_graphy_datatype(dt: &ui::graph::DataType) -> graphy::DataType {
         PG::Vector2 => GD::Vector2,
         PG::Vector3 => GD::Vector3,
         PG::Color => GD::Color,
-        PG::Object => GD::Typed(graphy::core::TypeInfo::new("Object")),
-        PG::Array(inner) => GD::Typed(graphy::core::TypeInfo::new(format!("Vec<{}>", inner))),
+        PG::Object => GD::Typed(pbgc::TypeInfo::new("Object")),
+        PG::Array(inner) => GD::Typed(pbgc::TypeInfo::new(format!("Vec<{}>", inner))),
     }
 }
 
@@ -49,11 +48,11 @@ impl BlueprintEditorPanel {
         }
     }
 
-    /// Build a `graphy::GraphDescription` directly from the current BlueprintGraph.
+    /// Build a `pbgc::GraphDescription` directly from the current BlueprintGraph.
     /// This is the single source-of-truth conversion; both compile functions use it.
-    fn build_graphy_description(&self) -> Result<graphy::GraphDescription, String> {
-        use graphy::Connection as GConnection;
-        use graphy::{
+    fn build_graphy_description(&self) -> Result<pbgc::GraphDescription, String> {
+        use pbgc::Connection as GConnection;
+        use pbgc::{
             ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
             PropertyValue,
         };
@@ -125,7 +124,15 @@ impl BlueprintEditorPanel {
     /// Compile current graph to Rust source code
     pub fn compile_to_rust(&self) -> Result<String, String> {
         let graph = self.build_graphy_description()?;
-        compiler::compile_graph(&graph).map_err(|e| format!("Compilation failed: {}", e))
+        let blueprint_name = self
+            .current_class_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("compiled_blueprint");
+
+        pbgc::compile_graph_to_actor_source(blueprint_name, &graph)
+            .map_err(|e| format!("Compilation failed: {}", e))
     }
 
     /// Compile and save events to class directory structure
@@ -152,7 +159,9 @@ impl BlueprintEditorPanel {
             return Err("No event nodes found in graph".to_string());
         }
 
-        // Build the graphy graph and compile all events in one pass
+        // Build the graph and compile in one pass through PBGC.
+        // Wrap raw generated logic into an Actor class so we always emit
+        // a struct with `#[derive(EngineClass)]`.
         let graph = self.build_graphy_description()?;
         let variables: std::collections::HashMap<String, String> = self
             .class_variables
@@ -160,8 +169,14 @@ impl BlueprintEditorPanel {
             .map(|v| (v.name.clone(), v.var_type.clone()))
             .collect();
 
-        let generated = compiler::compile_graph_with_variables(&graph, variables)
+        let generated_logic = pbgc::compile_graph_with_variables(&graph, variables)
             .map_err(|e| format!("Compilation failed: {}", e))?;
+
+        let blueprint_name = class_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("compiled_blueprint");
+        let generated = pbgc::generate_blueprint_actor_source(blueprint_name, &generated_logic);
 
         // Write all events into a single file
         let events_file = events_dir.join("events.rs");
