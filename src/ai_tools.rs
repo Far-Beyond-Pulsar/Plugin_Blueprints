@@ -756,7 +756,7 @@ pub fn capabilities_for_file(file_path: &Path) -> Vec<String> {
         .collect()
 }
 
-pub fn execute_ai_tool(file_path: &Path, tool_name: &str, tool_args: Value) -> Result<Value, PluginError> {
+pub fn execute_compiled_tool(file_path: &Path, tool_name: &str, tool_args: Value) -> Result<Value, PluginError> {
     set_active_file(file_path);
     let ctx = ToolContext::new()
         .with_current_file(file_path)
@@ -772,4 +772,8 @@ pub fn execute_ai_tool(file_path: &Path, tool_name: &str, tool_args: Value) -> R
         .map_err(|error| PluginError::Other {
             message: format!("{}", error),
         })
+}
+
+pub fn execute_ai_tool(file_path: &Path, tool_name: &str, tool_args: Value) -> Result<Value, PluginError> {
+    execute_compiled_tool(file_path, tool_name, tool_args)
 }
