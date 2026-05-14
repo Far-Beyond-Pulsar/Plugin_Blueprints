@@ -12,7 +12,7 @@ name = "blueprint_editor_plugin"
 plugin_editor_api = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/plugin_editor_api" }
 
 # UI dependencies (local paths so traits resolve to the same crate instance)
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "b43b910b2bb71c3a1faacf7837d585bcc24c718b" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "fa0d7604d8174a311429a2f656091966838602ec" }
 ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6d66619388d44bbbbffc440a586310076d7ff905" }
 ui_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6d66619388d44bbbbffc440a586310076d7ff905" }
 
