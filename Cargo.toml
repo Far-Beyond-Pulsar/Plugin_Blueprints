@@ -9,16 +9,16 @@ name = "blueprint_editor_plugin"
 
 [dependencies]
 # Plugin API (local checkout used when developing against Pulsar-Native)
-plugin_editor_api = { path = "../Pulsar-Native/crates/plugin_editor_api" }
+plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "7e58c28b602428d9106d2ca3b22e09a4948341b7" }
 
 # UI dependencies (local paths so traits resolve to the same crate instance)
 gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "fa0d7604d8174a311429a2f656091966838602ec" }
-ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6d66619388d44bbbbffc440a586310076d7ff905" }
-ui_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6d66619388d44bbbbffc440a586310076d7ff905" }
+ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "7e58c28b602428d9106d2ca3b22e09a4948341b7" }
+ui_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "7e58c28b602428d9106d2ca3b22e09a4948341b7" }
 
 # Blueprint editor dependencies (local paths)
-pulsar_std = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6d66619388d44bbbbffc440a586310076d7ff905" }
-engine_backend = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6d66619388d44bbbbffc440a586310076d7ff905" }
+pulsar_std = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "7e58c28b602428d9106d2ca3b22e09a4948341b7" }
+engine_backend = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "7e58c28b602428d9106d2ca3b22e09a4948341b7" }
 
 # Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "74a993fe51efc00ac5e208af74a3df79f2c0ba47" }
