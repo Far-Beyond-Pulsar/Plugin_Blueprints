@@ -103,6 +103,10 @@ fn with_session_mut<R>(f: impl FnOnce(&mut BlueprintAiSession) -> Result<R>) -> 
 }
 
 fn is_blueprint_file(file_path: &Path) -> bool {
+    if file_path.is_dir() {
+        return true;
+    }
+
     file_path
         .extension()
         .and_then(|ext| ext.to_str())
@@ -711,17 +715,6 @@ pub fn ai_tools() -> Vec<AiToolDefinition> {
 
 pub fn capabilities_for_file(file_path: &Path) -> Vec<String> {
     if !is_blueprint_file(file_path) {
-        return Vec::new();
-    }
-
-    let key = normalize_file_key(file_path);
-    let has_session = state()
-        .lock()
-        .ok()
-        .map(|guard| guard.sessions.contains_key(&key))
-        .unwrap_or(false);
-
-    if !has_session {
         return Vec::new();
     }
 
