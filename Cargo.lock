@@ -736,31 +736,48 @@ dependencies = [
 name = "blueprint_compiler"
 version = "0.1.0"
 dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
- "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=64ec900fccec26e308edf6d92d1fbaf1b61e60c5)",
+ "graphy",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=925107465da13f323b41513d00431703b4219296)",
+ "pulsar_graph 0.1.0",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "blueprint_compiler"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "graphy",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=925107465da13f323b41513d00431703b4219296)",
+ "pulsar_graph 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "serde_json",
  "tracing",
 ]
 
 [[package]]
 name = "blueprint_editor_plugin"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
+ "anyhow",
  "arboard",
  "chrono",
  "engine_backend",
  "futures",
- "gpui-ce",
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=fa0d7604d8174a311429a2f656091966838602ec)",
+ "graphy",
  "log",
- "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=20f71a4c0d3bcac3eee221ea8255c008e4d891fb)",
- "plugin_editor_api",
- "pulsar_std 0.1.0",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=5ad02cdf9baed974665f8774ad670bf6fbbf84b8)",
+ "plugin_editor_api 0.1.0",
+ "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
  "schemars",
  "serde",
  "serde_json",
  "smol 2.0.2",
+ "tool_registry",
+ "tool_registry_macros",
  "tracing",
- "ui",
+ "ui 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
  "ui_common",
  "uuid",
  "windows 0.62.2",
@@ -799,7 +816,7 @@ dependencies = [
  "bytemuck",
  "cfg-if",
  "cow-utils",
- "dashmap",
+ "dashmap 6.1.0",
  "dynify",
  "fast-float2",
  "float16",
@@ -1553,6 +1570,19 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
+version = "5.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
+dependencies = [
+ "cfg-if",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
+name = "dashmap"
 version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
@@ -1703,6 +1733,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3aa72a6f96ea37bbc5aa912f6788242832f75369bdfdadcb0e38423f100059"
 dependencies = [
  "dirs-sys 0.3.7",
+]
+
+[[package]]
+name = "dirs"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
+dependencies = [
+ "dirs-sys 0.4.1",
 ]
 
 [[package]]
@@ -1913,6 +1952,7 @@ dependencies = [
 [[package]]
 name = "engine_backend"
 version = "0.1.34"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "PebbleVault",
  "anyhow",
@@ -1920,19 +1960,20 @@ dependencies = [
  "async-tungstenite",
  "bytemuck",
  "crossbeam-channel",
- "dashmap",
+ "dashmap 6.1.0",
+ "engine_state",
  "flume 0.11.1",
  "futures",
  "git2",
  "glam 0.29.3",
- "gpui-ce",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
  "helio 0.17.0 (git+https://github.com/Far-Beyond-Pulsar/Helio?rev=4b006824e44a086651884ace001d76caaa977e7a)",
  "helio-asset-compat",
  "lsp-types",
  "parking_lot",
  "profiling 0.1.0",
- "pulsar_diagnostics",
- "pulsar_lsp",
+ "pulsar_diagnostics 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "pulsar_lsp 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
  "pulsar_reflection",
  "rapier3d",
  "ropey",
@@ -1942,13 +1983,34 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "ui",
+ "ui 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
  "ui_gen_macros",
  "uuid",
  "walkdir",
  "wgpu",
  "winapi",
  "windows 0.62.2",
+]
+
+[[package]]
+name = "engine_state"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "anyhow",
+ "dashmap 6.1.0",
+ "directories",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "parking_lot",
+ "pulsar-config",
+ "pulsar_settings",
+ "rust-discord-activity",
+ "serde",
+ "toml 0.8.23",
+ "tracing",
+ "type_db",
+ "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "window_manager 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
 ]
 
 [[package]]
@@ -2921,7 +2983,74 @@ dependencies = [
  "pin-project",
  "pollster 0.4.0",
  "postage",
- "priority-threadpool",
+ "priority-threadpool 0.1.0 (git+https://github.com/mdeand/priority-threadpool)",
+ "profiling 1.0.17",
+ "rand 0.10.1",
+ "raw-window-handle",
+ "resvg 0.47.0",
+ "schemars",
+ "seahash",
+ "semver 1.0.28",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "smallvec",
+ "smol 2.0.2",
+ "spin 0.10.0",
+ "stacksafe",
+ "strum",
+ "taffy",
+ "thiserror 2.0.18",
+ "usvg 0.47.0",
+ "uuid",
+ "waker-fn",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
+name = "gpui-ce"
+version = "1.0.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=fa0d7604d8174a311429a2f656091966838602ec#fa0d7604d8174a311429a2f656091966838602ec"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "async-task",
+ "bytemuck",
+ "circular-buffer",
+ "core-video",
+ "cosmic-text",
+ "ctor",
+ "derive_more 2.1.1",
+ "device_query",
+ "etagere",
+ "flume 0.12.0",
+ "font-kit",
+ "futures",
+ "gpui-macros",
+ "gpui_collections",
+ "gpui_http_client",
+ "gpui_refineable",
+ "gpui_sum_tree",
+ "gpui_util",
+ "gpui_util_macros",
+ "image",
+ "inventory",
+ "itertools 0.14.0",
+ "libc",
+ "log",
+ "lyon",
+ "num_cpus",
+ "objc2 0.5.2",
+ "objc2-app-kit 0.2.2",
+ "objc2-foundation 0.2.2",
+ "parking",
+ "parking_lot",
+ "pathfinder_geometry",
+ "pin-project",
+ "pollster 0.4.0",
+ "postage",
+ "priority-threadpool 0.1.0 (git+https://github.com/tristanpoland/priority-threadpool?rev=bb1ab91)",
  "profiling 1.0.17",
  "rand 0.10.1",
  "raw-window-handle",
@@ -2949,6 +3078,16 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "gpui-component-macros"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3090,20 +3229,6 @@ dependencies = [
  "gpui_perf",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "graphy"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=0cd1d0c0e8420757f98c480ab9c4ab28e2f63ae0#0cd1d0c0e8420757f98c480ab9c4ab28e2f63ae0"
-dependencies = [
- "quote",
- "rayon",
- "serde",
- "serde_json",
- "syn 2.0.117",
- "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
@@ -4437,6 +4562,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 
 [[package]]
+name = "is-docker"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
+dependencies = [
+ "once_cell",
+]
+
+[[package]]
+name = "is-wsl"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "173609498df190136aa7dea1a91db051746d339e18476eed5ca40521f02d7aa5"
+dependencies = [
+ "is-docker",
+ "once_cell",
+]
+
+[[package]]
 name = "itertools"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4864,6 +5008,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
 dependencies = [
  "scopeguard",
+]
+
+[[package]]
+name = "lockfree"
+version = "0.5.1"
+source = "git+https://github.com/tristanpoland/priority-threadpool?rev=bb1ab91#bb1ab91e284332975ca6889303582c7352ec6509"
+dependencies = [
+ "owned-alloc",
 ]
 
 [[package]]
@@ -5949,6 +6101,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "open"
+version = "5.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fbaa89d2ddc8473c78a3adf69eea8cffa28c483b8e02a971ef31527cd0fc92c"
+dependencies = [
+ "is-wsl",
+ "libc",
+ "pathdiff",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6119,9 +6282,9 @@ dependencies = [
 [[package]]
 name = "pbgc"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=20f71a4c0d3bcac3eee221ea8255c008e4d891fb#20f71a4c0d3bcac3eee221ea8255c008e4d891fb"
+source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=5ad02cdf9baed974665f8774ad670bf6fbbf84b8#5ad02cdf9baed974665f8774ad670bf6fbbf84b8"
 dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
+ "graphy",
  "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=812db780cb2b4d7b3882d6fda3d4a4ab076ae4ba)",
  "serde",
  "serde_json",
@@ -6132,9 +6295,9 @@ dependencies = [
 [[package]]
 name = "pbgc"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=64ec900fccec26e308edf6d92d1fbaf1b61e60c5#64ec900fccec26e308edf6d92d1fbaf1b61e60c5"
+source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=925107465da13f323b41513d00431703b4219296#925107465da13f323b41513d00431703b4219296"
 dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=0cd1d0c0e8420757f98c480ab9c4ab28e2f63ae0)",
+ "graphy",
  "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=812db780cb2b4d7b3882d6fda3d4a4ab076ae4ba)",
  "serde",
  "serde_json",
@@ -6347,13 +6510,27 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 name = "plugin_editor_api"
 version = "0.1.0"
 dependencies = [
- "gpui-ce",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=fa0d7604d8174a311429a2f656091966838602ec)",
  "serde",
  "serde_json",
  "tracing",
- "ui",
- "ui_types_common",
- "window_manager",
+ "ui 0.1.0",
+ "ui_types_common 0.1.0",
+ "window_manager 0.1.0",
+]
+
+[[package]]
+name = "plugin_editor_api"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "serde",
+ "serde_json",
+ "tracing",
+ "ui 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "window_manager 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
 ]
 
 [[package]]
@@ -6554,10 +6731,19 @@ dependencies = [
 [[package]]
 name = "priority-threadpool"
 version = "0.1.0"
+source = "git+https://github.com/tristanpoland/priority-threadpool?rev=bb1ab91#bb1ab91e284332975ca6889303582c7352ec6509"
+dependencies = [
+ "async-task",
+ "lockfree 0.5.1 (git+https://github.com/tristanpoland/priority-threadpool?rev=bb1ab91)",
+]
+
+[[package]]
+name = "priority-threadpool"
+version = "0.1.0"
 source = "git+https://github.com/mdeand/priority-threadpool#28df6ed5ebef6818f2ea0cde9bfd99d3067d42ce"
 dependencies = [
  "async-task",
- "lockfree",
+ "lockfree 0.5.1 (git+https://github.com/mdeand/priority-threadpool)",
 ]
 
 [[package]]
@@ -6627,6 +6813,7 @@ dependencies = [
 [[package]]
 name = "profiling"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "chrono",
  "crossbeam-channel",
@@ -6666,8 +6853,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulsar-config"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/PulsarConfig?rev=78a332cc59e82db5dc4d7b26c920b0ac7a703102#78a332cc59e82db5dc4d7b26c920b0ac7a703102"
+dependencies = [
+ "dashmap 6.1.0",
+ "dirs 5.0.1",
+ "parking_lot",
+ "toml 0.8.23",
+]
+
+[[package]]
 name = "pulsar_diagnostics"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "pulsar_diagnostics"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "serde",
  "serde_json",
@@ -6685,14 +6893,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulsar_graph"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "pulsar_lsp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "flume 0.11.1",
- "gpui-ce",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=fa0d7604d8174a311429a2f656091966838602ec)",
  "lsp-types",
- "pulsar_diagnostics",
+ "pulsar_diagnostics 0.1.0",
+ "ropey",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "pulsar_lsp"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "anyhow",
+ "flume 0.11.1",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "lsp-types",
+ "pulsar_diagnostics 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
  "ropey",
  "serde",
  "serde_json",
@@ -6702,6 +6937,17 @@ dependencies = [
 [[package]]
 name = "pulsar_macros"
 version = "0.1.0"
+dependencies = [
+ "linkme",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "pulsar_macros"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "linkme",
  "proc-macro2",
@@ -6723,6 +6969,7 @@ dependencies = [
 [[package]]
 name = "pulsar_reflection"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "inventory",
  "once_cell",
@@ -6734,7 +6981,7 @@ dependencies = [
 name = "pulsar_replication"
 version = "0.1.0"
 dependencies = [
- "gpui-ce",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=fa0d7604d8174a311429a2f656091966838602ec)",
  "parking_lot",
  "serde",
  "serde_json",
@@ -6742,11 +6989,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulsar_replication"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "pulsar_settings"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "pulsar-config",
+]
+
+[[package]]
 name = "pulsar_std"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "linkme",
- "pulsar_macros 0.1.0",
+ "pulsar_macros 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
  "rand 0.9.4",
  "rlua",
  "tracing",
@@ -7374,6 +7642,18 @@ dependencies = [
  "hashlink 0.9.1",
  "libsqlite3-sys",
  "smallvec",
+]
+
+[[package]]
+name = "rust-discord-activity"
+version = "0.3.1"
+source = "git+https://github.com/Far-Beyond-Pulsar/Discord-RPC-RS?rev=2f07922277bc3632fd124e46d28008fc542367fc#2f07922277bc3632fd124e46d28008fc542367fc"
+dependencies = [
+ "byteorder",
+ "log",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -9057,6 +9337,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
+name = "tool_registry"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/ToolbeltRS?rev=4300ccf8a2f79d307ebecd6b3b2bd45f166c59ef#4300ccf8a2f79d307ebecd6b3b2bd45f166c59ef"
+dependencies = [
+ "anyhow",
+ "inventory",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "tool_registry_macros"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/ToolbeltRS?rev=4300ccf8a2f79d307ebecd6b3b2bd45f166c59ef#4300ccf8a2f79d307ebecd6b3b2bd45f166c59ef"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "tower"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9196,6 +9498,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea3136b675547379c4bd395ca6b938e5ad3c3d20fad76e7fe85f9e0d011419c"
 
 [[package]]
+name = "type_db"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "dashmap 5.5.3",
+ "plugin_editor_api 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+]
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9220,12 +9532,12 @@ dependencies = [
  "aho-corasick",
  "anyhow",
  "base64",
- "blueprint_compiler",
+ "blueprint_compiler 0.1.0",
  "chrono",
  "directories",
  "enum-iterator",
- "gpui-ce",
- "gpui-component-macros",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=fa0d7604d8174a311429a2f656091966838602ec)",
+ "gpui-component-macros 0.1.0",
  "gpui_sum_tree",
  "html5ever",
  "image",
@@ -9240,13 +9552,14 @@ dependencies = [
  "notify",
  "num-traits",
  "once_cell",
+ "open",
  "parking_lot",
  "paste",
- "pulsar_diagnostics",
- "pulsar_graph",
- "pulsar_lsp",
+ "pulsar_diagnostics 0.1.0",
+ "pulsar_graph 0.1.0",
+ "pulsar_lsp 0.1.0",
  "pulsar_macros 0.1.0",
- "pulsar_replication",
+ "pulsar_replication 0.1.0",
  "regex",
  "resvg 0.45.1",
  "ropey",
@@ -9262,31 +9575,91 @@ dependencies = [
  "tracing",
  "tree-sitter",
  "tree-sitter-json",
- "ui_types_common",
+ "ui_types_common 0.1.0",
  "unicode-segmentation",
  "uuid",
- "window_manager",
+ "window_manager 0.1.0",
+ "windows 0.58.0",
+]
+
+[[package]]
+name = "ui"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "aho-corasick",
+ "anyhow",
+ "base64",
+ "blueprint_compiler 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "chrono",
+ "directories",
+ "enum-iterator",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "gpui-component-macros 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "gpui_sum_tree",
+ "html5ever",
+ "image",
+ "itertools 0.13.0",
+ "lazy_static",
+ "linkme",
+ "lsp-types",
+ "markdown",
+ "markup5ever_rcdom",
+ "mathjax-svg-rs",
+ "mermaid-rs-renderer",
+ "notify",
+ "num-traits",
+ "once_cell",
+ "open",
+ "parking_lot",
+ "paste",
+ "pulsar_diagnostics 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "pulsar_graph 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "pulsar_lsp 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "pulsar_macros 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "pulsar_replication 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "regex",
+ "resvg 0.45.1",
+ "ropey",
+ "rust-embed 6.8.1",
+ "rust-i18n",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "smallvec",
+ "smol 1.3.0",
+ "toml 0.8.23",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-json",
+ "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "unicode-segmentation",
+ "uuid",
+ "window_manager 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
  "windows 0.58.0",
 ]
 
 [[package]]
 name = "ui_common"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "anyhow",
- "gpui-ce",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
  "parking_lot",
  "rust-i18n",
  "serde",
  "serde_json",
  "tracing",
- "ui",
- "window_manager",
+ "ui 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
+ "window_manager 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
 ]
 
 [[package]]
 name = "ui_gen_macros"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -9297,6 +9670,20 @@ dependencies = [
 [[package]]
 name = "ui_types_common"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "lazy_static",
+ "regex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "ui_types_common"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
 dependencies = [
  "chrono",
  "lazy_static",
@@ -10116,13 +10503,28 @@ name = "window_manager"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "dashmap",
- "gpui-ce",
+ "dashmap 6.1.0",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=fa0d7604d8174a311429a2f656091966838602ec)",
  "parking_lot",
  "serde",
  "thiserror 2.0.18",
  "tracing",
- "ui_types_common",
+ "ui_types_common 0.1.0",
+]
+
+[[package]]
+name = "window_manager"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905#6d66619388d44bbbbffc440a586310076d7ff905"
+dependencies = [
+ "anyhow",
+ "dashmap 6.1.0",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=1f6f3843e8bea050ed3882b45b5ca1d433adf61f)",
+ "parking_lot",
+ "serde",
+ "thiserror 2.0.18",
+ "tracing",
+ "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6d66619388d44bbbbffc440a586310076d7ff905)",
 ]
 
 [[package]]
