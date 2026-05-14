@@ -103,7 +103,10 @@ fn with_session<R>(f: impl FnOnce(&BlueprintAiSession) -> Result<R>) -> Result<R
     let guard = state()
         .lock()
         .map_err(|_| anyhow!("AI session state lock poisoned"))?;
-    let requested = active_file()?;
+    let requested = guard
+        .active_file
+        .clone()
+        .ok_or_else(|| anyhow!("No active blueprint file in AI session"))?;
     let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
         anyhow!(
             "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
@@ -121,7 +124,10 @@ fn with_session_mut<R>(f: impl FnOnce(&mut BlueprintAiSession) -> Result<R>) -> 
     let mut guard = state()
         .lock()
         .map_err(|_| anyhow!("AI session state lock poisoned"))?;
-    let requested = active_file()?;
+    let requested = guard
+        .active_file
+        .clone()
+        .ok_or_else(|| anyhow!("No active blueprint file in AI session"))?;
     let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
         anyhow!(
             "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
