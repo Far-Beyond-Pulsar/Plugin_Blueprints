@@ -22,6 +22,10 @@ impl Panel for BlueprintEditorPanel {
         "Blueprint Editor"
     }
 
+    fn panel_file_path(&self, _cx: &App) -> Option<std::path::PathBuf> {
+        self.current_class_path.clone()
+    }
+
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         h_flex()
             .gap_2()
