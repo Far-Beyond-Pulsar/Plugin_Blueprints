@@ -8,8 +8,8 @@ crate-type = ["cdylib", "rlib"]
 name = "blueprint_editor_plugin"
 
 [dependencies]
-# Plugin API (local — same binary, no DLL boundary)
-plugin_editor_api = { path = "E:/Documents/GitHub/genesis/Pulsar-Native/crates/plugin_editor_api" }
+# Plugin API (local checkout used when developing against Pulsar-Native)
+plugin_editor_api = { path = "../Pulsar-Native/crates/plugin_editor_api" }
 
 # UI dependencies (local paths so traits resolve to the same crate instance)
 gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "fa0d7604d8174a311429a2f656091966838602ec" }
