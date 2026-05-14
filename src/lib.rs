@@ -37,6 +37,10 @@ pub use core::graph::*;
 pub use core::types::*;
 pub use editor::panel::BlueprintEditorPanel;
 
+pub fn upsert_ai_session(file_path: PathBuf, graph: BlueprintGraph) {
+    ai_tools::upsert_session(file_path, graph);
+}
+
 /// Storage for editor instances owned by the plugin
 struct EditorStorage {
     panel: Arc<dyn ui::dock::PanelView>,

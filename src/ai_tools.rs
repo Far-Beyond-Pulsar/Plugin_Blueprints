@@ -69,6 +69,25 @@ fn set_active_file(file_path: &Path) {
     }
 }
 
+fn resolve_session_key(guard: &RuntimeState, requested: &Path) -> Option<PathBuf> {
+    let requested = normalize_file_key(requested);
+    if guard.sessions.contains_key(&requested) {
+        return Some(requested);
+    }
+
+    if let Some(active) = guard.active_file.as_ref() {
+        if guard.sessions.contains_key(active) {
+            return Some(active.clone());
+        }
+    }
+
+    if guard.sessions.len() == 1 {
+        return guard.sessions.keys().next().cloned();
+    }
+
+    None
+}
+
 fn active_file() -> Result<PathBuf> {
     state()
         .lock()
@@ -79,26 +98,38 @@ fn active_file() -> Result<PathBuf> {
 }
 
 fn with_session<R>(f: impl FnOnce(&BlueprintAiSession) -> Result<R>) -> Result<R> {
-    let key = active_file()?;
     let guard = state()
         .lock()
         .map_err(|_| anyhow!("AI session state lock poisoned"))?;
+    let requested = active_file()?;
+    let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
+        anyhow!(
+            "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
+            requested.display()
+        )
+    })?;
     let session = guard
         .sessions
         .get(&key)
-        .ok_or_else(|| anyhow!("No open blueprint AI session for {}", key.display()))?;
+        .ok_or_else(|| anyhow!("Blueprint is not open in editor: {}", key.display()))?;
     f(session)
 }
 
 fn with_session_mut<R>(f: impl FnOnce(&mut BlueprintAiSession) -> Result<R>) -> Result<R> {
-    let key = active_file()?;
     let mut guard = state()
         .lock()
         .map_err(|_| anyhow!("AI session state lock poisoned"))?;
+    let requested = active_file()?;
+    let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
+        anyhow!(
+            "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
+            requested.display()
+        )
+    })?;
     let session = guard
         .sessions
         .get_mut(&key)
-        .ok_or_else(|| anyhow!("No open blueprint AI session for {}", key.display()))?;
+        .ok_or_else(|| anyhow!("Blueprint is not open in editor: {}", key.display()))?;
     f(session)
 }
 
