@@ -9339,18 +9339,19 @@ checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 [[package]]
 name = "tool_registry"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/ToolbeltRS?rev=4300ccf8a2f79d307ebecd6b3b2bd45f166c59ef#4300ccf8a2f79d307ebecd6b3b2bd45f166c59ef"
+source = "git+https://github.com/Far-Beyond-Pulsar/ToolbeltRS?rev=116b9028bad6b9467073de2534be60ef4df9b279#116b9028bad6b9467073de2534be60ef4df9b279"
 dependencies = [
  "anyhow",
  "inventory",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
 name = "tool_registry_macros"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/ToolbeltRS?rev=4300ccf8a2f79d307ebecd6b3b2bd45f166c59ef#4300ccf8a2f79d307ebecd6b3b2bd45f166c59ef"
+source = "git+https://github.com/Far-Beyond-Pulsar/ToolbeltRS?rev=116b9028bad6b9467073de2534be60ef4df9b279#116b9028bad6b9467073de2534be60ef4df9b279"
 dependencies = [
  "proc-macro2",
  "quote",

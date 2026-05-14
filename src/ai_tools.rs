@@ -5,9 +5,11 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
 use tool_registry::{PluginToolRegistry, ToolContext, ToolRegistry};
 use tool_registry_macros::tool;
 use ui::graph::ConnectionType;
+use tracing::debug;
 
 use crate::core::definitions::NodeDefinitions;
 use crate::core::graph::BlueprintGraph;
@@ -757,6 +759,8 @@ pub fn capabilities_for_file(file_path: &Path) -> Vec<String> {
 }
 
 pub fn execute_compiled_tool(file_path: &Path, tool_name: &str, tool_args: Value) -> Result<Value, PluginError> {
+    let started_at = Instant::now();
+    debug!(tool = tool_name, file = %file_path.display(), "blueprint execute_compiled_tool start");
     set_active_file(file_path);
     let ctx = ToolContext::new()
         .with_current_file(file_path)
@@ -771,6 +775,10 @@ pub fn execute_compiled_tool(file_path: &Path, tool_name: &str, tool_args: Value
         .execute(tool_name, tool_args, &ctx)
         .map_err(|error| PluginError::Other {
             message: format!("{}", error),
+        })
+        .map(|value| {
+            debug!(tool = tool_name, file = %file_path.display(), elapsed_ms = started_at.elapsed().as_millis() as u64, "blueprint execute_compiled_tool end");
+            value
         })
 }
 
