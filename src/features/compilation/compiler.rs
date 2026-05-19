@@ -11,6 +11,12 @@ use gpui::*;
 fn normalize_property_literal(raw: &str) -> String {
     let mut out = raw.trim().to_string();
 
+    // If the value contains escaped quotes (e.g. \"2\"), collapse those
+    // first so the JSON string decode loop below can unwrap it.
+    if out.contains("\\\"") {
+        out = out.replace("\\\"", "\"");
+    }
+
     // Decode nested JSON string encoding up to a small fixed depth.
     for _ in 0..3 {
         match serde_json::from_str::<String>(&out) {
@@ -20,6 +26,26 @@ fn normalize_property_literal(raw: &str) -> String {
     }
 
     out
+}
+
+fn property_value_from_raw(raw: &str) -> pbgc::PropertyValue {
+    let s = normalize_property_literal(raw);
+    let lower = s.to_ascii_lowercase();
+
+    if lower == "true" {
+        return pbgc::PropertyValue::Boolean(true);
+    }
+    if lower == "false" {
+        return pbgc::PropertyValue::Boolean(false);
+    }
+
+    if let Ok(n) = s.parse::<f64>() {
+        if n.is_finite() {
+            return pbgc::PropertyValue::Number(n);
+        }
+    }
+
+    pbgc::PropertyValue::String(s)
 }
 
 // Convert a pulsar_graph DataType into the PBGC DataType the compiler expects.
@@ -72,7 +98,6 @@ impl BlueprintEditorPanel {
         use pbgc::Connection as GConnection;
         use pbgc::{
             ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
-            PropertyValue,
         };
 
         let mut graph = GraphDescription::new("Blueprint Graph");
@@ -91,12 +116,7 @@ impl BlueprintEditorPanel {
                 properties: bp_node
                     .properties
                     .iter()
-                    .map(|(k, v)| {
-                        (
-                            k.clone(),
-                            PropertyValue::String(normalize_property_literal(v)),
-                        )
-                    })
+                    .map(|(k, v)| (k.clone(), property_value_from_raw(v)))
                     .collect(),
             };
 
