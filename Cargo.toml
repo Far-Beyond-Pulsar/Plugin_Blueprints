@@ -21,8 +21,8 @@ pulsar_std = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev =
 engine_backend = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "7e58c28b602428d9106d2ca3b22e09a4948341b7" }
 
 # Blueprint executor — bytecode VM path
-pulsar_std_bundle = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "cad0b845178967218d261ed03a24be9abc4f1cb6" }
-pulsar_bp_executor = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "cad0b845178967218d261ed03a24be9abc4f1cb6" }
+pulsar_std_bundle = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "cbce0f68d7da7ba24f583d609a206e0e364cba63" }
+pulsar_bp_executor = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "cbce0f68d7da7ba24f583d609a206e0e364cba63" }
 
 # Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "74a993fe51efc00ac5e208af74a3df79f2c0ba47" }
