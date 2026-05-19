@@ -753,12 +753,14 @@ dependencies = [
  "chrono",
  "engine_backend",
  "futures",
- "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=2941eb77bdada0407b2982336c7f37ae9f50d86a)",
+ "gpui-ce 1.0.0 (git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=0b555af11e80565429af9405ffd9d17fa832e3fe)",
  "graphy",
  "log",
- "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=5ad02cdf9baed974665f8774ad670bf6fbbf84b8)",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=ec3c37d8ff9a3ea2ca0cc23cba0ae22d1911526c)",
  "plugin_editor_api",
+ "pulsar_bp_executor",
  "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=7e58c28b602428d9106d2ca3b22e09a4948341b7)",
+ "pulsar_std_bundle",
  "schemars",
  "serde",
  "serde_json",
@@ -2933,7 +2935,7 @@ dependencies = [
 [[package]]
 name = "gpui-ce"
 version = "1.0.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=2941eb77bdada0407b2982336c7f37ae9f50d86a#2941eb77bdada0407b2982336c7f37ae9f50d86a"
+source = "git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=0b555af11e80565429af9405ffd9d17fa832e3fe#0b555af11e80565429af9405ffd9d17fa832e3fe"
 dependencies = [
  "anyhow",
  "arboard",
@@ -6254,7 +6256,7 @@ dependencies = [
 [[package]]
 name = "pbgc"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=5ad02cdf9baed974665f8774ad670bf6fbbf84b8#5ad02cdf9baed974665f8774ad670bf6fbbf84b8"
+source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=925107465da13f323b41513d00431703b4219296#925107465da13f323b41513d00431703b4219296"
 dependencies = [
  "graphy",
  "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=812db780cb2b4d7b3882d6fda3d4a4ab076ae4ba)",
@@ -6267,10 +6269,10 @@ dependencies = [
 [[package]]
 name = "pbgc"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=925107465da13f323b41513d00431703b4219296#925107465da13f323b41513d00431703b4219296"
+source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=ec3c37d8ff9a3ea2ca0cc23cba0ae22d1911526c#ec3c37d8ff9a3ea2ca0cc23cba0ae22d1911526c"
 dependencies = [
  "graphy",
- "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=812db780cb2b4d7b3882d6fda3d4a4ab076ae4ba)",
+ "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6e75c5c216827fafb4fad40c73b09e816c9963a7)",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -6814,6 +6816,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulsar_bp_executor"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=cad0b845178967218d261ed03a24be9abc4f1cb6#cad0b845178967218d261ed03a24be9abc4f1cb6"
+dependencies = [
+ "libloading",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=ec3c37d8ff9a3ea2ca0cc23cba0ae22d1911526c)",
+]
+
+[[package]]
 name = "pulsar_diagnostics"
 version = "0.1.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=7e58c28b602428d9106d2ca3b22e09a4948341b7#7e58c28b602428d9106d2ca3b22e09a4948341b7"
@@ -6848,6 +6859,17 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+]
+
+[[package]]
+name = "pulsar_macros"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6e75c5c216827fafb4fad40c73b09e816c9963a7#6e75c5c216827fafb4fad40c73b09e816c9963a7"
+dependencies = [
+ "linkme",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -6906,6 +6928,18 @@ dependencies = [
 [[package]]
 name = "pulsar_std"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6e75c5c216827fafb4fad40c73b09e816c9963a7#6e75c5c216827fafb4fad40c73b09e816c9963a7"
+dependencies = [
+ "linkme",
+ "pulsar_macros 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6e75c5c216827fafb4fad40c73b09e816c9963a7)",
+ "rand 0.9.4",
+ "rlua",
+ "tracing",
+]
+
+[[package]]
+name = "pulsar_std"
+version = "0.1.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=7e58c28b602428d9106d2ca3b22e09a4948341b7#7e58c28b602428d9106d2ca3b22e09a4948341b7"
 dependencies = [
  "linkme",
@@ -6926,6 +6960,11 @@ dependencies = [
  "rlua",
  "tracing",
 ]
+
+[[package]]
+name = "pulsar_std_bundle"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=cad0b845178967218d261ed03a24be9abc4f1cb6#cad0b845178967218d261ed03a24be9abc4f1cb6"
 
 [[package]]
 name = "pxfm"

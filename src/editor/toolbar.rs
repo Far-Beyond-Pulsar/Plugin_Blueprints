@@ -49,6 +49,7 @@ impl ToolbarRenderer {
             .tab_title
             .clone()
             .unwrap_or_else(|| "Blueprint Editor".to_string());
+        let compile_mode = panel.compile_mode.clone();
 
         // ── Compile-button icon (reflects last result) ───────────────────────
         let compile_icon = match &compile_state {
@@ -123,6 +124,26 @@ impl ToolbarRenderer {
                             CompilationState::Error => btn.danger(),
                             CompilationState::Compiling => btn.warning(),
                             CompilationState::Idle => btn,
+                        }
+                    })
+                    // Mode toggle: "Rust" ↔ "VM"
+                    .child({
+                        use crate::core::types::CompileMode;
+                        let mode_label = compile_mode.label();
+                        let tooltip = match &compile_mode {
+                            CompileMode::DirectRust => "Mode: Direct Rust codegen — click to switch to Bytecode VM",
+                            CompileMode::BytecodeVm => "Mode: Bytecode VM (pulsar_std cdylib) — click to switch to Direct Rust",
+                        };
+                        let btn = Button::new("toolbar-compile-mode")
+                            .label(mode_label)
+                            .tooltip(tooltip)
+                            .on_click(cx.listener(|panel, _, _window, cx| {
+                                panel.compile_mode = panel.compile_mode.toggle();
+                                cx.notify();
+                            }));
+                        match &compile_mode {
+                            CompileMode::BytecodeVm => btn.primary(),
+                            CompileMode::DirectRust => btn,
                         }
                     }),
             )

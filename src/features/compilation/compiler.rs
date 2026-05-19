@@ -1,4 +1,4 @@
-//! Compiler - Compile blueprints to Rust code
+//! Compiler - Compile blueprints to Rust code or PBGC bytecode
 
 use crate::editor::panel::{BlueprintEditorPanel, CompilationHistoryEntry};
 use crate::{CompilationState, CompilationStatus};
@@ -121,6 +121,43 @@ impl BlueprintEditorPanel {
         Ok(graph)
     }
 
+    /// Compile current graph → PBGC bytecode programs.
+    ///
+    /// Returns one `BpProgram` per entry-point (event) found in the graph.
+    pub fn compile_to_bytecode(&self) -> Result<Vec<pbgc::BpProgram>, String> {
+        let graph = self.build_graphy_description()?;
+        pbgc::compile_graph_to_bytecode(&graph)
+            .map_err(|e| format!("Bytecode compilation failed: {}", e))
+    }
+
+    /// Execute bytecode programs immediately against the embedded native cdylib.
+    ///
+    /// Extracts `pulsar_std` to a temp file, loads it via `BpExecutor`, patches
+    /// all `fn_ptr` slots, and runs each program through `pbgc::vm::run`.
+    ///
+    /// # Safety
+    ///
+    /// The `BpExecutor` (and its backing `TempLib`) must remain alive for the
+    /// entire duration of `vm::run`. Both are kept on the stack here.
+    pub fn execute_bytecode_programs(
+        &self,
+        programs: Vec<pbgc::BpProgram>,
+    ) -> Result<(), String> {
+        let tmp = pulsar_std_bundle::extract_to_tempfile()
+            .map_err(|e| format!("Failed to extract pulsar_std: {}", e))?;
+        let executor = pulsar_bp_executor::BpExecutor::load(&tmp.path)
+            .map_err(|e| format!("Failed to load pulsar_std: {}", e))?;
+
+        for mut prog in programs {
+            executor
+                .prepare(&mut prog)
+                .map_err(|e| format!("Dispatch resolve failed: {}", e))?;
+            pbgc::vm::run(&prog)
+                .map_err(|e| format!("VM run failed: {}", e))?;
+        }
+        Ok(())
+    }
+
     /// Compile current graph to Rust source code
     pub fn compile_to_rust(&self) -> Result<String, String> {
         let graph = self.build_graphy_description()?;
@@ -218,6 +255,12 @@ impl BlueprintEditorPanel {
     pub async fn compile_async(panel_entity: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp) {
         let started_at = std::time::Instant::now();
 
+        // Capture compile mode before entering async context.
+        let compile_mode = match panel_entity.update(cx, |panel, _cx| panel.compile_mode.clone()) {
+            Ok(m) => m,
+            Err(_) => return,
+        };
+
         // Set compiling state
         let result = panel_entity.update(cx, |panel, cx| {
             panel.compilation_status = CompilationStatus {
@@ -239,18 +282,35 @@ impl BlueprintEditorPanel {
                 "Compilation started",
                 Some(format!("Class path: {}", class_path_display)),
             );
-            panel.push_compilation_history(
-                CompilationState::Compiling,
-                "build",
-                "Generating Rust event modules",
-                Some(
-                    "Steps: validate event nodes, compile graph, write events/events.rs, write events/mod.rs, refresh vars module"
-                        .to_string(),
-                ),
-            );
 
-            cx.notify();
-            panel.compile_to_class_directory()
+            use crate::core::types::CompileMode;
+            match &compile_mode {
+                CompileMode::DirectRust => {
+                    panel.push_compilation_history(
+                        CompilationState::Compiling,
+                        "build",
+                        "Generating Rust event modules",
+                        Some(
+                            "Steps: validate event nodes, compile graph, write events/events.rs, write events/mod.rs, refresh vars module"
+                                .to_string(),
+                        ),
+                    );
+                    cx.notify();
+                    panel.compile_to_class_directory()
+                }
+                CompileMode::BytecodeVm => {
+                    panel.push_compilation_history(
+                        CompilationState::Compiling,
+                        "build",
+                        "Compiling to PBGC bytecode and executing via native VM",
+                        Some("Steps: build graph description, compile to bytecode, load pulsar_std cdylib, resolve dispatch symbols, vm::run".to_string()),
+                    );
+                    cx.notify();
+                    panel
+                        .compile_to_bytecode()
+                        .and_then(|programs| panel.execute_bytecode_programs(programs))
+                }
+            }
         });
 
         if let Ok(compile_result) = result {
@@ -260,16 +320,26 @@ impl BlueprintEditorPanel {
                     smol::Timer::after(std::time::Duration::from_millis(500)).await;
                     let _ = panel_entity.update(cx, |panel, cx| {
                         let elapsed_ms = started_at.elapsed().as_millis();
-                        let output_events = panel
-                            .current_class_path
-                            .as_ref()
-                            .map(|p| p.join("events").join("events.rs").display().to_string())
-                            .unwrap_or_else(|| "events/events.rs".to_string());
-                        let output_mod = panel
-                            .current_class_path
-                            .as_ref()
-                            .map(|p| p.join("events").join("mod.rs").display().to_string())
-                            .unwrap_or_else(|| "events/mod.rs".to_string());
+
+                        use crate::core::types::CompileMode;
+                        let detail = match panel.compile_mode {
+                            CompileMode::DirectRust => {
+                                let output_events = panel
+                                    .current_class_path
+                                    .as_ref()
+                                    .map(|p| p.join("events").join("events.rs").display().to_string())
+                                    .unwrap_or_else(|| "events/events.rs".to_string());
+                                let output_mod = panel
+                                    .current_class_path
+                                    .as_ref()
+                                    .map(|p| p.join("events").join("mod.rs").display().to_string())
+                                    .unwrap_or_else(|| "events/mod.rs".to_string());
+                                format!("Duration: {} ms | Outputs: {}, {}", elapsed_ms, output_events, output_mod)
+                            }
+                            CompileMode::BytecodeVm => {
+                                format!("Duration: {} ms | Mode: Bytecode VM (pulsar_std cdylib)", elapsed_ms)
+                            }
+                        };
 
                         panel.compilation_status = CompilationStatus {
                             state: CompilationState::Success,
@@ -282,10 +352,7 @@ impl BlueprintEditorPanel {
                             CompilationState::Success,
                             "complete",
                             "Compilation successful",
-                            Some(format!(
-                                "Duration: {} ms | Outputs: {}, {}",
-                                elapsed_ms, output_events, output_mod
-                            )),
+                            Some(detail),
                         );
 
                         cx.notify();

@@ -17,6 +17,35 @@ use crate::rendering::layout;
 // Compilation Status
 // ============================================================================
 
+/// Which backend the compile button targets.
+///
+/// - `DirectRust` — existing path: graph → Rust source written to
+///   `events/events.rs` inside the class directory.
+/// - `BytecodeVm` — new path: graph → PBGC bytecode executed immediately
+///   against the embedded `pulsar_std` native cdylib.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub enum CompileMode {
+    #[default]
+    DirectRust,
+    BytecodeVm,
+}
+
+impl CompileMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            CompileMode::DirectRust => "Rust",
+            CompileMode::BytecodeVm => "VM",
+        }
+    }
+
+    pub fn toggle(&self) -> Self {
+        match self {
+            CompileMode::DirectRust => CompileMode::BytecodeVm,
+            CompileMode::BytecodeVm => CompileMode::DirectRust,
+        }
+    }
+}
+
 /// Compilation status tracking for UI feedback
 #[derive(Clone, Debug, PartialEq)]
 pub enum CompilationState {
