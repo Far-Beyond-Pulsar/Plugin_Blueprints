@@ -54,16 +54,7 @@ fn to_graphy_datatype(dt: &ui::graph::DataType) -> pbgc::DataType {
     use ui::graph::DataType as PG;
     match dt {
         PG::Execution => GD::Execution,
-        PG::Typed(ti) => GD::Typed(pbgc::TypeInfo::new(ti.to_string())),
-        PG::Any => GD::Any,
-        PG::String => GD::String,
-        PG::Number => GD::Number,
-        PG::Boolean => GD::Boolean,
-        PG::Vector2 => GD::Vector2,
-        PG::Vector3 => GD::Vector3,
-        PG::Color => GD::Color,
-        PG::Object => GD::Typed(pbgc::TypeInfo::new("Object")),
-        PG::Array(inner) => GD::Typed(pbgc::TypeInfo::new(format!("Vec<{}>", inner))),
+        PG::Data(ti) => GD::Typed(pbgc::TypeInfo::new(ti.to_string())),
     }
 }
 
