@@ -168,8 +168,14 @@ impl BlueprintEditorPanel {
     ///
     /// Returns one `BpProgram` per entry-point (event) found in the graph.
     pub fn compile_to_bytecode(&self) -> Result<Vec<pbgc::BpProgram>, String> {
+        let variables: std::collections::HashMap<String, String> = self
+            .class_variables
+            .iter()
+            .map(|v| (v.name.clone(), v.var_type.clone()))
+            .collect();
+
         let graph = self.build_graphy_description()?;
-        pbgc::compile_graph_to_bytecode(&graph)
+        pbgc::compile_graph_to_bytecode_with_variables(&graph, variables)
             .map_err(|e| format!("Bytecode compilation failed: {}", e))
     }
 
