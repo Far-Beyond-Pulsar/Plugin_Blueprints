@@ -68,19 +68,6 @@ fn to_graphy_datatype(dt: &ui::graph::DataType) -> pbgc::DataType {
 }
 
 impl BlueprintEditorPanel {
-    fn is_bytecode_unsupported_node(definition_id: &str) -> bool {
-        definition_id.starts_with("get_") || definition_id.starts_with("set_")
-    }
-
-    fn bytecode_unsupported_nodes(&self) -> Vec<(String, String, String)> {
-        self.graph
-            .nodes
-            .iter()
-            .filter(|n| Self::is_bytecode_unsupported_node(&n.definition_id))
-            .map(|n| (n.id.clone(), n.definition_id.clone(), n.title.clone()))
-            .collect()
-    }
-
     fn push_compilation_history(
         &mut self,
         state: CompilationState,
@@ -177,97 +164,11 @@ impl BlueprintEditorPanel {
         Ok(graph)
     }
 
-    /// Build graph description for bytecode mode while skipping unsupported
-    /// node families (`get_*` / `set_*`) and any connections touching them.
-    fn build_graphy_description_for_bytecode(&self) -> Result<pbgc::GraphDescription, String> {
-        use pbgc::Connection as GConnection;
-        use pbgc::{
-            ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
-        };
-
-        let unsupported_ids: std::collections::HashSet<String> = self
-            .graph
-            .nodes
-            .iter()
-            .filter(|n| Self::is_bytecode_unsupported_node(&n.definition_id))
-            .map(|n| n.id.clone())
-            .collect();
-
-        let mut graph = GraphDescription::new("Blueprint Graph");
-
-        for bp_node in &self.graph.nodes {
-            if unsupported_ids.contains(&bp_node.id) {
-                continue;
-            }
-
-            let mut node = NodeInstance {
-                id: bp_node.id.clone(),
-                node_type: bp_node.definition_id.clone(),
-                position: Position {
-                    x: bp_node.position.x as f64,
-                    y: bp_node.position.y as f64,
-                },
-                inputs: Vec::new(),
-                outputs: Vec::new(),
-                properties: bp_node
-                    .properties
-                    .iter()
-                    .map(|(k, v)| (k.clone(), property_value_from_raw(v)))
-                    .collect(),
-            };
-
-            for pin in &bp_node.inputs {
-                node.inputs.push(PinInstance {
-                    id: pin.id.clone(),
-                    pin: Pin {
-                        id: pin.id.clone(),
-                        name: pin.name.clone(),
-                        data_type: to_graphy_datatype(&pin.data_type),
-                        pin_type: PinType::Input,
-                    },
-                });
-            }
-            for pin in &bp_node.outputs {
-                node.outputs.push(PinInstance {
-                    id: pin.id.clone(),
-                    pin: Pin {
-                        id: pin.id.clone(),
-                        name: pin.name.clone(),
-                        data_type: to_graphy_datatype(&pin.data_type),
-                        pin_type: PinType::Output,
-                    },
-                });
-            }
-
-            graph.nodes.insert(bp_node.id.clone(), node);
-        }
-
-        for conn in &self.graph.connections {
-            if unsupported_ids.contains(&conn.source_node) || unsupported_ids.contains(&conn.target_node) {
-                continue;
-            }
-
-            let conn_type = match conn.connection_type {
-                ui::graph::ConnectionType::Execution => ConnectionType::Execution,
-                ui::graph::ConnectionType::Data => ConnectionType::Data,
-            };
-            graph.connections.push(GConnection {
-                source_node: conn.source_node.clone(),
-                source_pin: conn.source_pin.clone(),
-                target_node: conn.target_node.clone(),
-                target_pin: conn.target_pin.clone(),
-                connection_type: conn_type,
-            });
-        }
-
-        Ok(graph)
-    }
-
     /// Compile current graph → PBGC bytecode programs.
     ///
     /// Returns one `BpProgram` per entry-point (event) found in the graph.
     pub fn compile_to_bytecode(&self) -> Result<Vec<pbgc::BpProgram>, String> {
-        let graph = self.build_graphy_description_for_bytecode()?;
+        let graph = self.build_graphy_description()?;
         pbgc::compile_graph_to_bytecode(&graph)
             .map_err(|e| format!("Bytecode compilation failed: {}", e))
     }
@@ -441,23 +342,11 @@ impl BlueprintEditorPanel {
                     panel.compile_to_class_directory()
                 }
                 CompileMode::BytecodeVm => {
-                    let skipped = panel.bytecode_unsupported_nodes();
-                    if !skipped.is_empty() {
-                        for (id, node_type, title) in skipped {
-                            panel.push_compilation_history(
-                                CompilationState::Compiling,
-                                "warn",
-                                format!("Skipping unsupported VM node: {}", title),
-                                Some(format!("id: {} | type: {}", id, node_type)),
-                            );
-                        }
-                    }
-
                     panel.push_compilation_history(
                         CompilationState::Compiling,
                         "build",
                         "Compiling to PBGC bytecode and executing via native VM",
-                        Some("Steps: build graph description, skip unsupported get_/set_ variable nodes, compile to bytecode, load pulsar_std cdylib, resolve dispatch symbols, vm::run".to_string()),
+                        Some("Steps: build graph description, compile to bytecode, load pulsar_std cdylib, resolve dispatch symbols, vm::run".to_string()),
                     );
                     cx.notify();
                     panel
@@ -491,16 +380,7 @@ impl BlueprintEditorPanel {
                                 format!("Duration: {} ms | Outputs: {}, {}", elapsed_ms, output_events, output_mod)
                             }
                             CompileMode::BytecodeVm => {
-                                let skipped_count = panel.bytecode_unsupported_nodes().len();
-                                if skipped_count > 0 {
-                                    format!(
-                                        "Duration: {} ms | Mode: Bytecode VM (pulsar_std cdylib) | Skipped unsupported nodes: {}",
-                                        elapsed_ms,
-                                        skipped_count
-                                    )
-                                } else {
-                                    format!("Duration: {} ms | Mode: Bytecode VM (pulsar_std cdylib)", elapsed_ms)
-                                }
+                                format!("Duration: {} ms | Mode: Bytecode VM (pulsar_std cdylib)", elapsed_ms)
                             }
                         };
 
