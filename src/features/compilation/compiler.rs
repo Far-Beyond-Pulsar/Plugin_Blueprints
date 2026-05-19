@@ -4,6 +4,24 @@ use crate::editor::panel::{BlueprintEditorPanel, CompilationHistoryEntry};
 use crate::{CompilationState, CompilationStatus};
 use gpui::*;
 
+/// Normalizes property literals that may be JSON-string-encoded one or more
+/// times by the editor/serialization path.
+///
+/// Example: `"\"2\""` -> `2`
+fn normalize_property_literal(raw: &str) -> String {
+    let mut out = raw.trim().to_string();
+
+    // Decode nested JSON string encoding up to a small fixed depth.
+    for _ in 0..3 {
+        match serde_json::from_str::<String>(&out) {
+            Ok(decoded) => out = decoded,
+            Err(_) => break,
+        }
+    }
+
+    out
+}
+
 // Convert a pulsar_graph DataType into the PBGC DataType the compiler expects.
 fn to_graphy_datatype(dt: &ui::graph::DataType) -> pbgc::DataType {
     use pbgc::DataType as GD;
@@ -73,7 +91,12 @@ impl BlueprintEditorPanel {
                 properties: bp_node
                     .properties
                     .iter()
-                    .map(|(k, v)| (k.clone(), PropertyValue::String(v.clone())))
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            PropertyValue::String(normalize_property_literal(v)),
+                        )
+                    })
                     .collect(),
             };
 
