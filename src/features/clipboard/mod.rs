@@ -109,7 +109,7 @@ impl ClipboardData {
                         id: pin.id.clone(),
                         name: pin.name.clone(),
                         pin_type: pin.pin_type.clone(),
-                        data_type: format!("{:?}", pin.data_type),
+                        data_type: pin.data_type.to_string(),
                     })
                     .collect(),
                 outputs: node
@@ -119,7 +119,7 @@ impl ClipboardData {
                         id: pin.id.clone(),
                         name: pin.name.clone(),
                         pin_type: pin.pin_type.clone(),
-                        data_type: format!("{:?}", pin.data_type),
+                        data_type: pin.data_type.to_string(),
                     })
                     .collect(),
                 properties: node.properties.clone(),

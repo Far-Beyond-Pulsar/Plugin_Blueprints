@@ -312,13 +312,13 @@ impl BlueprintNode {
                 id: "input".to_string(),
                 name: "".to_string(),
                 pin_type: PinType::Input,
-                data_type: DataType::Any, // Start as typeless
+                data_type: DataType::from_type_str("?"), // Start as typeless
             }],
             outputs: vec![Pin {
                 id: "output".to_string(),
                 name: "".to_string(),
                 pin_type: PinType::Output,
-                data_type: DataType::Any, // Start as typeless
+                data_type: DataType::from_type_str("?"), // Start as typeless
             }],
             properties: HashMap::new(),
             is_selected: false,

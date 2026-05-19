@@ -1539,7 +1539,7 @@ impl BlueprintEditorPanel {
             .iter()
             .map(|v| ClassVariable {
                 name: v.name.clone(),
-                var_type: format!("{:?}", v.data_type),
+                var_type: v.data_type.to_string(),
                 default_value: v.default_value.clone(),
             })
             .collect();

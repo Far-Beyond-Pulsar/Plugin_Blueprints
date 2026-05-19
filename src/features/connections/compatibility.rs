@@ -6,7 +6,7 @@ use ui::graph::DataType as GraphDataType;
 
 /// Check if two data types are compatible for connection
 pub fn are_types_compatible(from_type: &GraphDataType, to_type: &GraphDataType) -> bool {
-    from_type == to_type || *from_type == GraphDataType::Any || *to_type == GraphDataType::Any
+    from_type.is_compatible_with(to_type)
 }
 
 /// Infer the type of a reroute node based on its connections
@@ -44,8 +44,8 @@ pub fn infer_reroute_type(node_id: &str, graph: &BlueprintGraph) -> Option<Graph
         }
     }
 
-    // No connections found, default to Any
-    Some(GraphDataType::Any)
+    // No connections found, default to wildcard data
+    Some(GraphDataType::from_type_str("?"))
 }
 
 /// Validate that a connection is valid
