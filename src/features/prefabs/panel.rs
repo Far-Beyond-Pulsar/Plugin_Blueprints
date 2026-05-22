@@ -356,31 +356,30 @@ impl PrefabPropertiesRenderer {
                             )
                             .into_any_element()
                     } else {
-                        // Use shared component section renderer
+                        // Use shared component section renderer - capture panel entity first
+                        let panel_entity = cx.entity().clone();
+
                         let on_bool_toggle = Arc::new(move |prop_name: &str, checked: bool, _window: &mut Window, cx: &mut App| {
-                            if let Some(entity) = cx.entity_for_type::<BlueprintEditorPanel>() {
-                                entity.update(cx, |panel, cx| {
-                                    panel.update_prefab_component_property(
-                                        index,
-                                        prop_name,
-                                        serde_json::Value::Bool(checked),
-                                    );
-                                    cx.notify();
-                                });
-                            }
+                            panel_entity.update(cx, |panel, cx| {
+                                panel.update_prefab_component_property(
+                                    index,
+                                    prop_name,
+                                    serde_json::Value::Bool(checked),
+                                );
+                                cx.notify();
+                            });
                         });
 
+                        let panel_entity = cx.entity().clone();
                         let on_enum_select = Arc::new(move |prop_name: &str, ix: usize, _window: &mut Window, cx: &mut App| {
-                            if let Some(entity) = cx.entity_for_type::<BlueprintEditorPanel>() {
-                                entity.update(cx, |panel, cx| {
-                                    panel.update_prefab_component_property(
-                                        index,
-                                        prop_name,
-                                        serde_json::Value::from(ix as u64),
-                                    );
-                                    cx.notify();
-                                });
-                            }
+                            panel_entity.update(cx, |panel, cx| {
+                                panel.update_prefab_component_property(
+                                    index,
+                                    prop_name,
+                                    serde_json::Value::from(ix as u64),
+                                );
+                                cx.notify();
+                            });
                         });
 
                         v_flex()
