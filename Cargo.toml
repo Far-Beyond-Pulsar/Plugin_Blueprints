@@ -13,13 +13,13 @@ plugin_editor_api = { path = "../Pulsar-Native/crates/plugin_editor_api" }
 
 # UI dependencies (local paths so traits resolve to the same crate instance)
 gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "0b555af11e80565429af9405ffd9d17fa832e3fe" }
-ui = { path = "../Pulsar-Native/crates/ui" }
-ui_common = { path = "../Pulsar-Native/ui-crates/ui_common" }
+ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "e750907d41f1e50e1906e755db0d704e5c0f351a" }
+ui_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "e750907d41f1e50e1906e755db0d704e5c0f351a" }
 
 # Blueprint editor dependencies (local paths)
-pulsar_std = { path = "../Pulsar-Native/crates/pulsar_std" }
-engine_backend = { path = "../Pulsar-Native/crates/engine_backend" }
-pulsar_reflection = { path = "../Pulsar-Native/crates/pulsar_reflection" }
+pulsar_std = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "e750907d41f1e50e1906e755db0d704e5c0f351a" }
+engine_backend = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "e750907d41f1e50e1906e755db0d704e5c0f351a" }
+pulsar_reflection = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "e750907d41f1e50e1906e755db0d704e5c0f351a" }
 
 # Blueprint executor — bytecode VM path
 pulsar_std_bundle = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "e750907d41f1e50e1906e755db0d704e5c0f351a" }
