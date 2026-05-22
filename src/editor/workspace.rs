@@ -9,8 +9,8 @@ use ui::workspace::Workspace;
 
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::{
-    CompilerPanel, FindPanel, GraphCanvasPanel, MacrosPanel, PalettePanel, PropertiesPanel,
-    VariablesPanel,
+    CompilerPanel, FindPanel, GraphCanvasPanel, MacrosPanel, PalettePanel, PrefabHierarchyPanel,
+    PrefabsPanel, PropertiesPanel, VariablesPanel,
 };
 
 impl BlueprintEditorPanel {
@@ -36,9 +36,12 @@ impl BlueprintEditorPanel {
 
             let variables_panel = cx.new(|cx| VariablesPanel::new(editor_weak.clone(), cx));
             let macros_panel = cx.new(|cx| MacrosPanel::new(editor_weak.clone(), cx));
+            let prefab_hierarchy_panel =
+                cx.new(|cx| PrefabHierarchyPanel::new(editor_weak.clone(), cx));
             let compiler_panel = cx.new(|cx| CompilerPanel::new(editor_weak.clone(), cx));
             let find_panel = cx.new(|cx| FindPanel::new(editor_weak.clone(), cx));
             let properties_panel = cx.new(|cx| PropertiesPanel::new(editor_weak.clone(), cx));
+            let prefabs_panel = cx.new(|cx| PrefabsPanel::new(editor_weak.clone(), cx));
             let palette_panel = cx.new(|cx| PalettePanel::new(editor_weak.clone(), window, cx));
             let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = self
                 .open_tabs
@@ -65,7 +68,11 @@ impl BlueprintEditorPanel {
             );
 
             let left = DockItem::tabs(
-                vec![Arc::new(variables_panel), Arc::new(macros_panel)],
+                vec![
+                    Arc::new(prefab_hierarchy_panel),
+                    Arc::new(variables_panel),
+                    Arc::new(macros_panel),
+                ],
                 None,
                 &dock_area_weak,
                 window,
@@ -73,7 +80,11 @@ impl BlueprintEditorPanel {
             );
 
             let right = DockItem::tabs(
-                vec![Arc::new(properties_panel), Arc::new(palette_panel)],
+                vec![
+                    Arc::new(prefabs_panel),
+                    Arc::new(properties_panel),
+                    Arc::new(palette_panel),
+                ],
                 None,
                 &dock_area_weak,
                 window,

@@ -6,6 +6,7 @@
 use gpui::*;
 use std::collections::HashMap;
 use ui::{
+    color_picker::ColorPickerState,
     input::InputState,
     resizable::ResizableState,
     scroll::ScrollbarState,
@@ -16,7 +17,9 @@ use super::tabs::GraphTab;
 use crate::ui_components::palette_view::NodePaletteView;
 use crate::core::{definitions::NodeDefinitions, events::*, graph::*, types::*};
 use crate::editor::workspace_panels::GraphCanvasPanel;
+use crate::features::prefabs::add_component_dialog::AddPrefabComponentDialog;
 use crate::features::connections::operations::ConnectionDrag;
+use crate::features::prefabs::PrefabAsset;
 use crate::features::variables::ClassVariable;
 use crate::rendering::graph::NodeGraphRenderer;
 use ui::dock::{DockItem, DockPlacement};
@@ -78,6 +81,13 @@ pub struct BlueprintEditorPanel {
     pub dragging_variable: Option<crate::features::variables::VariableDrag>,
     pub variable_drop_menu_position: Option<Point<f32>>,
 
+    // Prefab sidecar authoring
+    pub prefab_asset: PrefabAsset,
+    pub prefab_add_component_dialog: Entity<AddPrefabComponentDialog>,
+    pub prefab_property_inputs: HashMap<String, Entity<InputState>>,
+    pub prefab_color_pickers: HashMap<String, Entity<ColorPickerState>>,
+    pub selected_prefab_component: Option<usize>,
+
     // Comment system
     pub dragging_comment: Option<String>,
     pub resizing_comment: Option<(String, ResizeHandle)>,
@@ -132,7 +142,7 @@ pub struct BlueprintEditorPanel {
     // Sidebar tab states
     pub left_top_tab: usize,    // 0=Variables, 1=Functions, 2=Macros
     pub left_bottom_tab: usize, // 0=Library, 1=Compiler
-    pub right_tab: usize,       // 0=Details, 1=Palette
+    pub right_tab: usize,       // 0=Details, 1=Prefabs, 2=Palette
 
     // Tab drag state
     pub dragging_tab: Option<TabDragInfo>,
@@ -250,6 +260,10 @@ impl BlueprintEditorPanel {
             return Err(e.into());
         }
 
+        if let Err(e) = panel.load_prefab_sidecar() {
+            log::warn!("Failed to load prefab sidecar: {}", e);
+        }
+
         log::info!("Loaded blueprint from {:?}", file_path);
         Ok(panel)
     }
@@ -266,6 +280,9 @@ impl BlueprintEditorPanel {
         if let Err(e) = panel.load_blueprint(file_path.to_str().unwrap(), window, cx) {
             eprintln!("Failed to load blueprint: {}", e);
         } else {
+            if let Err(e) = panel.load_prefab_sidecar() {
+                log::warn!("Failed to load prefab sidecar: {}", e);
+            }
             println!("Loaded blueprint from {:?}", file_path);
         }
 
@@ -318,8 +335,23 @@ impl BlueprintEditorPanel {
         };
 
         let editor_weak = cx.entity().downgrade();
-        let quick_palette_view =
-            cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
+        let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
+        let prefab_add_component_dialog = cx.new(|cx| AddPrefabComponentDialog::new(window, cx));
+        cx.subscribe(
+            &prefab_add_component_dialog,
+            |this, _, event: &crate::features::prefabs::add_component_dialog::PrefabComponentSelectedEvent, cx| {
+                this.add_prefab_component(event.class_name.clone());
+                cx.notify();
+            },
+        )
+        .detach();
+        cx.subscribe(
+            &prefab_add_component_dialog,
+            |this, _, _: &DismissEvent, cx| {
+                cx.notify();
+            },
+        )
+        .detach();
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -355,6 +387,11 @@ impl BlueprintEditorPanel {
                 .new(|cx| ui::dropdown::DropdownState::new(Vec::new(), None, window, cx)),
             dragging_variable: None,
             variable_drop_menu_position: None,
+            prefab_asset: PrefabAsset::new("Prefab"),
+            prefab_add_component_dialog,
+            prefab_property_inputs: HashMap::new(),
+            prefab_color_pickers: HashMap::new(),
+            selected_prefab_component: None,
             dragging_comment: None,
             resizing_comment: None,
             editing_comment: None,

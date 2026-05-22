@@ -18,6 +18,10 @@ impl BlueprintEditorPanel {
         if let Some(path) = self.get_graph_file_path() {
             match self.save_to_path(&path, window, cx) {
                 Ok(()) => {
+                    if let Err(e) = self.save_prefab_sidecar() {
+                        tracing::warn!("Failed to save prefab sidecar: {}", e);
+                    }
+
                     tracing::info!("Blueprint saved successfully to {:?}", path);
                     self.is_dirty = false;
 
@@ -133,6 +137,7 @@ impl BlueprintEditorPanel {
         // Load the asset into the editor
         self.load_blueprint_asset(asset, window, cx)?;
         self.set_path(source_path);
+        self.load_prefab_sidecar()?;
 
         Ok(())
     }

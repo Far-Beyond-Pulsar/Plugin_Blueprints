@@ -3,6 +3,97 @@
 use crate::editor::panel::{BlueprintEditorPanel, CompilationHistoryEntry};
 use crate::{CompilationState, CompilationStatus};
 use gpui::*;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+
+#[derive(Default)]
+struct BytecodeRuntimeState {
+    runtime: Option<BytecodeRuntime>,
+}
+
+struct BytecodeRuntime {
+    _temp_lib: pulsar_std_bundle::TempLib,
+    executor: pulsar_bp_executor::BpExecutor,
+    prepared_by_class: HashMap<String, Vec<PreparedProgram>>,
+}
+
+struct PreparedProgram {
+    program: pbgc::BpProgram,
+    arena: Vec<u64>,
+}
+
+static BYTECODE_RUNTIME: OnceLock<Mutex<BytecodeRuntimeState>> = OnceLock::new();
+
+fn runtime_state() -> &'static Mutex<BytecodeRuntimeState> {
+    BYTECODE_RUNTIME.get_or_init(|| Mutex::new(BytecodeRuntimeState::default()))
+}
+
+impl BytecodeRuntime {
+    fn new() -> Result<Self, String> {
+        let temp_lib = pulsar_std_bundle::extract_to_tempfile()
+            .map_err(|e| format!("Failed to extract pulsar_std: {}", e))?;
+        let executor = pulsar_bp_executor::BpExecutor::load(&temp_lib.path)
+            .map_err(|e| format!("Failed to load pulsar_std: {}", e))?;
+
+        Ok(Self {
+            _temp_lib: temp_lib,
+            executor,
+            prepared_by_class: HashMap::new(),
+        })
+    }
+
+    fn execute_for_class(
+        &mut self,
+        class_key: String,
+        mut programs: Vec<pbgc::BpProgram>,
+    ) -> Result<(), String> {
+        let prepared = self
+            .prepared_by_class
+            .entry(class_key)
+            .or_insert_with(Vec::new);
+
+        if prepared.len() != programs.len() {
+            prepared.clear();
+        }
+
+        // Re-prepare each compiled program while preserving previously allocated arenas
+        // for persistent variable state between executions.
+        for (index, mut program) in programs.drain(..).enumerate() {
+            self.executor
+                .prepare(&mut program)
+                .map_err(|e| format!("Dispatch resolve failed: {}", e))?;
+
+            let required_words = (program.arena_size + 7) / 8;
+
+            if let Some(existing) = prepared.get_mut(index) {
+                existing.program = program;
+                if existing.arena.len() < required_words {
+                    existing.arena.resize(required_words, 0);
+                }
+                continue;
+            }
+
+            prepared.push(PreparedProgram {
+                program,
+                arena: vec![0u64; required_words.max(1)],
+            });
+        }
+
+        for prepared_program in prepared.iter_mut() {
+            unsafe {
+                pbgc::vm::run_with_external_arena(
+                    &prepared_program.program,
+                    prepared_program.arena.as_mut_ptr() as *mut u8,
+                    prepared_program.arena.len() * std::mem::size_of::<u64>(),
+                )
+                .map_err(|e| format!("VM run failed: {}", e))?;
+            }
+        }
+
+        Ok(())
+    }
+}
 
 /// Normalizes property literals that may be JSON-string-encoded one or more
 /// times by the editor/serialization path.
@@ -183,19 +274,25 @@ impl BlueprintEditorPanel {
         &self,
         programs: Vec<pbgc::BpProgram>,
     ) -> Result<(), String> {
-        let tmp = pulsar_std_bundle::extract_to_tempfile()
-            .map_err(|e| format!("Failed to extract pulsar_std: {}", e))?;
-        let executor = pulsar_bp_executor::BpExecutor::load(&tmp.path)
-            .map_err(|e| format!("Failed to load pulsar_std: {}", e))?;
+        let class_key = self
+            .current_class_path
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "in_memory_blueprint".to_string());
 
-        for mut prog in programs {
-            executor
-                .prepare(&mut prog)
-                .map_err(|e| format!("Dispatch resolve failed: {}", e))?;
-            pbgc::vm::run(&prog)
-                .map_err(|e| format!("VM run failed: {}", e))?;
+        let mut state = runtime_state()
+            .lock()
+            .map_err(|_| "Bytecode runtime lock poisoned".to_string())?;
+
+        if state.runtime.is_none() {
+            state.runtime = Some(BytecodeRuntime::new()?);
         }
-        Ok(())
+
+        state
+            .runtime
+            .as_mut()
+            .ok_or_else(|| "Bytecode runtime failed to initialize".to_string())?
+            .execute_for_class(class_key, programs)
     }
 
     /// Compile current graph to Rust source code

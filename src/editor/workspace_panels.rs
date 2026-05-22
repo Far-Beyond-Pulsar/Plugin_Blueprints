@@ -10,6 +10,7 @@ use ui::{
 
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::macros::panel::MacrosRenderer;
+use crate::features::prefabs::panel::{PrefabHierarchyRenderer, PrefabPropertiesRenderer};
 use crate::features::variables::rendering::VariablesRenderer;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::palette_view::NodePaletteView;
@@ -239,7 +240,101 @@ impl Panel for PropertiesPanel {
     }
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Details".into_any_element()
+        "Blueprint Details".into_any_element()
+    }
+}
+
+/// Prefab Hierarchy Panel
+pub struct PrefabHierarchyPanel {
+    editor: WeakEntity<BlueprintEditorPanel>,
+    focus_handle: FocusHandle,
+}
+
+impl PrefabHierarchyPanel {
+    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+        Self {
+            editor,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+}
+
+impl EventEmitter<PanelEvent> for PrefabHierarchyPanel {}
+
+impl Render for PrefabHierarchyPanel {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(editor) = self.editor.upgrade() {
+            div()
+                .size_full()
+                .bg(cx.theme().sidebar)
+                .child(editor.update(cx, |editor, cx| PrefabHierarchyRenderer::render(editor, cx)))
+        } else {
+            div().child("Editor not available")
+        }
+    }
+}
+
+impl Focusable for PrefabHierarchyPanel {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Panel for PrefabHierarchyPanel {
+    fn panel_name(&self) -> &'static str {
+        "prefab-hierarchy"
+    }
+
+    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+        "Components".into_any_element()
+    }
+}
+
+/// Prefabs Panel
+pub struct PrefabsPanel {
+    editor: WeakEntity<BlueprintEditorPanel>,
+    focus_handle: FocusHandle,
+}
+
+impl PrefabsPanel {
+    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+        Self {
+            editor,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+}
+
+impl EventEmitter<PanelEvent> for PrefabsPanel {}
+
+impl Render for PrefabsPanel {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(editor) = self.editor.upgrade() {
+            div()
+                .size_full()
+                .bg(cx.theme().sidebar)
+                .child(editor.update(cx, |editor, cx| {
+                    PrefabPropertiesRenderer::render(editor, window, cx)
+                }))
+        } else {
+            div().child("Editor not available")
+        }
+    }
+}
+
+impl Focusable for PrefabsPanel {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Panel for PrefabsPanel {
+    fn panel_name(&self) -> &'static str {
+        "prefabs"
+    }
+
+    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+        "Component Properties".into_any_element()
     }
 }
 
