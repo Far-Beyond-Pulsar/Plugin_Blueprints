@@ -736,8 +736,8 @@ dependencies = [
 name = "blueprint_compiler"
 version = "0.1.0"
 dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
- "pbgc",
+ "graphy",
+ "pbgc 0.1.0",
  "pulsar_graph",
  "serde_json",
  "tracing",
@@ -752,12 +752,13 @@ dependencies = [
  "chrono",
  "engine_backend",
  "futures",
- "gpui-ce 0.3.3",
- "graphy 0.1.0",
+ "gpui-ce",
+ "graphy",
  "log",
- "pbgc",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=98b1510a153447f4af69c1b3bee5b3cb85c185e1)",
  "plugin_editor_api",
  "pulsar_bp_executor",
+ "pulsar_reflection",
  "pulsar_std 0.1.0",
  "pulsar_std_bundle",
  "schemars",
@@ -1956,7 +1957,7 @@ dependencies = [
  "futures",
  "git2",
  "glam 0.29.3",
- "gpui-ce 1.0.0",
+ "gpui-ce",
  "helio",
  "helio-asset-compat",
  "lsp-types",
@@ -2014,7 +2015,7 @@ dependencies = [
  "anyhow",
  "dashmap 6.1.0",
  "directories",
- "gpui-ce 1.0.0",
+ "gpui-ce",
  "parking_lot",
  "pulsar-config",
  "pulsar_settings",
@@ -2957,67 +2958,6 @@ dependencies = [
 
 [[package]]
 name = "gpui-ce"
-version = "0.3.3"
-dependencies = [
- "anyhow",
- "async-task",
- "bytemuck",
- "circular-buffer",
- "core-video",
- "cosmic-text",
- "ctor",
- "derive_more 2.1.1",
- "etagere",
- "flume 0.12.0",
- "font-kit",
- "futures",
- "gpui-macros",
- "gpui_collections",
- "gpui_http_client",
- "gpui_refineable",
- "gpui_sum_tree",
- "gpui_util",
- "gpui_util_macros",
- "image",
- "inventory",
- "itertools 0.14.0",
- "libc",
- "log",
- "lyon",
- "num_cpus",
- "parking",
- "parking_lot",
- "pathfinder_geometry",
- "pin-project",
- "pollster 0.4.0",
- "postage",
- "priority-threadpool 0.1.0 (git+https://github.com/mdeand/priority-threadpool)",
- "profiling 1.0.17",
- "rand 0.10.1",
- "raw-window-handle",
- "resvg 0.47.0",
- "schemars",
- "seahash",
- "semver 1.0.28",
- "serde",
- "serde_json",
- "slotmap",
- "smallvec",
- "smol 2.0.2",
- "spin 0.10.0",
- "stacksafe",
- "strum",
- "taffy",
- "thiserror 2.0.18",
- "usvg 0.47.0",
- "uuid",
- "waker-fn",
- "wgpu",
- "winit",
-]
-
-[[package]]
-name = "gpui-ce"
 version = "1.0.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/WGPUI?rev=0b555af11e80565429af9405ffd9d17fa832e3fe#0b555af11e80565429af9405ffd9d17fa832e3fe"
 dependencies = [
@@ -3058,7 +2998,7 @@ dependencies = [
  "pin-project",
  "pollster 0.4.0",
  "postage",
- "priority-threadpool 0.1.0 (git+https://github.com/tristanpoland/priority-threadpool?rev=bb1ab91)",
+ "priority-threadpool",
  "profiling 1.0.17",
  "rand 0.10.1",
  "raw-window-handle",
@@ -3227,19 +3167,6 @@ dependencies = [
  "gpui_perf",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "graphy"
-version = "0.1.0"
-dependencies = [
- "quote",
- "rayon",
- "serde",
- "serde_json",
- "syn 2.0.117",
- "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
@@ -4716,14 +4643,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lockfree"
-version = "0.5.1"
-source = "git+https://github.com/mdeand/priority-threadpool#28df6ed5ebef6818f2ea0cde9bfd99d3067d42ce"
-dependencies = [
- "owned-alloc",
-]
-
-[[package]]
 name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5980,7 +5899,20 @@ dependencies = [
 name = "pbgc"
 version = "0.1.0"
 dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=74a993fe51efc00ac5e208af74a3df79f2c0ba47)",
+ "graphy",
+ "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6e75c5c216827fafb4fad40c73b09e816c9963a7)",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "pbgc"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=98b1510a153447f4af69c1b3bee5b3cb85c185e1#98b1510a153447f4af69c1b3bee5b3cb85c185e1"
+dependencies = [
+ "graphy",
  "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6e75c5c216827fafb4fad40c73b09e816c9963a7)",
  "serde",
  "serde_json",
@@ -6193,7 +6125,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 name = "plugin_editor_api"
 version = "0.1.0"
 dependencies = [
- "gpui-ce 1.0.0",
+ "gpui-ce",
  "serde",
  "serde_json",
  "tracing",
@@ -6206,7 +6138,7 @@ dependencies = [
 name = "plugin_manager"
 version = "0.1.0"
 dependencies = [
- "gpui-ce 1.0.0",
+ "gpui-ce",
  "libloading",
  "once_cell",
  "plugin_editor_api",
@@ -6417,16 +6349,7 @@ version = "0.1.0"
 source = "git+https://github.com/tristanpoland/priority-threadpool?rev=bb1ab91#bb1ab91e284332975ca6889303582c7352ec6509"
 dependencies = [
  "async-task",
- "lockfree 0.5.1 (git+https://github.com/tristanpoland/priority-threadpool?rev=bb1ab91)",
-]
-
-[[package]]
-name = "priority-threadpool"
-version = "0.1.0"
-source = "git+https://github.com/mdeand/priority-threadpool#28df6ed5ebef6818f2ea0cde9bfd99d3067d42ce"
-dependencies = [
- "async-task",
- "lockfree 0.5.1 (git+https://github.com/mdeand/priority-threadpool)",
+ "lockfree",
 ]
 
 [[package]]
@@ -6550,7 +6473,7 @@ name = "pulsar_bp_executor"
 version = "0.1.0"
 dependencies = [
  "libloading",
- "pbgc",
+ "pbgc 0.1.0",
 ]
 
 [[package]]
@@ -6578,7 +6501,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "flume 0.11.1",
- "gpui-ce 1.0.0",
+ "gpui-ce",
  "lsp-types",
  "pulsar_diagnostics",
  "ropey",
@@ -6623,7 +6546,7 @@ dependencies = [
 name = "pulsar_replication"
 version = "0.1.0"
 dependencies = [
- "gpui-ce 1.0.0",
+ "gpui-ce",
  "parking_lot",
  "serde",
  "serde_json",
@@ -9169,7 +9092,7 @@ dependencies = [
  "chrono",
  "directories",
  "enum-iterator",
- "gpui-ce 1.0.0",
+ "gpui-ce",
  "gpui-component-macros",
  "gpui_sum_tree",
  "html5ever",
@@ -9222,10 +9145,11 @@ dependencies = [
  "anyhow",
  "engine_fs",
  "engine_state",
- "gpui-ce 1.0.0",
+ "gpui-ce",
  "image",
  "parking_lot",
  "plugin_editor_api",
+ "pulsar_reflection",
  "rust-i18n",
  "serde",
  "serde_json",
@@ -10111,7 +10035,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dashmap 6.1.0",
- "gpui-ce 1.0.0",
+ "gpui-ce",
  "parking_lot",
  "serde",
  "thiserror 2.0.18",

@@ -3,7 +3,7 @@ use crate::features::prefabs::property_value_to_json;
 use gpui::*;
 use pulsar_reflection::{PropertyType, PropertyValue, REGISTRY};
 use std::sync::Arc;
-use ui_common::properties_inspector;
+use ui_common::{properties_inspector, PropertyStateManager, json_to_property_value, render_component_section};
 use ui::popover::Popover;
 use ui::{
     button::Button,
@@ -276,14 +276,7 @@ impl PrefabPropertiesRenderer {
         };
 
         let class_name = component.class_name.clone();
-        let mut reflected_properties: Vec<(
-            String,
-            String,
-            PropertyType,
-            PropertyValue,
-            Option<Entity<ui::input::InputState>>,
-            Option<Entity<ui::color_picker::ColorPickerState>>,
-        )> = Vec::new();
+        let mut props_data = Vec::new();
         let mut missing_in_registry = false;
 
         if let Some(instance) = REGISTRY.create_instance(&class_name) {
@@ -295,7 +288,8 @@ impl PrefabPropertiesRenderer {
                     .and_then(|obj| obj.get(prop.name))
                     .cloned()
                     .unwrap_or_else(|| property_value_to_json(&default_value));
-                let input = match prop.property_type {
+
+                let numeric_input = match prop.property_type {
                     PropertyType::F32 { .. } | PropertyType::I32 { .. } => {
                         Some(panel.ensure_prefab_property_input(
                             index,
@@ -307,14 +301,9 @@ impl PrefabPropertiesRenderer {
                             cx,
                         ))
                     }
-                    PropertyType::Bool
-                    | PropertyType::Enum { .. }
-                    | PropertyType::Color
-                    | PropertyType::String { .. }
-                    | PropertyType::Vec3
-                    | PropertyType::Vec { .. }
-                    | PropertyType::Component { .. } => None,
+                    _ => None,
                 };
+
                 let should_create_picker = matches!(prop.property_type, PropertyType::Color)
                     || (matches!(&default_value, PropertyValue::String(s) if s == "unsupported")
                         && Self::is_color_field_name(prop.name));
@@ -334,13 +323,15 @@ impl PrefabPropertiesRenderer {
 
                 let current_typed =
                     json_to_property_value(&prop.property_type, &current_value).unwrap_or(default_value);
-                reflected_properties.push((
+
+                props_data.push((
                     prop.display_name.to_string(),
                     prop.name.to_string(),
                     prop.property_type.clone(),
                     current_typed,
-                    input,
+                    numeric_input,
                     color_picker,
+                    None, // No mesh picker in prefab editor yet
                 ));
             }
         } else {
@@ -365,19 +356,61 @@ impl PrefabPropertiesRenderer {
                             )
                             .into_any_element()
                     } else {
+                        // Use shared component section renderer
+                        let on_bool_toggle = Arc::new(move |prop_name: &str, checked: bool, _window: &mut Window, cx: &mut App| {
+                            if let Some(entity) = cx.entity_for_type::<BlueprintEditorPanel>() {
+                                entity.update(cx, |panel, cx| {
+                                    panel.update_prefab_component_property(
+                                        index,
+                                        prop_name,
+                                        serde_json::Value::Bool(checked),
+                                    );
+                                    cx.notify();
+                                });
+                            }
+                        });
+
+                        let on_enum_select = Arc::new(move |prop_name: &str, ix: usize, _window: &mut Window, cx: &mut App| {
+                            if let Some(entity) = cx.entity_for_type::<BlueprintEditorPanel>() {
+                                entity.update(cx, |panel, cx| {
+                                    panel.update_prefab_component_property(
+                                        index,
+                                        prop_name,
+                                        serde_json::Value::from(ix as u64),
+                                    );
+                                    cx.notify();
+                                });
+                            }
+                        });
+
                         v_flex()
                             .gap_2()
-                            .children(reflected_properties.into_iter().map(
-                                |(display_name, prop_name, property_type, value, input, color_picker)| {
-                                    Self::render_property_row(
-                                        index,
-                                        class_name.clone(),
-                                        display_name,
-                                        prop_name,
-                                        property_type,
-                                        value,
+                            .children(props_data.into_iter().map(
+                                |(display_name, prop_name, property_type, value, input, color_picker, mesh_picker)| {
+                                    let prop_bool = prop_name.clone();
+                                    let on_bool_toggle_local = on_bool_toggle.clone();
+                                    let bool_callback = Arc::new(move |checked: bool, window: &mut Window, cx: &mut App| {
+                                        (on_bool_toggle_local)(&prop_bool, checked, window, cx);
+                                    });
+
+                                    let prop_enum = prop_name.clone();
+                                    let on_enum_select_local = on_enum_select.clone();
+                                    let enum_callback = Arc::new(move |ix: usize, window: &mut Window, cx: &mut App| {
+                                        (on_enum_select_local)(&prop_enum, ix, window, cx);
+                                    });
+
+                                    ui_common::render_property_row(
+                                        "prefab",
+                                        &class_name,
+                                        &display_name,
+                                        &prop_name,
+                                        &property_type,
+                                        &value,
                                         input,
                                         color_picker,
+                                        mesh_picker,
+                                        bool_callback,
+                                        enum_callback,
                                         cx,
                                     )
                                 },
@@ -386,62 +419,6 @@ impl PrefabPropertiesRenderer {
                     }),
             )
             .into_any_element()
-    }
-
-    fn render_property_row(
-        component_index: usize,
-        class_name: String,
-        display_name: String,
-        prop_name: String,
-        property_type: PropertyType,
-        value: PropertyValue,
-        input: Option<Entity<ui::input::InputState>>,
-        color_picker: Option<Entity<ui::color_picker::ColorPickerState>>,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) -> impl IntoElement {
-        let view_bool = cx.entity().downgrade();
-        let prop_bool = prop_name.clone();
-        let on_bool_toggle = Arc::new(move |checked: bool, _window: &mut Window, cx: &mut App| {
-            if let Some(entity) = view_bool.upgrade() {
-                entity.update(cx, |panel, cx| {
-                    panel.update_prefab_component_property(
-                        component_index,
-                        &prop_bool,
-                        serde_json::Value::Bool(checked),
-                    );
-                    cx.notify();
-                });
-            }
-        });
-
-        let view_enum = cx.entity().downgrade();
-        let prop_enum = prop_name.clone();
-        let on_enum_select = Arc::new(move |ix: usize, _window: &mut Window, cx: &mut App| {
-            if let Some(entity) = view_enum.upgrade() {
-                entity.update(cx, |panel, cx| {
-                    panel.update_prefab_component_property(
-                        component_index,
-                        &prop_enum,
-                        serde_json::Value::from(ix as u64),
-                    );
-                    cx.notify();
-                });
-            }
-        });
-
-        properties_inspector::render_reflected_property_row(
-            "prefab",
-            &class_name,
-            &display_name,
-            &prop_name,
-            &property_type,
-            &value,
-            input,
-            color_picker,
-            on_bool_toggle,
-            on_enum_select,
-            cx,
-        )
     }
 }
 
