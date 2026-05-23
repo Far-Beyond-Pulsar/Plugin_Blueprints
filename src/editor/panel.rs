@@ -74,6 +74,7 @@ pub struct BlueprintEditorPanel {
 
     // Variables system
     pub class_variables: Vec<ClassVariable>,
+    pub selected_variable: Option<usize>,
     pub is_creating_variable: bool,
     pub variable_name_input: Entity<InputState>,
     pub variable_type_dropdown:
