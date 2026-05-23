@@ -120,14 +120,6 @@ impl HierarchyItem for VariableHierarchyItem {
         )
     }
 
-    fn on_click_custom(&self) -> Option<Arc<dyn Fn()>> {
-        let var_name = self.variable.name.clone();
-        let var_type = format!("{:?}", self.variable.var_type);
-        Some(Arc::new(move || {
-            println!("TODO: Select variable '{}' ({})", var_name, var_type);
-        }))
-    }
-
     fn build_context_menu(
         &self,
         menu: PopupMenu,
