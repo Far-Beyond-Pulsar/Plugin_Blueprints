@@ -111,6 +111,7 @@ pub struct BlueprintEditorPanel {
     // Library/macro system
     pub library_manager: LibraryManager,
     pub local_macros: Vec<SubGraphDefinition>,
+    pub selected_macro: Option<usize>,
 
     // Tab system
     pub open_tabs: Vec<GraphTab>,
