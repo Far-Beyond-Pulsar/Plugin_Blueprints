@@ -2,7 +2,6 @@
 
 use super::hierarchy_item::MacroHierarchyItem;
 use gpui::*;
-use std::sync::Arc;
 use ui::{
     button::{Button, ButtonVariants as _},
     h_flex, v_flex, ActiveTheme as _, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
@@ -150,12 +149,6 @@ impl MacrosRenderer {
 
         let root_ids: Vec<usize> = (0..items.len()).collect();
 
-        // Get entity for proper GPUI pattern
-        let panel_entity = cx.entity().clone();
-
-        // Clone macros for closure
-        let macros_for_select = panel.local_macros.clone();
-
         let config = HierarchyConfig {
             items,
             root_ids,
@@ -166,7 +159,7 @@ impl MacrosRenderer {
             header_buttons: vec![],
 
             // No root drop zone for macros
-            root_drop_zone: None,
+            root_drop_zone_label: None,
 
             // Widget config
             widget_title: None,
@@ -176,23 +169,6 @@ impl MacrosRenderer {
 
             // Drag-and-drop options
             disable_nesting: true, // Macros are a flat list - no nesting
-
-            // Callbacks
-            is_expanded: Arc::new(|_: &usize| false), // No expansion needed
-            on_toggle_expand: Arc::new(|_: &usize| {}), // No-op
-            on_select: Arc::new(move |id: &usize| {
-                // Open the macro on click using proper GPUI pattern
-                if let Some(subgraph) = macros_for_select.get(*id) {
-                    let macro_id = subgraph.id.clone();
-                    let macro_name = subgraph.name.clone();
-                    panel_entity.update(|panel: &mut BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>| {
-                        panel.open_local_macro(macro_id, macro_name, cx.window(), cx);
-                    });
-                }
-            }),
-            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {
-                // TODO: Implement macro reordering
-            }),
         };
 
         HierarchicalTreeView::new(config).render(cx)
