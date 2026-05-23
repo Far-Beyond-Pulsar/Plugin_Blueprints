@@ -185,7 +185,7 @@ impl MacrosRenderer {
                 if let Some(subgraph) = macros_for_select.get(*id) {
                     let macro_id = subgraph.id.clone();
                     let macro_name = subgraph.name.clone();
-                    panel_entity.update(|panel, cx| {
+                    panel_entity.update(|panel: &mut BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>| {
                         panel.open_local_macro(macro_id, macro_name, cx.window(), cx);
                     });
                 }

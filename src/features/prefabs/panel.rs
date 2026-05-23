@@ -127,7 +127,7 @@ impl PrefabHierarchyRenderer {
             on_toggle_expand: Arc::new(|_: &usize| {}), // TODO: Track expansion state
             on_select: Arc::new(move |id: &usize| {
                 // Select component
-                panel_entity.update(|panel, cx| {
+                panel_entity.update(|panel: &mut BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>| {
                     panel.select_prefab_component(*id);
                     cx.notify();
                 });

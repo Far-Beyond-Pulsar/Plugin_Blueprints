@@ -5,7 +5,7 @@
 use engine_backend::ComponentInstance;
 use gpui::*;
 use std::sync::Arc;
-use ui::{menu::popup_menu::PopupMenu, HierarchyItem, IconName};
+use ui::{menu::popup_menu::PopupMenu, ActiveTheme, HierarchyItem, IconName};
 
 /// Drag payload for components
 #[derive(Clone)]
