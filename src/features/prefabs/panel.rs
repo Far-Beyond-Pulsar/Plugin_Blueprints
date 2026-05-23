@@ -137,7 +137,40 @@ impl PrefabHierarchyRenderer {
                     });
                 });
             }),
-            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers, _window, _cx| {}),
+            on_drop: Arc::new(move |payload, target_id: &usize, modifiers: &Modifiers, _window, cx| {
+                use crate::features::prefabs::hierarchy_item::ComponentDrag;
+                let from_index = payload.component_index;
+                let to_index = *target_id;
+                let panel = panel_entity_for_drop.clone();
+                let mods = modifiers.clone();
+
+                if from_index != to_index {
+                    cx.defer(move |cx| {
+                        panel.update(cx, |panel, cx| {
+                            if from_index >= panel.prefab_asset.components.len() || to_index >= panel.prefab_asset.components.len() {
+                                return;
+                            }
+
+                            if mods.shift {
+                                // Shift: Un-nest - remove parent
+                                if let Some(obj) = panel.prefab_asset.components[from_index].data.as_object_mut() {
+                                    obj.remove("__parent_index");
+                                }
+                            } else if mods.alt {
+                                // Alt: Reorder as siblings
+                                let component = panel.prefab_asset.components.remove(from_index);
+                                panel.prefab_asset.components.insert(to_index, component);
+                            } else {
+                                // Normal: Nest under target
+                                if let Some(obj) = panel.prefab_asset.components[from_index].data.as_object_mut() {
+                                    obj.insert("__parent_index".to_string(), serde_json::json!(to_index));
+                                }
+                            }
+                            cx.notify();
+                        });
+                    });
+                }
+            }),
         };
 
         HierarchicalTreeView::new(config).render(cx)
