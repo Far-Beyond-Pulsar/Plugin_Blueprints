@@ -313,11 +313,12 @@ impl BlueprintEditorPanel {
     /// Start dragging a variable
     pub fn start_dragging_variable(
         &mut self,
+        var_index: usize,
         var_name: String,
         var_type: String,
         cx: &mut Context<Self>,
     ) {
-        self.dragging_variable = Some(VariableDrag { var_name, var_type });
+        self.dragging_variable = Some(VariableDrag { var_index, var_name, var_type });
         cx.notify();
     }
 
