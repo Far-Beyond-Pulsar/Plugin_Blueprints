@@ -5,13 +5,16 @@
 //! - Variable lifecycle operations (create, delete, get/set nodes)
 //! - Variables panel UI
 //! - Variable list rendering
+//! - HierarchyItem implementation for hierarchical list view
 
+pub mod hierarchy_item;
 pub mod operations;
 pub mod panel;
 pub mod rendering;
 pub mod types;
 
 // Re-export commonly used types
+pub use hierarchy_item::VariableHierarchyItem;
 pub use panel::VariablesPanel;
 pub use rendering::VariablesRenderer;
 pub use types::{ClassVariable, TypeItem, VariableDrag};

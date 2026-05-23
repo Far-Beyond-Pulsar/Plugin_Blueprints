@@ -1,9 +1,12 @@
 //! Macros panel - Rendering for the macros sidebar panel
 
+use super::hierarchy_item::MacroHierarchyItem;
 use gpui::*;
+use std::sync::Arc;
 use ui::{
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, IconName, StyledExt,
+    h_flex, v_flex, ActiveTheme as _, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
+    IconName, StyledExt,
 };
 
 use crate::editor::panel::BlueprintEditorPanel;
@@ -120,154 +123,73 @@ impl MacrosRenderer {
                     ),
             )
             .child(
-                // CONTENT AREA - local macros list
+                // CONTENT AREA - local macros list (using hierarchical tree view)
                 v_flex()
                     .flex_1()
                     .overflow_hidden()
-                    .p_3()
-                    .gap_2()
-                    .scrollable(Axis::Vertical)
-                    .child(Self::render_local_macros_list(panel, cx)),
+                    .p_1p5()
+                    .child(Self::render_macros_hierarchy(panel, cx)),
             )
     }
 
-    fn render_local_macros_list(
+    fn render_macros_hierarchy(
         panel: &BlueprintEditorPanel,
         cx: &mut Context<BlueprintEditorPanel>,
-    ) -> impl IntoElement {
-        v_flex().gap_2().children(if panel.local_macros.is_empty() {
-            vec![div()
-                .flex()
-                .flex_col()
-                .items_center()
-                .justify_center()
-                .gap_3()
-                .h(px(200.))
-                .child(div().text_3xl().child("📦"))
-                .child(
-                    div()
-                        .text_color(cx.theme().muted_foreground)
-                        .text_sm()
-                        .child("No local macros yet"),
-                )
-                .child(
-                    div()
-                        .text_color(cx.theme().muted_foreground.opacity(0.7))
-                        .text_xs()
-                        .child("Click + to create one"),
-                )
-                .into_any_element()]
-        } else {
-            panel
-                .local_macros
-                .iter()
-                .map(|subgraph| Self::render_macro_row(subgraph, cx))
-                .collect()
-        })
-    }
-
-    fn render_macro_row(
-        subgraph: &ui::graph::SubGraphDefinition,
-        cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
-        let subgraph_id = subgraph.id.clone();
-        let subgraph_name = subgraph.name.clone();
+        // Convert macros to hierarchy items
+        let items: Vec<MacroHierarchyItem> = panel
+            .local_macros
+            .iter()
+            .enumerate()
+            .map(|(index, subgraph)| {
+                let subgraph_id = subgraph.id.clone();
+                let subgraph_name = subgraph.name.clone();
 
-        h_flex()
-            .w_full()
-            .px_3()
-            .py_3()
-            .gap_3()
-            .bg(cx.theme().background)
-            .border_1()
-            .border_color(cx.theme().border.opacity(0.4))
-            .rounded(px(8.0))
-            .cursor_pointer()
-            .hover(|style| {
-                style
-                    .bg(cx.theme().accent.opacity(0.08))
-                    .border_color(cx.theme().accent.opacity(0.6))
-                    .shadow_md()
+                MacroHierarchyItem {
+                    subgraph: subgraph.clone(),
+                    index,
+                    is_selected: false, // TODO: Track selection state
+                    on_open: Arc::new(cx.listener(move |panel, _, window, cx| {
+                        panel.open_local_macro(subgraph_id.clone(), subgraph_name.clone(), window, cx);
+                    })),
+                }
             })
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(move |panel, _, window, cx| {
-                    panel.open_local_macro(subgraph_id.clone(), subgraph_name.clone(), window, cx);
-                }),
-            )
-            .child(
-                // Macro icon
-                div()
-                    .flex_shrink_0()
-                    .w(px(14.))
-                    .h(px(14.))
-                    .rounded_full()
-                    .bg(gpui::Rgba {
-                        r: 0.61,
-                        g: 0.35,
-                        b: 0.71,
-                        a: 1.0,
-                    }) // Purple for macros
-                    .border_2()
-                    .border_color(cx.theme().border)
-                    .shadow_sm(),
-            )
-            .child(
-                // Macro info section
-                v_flex()
-                    .flex_1()
-                    .gap_1p5()
-                    .child(
-                        // Macro name
-                        div()
-                            .text_sm()
-                            .font_semibold()
-                            .text_color(cx.theme().foreground)
-                            .child(subgraph.name.clone()),
-                    )
-                    .child(
-                        // Description
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(subgraph.description.clone()),
-                    )
-                    .child(
-                        // Input/Output count
-                        h_flex()
-                            .gap_3()
-                            .items_center()
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(px(4.0))
-                                    .bg(cx.theme().success.opacity(0.15))
-                                    .text_xs()
-                                    .font_family("JetBrainsMono-Regular")
-                                    .text_color(cx.theme().success)
-                                    .child(format!("→ {}", subgraph.interface.inputs.len())),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(px(4.0))
-                                    .bg(cx.theme().warning.opacity(0.15))
-                                    .text_xs()
-                                    .font_family("JetBrainsMono-Regular")
-                                    .text_color(cx.theme().warning)
-                                    .child(format!("← {}", subgraph.interface.outputs.len())),
-                            ),
-                    ),
-            )
-            .child(
-                // Arrow icon indicating clickable
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground.opacity(0.4))
-                    .child("›"),
-            )
-            .into_any_element()
+            .collect();
+
+        let root_ids: Vec<usize> = (0..items.len()).collect();
+
+        let config = HierarchyConfig {
+            items,
+            root_ids,
+            layout: HierarchyLayout::Widget,
+
+            // Header config (not used in Widget mode)
+            title: None,
+            header_buttons: vec![],
+
+            // No root drop zone for macros
+            root_drop_zone: None,
+
+            // Widget config
+            widget_title: None,
+            widget_icon: None,
+            widget_add_button: None,
+            empty_message: "No local macros yet\nClick + to create one".to_string(),
+
+            // Drag-and-drop options
+            disable_nesting: true, // Macros are a flat list - no nesting
+
+            // Callbacks
+            is_expanded: Arc::new(|_: &usize| false), // No expansion needed
+            on_toggle_expand: Arc::new(|_: &usize| {}), // No-op
+            on_select: Arc::new(|_id: &usize| {
+                // Selection handled by on_click_custom in MacroHierarchyItem
+            }),
+            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {
+                // TODO: Implement macro reordering
+            }),
+        };
+
+        HierarchicalTreeView::new(config).render(cx)
     }
 }

@@ -1,11 +1,14 @@
 //! Variable list rendering
+use super::hierarchy_item::VariableHierarchyItem;
 use super::types::ClassVariable;
 use crate::editor::panel::BlueprintEditorPanel;
 use gpui::*;
+use std::sync::Arc;
 use ui::{
     button::{Button, ButtonVariants as _},
     dropdown::Dropdown,
-    h_flex, v_flex, ActiveTheme, Colorize, IconName, PixelsExt, Sizable, StyledExt,
+    h_flex, v_flex, ActiveTheme, Colorize, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
+    IconName, PixelsExt, Sizable, StyledExt,
 };
 
 pub struct VariablesRenderer;
@@ -141,25 +144,60 @@ impl VariablesRenderer {
             } else {
                 Vec::new()
             })
-            .children(
-                if panel.class_variables.is_empty() && !panel.is_creating_variable {
-                    vec![div()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .h(px(100.))
-                        .text_color(cx.theme().muted_foreground)
-                        .text_sm()
-                        .child("No variables defined")
-                        .into_any_element()]
-                } else {
-                    panel
-                        .class_variables
-                        .iter()
-                        .map(|var| Self::render_variable_row(var, cx))
-                        .collect()
-                },
-            )
+            .child(Self::render_variables_hierarchy(panel, cx))
+    }
+
+    fn render_variables_hierarchy(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        // Convert variables to hierarchy items
+        let items: Vec<VariableHierarchyItem> = panel
+            .class_variables
+            .iter()
+            .enumerate()
+            .map(|(index, variable)| VariableHierarchyItem {
+                variable: variable.clone(),
+                index,
+                is_selected: false, // TODO: Track selection state
+            })
+            .collect();
+
+        let root_ids: Vec<usize> = (0..items.len()).collect();
+
+        let config = HierarchyConfig {
+            items,
+            root_ids,
+            layout: HierarchyLayout::Widget,
+
+            // Header config (not used in Widget mode)
+            title: None,
+            header_buttons: vec![],
+
+            // No root drop zone for variables
+            root_drop_zone: None,
+
+            // Widget config
+            widget_title: None,
+            widget_icon: None,
+            widget_add_button: None,
+            empty_message: "No variables defined".to_string(),
+
+            // Drag-and-drop options
+            disable_nesting: true, // Variables are a flat list - no nesting
+
+            // Callbacks
+            is_expanded: Arc::new(|_: &usize| false), // No expansion needed
+            on_toggle_expand: Arc::new(|_: &usize| {}), // No-op
+            on_select: Arc::new(|_id: &usize| {
+                // TODO: Implement selection for variables
+            }),
+            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {
+                // TODO: Implement variable reordering
+            }),
+        };
+
+        HierarchicalTreeView::new(config).render(cx)
     }
 
     fn render_variable_row(
