@@ -13,6 +13,7 @@ use ui::{
     v_flex, ActiveTheme, CollapsibleSection, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
     IconName, Sizable, StyledExt,
 };
+use std::sync::RwLock;
 
 pub struct PrefabHierarchyRenderer;
 pub struct PrefabPropertiesRenderer;
