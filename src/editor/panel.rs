@@ -389,6 +389,7 @@ impl BlueprintEditorPanel {
                 .new(|cx| ui::dropdown::DropdownState::new(Vec::new(), None, window, cx)),
             dragging_variable: None,
             variable_drop_menu_position: None,
+            selected_variable: None,
             prefab_asset: PrefabAsset::new("Prefab"),
             prefab_add_component_dialog,
             prefab_property_inputs: HashMap::new(),
