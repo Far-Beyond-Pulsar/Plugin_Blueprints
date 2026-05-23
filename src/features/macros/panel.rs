@@ -183,21 +183,19 @@ impl MacrosRenderer {
                 let panel = panel_entity.clone();
                 let window_handle = window.window_handle();
                 cx.defer(move |cx| {
-                    let result = panel.update(cx, |panel, cx| {
+                    let macro_id = panel.update(cx, |panel, cx| {
                         panel.selected_macro = Some(selected_id);
-
-                        // Get macro ID for opening
+                        cx.notify();
+                        // Return macro ID for opening
                         panel.local_macros.get(selected_id).map(|m| m.id.clone())
-                    });
+                    }).ok();
 
-                    // Open the macro tab with window access
-                    if let Ok(Some(macro_id)) = result {
-                        let _ = cx.update_window(window_handle, |_, cx| {
-                            panel.update(cx, |panel, cx| {
-                                // Need to get window from somewhere...
-                                // This is getting too complicated, let's just set selection for now
-                                cx.notify();
-                            })
+                    // Open the macro tab
+                    if let Some(Some(macro_id)) = macro_id {
+                        let _ = cx.update_window(window_handle, |_root_view, window, cx| {
+                            let _ = panel.update(cx, |panel, cx| {
+                                panel.open_macro_tab(&macro_id, window, cx);
+                            });
                         });
                     }
                 });
