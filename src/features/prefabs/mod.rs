@@ -1,7 +1,11 @@
 //! Prefab feature - sidecar prefab authoring integrated into the blueprint editor.
 
 pub mod add_component_dialog;
+pub mod hierarchy_item;
 pub mod panel;
+
+// Re-export commonly used types
+pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
 
 use crate::editor::panel::BlueprintEditorPanel;
 use engine_backend::scene::metadata::ComponentInstance;

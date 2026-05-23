@@ -1,4 +1,5 @@
 use crate::editor::panel::BlueprintEditorPanel;
+use crate::features::prefabs::hierarchy_item::ComponentHierarchyItem;
 use crate::features::prefabs::property_value_to_json;
 use gpui::*;
 use pulsar_reflection::{PropertyType, PropertyValue, REGISTRY};
@@ -9,63 +10,134 @@ use ui::{
     button::Button,
     h_flex,
     scroll::ScrollbarAxis,
-    v_flex, ActiveTheme, CollapsibleSection, IconName, Sizable, StyledExt,
+    v_flex, ActiveTheme, CollapsibleSection, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
+    IconName, Sizable, StyledExt,
 };
 
 pub struct PrefabHierarchyRenderer;
 pub struct PrefabPropertiesRenderer;
 
 impl PrefabHierarchyRenderer {
+    /// Get the parent index of a component from its data
+    fn get_parent_index(component: &engine_backend::ComponentInstance) -> Option<usize> {
+        component
+            .data
+            .get("__parent_index")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+    }
+
+    /// Get all children indices of a component
+    fn get_children(components: &[engine_backend::ComponentInstance], parent_index: usize) -> Vec<usize> {
+        components
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, comp)| {
+                if Self::get_parent_index(comp) == Some(parent_index) {
+                    Some(idx)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     pub fn render(
         panel: &mut BlueprintEditorPanel,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        let components = panel.prefab_asset.components.clone();
         let dialog = panel.prefab_add_component_dialog.clone();
-        let add_popover = Popover::new("prefab-add-component-picker")
-            .anchor(Corner::TopRight)
-            .trigger(
-                Button::new("prefab_component_add")
-                    .label("Add Component")
-                    .icon(IconName::Component)
-                    .small(),
-            )
-            .content(move |_window, _cx| dialog.clone());
+        let add_button = Button::new("prefab_component_add")
+            .label("Add Component")
+            .icon(IconName::Component)
+            .small()
+            .on_click(cx.listener(|_panel, _, _window, cx| {
+                // TODO: Show add component dialog
+                cx.notify();
+            }))
+            .into_any_element();
 
         v_flex()
             .size_full()
             .bg(cx.theme().background)
-            .child(Self::render_header(cx))
-            .child(
-                v_flex()
-                    .w_full()
-                    .p_2()
-                    .gap_2()
-                    .bg(cx.theme().sidebar)
-                    .border_b_1()
-                    .border_color(cx.theme().border.opacity(0.5))
-                    .child(add_popover),
-            )
-            .child(
-                div().flex_1().overflow_hidden().w_full().child(
-                    div().size_full().scrollable(ScrollbarAxis::Vertical).child(
-                        if components.is_empty() {
-                            Self::render_empty_state(cx).into_any_element()
-                        } else {
-                            v_flex()
-                                .w_full()
-                                .p_3()
-                                .gap_2()
-                                .children(
-                                    components.into_iter().enumerate().map(|(idx, component)| {
-                                        Self::render_component_item(panel, idx, component, cx)
-                                    }),
-                                )
-                                .into_any_element()
-                        },
-                    ),
-                ),
-            )
+            .child(Self::render_hierarchy(panel, add_button, cx))
+    }
+
+    fn render_hierarchy(
+        panel: &BlueprintEditorPanel,
+        add_button: AnyElement,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
+        // Get panel entity for callbacks
+        let panel_entity = cx.entity().clone();
+
+        let components = &panel.prefab_asset.components;
+
+        // Build hierarchy items with children calculated
+        let items: Vec<ComponentHierarchyItem> = components
+            .iter()
+            .enumerate()
+            .map(|(index, component)| {
+                let children_indices = Self::get_children(components, index);
+                ComponentHierarchyItem {
+                    component: component.clone(),
+                    index,
+                    is_selected: panel.selected_prefab_component == Some(index),
+                    children_indices,
+                }
+            })
+            .collect();
+
+        // Calculate root IDs (components without a parent)
+        let root_ids: Vec<usize> = components
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, comp)| {
+                if Self::get_parent_index(comp).is_none() {
+                    Some(idx)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let config = HierarchyConfig {
+            items,
+            root_ids,
+            layout: HierarchyLayout::Panel,
+
+            // Panel header
+            title: Some("Components".to_string()),
+            header_buttons: vec![add_button],
+
+            // No root drop zone for now
+            root_drop_zone: None,
+
+            // Widget config (not used in Panel mode)
+            widget_title: None,
+            widget_icon: None,
+            widget_add_button: None,
+            empty_message: "No components\nClick + to add one".to_string(),
+
+            // Drag-and-drop options
+            disable_nesting: false, // Components CAN be nested
+
+            // Callbacks
+            is_expanded: Arc::new(|_: &usize| true), // All expanded for now
+            on_toggle_expand: Arc::new(|_: &usize| {}), // TODO: Track expansion state
+            on_select: Arc::new(move |id: &usize| {
+                // Select component
+                panel_entity.update(|panel, cx| {
+                    panel.select_prefab_component(*id);
+                    cx.notify();
+                });
+            }),
+            on_drop: Arc::new(move |_payload, _target_id: &usize, _modifiers: &Modifiers| {
+                // TODO: Implement component reordering/reparenting
+            }),
+        };
+
+        HierarchicalTreeView::new(config).render(cx)
     }
 
     fn render_header(cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
