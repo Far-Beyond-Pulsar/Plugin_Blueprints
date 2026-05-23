@@ -14,6 +14,9 @@ pub struct ComponentDrag {
     pub class_name: String,
 }
 
+/// Shared state for component selection
+pub type ComponentSelectionState = std::sync::Arc<parking_lot::RwLock<Option<usize>>>;
+
 /// Wrapper for ComponentInstance that implements HierarchyItem
 #[derive(Clone)]
 pub struct ComponentHierarchyItem {
@@ -21,6 +24,7 @@ pub struct ComponentHierarchyItem {
     pub index: usize,
     pub is_selected: bool,
     pub children_indices: Vec<usize>,
+    pub selection_state: ComponentSelectionState,
 }
 
 impl HierarchyItem for ComponentHierarchyItem {
@@ -90,6 +94,14 @@ impl HierarchyItem for ComponentHierarchyItem {
                 )
                 .into_any_element(),
         )
+    }
+
+    fn on_click_custom(&self) -> Option<Arc<dyn Fn()>> {
+        let component_index = self.index;
+        let selection_state = self.selection_state.clone();
+        Some(Arc::new(move || {
+            *selection_state.write() = Some(component_index);
+        }))
     }
 
     fn build_context_menu(

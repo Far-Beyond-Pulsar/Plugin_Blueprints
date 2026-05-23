@@ -68,10 +68,10 @@ impl PrefabHierarchyRenderer {
         add_button: AnyElement,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        // Get panel entity for callbacks
-        let panel_entity = cx.entity().clone();
-
         let components = &panel.prefab_asset.components;
+
+        // Create shared selection state
+        let selection_state = std::sync::Arc::new(parking_lot::RwLock::new(panel.selected_prefab_component));
 
         // Build hierarchy items with children calculated
         let items: Vec<ComponentHierarchyItem> = components
@@ -84,6 +84,7 @@ impl PrefabHierarchyRenderer {
                     index,
                     is_selected: panel.selected_prefab_component == Some(index),
                     children_indices,
+                    selection_state: selection_state.clone(),
                 }
             })
             .collect();
@@ -122,19 +123,11 @@ impl PrefabHierarchyRenderer {
             // Drag-and-drop options
             disable_nesting: false, // Components CAN be nested
 
-            // Callbacks
+            // Callbacks - Use on_click_custom() in HierarchyItem for actions that need context
             is_expanded: Arc::new(|_: &usize| true), // All expanded for now
             on_toggle_expand: Arc::new(|_: &usize| {}), // TODO: Track expansion state
-            on_select: Arc::new(move |id: &usize| {
-                // Select component
-                panel_entity.update(|panel: &mut BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>| {
-                    panel.select_prefab_component(*id);
-                    cx.notify();
-                });
-            }),
-            on_drop: Arc::new(move |_payload, _target_id: &usize, _modifiers: &Modifiers| {
-                // TODO: Implement component reordering/reparenting
-            }),
+            on_select: Arc::new(|_id: &usize| {}),
+            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {}),
         };
 
         HierarchicalTreeView::new(config).render(cx)
