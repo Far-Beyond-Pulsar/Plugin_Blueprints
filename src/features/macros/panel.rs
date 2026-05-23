@@ -171,11 +171,11 @@ impl MacrosRenderer {
             // Drag-and-drop options
             disable_nesting: true, // Macros are a flat list - no nesting
 
-            // Callbacks - Use on_click_custom() in HierarchyItem for actions that need context
+            // Callbacks - Use on_click_custom() in HierarchyItem for macro opening
             is_expanded: Arc::new(|_: &usize| false),
-            on_toggle_expand: Arc::new(|_: &usize| {}),
-            on_select: Arc::new(|_id: &usize| {}),
-            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {}),
+            on_toggle_expand: Arc::new(|_: &usize, _window, _cx| {}),
+            on_select: Arc::new(|_id: &usize, _window, _cx| {}),
+            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers, _window, _cx| {}),
         };
 
         HierarchicalTreeView::new(config).render(cx)

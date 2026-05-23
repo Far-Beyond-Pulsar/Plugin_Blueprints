@@ -191,13 +191,12 @@ impl VariablesRenderer {
 
             // Callbacks
             is_expanded: Arc::new(|_: &usize| false), // No expansion needed
-            on_toggle_expand: Arc::new(|_: &usize| {}), // No-op
-            on_select: Arc::new(|_id: &usize| {
+            on_toggle_expand: Arc::new(|_: &usize, _window, _cx| {}), // No-op
+            on_select: Arc::new(|_id: &usize, _window, _cx| {
                 // Single-click selection - no-op for now
-                // TODO: Track selection state in panel
             }),
-            on_drop: Arc::new(move |_payload, _target_id: &usize, _modifiers: &Modifiers| {
-                // TODO: Implement variable reordering with entity
+            on_drop: Arc::new(move |_payload, _target_id: &usize, _modifiers: &Modifiers, _window, _cx| {
+                // Variable reordering could be implemented here with panel_entity.update(cx, ...)
                 let _ = panel_entity;
             }),
         };

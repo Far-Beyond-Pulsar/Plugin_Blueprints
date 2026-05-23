@@ -71,9 +71,6 @@ impl PrefabHierarchyRenderer {
     ) -> impl IntoElement {
         let components = &panel.prefab_asset.components;
 
-        // Create shared selection state
-        let selection_state = std::sync::Arc::new(parking_lot::RwLock::new(panel.selected_prefab_component));
-
         // Build hierarchy items with children calculated
         let items: Vec<ComponentHierarchyItem> = components
             .iter()
@@ -85,7 +82,6 @@ impl PrefabHierarchyRenderer {
                     index,
                     is_selected: panel.selected_prefab_component == Some(index),
                     children_indices,
-                    selection_state: selection_state.clone(),
                 }
             })
             .collect();
@@ -102,6 +98,9 @@ impl PrefabHierarchyRenderer {
                 }
             })
             .collect();
+
+        // Capture panel entity for callbacks
+        let panel_entity = cx.entity().clone();
 
         let config = HierarchyConfig {
             items,
@@ -124,11 +123,16 @@ impl PrefabHierarchyRenderer {
             // Drag-and-drop options
             disable_nesting: false, // Components CAN be nested
 
-            // Callbacks - Use on_click_custom() in HierarchyItem for actions that need context
+            // Callbacks
             is_expanded: Arc::new(|_: &usize| true), // All expanded for now
-            on_toggle_expand: Arc::new(|_: &usize| {}), // TODO: Track expansion state
-            on_select: Arc::new(|_id: &usize| {}),
-            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {}),
+            on_toggle_expand: Arc::new(|_id: &usize, _window, _cx| {}), // TODO: Track expansion state
+            on_select: Arc::new(move |id: &usize, _window, cx| {
+                panel_entity.update(cx, |panel, cx| {
+                    panel.selected_prefab_component = Some(*id);
+                    cx.notify();
+                });
+            }),
+            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers, _window, _cx| {}),
         };
 
         HierarchicalTreeView::new(config).render(cx)
