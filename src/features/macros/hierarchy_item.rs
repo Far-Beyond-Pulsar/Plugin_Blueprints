@@ -9,6 +9,7 @@ use ui::{menu::popup_menu::PopupMenu, HierarchyItem, IconName};
 /// Drag payload for macros
 #[derive(Clone)]
 pub struct MacroDrag {
+    pub macro_index: usize,
     pub macro_id: String,
     pub macro_name: String,
 }
@@ -60,6 +61,7 @@ impl HierarchyItem for MacroHierarchyItem {
 
     fn create_drag_payload(&self) -> Self::DragPayload {
         MacroDrag {
+            macro_index: self.index,
             macro_id: self.subgraph.id.clone(),
             macro_name: self.subgraph.name.clone(),
         }
