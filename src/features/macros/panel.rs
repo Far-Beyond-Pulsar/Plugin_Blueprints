@@ -144,11 +144,15 @@ impl MacrosRenderer {
             .map(|(index, subgraph)| MacroHierarchyItem {
                 subgraph: subgraph.clone(),
                 index,
-                is_selected: false, // TODO: Track selection state
+                is_selected: panel.selected_macro == Some(index),
             })
             .collect();
 
         let root_ids: Vec<usize> = (0..items.len()).collect();
+
+        // Get entity for proper GPUI pattern
+        let panel_entity = cx.entity().clone();
+        let panel_entity_for_drop = panel_entity.clone();
 
         let config = HierarchyConfig {
             items,
@@ -174,8 +178,35 @@ impl MacrosRenderer {
             // Callbacks - Use on_click_custom() in HierarchyItem for macro opening
             is_expanded: Arc::new(|_: &usize| false),
             on_toggle_expand: Arc::new(|_: &usize, _window, _cx| {}),
-            on_select: Arc::new(|_id: &usize, _window, _cx| {}),
-            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers, _window, _cx| {}),
+            on_select: Arc::new(move |id: &usize, _window, cx| {
+                let selected_id = *id;
+                let panel = panel_entity.clone();
+                cx.defer(move |cx| {
+                    panel.update(cx, |panel, cx| {
+                        panel.selected_macro = Some(selected_id);
+                        cx.notify();
+                    });
+                });
+            }),
+            on_drop: Arc::new(move |payload, target_id: &usize, _modifiers: &Modifiers, _window, cx| {
+                use crate::features::macros::hierarchy_item::MacroDrag;
+                let from_index = payload.macro_index;
+                let to_index = *target_id;
+                let panel = panel_entity_for_drop.clone();
+
+                if from_index != to_index {
+                    cx.defer(move |cx| {
+                        panel.update(cx, |panel, cx| {
+                            // Reorder macros
+                            if from_index < panel.local_macros.len() && to_index < panel.local_macros.len() {
+                                let macro_def = panel.local_macros.remove(from_index);
+                                panel.local_macros.insert(to_index, macro_def);
+                                cx.notify();
+                            }
+                        });
+                    });
+                }
+            }),
         };
 
         HierarchicalTreeView::new(config).render(cx)
