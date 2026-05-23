@@ -2,6 +2,7 @@
 
 use super::hierarchy_item::MacroHierarchyItem;
 use gpui::*;
+use std::sync::Arc;
 use ui::{
     button::{Button, ButtonVariants as _},
     h_flex, v_flex, ActiveTheme as _, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
@@ -149,6 +150,10 @@ impl MacrosRenderer {
 
         let root_ids: Vec<usize> = (0..items.len()).collect();
 
+        // Get entity for callbacks
+        let panel_entity = cx.entity().downgrade();
+        let macros_clone = panel.local_macros.clone();
+
         let config = HierarchyConfig {
             items,
             root_ids,
@@ -159,7 +164,7 @@ impl MacrosRenderer {
             header_buttons: vec![],
 
             // No root drop zone for macros
-            root_drop_zone_label: None,
+            root_drop_zone: None,
 
             // Widget config
             widget_title: None,
@@ -169,6 +174,24 @@ impl MacrosRenderer {
 
             // Drag-and-drop options
             disable_nesting: true, // Macros are a flat list - no nesting
+
+            // Callbacks
+            is_expanded: Arc::new(|_: &usize| false),
+            on_toggle_expand: Arc::new(|_: &usize| {}),
+            on_select: Arc::new(move |id: &usize| {
+                if let Some(entity) = panel_entity.upgrade() {
+                    if let Some(subgraph) = macros_clone.get(*id) {
+                        let macro_id = subgraph.id.clone();
+                        let macro_name = subgraph.name.clone();
+                        entity.update(&mut gpui::App::global_mut(), |panel, cx| {
+                            panel.open_local_macro(macro_id, macro_name, cx.window(), cx);
+                        }).ok();
+                    }
+                }
+            }),
+            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {
+                // TODO: Implement macro reordering
+            }),
         };
 
         HierarchicalTreeView::new(config).render(cx)

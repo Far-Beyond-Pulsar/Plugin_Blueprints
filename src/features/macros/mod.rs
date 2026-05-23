@@ -6,7 +6,6 @@
 //! - Macro panel rendering
 //! - HierarchyItem implementation for hierarchical list view
 
-pub mod hierarchy_delegate;
 pub mod hierarchy_item;
 pub mod operations;
 pub mod panel;
