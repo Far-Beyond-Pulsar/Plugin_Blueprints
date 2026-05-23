@@ -201,7 +201,6 @@ impl MacrosRenderer {
                 });
             }),
             on_drop: Arc::new(move |payload, target_id: &usize, _modifiers: &Modifiers, _window, cx| {
-                use crate::features::macros::hierarchy_item::MacroDrag;
                 let from_index = payload.macro_index;
                 let to_index = *target_id;
                 let panel = panel_entity_for_drop.clone();
