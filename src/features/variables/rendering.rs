@@ -159,7 +159,7 @@ impl VariablesRenderer {
             .map(|(index, variable)| VariableHierarchyItem {
                 variable: variable.clone(),
                 index,
-                is_selected: false, // TODO: Track selection state in panel
+                is_selected: panel.selected_variable == Some(index),
             })
             .collect();
 
@@ -167,6 +167,7 @@ impl VariablesRenderer {
 
         // Get entity for proper GPUI pattern
         let panel_entity = cx.entity().clone();
+        let panel_entity_for_drop = panel_entity.clone();
 
         let config = HierarchyConfig {
             items,
@@ -192,12 +193,33 @@ impl VariablesRenderer {
             // Callbacks
             is_expanded: Arc::new(|_: &usize| false), // No expansion needed
             on_toggle_expand: Arc::new(|_: &usize, _window, _cx| {}), // No-op
-            on_select: Arc::new(|_id: &usize, _window, _cx| {
-                // Single-click selection - no-op for now
+            on_select: Arc::new(move |id: &usize, _window, cx| {
+                let selected_id = *id;
+                let panel = panel_entity.clone();
+                cx.defer(move |cx| {
+                    panel.update(cx, |panel, cx| {
+                        panel.selected_variable = Some(selected_id);
+                        cx.notify();
+                    });
+                });
             }),
-            on_drop: Arc::new(move |_payload, _target_id: &usize, _modifiers: &Modifiers, _window, _cx| {
-                // Variable reordering could be implemented here with panel_entity.update(cx, ...)
-                let _ = panel_entity;
+            on_drop: Arc::new(move |payload, target_id: &usize, _modifiers: &Modifiers, _window, cx| {
+                let from_index = payload.var_index;
+                let to_index = *target_id;
+                let panel = panel_entity_for_drop.clone();
+
+                if from_index != to_index {
+                    cx.defer(move |cx| {
+                        panel.update(cx, |panel, cx| {
+                            // Reorder variables
+                            if from_index < panel.class_variables.len() && to_index < panel.class_variables.len() {
+                                let variable = panel.class_variables.remove(from_index);
+                                panel.class_variables.insert(to_index, variable);
+                                cx.notify();
+                            }
+                        });
+                    });
+                }
             }),
         };
 
@@ -243,7 +265,7 @@ impl VariablesRenderer {
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |panel, _event, _window, cx| {
-                    panel.start_dragging_variable(drag_var_name.clone(), drag_var_type.clone(), cx);
+                    panel.start_dragging_variable(0, drag_var_name.clone(), drag_var_type.clone(), cx);
                 }),
             )
             .child(
