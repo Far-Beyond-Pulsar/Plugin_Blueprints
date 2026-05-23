@@ -417,6 +417,7 @@ impl BlueprintEditorPanel {
                 lib_manager
             },
             local_macros: Vec::new(),
+            selected_macro: None,
             open_tabs: vec![GraphTab {
                 id: "main".to_string(),
                 name: "EventGraph".to_string(),
