@@ -127,9 +127,13 @@ impl PrefabHierarchyRenderer {
             is_expanded: Arc::new(|_: &usize| true), // All expanded for now
             on_toggle_expand: Arc::new(|_id: &usize, _window, _cx| {}), // TODO: Track expansion state
             on_select: Arc::new(move |id: &usize, _window, cx| {
-                panel_entity.update(cx, |panel, cx| {
-                    panel.selected_prefab_component = Some(*id);
-                    cx.notify();
+                let selected_id = *id;
+                let panel = panel_entity.clone();
+                cx.defer(move |cx| {
+                    panel.update(cx, |panel, cx| {
+                        panel.selected_prefab_component = Some(selected_id);
+                        cx.notify();
+                    });
                 });
             }),
             on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers, _window, _cx| {}),
