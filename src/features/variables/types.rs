@@ -14,6 +14,7 @@ pub struct ClassVariable {
 /// Drag data for variables - used when dragging variables from the panel to the graph
 #[derive(Clone, Debug)]
 pub struct VariableDrag {
+    pub var_index: usize,
     pub var_name: String,
     pub var_type: String,
 }

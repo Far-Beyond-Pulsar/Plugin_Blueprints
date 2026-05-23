@@ -382,6 +382,7 @@ impl BlueprintEditorPanel {
             interaction_view_id: None,
             interaction_state_by_view: HashMap::new(),
             class_variables: Vec::new(),
+            selected_variable: None,
             is_creating_variable: false,
             variable_name_input: cx
                 .new(|cx| InputState::new(window, cx).placeholder("Variable name...")),
@@ -389,7 +390,6 @@ impl BlueprintEditorPanel {
                 .new(|cx| ui::dropdown::DropdownState::new(Vec::new(), None, window, cx)),
             dragging_variable: None,
             variable_drop_menu_position: None,
-            selected_variable: None,
             prefab_asset: PrefabAsset::new("Prefab"),
             prefab_add_component_dialog,
             prefab_property_inputs: HashMap::new(),

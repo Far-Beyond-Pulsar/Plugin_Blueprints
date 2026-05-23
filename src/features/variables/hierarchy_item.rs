@@ -75,6 +75,7 @@ impl HierarchyItem for VariableHierarchyItem {
 
     fn create_drag_payload(&self) -> Self::DragPayload {
         VariableDrag {
+            var_index: self.index,
             var_name: self.variable.name.clone(),
             var_type: self.variable.var_type.clone(),
         }
