@@ -19,7 +19,6 @@ pub struct MacroHierarchyItem {
     pub subgraph: ui::graph::SubGraphDefinition,
     pub index: usize, // Index in the macros list
     pub is_selected: bool,
-    pub on_open: Arc<dyn Fn()>,
 }
 
 impl HierarchyItem for MacroHierarchyItem {
@@ -107,11 +106,6 @@ impl HierarchyItem for MacroHierarchyItem {
                 // Delete handled via context menu
                 .into_any_element(),
         )
-    }
-
-    fn on_click_custom(&self) -> Option<Arc<dyn Fn()>> {
-        // Custom click behavior - open the macro
-        Some(self.on_open.clone())
     }
 
     fn build_context_menu(

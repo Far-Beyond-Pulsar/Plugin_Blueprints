@@ -141,18 +141,10 @@ impl MacrosRenderer {
             .local_macros
             .iter()
             .enumerate()
-            .map(|(index, subgraph)| {
-                let subgraph_id = subgraph.id.clone();
-                let subgraph_name = subgraph.name.clone();
-
-                MacroHierarchyItem {
-                    subgraph: subgraph.clone(),
-                    index,
-                    is_selected: false, // TODO: Track selection state
-                    on_open: Arc::new(cx.listener(move |panel, _, window, cx| {
-                        panel.open_local_macro(subgraph_id.clone(), subgraph_name.clone(), window, cx);
-                    })),
-                }
+            .map(|(index, subgraph)| MacroHierarchyItem {
+                subgraph: subgraph.clone(),
+                index,
+                is_selected: false, // TODO: Track selection state
             })
             .collect();
 
@@ -182,9 +174,12 @@ impl MacrosRenderer {
             // Callbacks
             is_expanded: Arc::new(|_: &usize| false), // No expansion needed
             on_toggle_expand: Arc::new(|_: &usize| {}), // No-op
-            on_select: Arc::new(|_id: &usize| {
-                // Selection handled by on_click_custom in MacroHierarchyItem
-            }),
+            on_select: Arc::new(cx.listener(move |panel, id: &usize, window, cx| {
+                // Open the selected macro
+                if let Some(subgraph) = panel.local_macros.get(*id) {
+                    panel.open_local_macro(subgraph.id.clone(), subgraph.name.clone(), window, cx);
+                }
+            })),
             on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {
                 // TODO: Implement macro reordering
             }),
