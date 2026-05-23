@@ -101,6 +101,7 @@ impl PrefabHierarchyRenderer {
 
         // Capture panel entity for callbacks
         let panel_entity = cx.entity().clone();
+        let panel_entity_for_drop = panel_entity.clone();
 
         let config = HierarchyConfig {
             items,
