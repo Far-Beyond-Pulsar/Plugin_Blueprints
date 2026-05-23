@@ -188,10 +188,10 @@ impl MacrosRenderer {
                         cx.notify();
                         // Return macro ID for opening
                         panel.local_macros.get(selected_id).map(|m| m.id.clone())
-                    }).ok();
+                    });
 
                     // Open the macro tab
-                    if let Some(Some(macro_id)) = macro_id {
+                    if let Some(macro_id) = macro_id {
                         let _ = cx.update_window(window_handle, |_root_view, window, cx| {
                             let _ = panel.update(cx, |panel, cx| {
                                 panel.open_macro_tab(&macro_id, window, cx);
