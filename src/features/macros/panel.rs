@@ -174,12 +174,10 @@ impl MacrosRenderer {
             // Callbacks
             is_expanded: Arc::new(|_: &usize| false), // No expansion needed
             on_toggle_expand: Arc::new(|_: &usize| {}), // No-op
-            on_select: Arc::new(cx.listener(move |panel, id: &usize, window, cx| {
-                // Open the selected macro
-                if let Some(subgraph) = panel.local_macros.get(*id) {
-                    panel.open_local_macro(subgraph.id.clone(), subgraph.name.clone(), window, cx);
-                }
-            })),
+            on_select: Arc::new(|_id: &usize| {
+                // TODO: Implement macro opening via double-click or context menu
+                // Single click selection is currently a no-op since we don't track selection state
+            }),
             on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {
                 // TODO: Implement macro reordering
             }),
