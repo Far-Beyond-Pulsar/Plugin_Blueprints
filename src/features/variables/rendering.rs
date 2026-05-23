@@ -159,11 +159,14 @@ impl VariablesRenderer {
             .map(|(index, variable)| VariableHierarchyItem {
                 variable: variable.clone(),
                 index,
-                is_selected: false, // TODO: Track selection state
+                is_selected: false, // TODO: Track selection state in panel
             })
             .collect();
 
         let root_ids: Vec<usize> = (0..items.len()).collect();
+
+        // Get entity for proper GPUI pattern
+        let panel_entity = cx.entity().clone();
 
         let config = HierarchyConfig {
             items,
@@ -190,10 +193,12 @@ impl VariablesRenderer {
             is_expanded: Arc::new(|_: &usize| false), // No expansion needed
             on_toggle_expand: Arc::new(|_: &usize| {}), // No-op
             on_select: Arc::new(|_id: &usize| {
-                // TODO: Implement selection for variables
+                // Single-click selection - no-op for now
+                // TODO: Track selection state in panel
             }),
-            on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {
-                // TODO: Implement variable reordering
+            on_drop: Arc::new(move |_payload, _target_id: &usize, _modifiers: &Modifiers| {
+                // TODO: Implement variable reordering with entity
+                let _ = panel_entity;
             }),
         };
 

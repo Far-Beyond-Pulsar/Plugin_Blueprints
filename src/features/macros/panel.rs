@@ -150,6 +150,12 @@ impl MacrosRenderer {
 
         let root_ids: Vec<usize> = (0..items.len()).collect();
 
+        // Get entity for proper GPUI pattern
+        let panel_entity = cx.entity().clone();
+
+        // Clone macros for closure
+        let macros_for_select = panel.local_macros.clone();
+
         let config = HierarchyConfig {
             items,
             root_ids,
@@ -174,9 +180,15 @@ impl MacrosRenderer {
             // Callbacks
             is_expanded: Arc::new(|_: &usize| false), // No expansion needed
             on_toggle_expand: Arc::new(|_: &usize| {}), // No-op
-            on_select: Arc::new(|_id: &usize| {
-                // TODO: Implement macro opening via double-click or context menu
-                // Single click selection is currently a no-op since we don't track selection state
+            on_select: Arc::new(move |id: &usize| {
+                // Open the macro on click using proper GPUI pattern
+                if let Some(subgraph) = macros_for_select.get(*id) {
+                    let macro_id = subgraph.id.clone();
+                    let macro_name = subgraph.name.clone();
+                    panel_entity.update(|panel, cx| {
+                        panel.open_local_macro(macro_id, macro_name, cx.window(), cx);
+                    });
+                }
             }),
             on_drop: Arc::new(|_payload, _target_id: &usize, _modifiers: &Modifiers| {
                 // TODO: Implement macro reordering
