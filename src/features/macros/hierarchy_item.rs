@@ -110,14 +110,6 @@ impl HierarchyItem for MacroHierarchyItem {
         )
     }
 
-    fn on_click_custom(&self) -> Option<Arc<dyn Fn()>> {
-        let macro_name = self.subgraph.name.clone();
-        let macro_id = self.subgraph.id.clone();
-        Some(Arc::new(move || {
-            println!("TODO: Open macro '{}' (ID: {})", macro_name, macro_id);
-        }))
-    }
-
     fn build_context_menu(
         &self,
         menu: PopupMenu,

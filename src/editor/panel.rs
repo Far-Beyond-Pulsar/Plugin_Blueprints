@@ -1415,6 +1415,49 @@ impl BlueprintEditorPanel {
         }
     }
 
+    /// Open a macro tab by macro ID, or switch to it if already open
+    pub fn open_macro_tab(&mut self, macro_id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        // Check if tab is already open
+        if let Some(tab_index) = self.open_tabs.iter().position(|tab| tab.id == macro_id) {
+            self.switch_to_tab(tab_index, window, cx);
+            return;
+        }
+
+        // Find the macro definition
+        let macro_data = self
+            .local_macros
+            .iter()
+            .find(|m| m.id == macro_id)
+            .map(|m| (m.name.clone(), m.graph.clone()));
+
+        if let Some((macro_name, macro_graph)) = macro_data {
+            if let Ok(blueprint_graph) =
+                self.convert_graph_description_to_blueprint(&macro_graph, window, cx)
+            {
+                // Sync current tab before switching
+                self.sync_graph_to_active_tab();
+
+                // Create new tab
+                self.open_tabs.push(GraphTab {
+                    id: macro_id.to_string(),
+                    name: macro_name,
+                    graph: blueprint_graph,
+                    is_main: false,
+                    is_dirty: false,
+                    is_library_macro: false,
+                    library_id: None,
+                });
+
+                // Switch to the new tab
+                let new_tab_index = self.open_tabs.len() - 1;
+                self.active_tab_index = new_tab_index;
+                self.load_active_tab_graph();
+                self.graph_workspace_tabs_dirty = true;
+                cx.notify();
+            }
+        }
+    }
+
     /// Sync current graph to active tab
     pub fn sync_graph_to_active_tab(&mut self) {
         let tab_id = if let Some(tab) = self.open_tabs.get(self.active_tab_index) {

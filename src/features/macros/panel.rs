@@ -178,12 +178,19 @@ impl MacrosRenderer {
             // Callbacks - Use on_click_custom() in HierarchyItem for macro opening
             is_expanded: Arc::new(|_: &usize| false),
             on_toggle_expand: Arc::new(|_: &usize, _window, _cx| {}),
-            on_select: Arc::new(move |id: &usize, _window, cx| {
+            on_select: Arc::new(move |id: &usize, window, cx| {
                 let selected_id = *id;
                 let panel = panel_entity.clone();
                 cx.defer(move |cx| {
-                    panel.update(cx, |panel, cx| {
+                    panel.update(cx, |panel, window, cx| {
                         panel.selected_macro = Some(selected_id);
+
+                        // Open the macro tab
+                        if let Some(macro_def) = panel.local_macros.get(selected_id) {
+                            let macro_id = macro_def.id.clone();
+                            panel.open_macro_tab(&macro_id, window, cx);
+                        }
+
                         cx.notify();
                     });
                 });
