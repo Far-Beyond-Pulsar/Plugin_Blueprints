@@ -7,6 +7,7 @@
 
 use super::types::PinType;
 use crate::features::prefabs::PrefabAsset;
+use pulsar_reflection::{RuntimeTypeInfo, TypeStructure, WrapperType, REGISTRY};
 use serde::Deserialize;
 use std::collections::HashMap;
 use ui::graph::DataType;
@@ -326,12 +327,23 @@ impl NodeDefinitions {
         for (class_name, indices) in component_classes {
             let mut nodes = Vec::new();
 
-            // Get all methods (property accessors + manual methods)
-            if let Some(methods) = pulsar_reflection::REGISTRY.get_methods(&class_name) {
-                for method in methods {
-                    // Create bound node for each instance
+            if let Some(instance) = REGISTRY.create_instance(&class_name) {
+                for property in instance.get_properties() {
                     for &index in &indices {
-                        nodes.push(Self::create_bound_method_node(&class_name, &method, index));
+                        nodes.push(Self::create_bound_property_getter_node(
+                            &class_name,
+                            property.name,
+                            &property.display_name,
+                            property.type_info,
+                            index,
+                        ));
+                        nodes.push(Self::create_bound_property_setter_node(
+                            &class_name,
+                            property.name,
+                            &property.display_name,
+                            property.type_info,
+                            index,
+                        ));
                     }
                 }
             }
@@ -348,80 +360,99 @@ impl NodeDefinitions {
         categories
     }
 
-    fn create_bound_method_node(
+    fn create_bound_property_getter_node(
         class_name: &str,
-        method: &pulsar_reflection::MethodMetadata,
+        prop_name: &str,
+        display_name: &str,
+        type_info: &'static RuntimeTypeInfo,
         instance_index: usize,
     ) -> NodeDefinition {
-        let mut inputs = vec![];
-        let mut outputs = vec![];
-
-        // Add exec pin if needed (for MethodType::Fn)
-        if matches!(method.method_type, pulsar_reflection::MethodType::Fn) {
-            inputs.push(PinDefinition {
-                id: "exec".to_string(),
-                name: "exec".to_string(),
-                data_type: DataType::from_type_str("execution"),
-                pin_type: PinType::Input,
-            });
-            outputs.push(PinDefinition {
-                id: "exec_out".to_string(),
-                name: "exec".to_string(),
-                data_type: DataType::from_type_str("execution"),
-                pin_type: PinType::Output,
-            });
-        }
-
-        // Add parameter pins
-        for param in &method.params {
-            inputs.push(PinDefinition {
-                id: param.name.to_string(),
-                name: param.name.to_string(),
-                data_type: property_type_to_data_type(&param.param_type),
-                pin_type: PinType::Input,
-            });
-        }
-
-        // Add return pin
-        if let Some(return_type) = &method.return_type {
-            outputs.push(PinDefinition {
-                id: "result".to_string(),
-                name: "result".to_string(),
-                data_type: property_type_to_data_type(&return_type.return_type),
-                pin_type: PinType::Output,
-            });
-        }
+        let inputs = vec![];
+        let outputs = vec![PinDefinition {
+            id: "value".to_string(),
+            name: "value".to_string(),
+            data_type: runtime_type_to_data_type(type_info),
+            pin_type: PinType::Output,
+        }];
 
         NodeDefinition {
-            id: format!("method_{}_{}_{}", class_name, method.name, instance_index),
-            name: format!("{} [{} {}]", method.display_name, class_name, instance_index),
-            icon: "⚡".to_string(),
-            description: format!("Call {} on {} component", method.name, class_name),
+            id: format!("get_{}_{}_{}", class_name, prop_name, instance_index),
+            name: format!("Get {} [{} {}]", display_name, class_name, instance_index),
+            icon: "⬇".to_string(),
+            description: format!("Get {}.{}", class_name, prop_name),
             documentation: format!(
-                "Calls the {} method on {} component instance {}",
-                method.name, class_name, instance_index
+                "Gets the {} property from {} component instance {}",
+                prop_name, class_name, instance_index
             ),
             inputs,
             outputs,
             properties: HashMap::new(),
-            color: Some("#E74C3C".to_string()),
+            color: Some("#2ECC71".to_string()),
+        }
+    }
+
+    fn create_bound_property_setter_node(
+        class_name: &str,
+        prop_name: &str,
+        display_name: &str,
+        type_info: &'static RuntimeTypeInfo,
+        instance_index: usize,
+    ) -> NodeDefinition {
+        let inputs = vec![
+            PinDefinition {
+                id: "exec".to_string(),
+                name: "exec".to_string(),
+                data_type: DataType::from_type_str("execution"),
+                pin_type: PinType::Input,
+            },
+            PinDefinition {
+                id: "value".to_string(),
+                name: "value".to_string(),
+                data_type: runtime_type_to_data_type(type_info),
+                pin_type: PinType::Input,
+            },
+        ];
+        let outputs = vec![PinDefinition {
+            id: "exec_out".to_string(),
+            name: "exec".to_string(),
+            data_type: DataType::from_type_str("execution"),
+            pin_type: PinType::Output,
+        }];
+
+        NodeDefinition {
+            id: format!("set_{}_{}_{}", class_name, prop_name, instance_index),
+            name: format!("Set {} [{} {}]", display_name, class_name, instance_index),
+            icon: "⬆".to_string(),
+            description: format!("Set {}.{}", class_name, prop_name),
+            documentation: format!(
+                "Sets the {} property on {} component instance {}",
+                prop_name, class_name, instance_index
+            ),
+            inputs,
+            outputs,
+            properties: HashMap::new(),
+            color: Some("#E67E22".to_string()),
         }
     }
 }
 
-/// Convert PropertyType to DataType for blueprint pins
-fn property_type_to_data_type(prop_type: &pulsar_reflection::PropertyType) -> DataType {
-    match prop_type {
-        pulsar_reflection::PropertyType::F32 { .. } => DataType::from_type_str("f32"),
-        pulsar_reflection::PropertyType::I32 { .. } => DataType::from_type_str("i32"),
-        pulsar_reflection::PropertyType::Bool => DataType::from_type_str("bool"),
-        pulsar_reflection::PropertyType::String { .. } => DataType::from_type_str("String"),
-        pulsar_reflection::PropertyType::Vec3 => DataType::from_type_str("[f32; 3]"),
-        pulsar_reflection::PropertyType::Color => DataType::from_type_str("[f32; 4]"),
-        pulsar_reflection::PropertyType::Enum { .. } => DataType::from_type_str("i32"), // Enum as int
-        pulsar_reflection::PropertyType::Vec { .. } => DataType::from_type_str("Vec"),
-        pulsar_reflection::PropertyType::Component { class_name } => {
-            DataType::from_type_str(class_name)
-        }
+fn runtime_type_to_data_type(type_info: &RuntimeTypeInfo) -> DataType {
+    match &type_info.structure {
+        TypeStructure::Primitive => match type_info.base_name() {
+            "f32" => DataType::from_type_str("f32"),
+            "i32" => DataType::from_type_str("i32"),
+            "bool" => DataType::from_type_str("bool"),
+            "[f32; 3]" => DataType::from_type_str("[f32; 3]"),
+            "[f32; 4]" => DataType::from_type_str("[f32; 4]"),
+            other => DataType::from_type_str(other),
+        },
+        TypeStructure::String => DataType::from_type_str("String"),
+        TypeStructure::Enum { .. } => DataType::from_type_str("i32"),
+        TypeStructure::Wrapper {
+            wrapper_kind: WrapperType::Vec,
+            inner,
+        } => DataType::from_type_str(&format!("Vec<{}>", inner.base_name())),
+        TypeStructure::Wrapper { .. } => DataType::from_type_str(type_info.base_name()),
+        TypeStructure::Struct { .. } => DataType::from_type_str(type_info.base_name()),
     }
 }

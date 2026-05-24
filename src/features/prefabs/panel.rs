@@ -1,11 +1,12 @@
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::prefabs::hierarchy_item::ComponentHierarchyItem;
-use crate::features::prefabs::property_value_to_json;
+use crate::features::prefabs::{
+    json_to_property_value_from_type_info, property_value_to_json, runtime_type_to_property_type,
+};
 use gpui::*;
-use pulsar_reflection::{PropertyType, PropertyValue, REGISTRY};
+use pulsar_reflection::{PropertyValue, REGISTRY};
 use std::sync::Arc;
-use ui_common::{properties_inspector, PropertyStateManager, json_to_property_value, render_component_section};
-use ui::popover::Popover;
+use ui_common::properties_inspector;
 use ui::{
     button::Button,
     h_flex,
@@ -13,7 +14,6 @@ use ui::{
     v_flex, ActiveTheme, CollapsibleSection, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
     IconName, Sizable, StyledExt,
 };
-use std::sync::RwLock;
 
 pub struct PrefabHierarchyRenderer;
 pub struct PrefabPropertiesRenderer;
@@ -395,15 +395,18 @@ impl PrefabPropertiesRenderer {
                     .as_object()
                     .and_then(|obj| obj.get(prop.name))
                     .cloned()
-                    .unwrap_or_else(|| property_value_to_json(&default_value));
+                    .unwrap_or_else(|| property_value_to_json(default_value.as_ref(), prop.type_info));
 
-                let numeric_input = match prop.property_type {
-                    PropertyType::F32 { .. } | PropertyType::I32 { .. } => {
+                let property_type = runtime_type_to_property_type(prop.type_info);
+
+                let numeric_input = match &property_type {
+                    pulsar_reflection::PropertyType::F32 { .. }
+                    | pulsar_reflection::PropertyType::I32 { .. } => {
                         Some(panel.ensure_prefab_property_input(
                             index,
                             &class_name,
                             prop.name,
-                            &prop.property_type,
+                            prop.type_info,
                             &current_value,
                             window,
                             cx,
@@ -412,9 +415,8 @@ impl PrefabPropertiesRenderer {
                     _ => None,
                 };
 
-                let should_create_picker = matches!(prop.property_type, PropertyType::Color)
-                    || (matches!(&default_value, PropertyValue::String(s) if s == "unsupported")
-                        && Self::is_color_field_name(prop.name));
+                let should_create_picker = matches!(&property_type, pulsar_reflection::PropertyType::Color)
+                    || Self::is_color_field_name(prop.name);
 
                 let color_picker = if should_create_picker {
                     Some(panel.ensure_prefab_color_picker(
@@ -429,13 +431,13 @@ impl PrefabPropertiesRenderer {
                     None
                 };
 
-                let current_typed =
-                    json_to_property_value(&prop.property_type, &current_value).unwrap_or(default_value);
+                let current_typed = json_to_property_value_from_type_info(prop.type_info, &current_value)
+                    .unwrap_or(PropertyValue::String("unsupported".to_string()));
 
                 props_data.push((
                     prop.display_name.to_string(),
                     prop.name.to_string(),
-                    prop.property_type.clone(),
+                    property_type,
                     current_typed,
                     numeric_input,
                     color_picker,
