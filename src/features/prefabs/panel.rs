@@ -1,10 +1,7 @@
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::prefabs::hierarchy_item::ComponentHierarchyItem;
-use crate::features::prefabs::{
-    json_to_property_value_from_type_info, property_value_to_json, runtime_type_to_property_type,
-};
 use gpui::*;
-use pulsar_reflection::{PropertyValue, REGISTRY};
+use pulsar_reflection::{REGISTRY, TypeStructure};
 use std::sync::Arc;
 use ui_common::properties_inspector;
 use ui::{
@@ -389,19 +386,22 @@ impl PrefabPropertiesRenderer {
 
         if let Some(instance) = REGISTRY.create_instance(&class_name) {
             for prop in instance.get_properties() {
-                let default_value = (prop.getter)(instance.as_ref());
+                // Get current JSON value from component data, or serialize default
                 let current_value = component
                     .data
                     .as_object()
                     .and_then(|obj| obj.get(prop.name))
                     .cloned()
-                    .unwrap_or_else(|| property_value_to_json(default_value.as_ref(), prop.type_info));
+                    .unwrap_or_else(|| {
+                        let default_value = (prop.getter)(instance.as_ref());
+                        pulsar_reflection::RUNTIME_TYPE_REGISTRY
+                            .serialize_json_for_any(default_value.as_ref())
+                            .unwrap_or(serde_json::json!(null))
+                    });
 
-                let property_type = runtime_type_to_property_type(prop.type_info);
-
-                let numeric_input = match &property_type {
-                    pulsar_reflection::PropertyType::F32 { .. }
-                    | pulsar_reflection::PropertyType::I32 { .. } => {
+                // Determine if we need numeric input based on RuntimeTypeInfo
+                let numeric_input = match &prop.type_info.structure {
+                    TypeStructure::Primitive if matches!(prop.type_info.base_name(), "f32" | "i32") => {
                         Some(panel.ensure_prefab_property_input(
                             index,
                             &class_name,
@@ -415,8 +415,12 @@ impl PrefabPropertiesRenderer {
                     _ => None,
                 };
 
-                let should_create_picker = matches!(&property_type, pulsar_reflection::PropertyType::Color)
-                    || Self::is_color_field_name(prop.name);
+                // Determine if we need color picker based on RuntimeTypeInfo
+                let is_color_type = matches!(
+                    &prop.type_info.structure,
+                    TypeStructure::Primitive if prop.type_info.base_name() == "[f32; 4]"
+                );
+                let should_create_picker = is_color_type || Self::is_color_field_name(prop.name);
 
                 let color_picker = if should_create_picker {
                     Some(panel.ensure_prefab_color_picker(
@@ -431,14 +435,11 @@ impl PrefabPropertiesRenderer {
                     None
                 };
 
-                let current_typed = json_to_property_value_from_type_info(prop.type_info, &current_value)
-                    .unwrap_or(PropertyValue::String("unsupported".to_string()));
-
                 props_data.push((
                     prop.display_name.to_string(),
                     prop.name.to_string(),
-                    property_type,
-                    current_typed,
+                    prop.type_info,
+                    current_value,
                     numeric_input,
                     color_picker,
                     None, // No mesh picker in prefab editor yet
@@ -495,7 +496,7 @@ impl PrefabPropertiesRenderer {
                         v_flex()
                             .gap_2()
                             .children(props_data.into_iter().map(
-                                |(display_name, prop_name, property_type, value, input, color_picker, mesh_picker)| {
+                                |(display_name, prop_name, type_info, json_value, input, color_picker, mesh_picker)| {
                                     let prop_bool = prop_name.clone();
                                     let on_bool_toggle_local = on_bool_toggle.clone();
                                     let bool_callback = Arc::new(move |checked: bool, window: &mut Window, cx: &mut App| {
@@ -508,13 +509,13 @@ impl PrefabPropertiesRenderer {
                                         (on_enum_select_local)(&prop_enum, ix, window, cx);
                                     });
 
-                                    ui_common::render_property_row(
+                                    ui_common::render_property_row_runtime(
                                         "prefab",
                                         &class_name,
                                         &display_name,
                                         &prop_name,
-                                        &property_type,
-                                        &value,
+                                        type_info,
+                                        &json_value,
                                         input,
                                         color_picker,
                                         mesh_picker,

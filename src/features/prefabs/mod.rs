@@ -10,9 +10,8 @@ pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
 use crate::editor::panel::BlueprintEditorPanel;
 use engine_backend::scene::metadata::ComponentInstance;
 use gpui::{AppContext, Context, Entity, Hsla, Window};
-use pulsar_reflection::{PropertyType, PropertyValue, RuntimeTypeInfo, TypeStructure, WrapperType, REGISTRY};
+use pulsar_reflection::{RuntimeTypeInfo, TypeStructure, WrapperType, REGISTRY, RUNTIME_TYPE_REGISTRY};
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use ui::color_picker::{ColorPickerEvent, ColorPickerState};
@@ -141,10 +140,11 @@ impl BlueprintEditorPanel {
         let mut values = serde_json::Map::new();
         for prop in instance.get_properties() {
             let value = (prop.getter)(instance.as_ref());
-            values.insert(
-                prop.name.to_string(),
-                property_value_to_json(value.as_ref(), prop.type_info),
-            );
+            // Use runtime type registry for serialization
+            let json_value = RUNTIME_TYPE_REGISTRY
+                .serialize_json_for_any(value.as_ref())
+                .unwrap_or_else(|_| serde_json::json!(null));
+            values.insert(prop.name.to_string(), json_value);
         }
 
         self.prefab_asset.components.push(ComponentInstance {
@@ -292,191 +292,6 @@ impl BlueprintEditorPanel {
         self.prefab_color_pickers.insert(key, picker.clone());
         picker
     }
-}
-
-pub fn property_value_to_json_from_runtime(value: &PropertyValue) -> serde_json::Value {
-    match value {
-        PropertyValue::F32(v) => serde_json::Value::from(*v),
-        PropertyValue::I32(v) => serde_json::Value::from(*v),
-        PropertyValue::Bool(v) => serde_json::Value::from(*v),
-        PropertyValue::String(v) => serde_json::Value::from(v.clone()),
-        PropertyValue::Vec3(v) => serde_json::json!([v[0], v[1], v[2]]),
-        PropertyValue::Color(v) => serde_json::json!([v[0], v[1], v[2], v[3]]),
-        PropertyValue::EnumVariant(v) => serde_json::Value::from(*v as u64),
-        PropertyValue::Vec(values) => serde_json::Value::Array(
-            values.iter().map(property_value_to_json_from_runtime).collect(),
-        ),
-        PropertyValue::Component { class_name, .. } => {
-            serde_json::json!({"class_name": class_name})
-        }
-    }
-}
-
-pub fn runtime_type_to_property_type(type_info: &RuntimeTypeInfo) -> PropertyType {
-    match &type_info.structure {
-        TypeStructure::Primitive => match type_info.base_name() {
-            "f32" => PropertyType::F32 {
-                min: None,
-                max: None,
-                step: None,
-            },
-            "i32" => PropertyType::I32 {
-                min: None,
-                max: None,
-            },
-            "bool" => PropertyType::Bool,
-            "[f32; 3]" => PropertyType::Vec3,
-            "[f32; 4]" => PropertyType::Color,
-            _ => PropertyType::String { max_length: None },
-        },
-        TypeStructure::String => PropertyType::String { max_length: None },
-        TypeStructure::Enum { variants } => PropertyType::Enum {
-            variants: variants.to_vec(),
-        },
-        TypeStructure::Wrapper {
-            wrapper_kind: WrapperType::Vec,
-            inner,
-        } => PropertyType::Vec {
-            element_type: Box::new(runtime_type_to_property_type(inner)),
-        },
-        TypeStructure::Struct { .. } => PropertyType::Component {
-            class_name: type_info.type_name,
-        },
-        TypeStructure::Wrapper { .. } => PropertyType::String { max_length: None },
-    }
-}
-
-pub fn json_to_property_value_from_type_info(
-    type_info: &RuntimeTypeInfo,
-    value: &serde_json::Value,
-) -> Option<PropertyValue> {
-    match &type_info.structure {
-        TypeStructure::Primitive => match type_info.base_name() {
-            "f32" => value.as_f64().map(|v| PropertyValue::F32(v as f32)),
-            "i32" => value.as_i64().map(|v| PropertyValue::I32(v as i32)),
-            "bool" => value.as_bool().map(PropertyValue::Bool),
-            "[f32; 3]" => {
-                let arr = value.as_array()?;
-                if arr.len() != 3 {
-                    return None;
-                }
-                Some(PropertyValue::Vec3([
-                    arr.first()?.as_f64()? as f32,
-                    arr.get(1)?.as_f64()? as f32,
-                    arr.get(2)?.as_f64()? as f32,
-                ]))
-            }
-            "[f32; 4]" => {
-                let arr = value.as_array()?;
-                if arr.len() != 4 {
-                    return None;
-                }
-                Some(PropertyValue::Color([
-                    arr.first()?.as_f64()? as f32,
-                    arr.get(1)?.as_f64()? as f32,
-                    arr.get(2)?.as_f64()? as f32,
-                    arr.get(3)?.as_f64()? as f32,
-                ]))
-            }
-            _ => value
-                .as_str()
-                .map(|v| PropertyValue::String(v.to_string()))
-                .or_else(|| Some(PropertyValue::String(value.to_string()))),
-        },
-        TypeStructure::String => value
-            .as_str()
-            .map(|v| PropertyValue::String(v.to_string()))
-            .or_else(|| Some(PropertyValue::String(value.to_string()))),
-        TypeStructure::Enum { .. } => value
-            .as_u64()
-            .map(|v| PropertyValue::EnumVariant(v as usize)),
-        TypeStructure::Wrapper {
-            wrapper_kind: WrapperType::Vec,
-            inner,
-        } => {
-            let arr = value.as_array()?;
-            let values: Option<Vec<PropertyValue>> = arr
-                .iter()
-                .map(|item| json_to_property_value_from_type_info(inner, item))
-                .collect();
-            values.map(PropertyValue::Vec)
-        }
-        TypeStructure::Struct { .. } => Some(PropertyValue::Component {
-            class_name: type_info.base_name().to_string(),
-        }),
-        TypeStructure::Wrapper { .. } => Some(PropertyValue::String(value.to_string())),
-    }
-}
-
-fn any_to_property_value(value: &dyn Any, type_info: &RuntimeTypeInfo) -> Option<PropertyValue> {
-    match &type_info.structure {
-        TypeStructure::Primitive => match type_info.base_name() {
-            "f32" => value.downcast_ref::<f32>().copied().map(PropertyValue::F32),
-            "i32" => value.downcast_ref::<i32>().copied().map(PropertyValue::I32),
-            "bool" => value.downcast_ref::<bool>().copied().map(PropertyValue::Bool),
-            "[f32; 3]" => value.downcast_ref::<[f32; 3]>().copied().map(PropertyValue::Vec3),
-            "[f32; 4]" => value.downcast_ref::<[f32; 4]>().copied().map(PropertyValue::Color),
-            _ => Some(PropertyValue::String("unsupported".to_string())),
-        },
-        TypeStructure::String => value
-            .downcast_ref::<String>()
-            .map(|v| PropertyValue::String(v.clone())),
-        TypeStructure::Enum { variants } => {
-            if let Some(ix) = value.downcast_ref::<usize>() {
-                return Some(PropertyValue::EnumVariant(*ix));
-            }
-            if let Some(ix) = value.downcast_ref::<u64>() {
-                return Some(PropertyValue::EnumVariant(*ix as usize));
-            }
-            // Fallback: if the value is stringly encoded, map by variant name.
-            value.downcast_ref::<String>().and_then(|name| {
-                variants
-                    .iter()
-                    .position(|v| v == name)
-                    .map(PropertyValue::EnumVariant)
-            })
-        }
-        TypeStructure::Wrapper {
-            wrapper_kind: WrapperType::Vec,
-            inner,
-        } => {
-            if let Some(vec) = value.downcast_ref::<Vec<f32>>() {
-                return Some(PropertyValue::Vec(vec.iter().copied().map(PropertyValue::F32).collect()));
-            }
-            if let Some(vec) = value.downcast_ref::<Vec<i32>>() {
-                return Some(PropertyValue::Vec(vec.iter().copied().map(PropertyValue::I32).collect()));
-            }
-            if let Some(vec) = value.downcast_ref::<Vec<bool>>() {
-                return Some(PropertyValue::Vec(vec.iter().copied().map(PropertyValue::Bool).collect()));
-            }
-            if let Some(vec) = value.downcast_ref::<Vec<String>>() {
-                return Some(PropertyValue::Vec(
-                    vec.iter().cloned().map(PropertyValue::String).collect(),
-                ));
-            }
-            if let Some(vec) = value.downcast_ref::<Vec<[f32; 3]>>() {
-                return Some(PropertyValue::Vec(vec.iter().copied().map(PropertyValue::Vec3).collect()));
-            }
-            if let Some(vec) = value.downcast_ref::<Vec<[f32; 4]>>() {
-                return Some(PropertyValue::Vec(vec.iter().copied().map(PropertyValue::Color).collect()));
-            }
-
-            // Unknown Vec<T> shape falls back to an empty vector so UI remains safe.
-            let _ = inner;
-            Some(PropertyValue::Vec(Vec::new()))
-        }
-        TypeStructure::Struct { .. } => Some(PropertyValue::Component {
-            class_name: type_info.base_name().to_string(),
-        }),
-        TypeStructure::Wrapper { .. } => Some(PropertyValue::String("unsupported".to_string())),
-    }
-}
-
-pub fn property_value_to_json(value: &dyn Any, type_info: &RuntimeTypeInfo) -> serde_json::Value {
-    any_to_property_value(value, type_info)
-        .as_ref()
-    .map(property_value_to_json_from_runtime)
-        .unwrap_or_else(|| serde_json::Value::String("unsupported".to_string()))
 }
 
 fn format_property_value(type_info: &RuntimeTypeInfo, value: &serde_json::Value) -> String {
