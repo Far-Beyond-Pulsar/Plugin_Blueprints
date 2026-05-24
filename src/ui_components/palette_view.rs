@@ -46,6 +46,8 @@ pub struct NodePaletteView {
     scroll_handle: VirtualListScrollHandle,
     /// Tracks scroll position for the scrollbar thumb.
     scrollbar_state: ScrollbarState,
+    /// Tracks whether component nodes have been loaded
+    component_nodes_loaded: bool,
 }
 
 impl NodePaletteView {
@@ -54,7 +56,9 @@ impl NodePaletteView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        // Build base node items only - component nodes will be loaded lazily
         let all_items = build_palette_items(NodeDefinitions::load());
+
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
         Self {
             editor,
@@ -63,8 +67,45 @@ impl NodePaletteView {
             search_input,
             scroll_handle: VirtualListScrollHandle::new(),
             scrollbar_state: ScrollbarState::default(),
+            component_nodes_loaded: false,
         }
     }
+
+    /// Rebuild the palette items (called when prefab changes)
+    pub fn rebuild_items(&mut self, cx: &mut Context<Self>) {
+        // Build base node items
+        let mut all_items = build_palette_items(NodeDefinitions::load());
+
+        // Add component method nodes if editor is available
+        if let Some(editor_entity) = self.editor.upgrade() {
+            // Safe to read here because this is called after construction is complete
+            let editor_ref = editor_entity.read(cx);
+            let component_categories = NodeDefinitions::generate_component_nodes(&editor_ref.prefab_asset);
+            for category in component_categories {
+                all_items.extend(build_palette_items_for_category(&category));
+            }
+        }
+
+        self.all_items = all_items;
+        self.component_nodes_loaded = true;
+    }
+}
+
+/// Build palette items for a single category
+fn build_palette_items_for_category(category: &crate::core::definitions::NodeCategory) -> Vec<PaletteItem> {
+    let mut items = Vec::new();
+    items.push(PaletteItem::CategoryHeader {
+        name: category.name.clone(),
+        color: category.color.clone(),
+        node_count: category.nodes.len(),
+    });
+    for node in &category.nodes {
+        items.push(PaletteItem::NodeEntry {
+            def: node.clone(),
+            category_color: category.color.clone(),
+        });
+    }
+    items
 }
 
 impl NodePaletteView {
@@ -82,6 +123,11 @@ impl Focusable for NodePaletteView {
 
 impl Render for NodePaletteView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Load component nodes on first render (safe because editor construction is complete)
+        if !self.component_nodes_loaded {
+            self.rebuild_items(cx);
+        }
+
         // ── Filtered list ─────────────────────────────────────────────────────
         let query = self.search_input.read(cx).value().to_string();
         let connection_filter_type = self

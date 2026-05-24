@@ -6,6 +6,7 @@
 //! for efficient access to node metadata throughout the application.
 
 use super::types::PinType;
+use crate::features::prefabs::PrefabAsset;
 use serde::Deserialize;
 use std::collections::HashMap;
 use ui::graph::DataType;
@@ -302,5 +303,125 @@ impl NodeDefinitions {
         self.categories
             .iter()
             .find(|category| category.nodes.iter().any(|node| node.id == node_id))
+    }
+
+    /// Generate component method nodes bound to specific instances from a prefab
+    ///
+    /// This creates blueprint nodes for all methods (both auto-generated property accessors
+    /// and manually marked methods) on components in the prefab. Each node is bound to a
+    /// specific component instance.
+    pub fn generate_component_nodes(prefab: &PrefabAsset) -> Vec<NodeCategory> {
+        let mut categories = Vec::new();
+
+        // Group components by class name
+        let mut component_classes: HashMap<String, Vec<usize>> = HashMap::new();
+        for (index, component) in prefab.components.iter().enumerate() {
+            component_classes
+                .entry(component.class_name.clone())
+                .or_default()
+                .push(index);
+        }
+
+        // For each component class, create bound method nodes
+        for (class_name, indices) in component_classes {
+            let mut nodes = Vec::new();
+
+            // Get all methods (property accessors + manual methods)
+            if let Some(methods) = pulsar_reflection::REGISTRY.get_methods(&class_name) {
+                for method in methods {
+                    // Create bound node for each instance
+                    for &index in &indices {
+                        nodes.push(Self::create_bound_method_node(&class_name, &method, index));
+                    }
+                }
+            }
+
+            if !nodes.is_empty() {
+                categories.push(NodeCategory {
+                    name: format!("Components/{}", class_name),
+                    color: "#9B59B6".to_string(),
+                    nodes,
+                });
+            }
+        }
+
+        categories
+    }
+
+    fn create_bound_method_node(
+        class_name: &str,
+        method: &pulsar_reflection::MethodMetadata,
+        instance_index: usize,
+    ) -> NodeDefinition {
+        let mut inputs = vec![];
+        let mut outputs = vec![];
+
+        // Add exec pin if needed (for MethodType::Fn)
+        if matches!(method.method_type, pulsar_reflection::MethodType::Fn) {
+            inputs.push(PinDefinition {
+                id: "exec".to_string(),
+                name: "exec".to_string(),
+                data_type: DataType::from_type_str("execution"),
+                pin_type: PinType::Input,
+            });
+            outputs.push(PinDefinition {
+                id: "exec_out".to_string(),
+                name: "exec".to_string(),
+                data_type: DataType::from_type_str("execution"),
+                pin_type: PinType::Output,
+            });
+        }
+
+        // Add parameter pins
+        for param in &method.params {
+            inputs.push(PinDefinition {
+                id: param.name.to_string(),
+                name: param.name.to_string(),
+                data_type: property_type_to_data_type(&param.param_type),
+                pin_type: PinType::Input,
+            });
+        }
+
+        // Add return pin
+        if let Some(return_type) = &method.return_type {
+            outputs.push(PinDefinition {
+                id: "result".to_string(),
+                name: "result".to_string(),
+                data_type: property_type_to_data_type(&return_type.return_type),
+                pin_type: PinType::Output,
+            });
+        }
+
+        NodeDefinition {
+            id: format!("method_{}_{}_{}", class_name, method.name, instance_index),
+            name: format!("{} [{} {}]", method.display_name, class_name, instance_index),
+            icon: "⚡".to_string(),
+            description: format!("Call {} on {} component", method.name, class_name),
+            documentation: format!(
+                "Calls the {} method on {} component instance {}",
+                method.name, class_name, instance_index
+            ),
+            inputs,
+            outputs,
+            properties: HashMap::new(),
+            color: Some("#E74C3C".to_string()),
+        }
+    }
+}
+
+/// Convert PropertyType to DataType for blueprint pins
+fn property_type_to_data_type(prop_type: &pulsar_reflection::PropertyType) -> DataType {
+    match prop_type {
+        pulsar_reflection::PropertyType::F32 { .. } => DataType::from_type_str("f32"),
+        pulsar_reflection::PropertyType::I32 { .. } => DataType::from_type_str("i32"),
+        pulsar_reflection::PropertyType::Bool => DataType::from_type_str("bool"),
+        pulsar_reflection::PropertyType::String { .. } => DataType::from_type_str("String"),
+        pulsar_reflection::PropertyType::Vec3 => DataType::from_type_str("[f32; 3]"),
+        pulsar_reflection::PropertyType::Color => DataType::from_type_str("[f32; 4]"),
+        pulsar_reflection::PropertyType::Enum { .. } => DataType::from_type_str("i32"), // Enum as int
+        pulsar_reflection::PropertyType::Vec { .. } => DataType::from_type_str("Vec"),
+        pulsar_reflection::PropertyType::Component { class_name } => {
+            DataType::from_type_str(class_name)
+        }
     }
 }

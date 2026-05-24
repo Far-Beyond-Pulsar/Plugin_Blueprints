@@ -5,7 +5,9 @@
       "Bash(wc:*)",
       "Bash(cargo check:*)",
       "Bash(grep:*)",
-      "Bash(1)"
+      "Bash(1)",
+      "Bash(xargs:*)",
+      "Bash(gh issue create:*)"
     ]
   }
 }
