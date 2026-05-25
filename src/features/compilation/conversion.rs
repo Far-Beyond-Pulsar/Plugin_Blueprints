@@ -7,7 +7,7 @@ use crate::{
     PinType,
 };
 use gpui::*;
-use ui::graph::{self as graph_types, GraphDescription, NodeInstance, Position, PropertyValue};
+use ui::graph::{self as graph_types, GraphDescription, NodeInstance, Position};
 
 impl BlueprintEditorPanel {
     /// Convert current blueprint graph to graph description
@@ -43,12 +43,12 @@ impl BlueprintEditorPanel {
 
             // Convert properties
             for (key, value) in &bp_node.properties {
-                let prop_value = if value.parse::<f64>().is_ok() {
-                    PropertyValue::Number(value.parse().unwrap())
-                } else if value.parse::<bool>().is_ok() {
-                    PropertyValue::Boolean(value.parse().unwrap())
+                let prop_value = if let Ok(n) = value.parse::<f64>() {
+                    serde_json::json!(n)
+                } else if let Ok(b) = value.parse::<bool>() {
+                    serde_json::json!(b)
                 } else {
-                    PropertyValue::String(value.clone())
+                    serde_json::json!(value)
                 };
                 node_instance.set_property(key, prop_value);
             }
@@ -201,11 +201,14 @@ impl BlueprintEditorPanel {
                     .properties
                     .iter()
                     .map(|(k, v)| {
-                        let value_str = match v {
-                            PropertyValue::String(s) => s.clone(),
-                            PropertyValue::Number(n) => n.to_string(),
-                            PropertyValue::Boolean(b) => b.to_string(),
-                            _ => "".to_string(),
+                        let value_str = if let Some(s) = v.as_str() {
+                            s.to_string()
+                        } else if let Some(n) = v.as_f64() {
+                            n.to_string()
+                        } else if let Some(b) = v.as_bool() {
+                            b.to_string()
+                        } else {
+                            v.to_string()
                         };
                         (k.clone(), value_str)
                     })
