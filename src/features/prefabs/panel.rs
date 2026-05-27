@@ -45,12 +45,14 @@ impl PrefabHierarchyRenderer {
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         let dialog = panel.prefab_add_component_dialog.clone();
+        let show_dialog = panel.show_add_component_dialog;
+
         let add_button = Button::new("prefab_component_add")
             .label("Add Component")
             .icon(IconName::Component)
             .small()
-            .on_click(cx.listener(|_panel, _, _window, cx| {
-                // TODO: Show add component dialog
+            .on_click(cx.listener(|panel, _, _window, cx| {
+                panel.show_add_component_dialog = true;
                 cx.notify();
             }))
             .into_any_element();
@@ -59,6 +61,25 @@ impl PrefabHierarchyRenderer {
             .size_full()
             .bg(cx.theme().background)
             .child(Self::render_hierarchy(panel, add_button, cx))
+            .when(show_dialog, |el| {
+                el.child(
+                    div()
+                        .absolute()
+                        .left(px(8.0))
+                        .bottom(px(8.0))
+                        .w(px(260.0))
+                        .shadow_lg()
+                        .rounded(px(6.0))
+                        .overflow_hidden()
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .on_mouse_down_out(cx.listener(|panel, _, _, cx| {
+                            panel.show_add_component_dialog = false;
+                            cx.notify();
+                        }))
+                        .child(dialog),
+                )
+            })
     }
 
     fn render_hierarchy(

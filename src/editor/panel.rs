@@ -85,6 +85,7 @@ pub struct BlueprintEditorPanel {
     // Prefab sidecar authoring
     pub prefab_asset: PrefabAsset,
     pub prefab_add_component_dialog: Entity<AddPrefabComponentDialog>,
+    pub show_add_component_dialog: bool,
     pub prefab_property_inputs: HashMap<String, Entity<InputState>>,
     pub prefab_color_pickers: HashMap<String, Entity<ColorPickerState>>,
     pub selected_prefab_component: Option<usize>,
@@ -350,6 +351,7 @@ impl BlueprintEditorPanel {
         cx.subscribe(
             &prefab_add_component_dialog,
             |this, _, _: &DismissEvent, cx| {
+                this.show_add_component_dialog = false;
                 cx.notify();
             },
         )
@@ -392,6 +394,7 @@ impl BlueprintEditorPanel {
             variable_drop_menu_position: None,
             prefab_asset: PrefabAsset::new("Prefab"),
             prefab_add_component_dialog,
+            show_add_component_dialog: false,
             prefab_property_inputs: HashMap::new(),
             prefab_color_pickers: HashMap::new(),
             selected_prefab_component: None,

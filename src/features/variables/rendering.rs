@@ -91,10 +91,12 @@ impl VariablesRenderer {
             on_select: Arc::new(move |id: &usize, _window, cx| {
                 let selected_id = *id;
                 let panel = panel_entity.clone();
-
-                panel.update(cx, |panel, cx| {
-                    panel.selected_variable = Some(selected_id);
-                    cx.notify();
+                // Defer so the entity borrow from cx.listener is released first.
+                cx.defer(move |cx| {
+                    panel.update(cx, |panel, cx| {
+                        panel.selected_variable = Some(selected_id);
+                        cx.notify();
+                    });
                 });
             }),
             on_drop: Arc::new(move |payload, target_id: &usize, _modifiers: &Modifiers, _window, cx| {
