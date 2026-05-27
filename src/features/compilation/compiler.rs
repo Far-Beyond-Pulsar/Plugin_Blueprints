@@ -5,95 +5,33 @@ use crate::{CompilationState, CompilationStatus};
 use gpui::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
 
-#[derive(Default)]
-struct BytecodeRuntimeState {
-    runtime: Option<BytecodeRuntime>,
+// ── Bytecode file format ──────────────────────────────────────────────────────
+
+/// JSON output written to `<class>/events/.build/bytecode.json`.
+///
+/// Field layout is intentionally compatible with
+/// `pulsar_game::blueprint_runtime::CompiledBytecode` so the game runtime can
+/// deserialise it without knowing about this type.
+#[derive(serde::Serialize)]
+struct BytecodeFileOutput {
+    /// Format version — must stay 1 unless the runtime is updated in lock-step.
+    version: u32,
+    /// Blueprint class name (used as the key in `BlueprintDispatcher`).
+    source_class: String,
+    /// Variable descriptors — currently empty; the runtime initialises an arena
+    /// large enough for the programs' combined `arena_size` without needing
+    /// explicit layout here.
+    variables: Vec<serde_json::Value>,
+    /// One compiled program per event entry-point, keyed by event name
+    /// ("begin_play", "tick", …).  Function pointers are zero here; the game
+    /// runtime's `BpExecutor::prepare` patches them from `pulsar_std`.
+    event_programs: HashMap<String, pbgc::BpProgram>,
+    /// Bytes needed for the per-instance state arena.
+    arena_size: usize,
 }
 
-struct BytecodeRuntime {
-    _temp_lib: pulsar_std_bundle::TempLib,
-    executor: pulsar_bp_executor::BpExecutor,
-    prepared_by_class: HashMap<String, Vec<PreparedProgram>>,
-}
-
-struct PreparedProgram {
-    program: pbgc::BpProgram,
-    arena: Vec<u64>,
-}
-
-static BYTECODE_RUNTIME: OnceLock<Mutex<BytecodeRuntimeState>> = OnceLock::new();
-
-fn runtime_state() -> &'static Mutex<BytecodeRuntimeState> {
-    BYTECODE_RUNTIME.get_or_init(|| Mutex::new(BytecodeRuntimeState::default()))
-}
-
-impl BytecodeRuntime {
-    fn new() -> Result<Self, String> {
-        let temp_lib = pulsar_std_bundle::extract_to_tempfile()
-            .map_err(|e| format!("Failed to extract pulsar_std: {}", e))?;
-        let executor = pulsar_bp_executor::BpExecutor::load(&temp_lib.path)
-            .map_err(|e| format!("Failed to load pulsar_std: {}", e))?;
-
-        Ok(Self {
-            _temp_lib: temp_lib,
-            executor,
-            prepared_by_class: HashMap::new(),
-        })
-    }
-
-    fn execute_for_class(
-        &mut self,
-        class_key: String,
-        mut programs: Vec<pbgc::BpProgram>,
-    ) -> Result<(), String> {
-        let prepared = self
-            .prepared_by_class
-            .entry(class_key)
-            .or_insert_with(Vec::new);
-
-        if prepared.len() != programs.len() {
-            prepared.clear();
-        }
-
-        // Re-prepare each compiled program while preserving previously allocated arenas
-        // for persistent variable state between executions.
-        for (index, mut program) in programs.drain(..).enumerate() {
-            self.executor
-                .prepare(&mut program)
-                .map_err(|e| format!("Dispatch resolve failed: {}", e))?;
-
-            let required_words = (program.arena_size + 7) / 8;
-
-            if let Some(existing) = prepared.get_mut(index) {
-                existing.program = program;
-                if existing.arena.len() < required_words {
-                    existing.arena.resize(required_words, 0);
-                }
-                continue;
-            }
-
-            prepared.push(PreparedProgram {
-                program,
-                arena: vec![0u64; required_words.max(1)],
-            });
-        }
-
-        for prepared_program in prepared.iter_mut() {
-            unsafe {
-                pbgc::vm::run_with_external_arena(
-                    &prepared_program.program,
-                    prepared_program.arena.as_mut_ptr() as *mut u8,
-                    prepared_program.arena.len() * std::mem::size_of::<u64>(),
-                )
-                .map_err(|e| format!("VM run failed: {}", e))?;
-            }
-        }
-
-        Ok(())
-    }
-}
+// ── Property normalisation (shared by both compile paths) ────────────────────
 
 /// Normalizes property literals that may be JSON-string-encoded one or more
 /// times by the editor/serialization path.
@@ -150,6 +88,8 @@ fn to_graphy_datatype(dt: &ui::graph::DataType) -> pbgc::DataType {
         PG::Data(ti) => GD::Typed(pbgc::TypeInfo::new(ti.to_string())),
     }
 }
+
+// ── BlueprintEditorPanel helpers ──────────────────────────────────────────────
 
 impl BlueprintEditorPanel {
     fn push_compilation_history(
@@ -248,9 +188,7 @@ impl BlueprintEditorPanel {
         Ok(graph)
     }
 
-    /// Compile current graph → PBGC bytecode programs.
-    ///
-    /// Returns one `BpProgram` per entry-point (event) found in the graph.
+    /// Compile current graph → raw PBGC bytecode programs (one per event entry-point).
     pub fn compile_to_bytecode(&self) -> Result<Vec<pbgc::BpProgram>, String> {
         let variables: std::collections::HashMap<String, String> = self
             .class_variables
@@ -263,38 +201,67 @@ impl BlueprintEditorPanel {
             .map_err(|e| format!("Bytecode compilation failed: {}", e))
     }
 
-    /// Execute bytecode programs immediately against the embedded native cdylib.
+    /// Compile the current graph and write the result to
+    /// `<class_path>/events/.build/bytecode.json`.
     ///
-    /// Extracts `pulsar_std` to a temp file, loads it via `BpExecutor`, patches
-    /// all `fn_ptr` slots, and runs each program through `pbgc::vm::run`.
-    ///
-    /// # Safety
-    ///
-    /// The `BpExecutor` (and its backing `TempLib`) must remain alive for the
-    /// entire duration of `vm::run`. Both are kept on the stack here.
-    pub fn execute_bytecode_programs(
-        &self,
-        programs: Vec<pbgc::BpProgram>,
-    ) -> Result<(), String> {
-        let class_key = self
+    /// The produced file can be loaded by
+    /// `pulsar_game::blueprint_runtime::BlueprintDispatcher` at game startup —
+    /// the game runtime handles `BpExecutor::prepare` (function-pointer patching)
+    /// and drives `begin_play` / `tick` / `end_play` through the `TickLoop`.
+    pub fn compile_to_bytecode_files(&self) -> Result<PathBuf, String> {
+        let class_path = self
             .current_class_path
             .as_ref()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| "in_memory_blueprint".to_string());
+            .ok_or("No class loaded — cannot compile")?;
 
-        let mut state = runtime_state()
-            .lock()
-            .map_err(|_| "Bytecode runtime lock poisoned".to_string())?;
+        let programs = self.compile_to_bytecode()?;
 
-        if state.runtime.is_none() {
-            state.runtime = Some(BytecodeRuntime::new()?);
+        if programs.is_empty() {
+            return Err("No event entry-points found in graph — add a BeginPlay or Tick node".to_string());
         }
 
-        state
-            .runtime
-            .as_mut()
-            .ok_or_else(|| "Bytecode runtime failed to initialize".to_string())?
-            .execute_for_class(class_key, programs)
+        // Map programs by event name.  BpProgram::name carries the event type
+        // ("begin_play", "tick", …) set by the bytecode codegen.
+        let arena_size = programs
+            .iter()
+            .map(|p| p.arena_size)
+            .max()
+            .unwrap_or(0)
+            .max(1024); // minimum 1 KiB so the runtime always has headroom
+
+        let event_programs: HashMap<String, pbgc::BpProgram> = programs
+            .into_iter()
+            .map(|p| (p.name.clone(), p))
+            .collect();
+
+        let blueprint_name = class_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unnamed_blueprint")
+            .to_owned();
+
+        let output = BytecodeFileOutput {
+            version: 1,
+            source_class: blueprint_name,
+            variables: Vec::new(),
+            event_programs,
+            arena_size,
+        };
+
+        let json = serde_json::to_string_pretty(&output)
+            .map_err(|e| format!("Failed to serialise bytecode: {}", e))?;
+
+        // Ensure .build directory exists under events/
+        let build_dir = class_path.join("events").join(".build");
+        std::fs::create_dir_all(&build_dir)
+            .map_err(|e| format!("Failed to create .build directory: {}", e))?;
+
+        let out_path = build_dir.join("bytecode.json");
+        std::fs::write(&out_path, json)
+            .map_err(|e| format!("Failed to write bytecode.json: {}", e))?;
+
+        tracing::info!("Bytecode written to {}", out_path.display());
+        Ok(out_path)
     }
 
     /// Compile current graph to Rust source code
@@ -453,26 +420,28 @@ impl BlueprintEditorPanel {
                         ),
                     );
                     cx.notify();
-                    panel.compile_to_class_directory()
+                    panel.compile_to_class_directory().map(|_| None::<PathBuf>)
                 }
                 CompileMode::BytecodeVm => {
                     panel.push_compilation_history(
                         CompilationState::Compiling,
                         "build",
-                        "Compiling to PBGC bytecode and executing via native VM",
-                        Some("Steps: build graph description, compile to bytecode, load pulsar_std cdylib, resolve dispatch symbols, vm::run".to_string()),
+                        "Compiling to PBGC bytecode",
+                        Some(
+                            "Steps: build graph description, compile to bytecode programs, \
+                             write events/.build/bytecode.json"
+                                .to_string(),
+                        ),
                     );
                     cx.notify();
-                    panel
-                        .compile_to_bytecode()
-                        .and_then(|programs| panel.execute_bytecode_programs(programs))
+                    panel.compile_to_bytecode_files().map(Some)
                 }
             }
         });
 
         if let Ok(compile_result) = result {
             match compile_result {
-                Ok(()) => {
+                Ok(maybe_path) => {
                     // Success
                     smol::Timer::after(std::time::Duration::from_millis(500)).await;
                     let _ = panel_entity.update(cx, |panel, cx| {
@@ -491,10 +460,20 @@ impl BlueprintEditorPanel {
                                     .as_ref()
                                     .map(|p| p.join("events").join("mod.rs").display().to_string())
                                     .unwrap_or_else(|| "events/mod.rs".to_string());
-                                format!("Duration: {} ms | Outputs: {}, {}", elapsed_ms, output_events, output_mod)
+                                format!(
+                                    "Duration: {} ms | Outputs: {}, {}",
+                                    elapsed_ms, output_events, output_mod
+                                )
                             }
                             CompileMode::BytecodeVm => {
-                                format!("Duration: {} ms | Mode: Bytecode VM (pulsar_std cdylib)", elapsed_ms)
+                                let out = maybe_path
+                                    .map(|p| p.display().to_string())
+                                    .unwrap_or_else(|| "events/.build/bytecode.json".to_string());
+                                format!(
+                                    "Duration: {} ms | Output: {} | \
+                                     Run `cargo run` in your project to execute via the VM runtime",
+                                    elapsed_ms, out
+                                )
                             }
                         };
 
