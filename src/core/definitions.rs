@@ -306,45 +306,58 @@ impl NodeDefinitions {
             .find(|category| category.nodes.iter().any(|node| node.id == node_id))
     }
 
-    /// Generate component method nodes bound to specific instances from a prefab
+    /// Generate component nodes for all components in a prefab.
     ///
-    /// This creates blueprint nodes for all methods (both auto-generated property accessors
-    /// and manually marked methods) on components in the prefab. Each node is bound to a
-    /// specific component instance.
+    /// For each component class the prefab references, this creates:
+    /// - A **Get Property** node per property (`comp_get_prop::ClassName::PropName`)
+    /// - A **Set Property** node per property (`comp_set_prop::ClassName::PropName`)
+    /// - A **Call Method** node per blueprint-callable method (`comp_call::ClassName::MethodName`)
+    ///
+    /// These node IDs follow the convention expected by the PBGC Rust codegen so that
+    /// compiled blueprints produce correct `ComponentStore` access code.
     pub fn generate_component_nodes(prefab: &PrefabAsset) -> Vec<NodeCategory> {
         let mut categories = Vec::new();
 
-        // Group components by class name
-        let mut component_classes: HashMap<String, Vec<usize>> = HashMap::new();
-        for (index, component) in prefab.components.iter().enumerate() {
-            component_classes
-                .entry(component.class_name.clone())
-                .or_default()
-                .push(index);
-        }
+        // Collect unique class names (each class only needs one set of nodes regardless
+        // of how many instances the prefab contains).
+        let mut seen_classes: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-        // For each component class, create bound method nodes
-        for (class_name, indices) in component_classes {
-            let mut nodes = Vec::new();
+        for component in &prefab.components {
+            if !component.enabled {
+                continue;
+            }
+            let class_name = &component.class_name;
+            if seen_classes.contains(class_name) {
+                continue;
+            }
+            seen_classes.insert(class_name.clone());
 
-            if let Some(instance) = REGISTRY.create_instance(&class_name) {
-                for property in instance.get_properties() {
-                    for &index in &indices {
-                        nodes.push(Self::create_bound_property_getter_node(
-                            &class_name,
-                            property.name,
-                            &property.display_name,
-                            property.type_info,
-                            index,
-                        ));
-                        nodes.push(Self::create_bound_property_setter_node(
-                            &class_name,
-                            property.name,
-                            &property.display_name,
-                            property.type_info,
-                            index,
-                        ));
-                    }
+            let Some(instance) = REGISTRY.create_instance(class_name) else {
+                continue;
+            };
+
+            let mut nodes: Vec<NodeDefinition> = Vec::new();
+
+            // ── Property nodes ────────────────────────────────────────────────
+            for property in instance.get_properties() {
+                nodes.push(Self::make_comp_get_prop_node(
+                    class_name,
+                    property.name,
+                    &property.display_name,
+                    property.type_info,
+                ));
+                nodes.push(Self::make_comp_set_prop_node(
+                    class_name,
+                    property.name,
+                    &property.display_name,
+                    property.type_info,
+                ));
+            }
+
+            // ── Method nodes ──────────────────────────────────────────────────
+            if let Some(methods) = REGISTRY.get_methods(class_name) {
+                for method in methods {
+                    nodes.push(Self::make_comp_call_node(class_name, &method));
                 }
             }
 
@@ -360,78 +373,128 @@ impl NodeDefinitions {
         categories
     }
 
-    fn create_bound_property_getter_node(
+    /// Create a `comp_get_prop::ClassName::PropName` node definition (pure — no exec pins).
+    fn make_comp_get_prop_node(
         class_name: &str,
         prop_name: &str,
         display_name: &str,
         type_info: &'static RuntimeTypeInfo,
-        instance_index: usize,
     ) -> NodeDefinition {
-        let inputs = vec![];
-        let outputs = vec![PinDefinition {
-            id: "value".to_string(),
-            name: "value".to_string(),
-            data_type: runtime_type_to_data_type(type_info),
-            pin_type: PinType::Output,
-        }];
-
         NodeDefinition {
-            id: format!("get_{}_{}_{}", class_name, prop_name, instance_index),
-            name: format!("Get {} [{} {}]", display_name, class_name, instance_index),
+            id: format!("comp_get_prop::{}::{}", class_name, prop_name),
+            name: format!("Get {} ({})", display_name, class_name),
             icon: "⬇".to_string(),
-            description: format!("Get {}.{}", class_name, prop_name),
+            description: format!("Get {}.{} from this prefab's component", class_name, prop_name),
             documentation: format!(
-                "Gets the {} property from {} component instance {}",
-                prop_name, class_name, instance_index
+                "Reads the `{}` property of the `{}` component attached to this prefab.\n\n\
+                 **Returns** the current value of the property.",
+                prop_name, class_name
             ),
-            inputs,
-            outputs,
+            inputs: vec![],
+            outputs: vec![PinDefinition {
+                id: "value".to_string(),
+                name: "value".to_string(),
+                data_type: runtime_type_to_data_type(type_info),
+                pin_type: PinType::Output,
+            }],
             properties: HashMap::new(),
             color: Some("#2ECC71".to_string()),
         }
     }
 
-    fn create_bound_property_setter_node(
+    /// Create a `comp_set_prop::ClassName::PropName` node definition (exec node).
+    fn make_comp_set_prop_node(
         class_name: &str,
         prop_name: &str,
         display_name: &str,
         type_info: &'static RuntimeTypeInfo,
-        instance_index: usize,
     ) -> NodeDefinition {
-        let inputs = vec![
-            PinDefinition {
-                id: "exec".to_string(),
+        NodeDefinition {
+            id: format!("comp_set_prop::{}::{}", class_name, prop_name),
+            name: format!("Set {} ({})", display_name, class_name),
+            icon: "⬆".to_string(),
+            description: format!("Set {}.{} on this prefab's component", class_name, prop_name),
+            documentation: format!(
+                "Writes a new value to the `{}` property of the `{}` component attached to this prefab.",
+                prop_name, class_name
+            ),
+            inputs: vec![
+                PinDefinition {
+                    id: "exec".to_string(),
+                    name: "exec".to_string(),
+                    data_type: DataType::from_type_str("execution"),
+                    pin_type: PinType::Input,
+                },
+                PinDefinition {
+                    id: "value".to_string(),
+                    name: "value".to_string(),
+                    data_type: runtime_type_to_data_type(type_info),
+                    pin_type: PinType::Input,
+                },
+            ],
+            outputs: vec![PinDefinition {
+                id: "exec_out".to_string(),
                 name: "exec".to_string(),
                 data_type: DataType::from_type_str("execution"),
+                pin_type: PinType::Output,
+            }],
+            properties: HashMap::new(),
+            color: Some("#E67E22".to_string()),
+        }
+    }
+
+    /// Create a `comp_call::ClassName::MethodName` node definition (exec node).
+    fn make_comp_call_node(
+        class_name: &str,
+        method: &pulsar_reflection::MethodMetadata,
+    ) -> NodeDefinition {
+        use pulsar_reflection::runtime_types::RuntimeTypeInfo;
+
+        let mut inputs = vec![PinDefinition {
+            id: "exec".to_string(),
+            name: "exec".to_string(),
+            data_type: DataType::from_type_str("execution"),
+            pin_type: PinType::Input,
+        }];
+
+        for param in &method.params {
+            inputs.push(PinDefinition {
+                id: param.name.to_string(),
+                name: param.name.to_string(),
+                data_type: runtime_type_to_data_type(param.type_info),
                 pin_type: PinType::Input,
-            },
-            PinDefinition {
-                id: "value".to_string(),
-                name: "value".to_string(),
-                data_type: runtime_type_to_data_type(type_info),
-                pin_type: PinType::Input,
-            },
-        ];
-        let outputs = vec![PinDefinition {
+            });
+        }
+
+        let mut outputs = vec![PinDefinition {
             id: "exec_out".to_string(),
             name: "exec".to_string(),
             data_type: DataType::from_type_str("execution"),
             pin_type: PinType::Output,
         }];
 
+        if let Some(ret) = &method.return_type {
+            outputs.push(PinDefinition {
+                id: "return_value".to_string(),
+                name: "return value".to_string(),
+                data_type: runtime_type_to_data_type(ret.type_info),
+                pin_type: PinType::Output,
+            });
+        }
+
         NodeDefinition {
-            id: format!("set_{}_{}_{}", class_name, prop_name, instance_index),
-            name: format!("Set {} [{} {}]", display_name, class_name, instance_index),
-            icon: "⬆".to_string(),
-            description: format!("Set {}.{}", class_name, prop_name),
+            id: format!("comp_call::{}::{}", class_name, method.name),
+            name: format!("{} ({})", method.display_name, class_name),
+            icon: "▶".to_string(),
+            description: format!("Call {}.{}()", class_name, method.name),
             documentation: format!(
-                "Sets the {} property on {} component instance {}",
-                prop_name, class_name, instance_index
+                "Calls the `{}` method on the `{}` component attached to this prefab.",
+                method.name, class_name
             ),
             inputs,
             outputs,
             properties: HashMap::new(),
-            color: Some("#E67E22".to_string()),
+            color: Some("#3498DB".to_string()),
         }
     }
 }

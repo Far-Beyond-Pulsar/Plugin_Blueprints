@@ -352,7 +352,25 @@ impl BlueprintEditorPanel {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("compiled_blueprint");
-        let generated = pbgc::generate_blueprint_actor_source(blueprint_name, &generated_logic);
+
+        // Extract component data from the prefab sidecar so the generated actor
+        // can initialise and drive its components during begin_play / tick.
+        let compiled_components: Vec<pbgc::CompiledComponent> = self
+            .prefab_asset
+            .components
+            .iter()
+            .map(|c| pbgc::CompiledComponent {
+                class_name: c.class_name.clone(),
+                property_defaults: c.data.clone(),
+                enabled: c.enabled,
+            })
+            .collect();
+
+        let generated = pbgc::generate_blueprint_actor_source_with_components(
+            blueprint_name,
+            &generated_logic,
+            compiled_components,
+        );
 
         // Write all events into a single file
         let events_file = events_dir.join("events.rs");
