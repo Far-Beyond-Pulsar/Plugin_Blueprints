@@ -11,7 +11,7 @@ use ui::{
     v_flex, ActiveTheme, CollapsibleSection, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
     IconName, Sizable, StyledExt,
 };
-
+ use gpui::prelude::FluentBuilder;
 pub struct PrefabHierarchyRenderer;
 pub struct PrefabPropertiesRenderer;
 
