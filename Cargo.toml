@@ -13,17 +13,17 @@ plugin_editor_api = { path = "../Pulsar-Native/crates/plugin_editor_api" }
 
 # UI dependencies (local paths so traits resolve to the same crate instance)
 gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "0b555af11e80565429af9405ffd9d17fa832e3fe" }
-ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f14c3fccb2092994db3e779bb85b875e88967570" }
-ui_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f14c3fccb2092994db3e779bb85b875e88967570" }
+ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ba8a21caa564425a7d9f9767ad487304ebc90dc" }
+ui_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ba8a21caa564425a7d9f9767ad487304ebc90dc" }
 
 # Blueprint editor dependencies (local paths)
-pulsar_std = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f14c3fccb2092994db3e779bb85b875e88967570" }
-engine_backend = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f14c3fccb2092994db3e779bb85b875e88967570" }
-pulsar_reflection = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f14c3fccb2092994db3e779bb85b875e88967570" }
+pulsar_std = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ba8a21caa564425a7d9f9767ad487304ebc90dc" }
+engine_backend = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ba8a21caa564425a7d9f9767ad487304ebc90dc" }
+pulsar_reflection = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ba8a21caa564425a7d9f9767ad487304ebc90dc" }
 
 # Blueprint executor — bytecode VM path
-pulsar_std_bundle = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f14c3fccb2092994db3e779bb85b875e88967570" }
-pulsar_bp_executor = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f14c3fccb2092994db3e779bb85b875e88967570" }
+pulsar_std_bundle = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ba8a21caa564425a7d9f9767ad487304ebc90dc" }
+pulsar_bp_executor = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ba8a21caa564425a7d9f9767ad487304ebc90dc" }
 
 # Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "944b114e79f88b44eecd493a000e95ce0ce6b5bd" }
