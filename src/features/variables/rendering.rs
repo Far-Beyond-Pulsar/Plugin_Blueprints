@@ -45,6 +45,7 @@ impl VariablesRenderer {
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         // Convert variables to hierarchy items
+        let panel_weak_for_items = cx.entity().downgrade();
         let items: Vec<VariableHierarchyItem> = panel
             .class_variables
             .iter()
@@ -53,6 +54,7 @@ impl VariablesRenderer {
                 variable: variable.clone(),
                 index,
                 is_selected: panel.selected_variable == Some(index),
+                panel: panel_weak_for_items.clone(),
             })
             .collect();
 

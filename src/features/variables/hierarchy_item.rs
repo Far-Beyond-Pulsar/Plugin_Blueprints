@@ -3,6 +3,7 @@
 //! This allows variables to be displayed in the HierarchicalTreeView component
 
 use super::types::{ClassVariable, VariableDrag};
+use crate::editor::panel::BlueprintEditorPanel;
 use gpui::*;
 use std::sync::Arc;
 use ui::{menu::popup_menu::PopupMenu, HierarchyItem, IconName};
@@ -13,6 +14,8 @@ pub struct VariableHierarchyItem {
     pub variable: ClassVariable,
     pub index: usize, // Index in the variables list
     pub is_selected: bool,
+    /// Weak reference back to the panel so context-menu actions can reach it.
+    pub panel: WeakEntity<BlueprintEditorPanel>,
 }
 
 impl HierarchyItem for VariableHierarchyItem {
@@ -126,8 +129,16 @@ impl HierarchyItem for VariableHierarchyItem {
         _window: &mut Window,
         _cx: &mut Context<PopupMenu>,
     ) -> PopupMenu {
-        // TODO: Add context menu items for variables (duplicate, rename, etc.)
-        menu
+        let var_name = self.variable.name.clone();
+        let panel = self.panel.clone();
+
+        menu.menu_handler("Delete Variable", move |_window, cx| {
+            if let Some(panel) = panel.upgrade() {
+                panel.update(cx, |panel, cx| {
+                    panel.remove_variable(&var_name, cx);
+                });
+            }
+        })
     }
 }
 

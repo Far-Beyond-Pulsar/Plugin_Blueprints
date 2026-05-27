@@ -337,9 +337,18 @@ impl BlueprintEditorPanel {
         code.push_str("//! Auto-generated variables module\n");
         code.push_str("//! DO NOT EDIT MANUALLY - YOUR CHANGES WILL BE OVERWRITTEN\n\n");
 
-        let needs_refcell = self.class_variables.iter().any(|v| {
+        let sanitized_vars: Vec<(String, String, Option<String>)> = self
+            .class_variables
+            .iter()
+            .map(|v| {
+                let rust_type = sanitize_rust_type(&v.var_type).to_string();
+                (v.name.clone(), rust_type, v.default_value.clone())
+            })
+            .collect();
+
+        let needs_refcell = sanitized_vars.iter().any(|(_, t, _)| {
             !matches!(
-                v.var_type.as_str(),
+                t.as_str(),
                 "i32"
                     | "i64"
                     | "u32"
@@ -363,12 +372,13 @@ impl BlueprintEditorPanel {
         }
         code.push_str("\n");
 
-        for var in &self.class_variables {
-            let default_value = if let Some(default) = &var.default_value {
-                default.clone()
+        for (name, rust_type, default_value) in &sanitized_vars {
+            let default = if let Some(d) = default_value {
+                d.clone()
             } else {
-                match var.var_type.as_str() {
-                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => "0".to_string(),
+                match rust_type.as_str() {
+                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" |
+                    "i8" | "i16" | "u8" | "u16" | "usize" | "isize" => "0".to_string(),
                     "bool" => "false".to_string(),
                     "&str" => "\"\"".to_string(),
                     "String" => "String::new()".to_string(),
@@ -377,7 +387,7 @@ impl BlueprintEditorPanel {
             };
 
             let use_cell = matches!(
-                var.var_type.as_str(),
+                rust_type.as_str(),
                 "i32"
                     | "i64"
                     | "u32"
@@ -396,12 +406,8 @@ impl BlueprintEditorPanel {
 
             let cell_type = if use_cell { "Cell" } else { "RefCell" };
             code.push_str(&format!(
-                "thread_local! {{\n    pub static {}: {}::<{}> = {}::new({});\n}}\n\n",
-                var.name.to_uppercase(),
-                cell_type,
-                var.var_type,
-                cell_type,
-                default_value
+                "thread_local! {{\n    pub static {}: {cell_type}::<{rust_type}> = {cell_type}::new({default});\n}}\n\n",
+                name.to_uppercase(),
             ));
         }
 
@@ -411,4 +417,45 @@ impl BlueprintEditorPanel {
 
         Ok(())
     }
+}
+
+/// Sanitize a variable type string, normalising legacy DataType serialization forms
+/// to plain Rust type names.
+///
+/// Old editor versions stored the full `DataType` debug/serde representation in
+/// `var_type`. This function extracts just the Rust-compatible type name so that
+/// `generate_vars_module` always emits valid code.
+fn sanitize_rust_type(raw: &str) -> &str {
+    let t = raw.trim();
+
+    // Plain primitive or user type — pass through unchanged.
+    match t {
+        "bool" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64"
+        | "f32" | "f64" | "usize" | "isize" | "char" | "String" | "&str" => return t,
+        _ => {}
+    }
+
+    // DataType::Number → f64
+    if t == "Number" {
+        return "f64";
+    }
+    // DataType::Boolean → bool
+    if t == "Boolean" || t == "Bool" {
+        return "bool";
+    }
+
+    // DataType::Typed(TypeInfo { ... }) or legacy serialized DataType forms.
+    // These appear when old code stored the DataType enum's Display/serde output
+    // directly as the var_type string.  Fall back to String for any unknown form.
+    if t.contains("TypeInfo") || t.starts_with("Typed(") || t.contains("base_type") {
+        return "String";
+    }
+
+    // Execution / Any → unit (these shouldn't be stored as variable types but be safe)
+    if t == "Execution" || t == "Any" {
+        return "()";
+    }
+
+    // Anything else is assumed to be a valid Rust type name already.
+    t
 }
