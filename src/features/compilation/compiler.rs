@@ -119,24 +119,26 @@ fn normalize_property_literal(raw: &str) -> String {
     out
 }
 
-fn property_value_from_raw(raw: &str) -> pbgc::PropertyValue {
+fn property_value_from_raw(raw: &str) -> pbgc::JsonValue {
     let s = normalize_property_literal(raw);
     let lower = s.to_ascii_lowercase();
 
     if lower == "true" {
-        return pbgc::PropertyValue::Boolean(true);
+        return pbgc::JsonValue::Bool(true);
     }
     if lower == "false" {
-        return pbgc::PropertyValue::Boolean(false);
+        return pbgc::JsonValue::Bool(false);
     }
 
     if let Ok(n) = s.parse::<f64>() {
         if n.is_finite() {
-            return pbgc::PropertyValue::Number(n);
+            if let Some(number) = serde_json::Number::from_f64(n) {
+                return pbgc::JsonValue::Number(number);
+            }
         }
     }
 
-    pbgc::PropertyValue::String(s)
+    pbgc::JsonValue::String(s)
 }
 
 // Convert a pulsar_graph DataType into the PBGC DataType the compiler expects.
