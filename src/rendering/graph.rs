@@ -119,7 +119,7 @@ impl NodeGraphRenderer {
                 gpui::MouseButton::Left,
                 cx.listener(move |panel, event, window, cx| {
                     // Focus on click to enable keyboard events
-                    panel.focus_handle().focus(window);
+                    panel.focus_handle().focus(window, cx);
 
                     // If editing a comment, clicking outside should save and exit edit mode
                     if panel.editing_comment.is_some() {
@@ -230,7 +230,7 @@ impl NodeGraphRenderer {
                                         .read(cx)
                                         .search_focus_handle(cx);
                                     panel.quick_palette_focus_pending = false;
-                                    window.focus(&search_handle);
+                                    window.focus(&search_handle, cx);
                                 });
                             }
                         })

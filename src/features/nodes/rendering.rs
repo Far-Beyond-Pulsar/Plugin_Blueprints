@@ -319,7 +319,7 @@ fn render_blueprint_node(
                             let node_title = node.title.clone();
                             cx.listener(move |panel, event: &MouseDownEvent, window, cx| {
                                 cx.stop_propagation();
-                                panel.focus_handle().focus(window);
+                                panel.focus_handle().focus(window, cx);
 
                                 let now = std::time::Instant::now();
                                 let is_subgraph = node_definition_id.starts_with("subgraph:");
@@ -412,7 +412,7 @@ fn render_blueprint_node(
             let node_id = node_id.clone();
             cx.listener(move |panel, _event: &MouseDownEvent, window, cx| {
                 cx.stop_propagation();
-                panel.focus_handle().focus(window);
+                panel.focus_handle().focus(window, cx);
                 if !panel.graph.selected_nodes.contains(&node_id) {
                     panel.select_node(Some(node_id.clone()), cx);
                 }
@@ -457,7 +457,7 @@ pub fn render_reroute_node(
                 cx.stop_propagation();
 
                 // Ensure graph has focus for keyboard events
-                panel.focus_handle().focus(window);
+                panel.focus_handle().focus(window, cx);
 
                 // Only change selection if this node is not already selected
                 if !panel.graph.selected_nodes.contains(&node_id) {

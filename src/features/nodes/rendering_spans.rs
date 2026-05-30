@@ -269,7 +269,7 @@ pub fn render_blueprint_node_spans(
                     let node_title = node.title.clone();
                     cx.listener(move |panel, event: &MouseDownEvent, window, cx| {
                         cx.stop_propagation();
-                        panel.focus_handle().focus(window);
+                        panel.focus_handle().focus(window, cx);
 
                         let now = std::time::Instant::now();
                         let is_subgraph = node_definition_id.starts_with("subgraph:");
@@ -352,7 +352,7 @@ pub fn render_blueprint_node_spans(
             let node_id = node_id.clone();
             cx.listener(move |panel, _event: &MouseDownEvent, window, cx| {
                 cx.stop_propagation();
-                panel.focus_handle().focus(window);
+                panel.focus_handle().focus(window, cx);
                 if !panel.graph.selected_nodes.contains(&node_id) {
                     panel.select_node(Some(node_id.clone()), cx);
                 }
