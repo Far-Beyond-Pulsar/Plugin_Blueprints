@@ -8,14 +8,12 @@ crate-type = ["cdylib", "rlib"]
 name = "blueprint_editor_plugin"
 
 [dependencies]
-# Plugin API (local checkout used when developing against Pulsar-Native)
-plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "634e1206e488bd6ef2a69d7eb1d948e5bafb9c44" }
-
 # UI dependencies (local paths so traits resolve to the same crate instance)
 gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "53872e17a0e2f306ce4d9760ff2bdfa965b41337" }
 ui      = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI-Component", rev = "0493afe2c9e509d0cbb5d043ed69202ef6c601a5" }
 
 
+plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "634e1206e488bd6ef2a69d7eb1d948e5bafb9c44" }
 ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "634e1206e488bd6ef2a69d7eb1d948e5bafb9c44" }
 pulsar_std         = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "634e1206e488bd6ef2a69d7eb1d948e5bafb9c44" }
 engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "634e1206e488bd6ef2a69d7eb1d948e5bafb9c44" }
