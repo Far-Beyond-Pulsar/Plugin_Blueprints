@@ -25,7 +25,7 @@ use crate::core::types::{BlueprintNode, Connection, NodeType, Pin};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::connections::operations::ConnectionDrag;
 use crate::rendering::gpu::{
-    BpRenderer, GraphUniforms, NodeInstance, PinInstance, TextRenderer, WireVertex,
+    BpRenderer, GraphUniforms, NodeInstance, PinInstance, TextRenderer, WireInstance, WireVertex,
 };
 use crate::rendering::layout;
 
@@ -393,15 +393,30 @@ impl NodeGraphRenderer {
             }
         }
 
-        // wires — positions in GRAPH SPACE (shader applies pan+zoom)
-        let mut wire_verts: Vec<WireVertex> = Vec::new();
-        // Wire half-thickness in graph units: shader multiplies by zoom giving screen pixels.
-        // At zoom=1 → 2.8 px, at zoom=2 → 5.6 px (scales naturally with zoom level).
-        let half_thick = WIRE_THICKNESS * 0.5;
+        // ── Bezier wire instances — one struct per connection, GPU does all tessellation ──
+        // No CPU bezier evaluation: just compute four control points and hand off to GPU.
+        let mut wire_instances: Vec<WireInstance> = Vec::new();
+        let half_thick = WIRE_THICKNESS * 0.5; // graph-space half-thickness; shader × zoom → px
+
         let node_map: std::collections::HashMap<&str,&BlueprintNode> =
             panel.graph.nodes.iter().map(|n|(n.id.as_str(),n)).collect();
         let vis_ids: std::collections::HashSet<&str> =
             panel.graph.nodes.iter().filter(|n|visible(n)).map(|n|n.id.as_str()).collect();
+
+        // Helper: build a WireInstance from two graph-space endpoints.
+        let make_wire = |fp: (f32,f32), tp: (f32,f32), color: [f32;4], thick: f32| -> WireInstance {
+            let hd   = (tp.0 - fp.0).abs();
+            let ctl  = (hd * 0.45).max(55.0).min(220.0);
+            WireInstance {
+                from:      [fp.0, fp.1],
+                ctrl1:     [fp.0 + ctl, fp.1],
+                ctrl2:     [tp.0 - ctl, tp.1],
+                to:        [tp.0, tp.1],
+                color,
+                thickness: thick,
+                _pad:      [0.0; 3],
+            }
+        };
 
         for conn in &panel.graph.connections {
             if !vis_ids.contains(conn.source_node.as_str())
@@ -411,44 +426,39 @@ impl NodeGraphRenderer {
             if let (Some(fn_), Some(tn)) = (fn_, tn) {
                 let fc = fn_.outputs.iter().find(|p|p.id==conn.source_pin)
                     .map_or([0.8,0.8,0.8,1.0], |p|pin_color(&p.data_type));
-                // Use graph-space pin positions — no pan/zoom applied here
                 if let (Some(fp), Some(tp)) = (
                     pin_gpos_id(fn_, &conn.source_pin, false),
                     pin_gpos_id(tn,  &conn.target_pin, true),
                 ) {
-                    wire_verts.extend(tessellate_wire(fp, tp, fc, half_thick));
+                    wire_instances.push(make_wire(fp, tp, fc, half_thick));
                 }
             }
         }
 
-        // drag wire — source is graph space, mouse pos is canvas/screen space → convert
+        // Drag wire preview — source pin in graph space, mouse pos converted from canvas space.
         if let Some(ref drag) = panel.dragging_connection.clone() {
             if let Some(fn_) = node_map.get(drag.source_node.as_str()) {
                 if let Some(fp) = pin_gpos_id(fn_, &drag.source_pin, false) {
-                    let dc = pin_color(&drag.source_pin_type);
-                    // current_mouse_pos is canvas-relative (screen) — convert to graph space
-                    let mp = drag.current_mouse_pos;
-                    let tp = (mp.x / zoom - pan_x, mp.y / zoom - pan_y);
-                    wire_verts.extend(tessellate_wire(
-                        fp, tp,
-                        [dc[0],dc[1],dc[2],0.75],
-                        half_thick * 0.85,
-                    ));
+                    let dc   = pin_color(&drag.source_pin_type);
+                    let mp   = drag.current_mouse_pos;
+                    let tp   = (mp.x / zoom - pan_x, mp.y / zoom - pan_y);
+                    wire_instances.push(make_wire(fp, tp, [dc[0],dc[1],dc[2],0.70], half_thick * 0.85));
                 }
             }
         }
 
-        // selection box — straight lines only (no bezier), in GRAPH SPACE.
-        // The half-thickness should appear constant in screen pixels regardless of zoom:
-        // half_thick_graph = desired_screen_pixels / zoom / 2
+        // ── Selection box — straight lines only, CPU-tessellated (4 lines = 24 verts) ──
+        // Kept as a vertex buffer because there are at most 4 segments and no GPU
+        // instancing overhead is worth it for that count.
+        let mut line_verts: Vec<WireVertex> = Vec::new();
         if let (Some(start), Some(end)) = (panel.selection_start, panel.selection_end) {
             let (sx,sy,ex,ey) = (start.x, start.y, end.x, end.y);
             let sc = [0.30,0.55,0.90,0.80_f32];
-            let ht = 1.0 / zoom; // ~2 screen pixels at any zoom level
-            wire_verts.extend(tessellate_line((sx,sy),(ex,sy),sc,ht)); // top
-            wire_verts.extend(tessellate_line((sx,ey),(ex,ey),sc,ht)); // bottom
-            wire_verts.extend(tessellate_line((sx,sy),(sx,ey),sc,ht)); // left
-            wire_verts.extend(tessellate_line((ex,sy),(ex,ey),sc,ht)); // right
+            let ht = 1.0 / zoom; // constant ~2 screen pixels
+            line_verts.extend(tessellate_line((sx,sy),(ex,sy),sc,ht)); // top
+            line_verts.extend(tessellate_line((sx,ey),(ex,ey),sc,ht)); // bottom
+            line_verts.extend(tessellate_line((sx,sy),(sx,ey),sc,ht)); // left
+            line_verts.extend(tessellate_line((ex,sy),(ex,ey),sc,ht)); // right
         }
 
         let uniforms = GraphUniforms {
@@ -528,7 +538,11 @@ impl NodeGraphRenderer {
                             surface.device(), surface.queue(),
                             &view, w, h, surface.format(),
                             &frame_uni,
-                            &node_instances, &wire_verts, &pin_instances, &text_calls,
+                            &node_instances,
+                            &wire_instances, // one struct per bezier connection
+                            &line_verts,     // selection box straight lines only
+                            &pin_instances,
+                            &text_calls,
                         );
                         drop(view);
                         surface.swap_buffers();

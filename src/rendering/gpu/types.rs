@@ -32,9 +32,25 @@ pub struct NodeInstance {
     pub _pad:          u32,
 }
 
-// ── Wire vertices (CPU-tessellated bezier) ─────────────────────────────────────
-// CPU evaluates the bezier and emits 6 verts per segment (triangle quads).
-// UV.x = 0/1 for left/right edge — used for glow in fs.
+// ── Bezier wire instances ──────────────────────────────────────────────────────
+// One struct per connection.  The vertex shader generates WIRE_SEGS × 6 vertices
+// per instance, evaluating the cubic bezier entirely on GPU.  No CPU tessellation.
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct WireInstance {
+    pub from:      [f32; 2], // graph-space start
+    pub ctrl1:     [f32; 2], // first bezier control point
+    pub ctrl2:     [f32; 2], // second bezier control point
+    pub to:        [f32; 2], // graph-space end
+    pub color:     [f32; 4],
+    pub thickness: f32,      // half-thickness in graph units
+    pub _pad:      [f32; 3],
+}
+
+// ── Straight-line vertices (selection box, drag preview) ───────────────────────
+// CPU emits a flat quad per segment via tessellate_line(); used only for the
+// selection rectangle — tiny upload, not worth a separate instanced pipeline.
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
