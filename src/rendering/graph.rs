@@ -333,7 +333,7 @@ impl NodeGraphRenderer {
                 _pad:          0,
             });
 
-            // header title
+            // header title — text is in screen space (text shader skips graph transform)
             if !is_reroute {
                 let scr = Self::graph_to_screen_pos(node.position, &panel.graph);
                 text_calls.push((
@@ -346,13 +346,13 @@ impl NodeGraphRenderer {
                 ));
             }
 
-            // pins
+            // pins — centers in GRAPH SPACE (GPU shader applies pan+zoom)
             for (is_input, pins) in [
                 (true,  node.inputs.as_slice()),
                 (false, node.outputs.as_slice()),
             ] {
                 for (i, pin) in pins.iter().enumerate() {
-                    let c   = Self::pin_canvas_pos(node, is_input, i, &panel.graph);
+                    let (cgx, cgy) = pin_gpos_row(node, is_input, i);
                     let pc  = pin_color(&pin.data_type);
                     let exe = pin.data_type == DataType::Execution;
                     let compat = dragging_conn.as_ref().map_or(false, |d|{
@@ -360,7 +360,7 @@ impl NodeGraphRenderer {
                             && pin.data_type.is_compatible_with(&d.source_pin_type)
                     });
                     pin_instances.push(PinInstance {
-                        center:     [c.x, c.y],
+                        center:     [cgx, cgy],  // graph space — no pan/zoom applied
                         size:       PIN_SIZE,
                         _pad0:      0.0,
                         color:      pc,
@@ -369,13 +369,16 @@ impl NodeGraphRenderer {
                         compatible: compat as u32,
                         _pad1:      0,
                     });
+                    // Pin labels — convert graph pos to screen for text renderer
                     if !pin.name.is_empty() && !is_reroute {
-                        let lx = if is_input { c.x + (PIN_SIZE*zoom*0.5+5.0) }
-                                 else        { c.x - (PIN_SIZE*zoom*0.5+5.0) };
+                        let scr_x = (cgx + pan_x) * zoom;
+                        let scr_y = (cgy + pan_y) * zoom;
+                        let lx = if is_input { scr_x + (PIN_SIZE*zoom*0.5 + 5.0) }
+                                 else        { scr_x - (PIN_SIZE*zoom*0.5 + 5.0) };
                         text_calls.push((
                             pin.name.clone(), lx,
-                            c.y + PIN_FONT*zoom*0.35,
-                            PIN_FONT*zoom,
+                            scr_y + PIN_FONT * zoom * 0.35,
+                            PIN_FONT * zoom,
                             [0.88, 0.88, 0.90, 1.0],
                             !is_input,
                         ));
