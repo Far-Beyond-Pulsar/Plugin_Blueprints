@@ -4,6 +4,7 @@
 
 use crate::core::types::{BlueprintComment, BlueprintNode, Connection};
 use gpui::*;
+use std::collections::HashSet;
 
 /// A command that can be executed and undone
 #[derive(Debug, Clone)]
@@ -12,6 +13,7 @@ pub enum Command {
     DeleteNode(DeleteNodeCommand),
     AddComment(AddCommentCommand),
     DeleteComment(DeleteCommentCommand),
+    DeleteEntities(DeleteEntitiesCommand),
     MoveEntities(MoveEntitiesCommand),
     AddConnection(AddConnectionCommand),
     DeleteConnection(DeleteConnectionCommand),
@@ -30,6 +32,7 @@ impl Command {
             Command::DeleteNode(cmd) => cmd.execute(panel, cx),
             Command::AddComment(cmd) => cmd.execute(panel, cx),
             Command::DeleteComment(cmd) => cmd.execute(panel, cx),
+            Command::DeleteEntities(cmd) => cmd.execute(panel, cx),
             Command::MoveEntities(cmd) => cmd.execute(panel, cx),
             Command::AddConnection(cmd) => cmd.execute(panel, cx),
             Command::DeleteConnection(cmd) => cmd.execute(panel, cx),
@@ -48,6 +51,7 @@ impl Command {
             Command::DeleteNode(cmd) => cmd.undo(panel, cx),
             Command::AddComment(cmd) => cmd.undo(panel, cx),
             Command::DeleteComment(cmd) => cmd.undo(panel, cx),
+            Command::DeleteEntities(cmd) => cmd.undo(panel, cx),
             Command::MoveEntities(cmd) => cmd.undo(panel, cx),
             Command::AddConnection(cmd) => cmd.undo(panel, cx),
             Command::DeleteConnection(cmd) => cmd.undo(panel, cx),
@@ -62,6 +66,7 @@ impl Command {
             Command::DeleteNode(cmd) => cmd.description(),
             Command::AddComment(cmd) => cmd.description(),
             Command::DeleteComment(cmd) => cmd.description(),
+            Command::DeleteEntities(cmd) => cmd.description(),
             Command::MoveEntities(cmd) => cmd.description(),
             Command::AddConnection(cmd) => cmd.description(),
             Command::DeleteConnection(cmd) => cmd.description(),
@@ -270,6 +275,99 @@ impl DeleteCommentCommand {
 
     pub fn description(&self) -> String {
         format!("Delete comment")
+    }
+}
+
+/// Delete multiple entities in one pass (optimized for large selections)
+#[derive(Debug, Clone)]
+pub struct DeleteEntitiesCommand {
+    pub nodes: Vec<BlueprintNode>,
+    pub comments: Vec<BlueprintComment>,
+    pub connections: Vec<Connection>,
+    executed: bool,
+}
+
+impl DeleteEntitiesCommand {
+    pub fn new(
+        nodes: Vec<BlueprintNode>,
+        comments: Vec<BlueprintComment>,
+        connections: Vec<Connection>,
+    ) -> Self {
+        Self {
+            nodes,
+            comments,
+            connections,
+            executed: false,
+        }
+    }
+
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
+        if !self.executed {
+            println!(
+                "[UNDO] Executing DeleteEntities: {} nodes, {} comments, {} connections",
+                self.nodes.len(),
+                self.comments.len(),
+                self.connections.len()
+            );
+
+            let node_ids: HashSet<&str> = self.nodes.iter().map(|node| node.id.as_str()).collect();
+            let comment_ids: HashSet<&str> = self
+                .comments
+                .iter()
+                .map(|comment| comment.id.as_str())
+                .collect();
+
+            panel
+                .graph
+                .nodes
+                .retain(|node| !node_ids.contains(node.id.as_str()));
+            panel
+                .graph
+                .comments
+                .retain(|comment| !comment_ids.contains(comment.id.as_str()));
+            panel.graph.connections.retain(|connection| {
+                !node_ids.contains(connection.source_node.as_str())
+                    && !node_ids.contains(connection.target_node.as_str())
+            });
+
+            panel.graph.selected_nodes.clear();
+            panel.graph.selected_comments.clear();
+            self.executed = true;
+            cx.notify();
+        }
+    }
+
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
+        if self.executed {
+            println!(
+                "[UNDO] Undoing DeleteEntities: {} nodes, {} comments, {} connections",
+                self.nodes.len(),
+                self.comments.len(),
+                self.connections.len()
+            );
+
+            panel.graph.nodes.extend(self.nodes.clone());
+            panel.graph.comments.extend(self.comments.clone());
+            panel.graph.connections.extend(self.connections.clone());
+
+            self.executed = false;
+            cx.notify();
+        }
+    }
+
+    pub fn description(&self) -> String {
+        format!(
+            "Delete {} entities",
+            self.nodes.len() + self.comments.len()
+        )
     }
 }
 

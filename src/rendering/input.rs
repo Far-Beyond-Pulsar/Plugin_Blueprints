@@ -341,6 +341,8 @@ pub fn on_key_down(
     move |event: &KeyDownEvent, window, cx| {
         entity.update(cx, |panel, cx| {
             let key = event.keystroke.key.to_lowercase();
+            let has_copy_paste_modifier =
+                event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
 
             if panel.editing_comment.is_some() {
                 if key == "escape" { panel.editing_comment = None; cx.notify(); }
@@ -362,13 +364,13 @@ pub fn on_key_down(
                     cx.notify();
                 }
                 "delete" | "backspace" => panel.delete_selected_nodes(cx),
-                "c" if !event.keystroke.modifiers.control => {
+                "c" if !has_copy_paste_modifier => {
                     panel.create_comment_at_center(window, cx);
                 }
-                "c" if event.keystroke.modifiers.control => {
+                "c" if has_copy_paste_modifier => {
                     panel.copy_selected_entities(cx);
                 }
-                "v" if event.keystroke.modifiers.control => {
+                "v" if has_copy_paste_modifier => {
                     panel.paste_entities(window, cx);
                 }
                 "z" if event.keystroke.modifiers.control && event.keystroke.modifiers.shift => {

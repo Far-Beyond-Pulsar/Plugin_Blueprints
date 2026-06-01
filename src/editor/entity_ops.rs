@@ -5,6 +5,7 @@ use crate::core::types::{BlueprintComment, BlueprintNode};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
+use std::collections::HashSet;
 
 impl BlueprintEditorPanel {
     /// Get all currently selected entities as a unified list
@@ -242,50 +243,50 @@ impl BlueprintEditorPanel {
             node_count, comment_count
         );
 
-        // Create a batch command for multiple deletions
-        let mut batch = crate::features::undo::BatchCommand::new(format!(
-            "Delete {} entities",
-            node_count + comment_count
-        ));
+        let selected_node_ids: HashSet<&str> = self
+            .graph
+            .selected_nodes
+            .iter()
+            .map(|id| id.as_str())
+            .collect();
+        let selected_comment_ids: HashSet<&str> = self
+            .graph
+            .selected_comments
+            .iter()
+            .map(|id| id.as_str())
+            .collect();
 
-        // Add delete commands for each selected node
-        for node_id in &self.graph.selected_nodes.clone() {
-            if let Some(node) = self.graph.nodes.iter().find(|n| &n.id == node_id).cloned() {
-                let connections: Vec<_> = self
-                    .graph
-                    .connections
-                    .iter()
-                    .filter(|c| &c.source_node == node_id || &c.target_node == node_id)
-                    .cloned()
-                    .collect();
+        let deleted_nodes: Vec<_> = self
+            .graph
+            .nodes
+            .iter()
+            .filter(|node| selected_node_ids.contains(node.id.as_str()))
+            .cloned()
+            .collect();
+        let deleted_comments: Vec<_> = self
+            .graph
+            .comments
+            .iter()
+            .filter(|comment| selected_comment_ids.contains(comment.id.as_str()))
+            .cloned()
+            .collect();
+        let deleted_connections: Vec<_> = self
+            .graph
+            .connections
+            .iter()
+            .filter(|connection| {
+                selected_node_ids.contains(connection.source_node.as_str())
+                    || selected_node_ids.contains(connection.target_node.as_str())
+            })
+            .cloned()
+            .collect();
 
-                batch.add_command(crate::features::undo::Command::DeleteNode(
-                    crate::features::undo::DeleteNodeCommand::new(node, connections),
-                ));
-            }
-        }
-
-        // Add delete commands for each selected comment
-        for comment_id in &self.graph.selected_comments.clone() {
-            if let Some(comment) = self
-                .graph
-                .comments
-                .iter()
-                .find(|c| &c.id == comment_id)
-                .cloned()
-            {
-                batch.add_command(crate::features::undo::Command::DeleteComment(
-                    crate::features::undo::DeleteCommentCommand::new(comment),
-                ));
-            }
-        }
-
-        // Execute the batch command
-        batch.execute(self, cx);
-        self.push_undo_command(crate::features::undo::Command::Batch(batch));
-
-        // Clear selection
-        self.graph.selected_nodes.clear();
-        self.graph.selected_comments.clear();
+        let mut command = crate::features::undo::DeleteEntitiesCommand::new(
+            deleted_nodes,
+            deleted_comments,
+            deleted_connections,
+        );
+        command.execute(self, cx);
+        self.push_undo_command(crate::features::undo::Command::DeleteEntities(command));
     }
 }

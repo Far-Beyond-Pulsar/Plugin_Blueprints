@@ -296,8 +296,13 @@ impl NodeGraphRenderer {
             ||n.position.y>vb||n.position.y+n.size.height<vt)
         };
 
-        let dragging_conn   = panel.dragging_connection.clone();
-        let selected_nodes  = panel.graph.selected_nodes.clone();
+        let dragging_conn = panel.dragging_connection.clone();
+        let selected_nodes: std::collections::HashSet<&str> = panel
+            .graph
+            .selected_nodes
+            .iter()
+            .map(|id| id.as_str())
+            .collect();
 
         let mut node_instances: Vec<NodeInstance> = Vec::new();
         let mut pin_instances:  Vec<PinInstance>  = Vec::new();
@@ -306,7 +311,7 @@ impl NodeGraphRenderer {
         for node in &panel.graph.nodes {
             if !visible(node) { continue; }
 
-            let is_sel    = selected_nodes.contains(&node.id);
+            let is_sel = selected_nodes.contains(node.id.as_str());
             let is_reroute = node.node_type == NodeType::Reroute;
             let cat  = category_color(node);
             let hdr  = darken(cat, 0.60);
