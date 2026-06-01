@@ -333,8 +333,13 @@ impl NodeGraphRenderer {
                 _pad:          0,
             });
 
-            // header title — text is in screen space (text shader skips graph transform)
-            if !is_reroute {
+            // ── LOD: above this zoom level render pins, text, and labels.
+            // Below it we only draw node bodies and wires — much cheaper at scale.
+            const LOD_FULL: f32 = 0.35;
+            const LOD_TITLES: f32 = 0.18; // show title text but still no pins
+
+            // Node title
+            if zoom >= LOD_TITLES && !is_reroute {
                 let scr = Self::graph_to_screen_pos(node.position, &panel.graph);
                 text_calls.push((
                     node.title.clone(),
@@ -346,42 +351,43 @@ impl NodeGraphRenderer {
                 ));
             }
 
-            // pins — centers in GRAPH SPACE (GPU shader applies pan+zoom)
-            for (is_input, pins) in [
-                (true,  node.inputs.as_slice()),
-                (false, node.outputs.as_slice()),
-            ] {
-                for (i, pin) in pins.iter().enumerate() {
-                    let (cgx, cgy) = pin_gpos_row(node, is_input, i);
-                    let pc  = pin_color(&pin.data_type);
-                    let exe = pin.data_type == DataType::Execution;
-                    let compat = dragging_conn.as_ref().map_or(false, |d|{
-                        is_input && node.id != d.source_node
-                            && pin.data_type.is_compatible_with(&d.source_pin_type)
-                    });
-                    pin_instances.push(PinInstance {
-                        center:     [cgx, cgy],  // graph space — no pan/zoom applied
-                        size:       PIN_SIZE,
-                        _pad0:      0.0,
-                        color:      pc,
-                        kind:       exe as u32,
-                        is_input:   is_input as u32,
-                        compatible: compat as u32,
-                        _pad1:      0,
-                    });
-                    // Pin labels — convert graph pos to screen for text renderer
-                    if !pin.name.is_empty() && !is_reroute {
-                        let scr_x = (cgx + pan_x) * zoom;
-                        let scr_y = (cgy + pan_y) * zoom;
-                        let lx = if is_input { scr_x + (PIN_SIZE*zoom*0.5 + 5.0) }
-                                 else        { scr_x - (PIN_SIZE*zoom*0.5 + 5.0) };
-                        text_calls.push((
-                            pin.name.clone(), lx,
-                            scr_y + PIN_FONT * zoom * 0.35,
-                            PIN_FONT * zoom,
-                            [0.88, 0.88, 0.90, 1.0],
-                            !is_input,
-                        ));
+            // Pins and pin labels — only at full detail zoom
+            if zoom >= LOD_FULL {
+                for (is_input, pins) in [
+                    (true,  node.inputs.as_slice()),
+                    (false, node.outputs.as_slice()),
+                ] {
+                    for (i, pin) in pins.iter().enumerate() {
+                        let (cgx, cgy) = pin_gpos_row(node, is_input, i);
+                        let pc  = pin_color(&pin.data_type);
+                        let exe = pin.data_type == DataType::Execution;
+                        let compat = dragging_conn.as_ref().map_or(false, |d|{
+                            is_input && node.id != d.source_node
+                                && pin.data_type.is_compatible_with(&d.source_pin_type)
+                        });
+                        pin_instances.push(PinInstance {
+                            center:     [cgx, cgy],
+                            size:       PIN_SIZE,
+                            _pad0:      0.0,
+                            color:      pc,
+                            kind:       exe as u32,
+                            is_input:   is_input as u32,
+                            compatible: compat as u32,
+                            _pad1:      0,
+                        });
+                        if !pin.name.is_empty() && !is_reroute {
+                            let scr_x = (cgx + pan_x) * zoom;
+                            let scr_y = (cgy + pan_y) * zoom;
+                            let lx = if is_input { scr_x + (PIN_SIZE*zoom*0.5 + 5.0) }
+                                     else        { scr_x - (PIN_SIZE*zoom*0.5 + 5.0) };
+                            text_calls.push((
+                                pin.name.clone(), lx,
+                                scr_y + PIN_FONT * zoom * 0.35,
+                                PIN_FONT * zoom,
+                                [0.88, 0.88, 0.90, 1.0],
+                                !is_input,
+                            ));
+                        }
                     }
                 }
             }

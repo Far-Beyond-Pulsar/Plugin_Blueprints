@@ -321,9 +321,9 @@ fn build_stress_graph() -> BlueprintGraph {
         comments: Vec::new(),
         selected_nodes: Vec::new(),
         selected_comments: Vec::new(),
-        // Zoomed out enough to see the broad shape; zoom in to inspect detail
-        zoom_level: 0.22,
-        // Centre the view roughly on the upper-left quadrant
+        // Zoomed far out to show the broad shape; zoom in to inspect detail.
+        // At 0.07 the full 54 000 × 18 000 unit graph fits on a 1600p wide screen.
+        zoom_level: 0.07,
         pan_offset: Point::new(30.0, 30.0),
         virtualization_stats: VirtualizationStats::default(),
     }
@@ -376,10 +376,8 @@ fn main() {
                 })),
                 titlebar: Some(TitlebarOptions {
                     title: Some(format!(
-                        "Blueprint Stress Test — {} nodes, {} connections",
+                        "Blueprint Stress Test — {:} nodes  (check stderr for connection count)",
                         COLS * ROWS,
-                        // approximate; exact logged to stderr on startup
-                        COLS * ROWS * 2,
                     ).into()),
                     ..Default::default()
                 }),
