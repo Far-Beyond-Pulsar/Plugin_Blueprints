@@ -19,6 +19,5 @@ pub fn save_prefab(path: &Path, prefab: &PrefabAsset) -> Result<(), String> {
     let json = serde_json::to_string_pretty(prefab)
         .map_err(|e| format!("Failed to serialize prefab: {}", e))?;
 
-    std::fs::write(path, json)
-        .map_err(|e| format!("Failed to write prefab sidecar: {}", e))
+    std::fs::write(path, json).map_err(|e| format!("Failed to write prefab sidecar: {}", e))
 }

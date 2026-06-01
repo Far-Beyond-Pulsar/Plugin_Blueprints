@@ -100,24 +100,28 @@ impl MacrosRenderer {
                     });
                 });
             }),
-            on_drop: Arc::new(move |payload, target_id: &usize, _modifiers: &Modifiers, _window, cx| {
-                let from_index = payload.macro_index;
-                let to_index = *target_id;
-                let panel = panel_entity_for_drop.clone();
+            on_drop: Arc::new(
+                move |payload, target_id: &usize, _modifiers: &Modifiers, _window, cx| {
+                    let from_index = payload.macro_index;
+                    let to_index = *target_id;
+                    let panel = panel_entity_for_drop.clone();
 
-                if from_index != to_index {
-                    cx.defer(move |cx| {
-                        panel.update(cx, |panel, cx| {
-                            // Reorder macros
-                            if from_index < panel.local_macros.len() && to_index < panel.local_macros.len() {
-                                let macro_def = panel.local_macros.remove(from_index);
-                                panel.local_macros.insert(to_index, macro_def);
-                                cx.notify();
-                            }
+                    if from_index != to_index {
+                        cx.defer(move |cx| {
+                            panel.update(cx, |panel, cx| {
+                                // Reorder macros
+                                if from_index < panel.local_macros.len()
+                                    && to_index < panel.local_macros.len()
+                                {
+                                    let macro_def = panel.local_macros.remove(from_index);
+                                    panel.local_macros.insert(to_index, macro_def);
+                                    cx.notify();
+                                }
+                            });
                         });
-                    });
-                }
-            }),
+                    }
+                },
+            ),
         };
 
         HierarchicalTreeView::new(config).render(cx)

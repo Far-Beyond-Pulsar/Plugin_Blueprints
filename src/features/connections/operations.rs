@@ -162,7 +162,8 @@ impl BlueprintEditorPanel {
                         };
 
                         // Create and execute undo command
-                        let mut cmd = crate::features::undo::AddConnectionCommand::new(connection.clone());
+                        let mut cmd =
+                            crate::features::undo::AddConnectionCommand::new(connection.clone());
                         cmd.execute(self, cx);
                         self.push_undo_command(crate::features::undo::Command::AddConnection(cmd));
 
@@ -191,7 +192,9 @@ impl BlueprintEditorPanel {
     /// Disconnect a pin
     pub fn disconnect_pin(&mut self, node_id: String, pin_id: String, cx: &mut Context<Self>) {
         // Collect connections to delete
-        let connections_to_delete: Vec<_> = self.graph.connections
+        let connections_to_delete: Vec<_> = self
+            .graph
+            .connections
             .iter()
             .filter(|conn| {
                 (conn.source_node == node_id && conn.source_pin == pin_id)
@@ -203,14 +206,17 @@ impl BlueprintEditorPanel {
         if !connections_to_delete.is_empty() {
             // Create batch command if multiple connections
             if connections_to_delete.len() == 1 {
-                let mut cmd = crate::features::undo::DeleteConnectionCommand::new(connections_to_delete[0].clone());
+                let mut cmd = crate::features::undo::DeleteConnectionCommand::new(
+                    connections_to_delete[0].clone(),
+                );
                 cmd.execute(self, cx);
                 self.push_undo_command(crate::features::undo::Command::DeleteConnection(cmd));
             } else {
-                let mut batch = crate::features::undo::BatchCommand::new("Disconnect pin".to_string());
+                let mut batch =
+                    crate::features::undo::BatchCommand::new("Disconnect pin".to_string());
                 for connection in connections_to_delete {
                     batch.add_command(crate::features::undo::Command::DeleteConnection(
-                        crate::features::undo::DeleteConnectionCommand::new(connection)
+                        crate::features::undo::DeleteConnectionCommand::new(connection),
                     ));
                 }
                 batch.execute(self, cx);

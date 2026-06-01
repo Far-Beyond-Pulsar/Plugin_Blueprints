@@ -1,17 +1,14 @@
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::prefabs::hierarchy_item::ComponentHierarchyItem;
+use gpui::prelude::FluentBuilder;
 use gpui::*;
-use pulsar_reflection::{REGISTRY, TypeStructure};
+use pulsar_reflection::{TypeStructure, REGISTRY};
 use std::sync::Arc;
-use ui_common::properties_inspector;
 use ui::{
-    button::Button,
-    h_flex,
-    scroll::ScrollbarAxis,
-    v_flex, ActiveTheme, CollapsibleSection, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
-    IconName, Sizable, StyledExt,
+    button::Button, h_flex, scroll::ScrollbarAxis, v_flex, ActiveTheme, CollapsibleSection,
+    HierarchicalTreeView, HierarchyConfig, HierarchyLayout, IconName, Sizable, StyledExt,
 };
- use gpui::prelude::FluentBuilder;
+use ui_common::properties_inspector;
 pub struct PrefabHierarchyRenderer;
 pub struct PrefabPropertiesRenderer;
 
@@ -26,7 +23,10 @@ impl PrefabHierarchyRenderer {
     }
 
     /// Get all children indices of a component
-    fn get_children(components: &[engine_backend::ComponentInstance], parent_index: usize) -> Vec<usize> {
+    fn get_children(
+        components: &[engine_backend::ComponentInstance],
+        parent_index: usize,
+    ) -> Vec<usize> {
         components
             .iter()
             .enumerate()
@@ -155,40 +155,54 @@ impl PrefabHierarchyRenderer {
                     });
                 });
             }),
-            on_drop: Arc::new(move |payload, target_id: &usize, modifiers: &Modifiers, _window, cx| {
-                use crate::features::prefabs::hierarchy_item::ComponentDrag;
-                let from_index = payload.component_index;
-                let to_index = *target_id;
-                let panel = panel_entity_for_drop.clone();
-                let mods = modifiers.clone();
+            on_drop: Arc::new(
+                move |payload, target_id: &usize, modifiers: &Modifiers, _window, cx| {
+                    use crate::features::prefabs::hierarchy_item::ComponentDrag;
+                    let from_index = payload.component_index;
+                    let to_index = *target_id;
+                    let panel = panel_entity_for_drop.clone();
+                    let mods = modifiers.clone();
 
-                if from_index != to_index {
-                    cx.defer(move |cx| {
-                        panel.update(cx, |panel, cx| {
-                            if from_index >= panel.prefab_asset.components.len() || to_index >= panel.prefab_asset.components.len() {
-                                return;
-                            }
+                    if from_index != to_index {
+                        cx.defer(move |cx| {
+                            panel.update(cx, |panel, cx| {
+                                if from_index >= panel.prefab_asset.components.len()
+                                    || to_index >= panel.prefab_asset.components.len()
+                                {
+                                    return;
+                                }
 
-                            if mods.shift {
-                                // Shift: Un-nest - remove parent
-                                if let Some(obj) = panel.prefab_asset.components[from_index].data.as_object_mut() {
-                                    obj.remove("__parent_index");
+                                if mods.shift {
+                                    // Shift: Un-nest - remove parent
+                                    if let Some(obj) = panel.prefab_asset.components[from_index]
+                                        .data
+                                        .as_object_mut()
+                                    {
+                                        obj.remove("__parent_index");
+                                    }
+                                } else if mods.alt {
+                                    // Alt: Reorder as siblings
+                                    let component =
+                                        panel.prefab_asset.components.remove(from_index);
+                                    panel.prefab_asset.components.insert(to_index, component);
+                                } else {
+                                    // Normal: Nest under target
+                                    if let Some(obj) = panel.prefab_asset.components[from_index]
+                                        .data
+                                        .as_object_mut()
+                                    {
+                                        obj.insert(
+                                            "__parent_index".to_string(),
+                                            serde_json::json!(to_index),
+                                        );
+                                    }
                                 }
-                            } else if mods.alt {
-                                // Alt: Reorder as siblings
-                                let component = panel.prefab_asset.components.remove(from_index);
-                                panel.prefab_asset.components.insert(to_index, component);
-                            } else {
-                                // Normal: Nest under target
-                                if let Some(obj) = panel.prefab_asset.components[from_index].data.as_object_mut() {
-                                    obj.insert("__parent_index".to_string(), serde_json::json!(to_index));
-                                }
-                            }
-                            cx.notify();
+                                cx.notify();
+                            });
                         });
-                    });
-                }
-            }),
+                    }
+                },
+            ),
         };
 
         HierarchicalTreeView::new(config).render(cx)
@@ -321,7 +335,11 @@ impl PrefabHierarchyRenderer {
                     .gap_1()
                     .child(
                         Button::new(("prefab_component_toggle", idx))
-                            .icon(if enabled { IconName::Check } else { IconName::Xmark })
+                            .icon(if enabled {
+                                IconName::Check
+                            } else {
+                                IconName::Xmark
+                            })
                             .xsmall()
                             .on_click(cx.listener(move |panel, _, _, cx| {
                                 panel.set_prefab_component_enabled(idx, !enabled);
@@ -350,19 +368,18 @@ impl PrefabPropertiesRenderer {
         v_flex()
             .size_full()
             .bg(cx.theme().background)
-            .child(Self::render_header(panel.selected_prefab_component.is_some(), cx))
-            .child(
-                div().flex_1().overflow_hidden().w_full().child(
-                    div().size_full().scrollable(ScrollbarAxis::Vertical).child(
-                        match panel.selected_prefab_component {
-                            Some(index) => {
-                                Self::render_component_properties(panel, index, window, cx)
-                            }
-                            None => Self::render_empty_state(cx).into_any_element(),
-                        },
-                    ),
+            .child(Self::render_header(
+                panel.selected_prefab_component.is_some(),
+                cx,
+            ))
+            .child(div().flex_1().overflow_hidden().w_full().child(
+                div().size_full().scrollable(ScrollbarAxis::Vertical).child(
+                    match panel.selected_prefab_component {
+                        Some(index) => Self::render_component_properties(panel, index, window, cx),
+                        None => Self::render_empty_state(cx).into_any_element(),
+                    },
                 ),
-            )
+            ))
     }
 
     fn render_header(
@@ -422,7 +439,9 @@ impl PrefabPropertiesRenderer {
 
                 // Determine if we need numeric input based on RuntimeTypeInfo
                 let numeric_input = match &prop.type_info.structure {
-                    TypeStructure::Primitive if matches!(prop.type_info.base_name(), "f32" | "i32") => {
+                    TypeStructure::Primitive
+                        if matches!(prop.type_info.base_name(), "f32" | "i32") =>
+                    {
                         Some(panel.ensure_prefab_property_input(
                             index,
                             &class_name,
@@ -491,44 +510,66 @@ impl PrefabPropertiesRenderer {
                         // Use shared component section renderer - capture panel entity first
                         let panel_entity = cx.entity().clone();
 
-                        let on_bool_toggle = Arc::new(move |prop_name: &str, checked: bool, _window: &mut Window, cx: &mut App| {
-                            panel_entity.update(cx, |panel, cx| {
-                                panel.update_prefab_component_property(
-                                    index,
-                                    prop_name,
-                                    serde_json::Value::Bool(checked),
-                                );
-                                cx.notify();
-                            });
-                        });
+                        let on_bool_toggle = Arc::new(
+                            move |prop_name: &str,
+                                  checked: bool,
+                                  _window: &mut Window,
+                                  cx: &mut App| {
+                                panel_entity.update(cx, |panel, cx| {
+                                    panel.update_prefab_component_property(
+                                        index,
+                                        prop_name,
+                                        serde_json::Value::Bool(checked),
+                                    );
+                                    cx.notify();
+                                });
+                            },
+                        );
 
                         let panel_entity = cx.entity().clone();
-                        let on_enum_select = Arc::new(move |prop_name: &str, ix: usize, _window: &mut Window, cx: &mut App| {
-                            panel_entity.update(cx, |panel, cx| {
-                                panel.update_prefab_component_property(
-                                    index,
-                                    prop_name,
-                                    serde_json::Value::from(ix as u64),
-                                );
-                                cx.notify();
-                            });
-                        });
+                        let on_enum_select = Arc::new(
+                            move |prop_name: &str,
+                                  ix: usize,
+                                  _window: &mut Window,
+                                  cx: &mut App| {
+                                panel_entity.update(cx, |panel, cx| {
+                                    panel.update_prefab_component_property(
+                                        index,
+                                        prop_name,
+                                        serde_json::Value::from(ix as u64),
+                                    );
+                                    cx.notify();
+                                });
+                            },
+                        );
 
                         v_flex()
                             .gap_2()
                             .children(props_data.into_iter().map(
-                                |(display_name, prop_name, type_info, json_value, input, color_picker, mesh_picker)| {
+                                |(
+                                    display_name,
+                                    prop_name,
+                                    type_info,
+                                    json_value,
+                                    input,
+                                    color_picker,
+                                    mesh_picker,
+                                )| {
                                     let prop_bool = prop_name.clone();
                                     let on_bool_toggle_local = on_bool_toggle.clone();
-                                    let bool_callback = Arc::new(move |checked: bool, window: &mut Window, cx: &mut App| {
-                                        (on_bool_toggle_local)(&prop_bool, checked, window, cx);
-                                    });
+                                    let bool_callback = Arc::new(
+                                        move |checked: bool, window: &mut Window, cx: &mut App| {
+                                            (on_bool_toggle_local)(&prop_bool, checked, window, cx);
+                                        },
+                                    );
 
                                     let prop_enum = prop_name.clone();
                                     let on_enum_select_local = on_enum_select.clone();
-                                    let enum_callback = Arc::new(move |ix: usize, window: &mut Window, cx: &mut App| {
-                                        (on_enum_select_local)(&prop_enum, ix, window, cx);
-                                    });
+                                    let enum_callback = Arc::new(
+                                        move |ix: usize, window: &mut Window, cx: &mut App| {
+                                            (on_enum_select_local)(&prop_enum, ix, window, cx);
+                                        },
+                                    );
 
                                     ui_common::render_property_row_runtime(
                                         "prefab",

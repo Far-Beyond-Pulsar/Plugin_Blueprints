@@ -3,7 +3,7 @@
 use crate::core::types::{BlueprintComment, BlueprintNode, Connection};
 use gpui::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Clipboard data structure for serializing copied graph entities
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,24 +70,27 @@ impl ClipboardData {
         selected_node_ids: &[String],
         selected_comment_ids: &[String],
     ) -> Self {
+        let selected_node_ids: HashSet<&str> = selected_node_ids.iter().map(|id| id.as_str()).collect();
+        let selected_comment_ids: HashSet<&str> = selected_comment_ids.iter().map(|id| id.as_str()).collect();
+
         // Filter selected nodes
         let selected_nodes: Vec<_> = nodes
             .iter()
-            .filter(|n| selected_node_ids.contains(&n.id))
+            .filter(|n| selected_node_ids.contains(n.id.as_str()))
             .collect();
 
         // Filter selected comments
         let selected_comments: Vec<_> = comments
             .iter()
-            .filter(|c| selected_comment_ids.contains(&c.id))
+            .filter(|c| selected_comment_ids.contains(c.id.as_str()))
             .collect();
 
         // Filter connections that are between selected nodes
         let selected_connections: Vec<_> = connections
             .iter()
             .filter(|conn| {
-                selected_node_ids.contains(&conn.source_node)
-                    && selected_node_ids.contains(&conn.target_node)
+                selected_node_ids.contains(conn.source_node.as_str())
+                    && selected_node_ids.contains(conn.target_node.as_str())
             })
             .collect();
 
@@ -264,9 +267,9 @@ impl ClipboardData {
                     },
                     contained_node_ids: new_contained_ids,
                     is_selected: false,
-                    color_picker_state: Some(cx.new(|cx| {
-                        ui::color_picker::ColorPickerState::new(window, cx)
-                    })),
+                    color_picker_state: Some(
+                        cx.new(|cx| ui::color_picker::ColorPickerState::new(window, cx)),
+                    ),
                 })
             })
             .collect();

@@ -63,33 +63,21 @@ impl BlueprintEditorPanel {
             let min = Point::new(start.x.min(end.x), start.y.min(end.y));
             let max = Point::new(start.x.max(end.x), start.y.max(end.y));
 
-            // Check all nodes using GraphEntity trait
-            for node in &self.graph.nodes {
-                let intersects = node.intersects_rect(min, max);
+            self.graph.selected_nodes = self
+                .graph
+                .nodes
+                .iter()
+                .filter(|node| node.intersects_rect(min, max))
+                .map(|node| node.id().to_string())
+                .collect();
 
-                if intersects {
-                    let node_id = node.id().to_string();
-                    if !self.graph.selected_nodes.contains(&node_id) {
-                        self.graph.selected_nodes.push(node_id);
-                    }
-                } else {
-                    self.graph.selected_nodes.retain(|id| id != node.id());
-                }
-            }
-
-            // Check all comments using GraphEntity trait
-            for comment in &self.graph.comments {
-                let intersects = comment.intersects_rect(min, max);
-
-                if intersects {
-                    let comment_id = comment.id().to_string();
-                    if !self.graph.selected_comments.contains(&comment_id) {
-                        self.graph.selected_comments.push(comment_id);
-                    }
-                } else {
-                    self.graph.selected_comments.retain(|id| id != comment.id());
-                }
-            }
+            self.graph.selected_comments = self
+                .graph
+                .comments
+                .iter()
+                .filter(|comment| comment.intersects_rect(min, max))
+                .map(|comment| comment.id().to_string())
+                .collect();
 
             cx.notify();
         }
@@ -133,7 +121,7 @@ impl BlueprintEditorPanel {
                 if let Some(data_type) = self.get_connection_data_type(&connection) {
                     // Create reroute node
                     let reroute_pos =
-                        NodeGraphRenderer::snap_to_grid(graph_pos, self.graph.zoom_level);
+                        NodeGraphRenderer::snap_to_grid(graph_pos);
                     let reroute_node = BlueprintNode::create_reroute(reroute_pos);
                     let reroute_id = reroute_node.id.clone();
 

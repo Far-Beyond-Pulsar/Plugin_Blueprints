@@ -80,7 +80,8 @@ impl NodePaletteView {
         if let Some(editor_entity) = self.editor.upgrade() {
             // Safe to read here because this is called after construction is complete
             let editor_ref = editor_entity.read(cx);
-            let component_categories = NodeDefinitions::generate_component_nodes(&editor_ref.prefab_asset);
+            let component_categories =
+                NodeDefinitions::generate_component_nodes(&editor_ref.prefab_asset);
             for category in component_categories {
                 all_items.extend(build_palette_items_for_category(&category));
             }
@@ -92,7 +93,9 @@ impl NodePaletteView {
 }
 
 /// Build palette items for a single category
-fn build_palette_items_for_category(category: &crate::core::definitions::NodeCategory) -> Vec<PaletteItem> {
+fn build_palette_items_for_category(
+    category: &crate::core::definitions::NodeCategory,
+) -> Vec<PaletteItem> {
     let mut items = Vec::new();
     items.push(PaletteItem::CategoryHeader {
         name: category.name.clone(),
@@ -221,47 +224,58 @@ impl Render for NodePaletteView {
             )
             // ── Scrollable node list ───────────────────────────────────────────
             .child(
-                div().flex_1().min_h_0().overflow_hidden().relative().child(
-                    v_virtual_list(
-                        view_entity,
-                        "node-palette-view-list",
-                        item_sizes,
-                        move |_view, range, _window, cx| {
-                            range
-                                .map(|ix| -> AnyElement {
-                                    let Some(item) = items_snap.get(ix) else {
-                                        return div().h(px(NODE_ENTRY_H)).into_any_element();
-                                    };
-                                    match item {
-                                        PaletteItem::CategoryHeader {
-                                            name,
-                                            color,
-                                            node_count,
-                                        } => {
-                                            palette_category_header(name, color, *node_count, cx)
-                                                .into_any_element()
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_hidden()
+                    .relative()
+                    .child(
+                        v_virtual_list(
+                            view_entity,
+                            "node-palette-view-list",
+                            item_sizes,
+                            move |_view, range, _window, cx| {
+                                range
+                                    .map(|ix| -> AnyElement {
+                                        let Some(item) = items_snap.get(ix) else {
+                                            return div().h(px(NODE_ENTRY_H)).into_any_element();
+                                        };
+                                        match item {
+                                            PaletteItem::CategoryHeader {
+                                                name,
+                                                color,
+                                                node_count,
+                                            } => palette_category_header(
+                                                name,
+                                                color,
+                                                *node_count,
+                                                cx,
+                                            )
+                                            .into_any_element(),
+                                            PaletteItem::NodeEntry {
+                                                def,
+                                                category_color,
+                                            } => palette_node_row(
+                                                ix,
+                                                def.clone(),
+                                                category_color,
+                                                cx,
+                                            )
+                                            .into_any_element(),
                                         }
-                                        PaletteItem::NodeEntry {
-                                            def,
-                                            category_color,
-                                        } => {
-                                            palette_node_row(ix, def.clone(), category_color, cx)
-                                                .into_any_element()
-                                        }
-                                    }
-                                })
-                                .collect()
-                        },
+                                    })
+                                    .collect()
+                            },
+                        )
+                        .size_full()
+                        .track_scroll(&scroll_handle),
                     )
-                    .size_full()
-                    .track_scroll(&scroll_handle),
-                )
-                .child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .child(Scrollbar::vertical(&scrollbar_state, &scroll_handle)),
-                ),
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .child(Scrollbar::vertical(&scrollbar_state, &scroll_handle)),
+                    ),
             )
     }
 }

@@ -10,7 +10,9 @@ pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
 use crate::editor::panel::BlueprintEditorPanel;
 use engine_backend::scene::metadata::ComponentInstance;
 use gpui::{AppContext, Context, Entity, Hsla, Window};
-use pulsar_reflection::{RuntimeTypeInfo, TypeStructure, WrapperType, REGISTRY, RUNTIME_TYPE_REGISTRY};
+use pulsar_reflection::{
+    RuntimeTypeInfo, TypeStructure, WrapperType, REGISTRY, RUNTIME_TYPE_REGISTRY,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -50,7 +52,9 @@ impl PrefabAsset {
 
 impl BlueprintEditorPanel {
     pub fn prefab_file_path(&self) -> Option<PathBuf> {
-        self.current_class_path.as_ref().map(|p| p.join("prefab.json"))
+        self.current_class_path
+            .as_ref()
+            .map(|p| p.join("prefab.json"))
     }
 
     pub fn load_prefab_sidecar(&mut self) -> Result<(), String> {
@@ -301,11 +305,7 @@ fn format_property_value(type_info: &RuntimeTypeInfo, value: &serde_json::Value)
     }
 }
 
-fn parse_property_text(
-    class_name: &str,
-    prop_name: &str,
-    text: &str,
-) -> Option<serde_json::Value> {
+fn parse_property_text(class_name: &str, prop_name: &str, text: &str) -> Option<serde_json::Value> {
     let instance = REGISTRY.create_instance(class_name)?;
     let properties = instance.get_properties();
     let prop = properties
@@ -314,16 +314,8 @@ fn parse_property_text(
 
     match &prop.type_info.structure {
         TypeStructure::Primitive => match prop.type_info.base_name() {
-            "f32" => text
-                .trim()
-                .parse::<f32>()
-                .ok()
-                .map(serde_json::Value::from),
-            "i32" => text
-                .trim()
-                .parse::<i32>()
-                .ok()
-                .map(serde_json::Value::from),
+            "f32" => text.trim().parse::<f32>().ok().map(serde_json::Value::from),
+            "i32" => text.trim().parse::<i32>().ok().map(serde_json::Value::from),
             "bool" => text
                 .trim()
                 .parse::<bool>()
@@ -333,16 +325,14 @@ fn parse_property_text(
             _ => Some(serde_json::Value::String(text.to_string())),
         },
         TypeStructure::String => Some(serde_json::Value::String(text.to_string())),
-        TypeStructure::Enum { .. } => text
-            .trim()
-            .parse::<u64>()
-            .ok()
-            .map(serde_json::Value::from),
+        TypeStructure::Enum { .. } => text.trim().parse::<u64>().ok().map(serde_json::Value::from),
         TypeStructure::Wrapper {
             wrapper_kind: WrapperType::Vec,
             ..
         } => serde_json::from_str::<serde_json::Value>(text).ok(),
-        TypeStructure::Struct { .. } => Some(serde_json::json!({"class_name": prop.type_info.type_name})),
+        TypeStructure::Struct { .. } => {
+            Some(serde_json::json!({"class_name": prop.type_info.type_name}))
+        }
         TypeStructure::Wrapper { .. } => Some(serde_json::Value::String(text.to_string())),
     }
 }

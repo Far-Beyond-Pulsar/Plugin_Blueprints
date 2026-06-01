@@ -1,15 +1,12 @@
 //! Rendering - GPUI render implementation and trait implementations
 
-use gpui::*;
 use gpui::prelude::*;
+use gpui::*;
 use ui::{
     dock::{Panel, PanelEvent, PanelState},
     h_flex,
     scroll::Scrollbar,
-    v_flex,
-    v_virtual_list,
-    ActiveTheme,
-    StyledExt,
+    v_flex, v_virtual_list, ActiveTheme, StyledExt,
 };
 
 use super::panel::BlueprintEditorPanel;
@@ -100,14 +97,14 @@ impl BlueprintEditorPanel {
                                 CompilationState::Compiling => "⟳ Compiling...",
                                 CompilationState::Success => "✓ Build Succeeded",
                                 CompilationState::Error => "✗ Build Failed",
-                            })
+                            }),
                     )
                     .child(
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(format!("{} entries", self.compilation_history.len()))
-                    )
+                            .child(format!("{} entries", self.compilation_history.len())),
+                    ),
             )
             .child(
                 div()
@@ -124,7 +121,7 @@ impl BlueprintEditorPanel {
                                 .justify_center()
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("No compilation messages yet.")
+                                .child("No compilation messages yet."),
                         )
                     })
                     .when(!history_entries.is_empty(), |this| {
@@ -219,25 +216,21 @@ impl BlueprintEditorPanel {
                                                                 .text_color(cx.theme().foreground)
                                                                 .child(entry.message.clone()),
                                                         )
-                                                        .when(
-                                                            entry.detail.is_some(),
-                                                            |this| {
-                                                                this.child(
-                                                                    div()
-                                                                        .text_xs()
-                                                                        .text_color(
-                                                                            cx.theme()
-                                                                                .muted_foreground,
-                                                                        )
-                                                                        .child(
-                                                                            entry
-                                                                                .detail
-                                                                                .clone()
-                                                                                .unwrap_or_default(),
-                                                                        ),
-                                                                )
-                                                            },
-                                                        ),
+                                                        .when(entry.detail.is_some(), |this| {
+                                                            this.child(
+                                                                div()
+                                                                    .text_xs()
+                                                                    .text_color(
+                                                                        cx.theme().muted_foreground,
+                                                                    )
+                                                                    .child(
+                                                                        entry
+                                                                            .detail
+                                                                            .clone()
+                                                                            .unwrap_or_default(),
+                                                                    ),
+                                                            )
+                                                        }),
                                                 )
                                                 .into_any_element()
                                         })
@@ -253,7 +246,7 @@ impl BlueprintEditorPanel {
                                 .inset_0()
                                 .child(Scrollbar::vertical(&scrollbar_state, &scroll_handle)),
                         )
-                    })
+                    }),
             )
     }
 
@@ -286,20 +279,20 @@ impl BlueprintEditorPanel {
                             .text_sm()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .text_color(cx.theme().foreground)
-                            .child("Graph Index")
+                            .child("Graph Index"),
                     )
                     .child(
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(format!("{} nodes, {} comments", node_count, comment_count))
-                    )
+                            .child(format!("{} nodes, {} comments", node_count, comment_count)),
+                    ),
             )
             .child(
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("Click a node entry to select it in the graph.")
+                    .child("Click a node entry to select it in the graph."),
             )
             .child(
                 div()
@@ -316,7 +309,7 @@ impl BlueprintEditorPanel {
                                 .justify_center()
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("No nodes in graph.")
+                                .child("No nodes in graph."),
                         )
                     })
                     .when(!nodes.is_empty(), |this| {
@@ -351,22 +344,31 @@ impl BlueprintEditorPanel {
                                                 .border_b_1()
                                                 .border_color(cx.theme().border.opacity(0.08))
                                                 .hover(|s| s.bg(cx.theme().muted.opacity(0.2)))
-                                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |panel, _, _window, cx| {
-                                                    panel.graph.selected_nodes.clear();
-                                                    panel.graph.selected_nodes.push(node_id.clone());
-                                                    cx.notify();
-                                                }))
+                                                .on_mouse_down(
+                                                    gpui::MouseButton::Left,
+                                                    cx.listener(move |panel, _, _window, cx| {
+                                                        panel.graph.selected_nodes.clear();
+                                                        panel
+                                                            .graph
+                                                            .selected_nodes
+                                                            .push(node_id.clone());
+                                                        cx.notify();
+                                                    }),
+                                                )
                                                 .child(
                                                     div()
                                                         .text_xs()
                                                         .text_color(cx.theme().foreground)
-                                                        .child(node_title)
+                                                        .child(node_title),
                                                 )
                                                 .child(
                                                     div()
                                                         .text_xs()
                                                         .text_color(cx.theme().muted_foreground)
-                                                        .child(format!("({:.0}, {:.0})", node.position.x, node.position.y))
+                                                        .child(format!(
+                                                            "({:.0}, {:.0})",
+                                                            node.position.x, node.position.y
+                                                        )),
                                                 )
                                                 .into_any_element()
                                         })
@@ -382,7 +384,7 @@ impl BlueprintEditorPanel {
                                 .inset_0()
                                 .child(Scrollbar::vertical(&scrollbar_state, &scroll_handle)),
                         )
-                    })
+                    }),
             )
     }
 
@@ -400,78 +402,75 @@ impl BlueprintEditorPanel {
             .child(
                 h_flex()
                     .items_center()
-                    .children(
-                        self.open_tabs.iter().enumerate().map(|(index, tab)| {
-                            let is_active = index == self.active_tab_index;
+                    .children(self.open_tabs.iter().enumerate().map(|(index, tab)| {
+                        let is_active = index == self.active_tab_index;
 
-                            h_flex()
-                                .items_center()
-                                .gap_1p5()
-                                .px_3()
-                                .h_full()
-                                .bg(if is_active {
-                                    cx.theme().background
+                        h_flex()
+                            .items_center()
+                            .gap_1p5()
+                            .px_3()
+                            .h_full()
+                            .bg(if is_active {
+                                cx.theme().background
+                            } else {
+                                gpui::transparent_black()
+                            })
+                            .when(is_active, |this| {
+                                this.border_t_2().border_color(cx.theme().accent)
+                            })
+                            .when(!is_active, |this| {
+                                this.hover(|s| s.bg(cx.theme().muted.opacity(0.1)))
+                            })
+                            .cursor_pointer()
+                            .child(
+                                ui::Icon::new(if tab.is_main {
+                                    IconName::Play
                                 } else {
-                                    gpui::transparent_black()
+                                    IconName::Component
                                 })
-                                .when(is_active, |this| {
-                                    this.border_t_2().border_color(cx.theme().accent)
-                                })
-                                .when(!is_active, |this| {
-                                    this.hover(|s| s.bg(cx.theme().muted.opacity(0.1)))
-                                })
-                                .cursor_pointer()
-                                .child(
-                                    ui::Icon::new(if tab.is_main {
-                                        IconName::Play
-                                    } else {
-                                        IconName::Component
-                                    })
-                                    .size(px(14.0))
+                                .size(px(14.0))
+                                .text_color(if is_active {
+                                    cx.theme().accent
+                                } else {
+                                    cx.theme().muted_foreground
+                                }),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .when(is_active, |s| s.font_weight(gpui::FontWeight::SEMIBOLD))
                                     .text_color(if is_active {
-                                        cx.theme().accent
+                                        cx.theme().foreground
                                     } else {
                                         cx.theme().muted_foreground
                                     })
-                                )
-                                .child(
+                                    .child(tab.name.clone()),
+                            )
+                            .when(tab.is_dirty, |this| {
+                                this.child(
                                     div()
-                                        .text_sm()
-                                        .when(is_active, |s| s.font_weight(gpui::FontWeight::SEMIBOLD))
-                                        .text_color(if is_active {
-                                            cx.theme().foreground
-                                        } else {
-                                            cx.theme().muted_foreground
-                                        })
-                                        .child(tab.name.clone())
+                                        .w(px(6.0))
+                                        .h(px(6.0))
+                                        .rounded_full()
+                                        .bg(cx.theme().accent),
                                 )
-                                .when(tab.is_dirty, |this| {
-                                    this.child(
-                                        div()
-                                            .w(px(6.0))
-                                            .h(px(6.0))
-                                            .rounded_full()
-                                            .bg(cx.theme().accent)
-                                    )
-                                })
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, window, cx| {
+                            })
+                            .on_mouse_down(
+                                gpui::MouseButton::Left,
+                                cx.listener(move |this, _, window, cx| {
                                     this.switch_to_tab(index, window, cx);
-                                }))
-                        })
-                    )
+                                }),
+                            )
+                    })),
             )
             .child(div().flex_1())
             .child(
-                h_flex()
-                    .items_center()
-                    .gap_1()
-                    .px_2()
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child("Tabs")
-                    )
+                h_flex().items_center().gap_1().px_2().child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child("Tabs"),
+                ),
             )
     }
 }
@@ -506,22 +505,18 @@ impl Render for BlueprintEditorPanel {
             .on_action(cx.listener(|panel, _action: &OpenAddNodeMenu, window, cx| {
                 if let Some(bounds) = &panel.graph_element_bounds {
                     let screen_center = Point::new(bounds.center().x, bounds.center().y);
-                    let graph_pos = NodeGraphRenderer::screen_to_graph_pos(screen_center, &panel.graph);
+                    let graph_pos =
+                        NodeGraphRenderer::screen_to_graph_pos(screen_center, &panel.graph);
                     panel.show_node_picker(graph_pos, window, cx);
                 }
             }))
             .child(ToolbarRenderer::render(self, cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .map(|el| {
-                        if let Some(workspace) = &self.workspace {
-                            el.child(workspace.clone())
-                        } else {
-                            el.child(div().child("Initializing workspace..."))
-                        }
-                    })
-            )
+            .child(div().flex_1().min_h_0().map(|el| {
+                if let Some(workspace) = &self.workspace {
+                    el.child(workspace.clone())
+                } else {
+                    el.child(div().child("Initializing workspace..."))
+                }
+            }))
     }
 }

@@ -380,7 +380,6 @@ impl Focusable for PalettePanel {
     }
 }
 
-
 impl Panel for PalettePanel {
     fn panel_name(&self) -> &'static str {
         "palette"

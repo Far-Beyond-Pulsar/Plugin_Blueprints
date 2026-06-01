@@ -217,7 +217,9 @@ impl BlueprintEditorPanel {
         let programs = self.compile_to_bytecode()?;
 
         if programs.is_empty() {
-            return Err("No event entry-points found in graph — add a BeginPlay or Tick node".to_string());
+            return Err(
+                "No event entry-points found in graph — add a BeginPlay or Tick node".to_string(),
+            );
         }
 
         // Map programs by event name.  BpProgram::name carries the event type
@@ -229,10 +231,8 @@ impl BlueprintEditorPanel {
             .unwrap_or(0)
             .max(1024); // minimum 1 KiB so the runtime always has headroom
 
-        let event_programs: HashMap<String, pbgc::BpProgram> = programs
-            .into_iter()
-            .map(|p| (p.name.clone(), p))
-            .collect();
+        let event_programs: HashMap<String, pbgc::BpProgram> =
+            programs.into_iter().map(|p| (p.name.clone(), p)).collect();
 
         let blueprint_name = class_path
             .file_name()
@@ -486,7 +486,9 @@ impl BlueprintEditorPanel {
                                 let output_events = panel
                                     .current_class_path
                                     .as_ref()
-                                    .map(|p| p.join("events").join("events.rs").display().to_string())
+                                    .map(|p| {
+                                        p.join("events").join("events.rs").display().to_string()
+                                    })
                                     .unwrap_or_else(|| "events/events.rs".to_string());
                                 let output_mod = panel
                                     .current_class_path

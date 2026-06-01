@@ -8,8 +8,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use tool_registry::{PluginToolRegistry, ToolContext, ToolRegistry};
 use tool_registry_macros::tool;
-use ui::graph::ConnectionType;
 use tracing::debug;
+use ui::graph::ConnectionType;
 
 use crate::core::definitions::NodeDefinitions;
 use crate::core::graph::BlueprintGraph;
@@ -548,7 +548,10 @@ pub fn blueprint_add_comment(
             id: uuid::Uuid::new_v4().to_string(),
             text,
             position: Point::new(x as f32, y as f32),
-            size: Size::new(width.unwrap_or(300.0) as f32, height.unwrap_or(200.0) as f32),
+            size: Size::new(
+                width.unwrap_or(300.0) as f32,
+                height.unwrap_or(200.0) as f32,
+            ),
             color: gpui::hsla(0.5, 0.3, 0.2, 0.3),
             contained_node_ids: Vec::new(),
             is_selected: false,
@@ -687,9 +690,14 @@ pub fn blueprint_remove_connection(connection_id: String) -> Result<Value> {
 
 /// Extract a partial subgraph view by node ids.
 #[tool(category = "blueprint")]
-pub fn blueprint_get_subgraph(node_ids: Vec<String>, include_comments: Option<bool>) -> Result<Value> {
+pub fn blueprint_get_subgraph(
+    node_ids: Vec<String>,
+    include_comments: Option<bool>,
+) -> Result<Value> {
     with_session(|session| {
-        let node_set = node_ids.into_iter().collect::<std::collections::HashSet<_>>();
+        let node_set = node_ids
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
 
         let nodes = session
             .graph
@@ -764,18 +772,17 @@ pub fn capabilities_for_file(file_path: &Path) -> Vec<String> {
         .collect()
 }
 
-pub fn execute_compiled_tool(file_path: &Path, tool_name: &str, tool_args: Value) -> Result<Value, PluginError> {
+pub fn execute_compiled_tool(
+    file_path: &Path,
+    tool_name: &str,
+    tool_args: Value,
+) -> Result<Value, PluginError> {
     let started_at = Instant::now();
     debug!(tool = tool_name, file = %file_path.display(), "blueprint execute_compiled_tool start");
     set_active_file(file_path);
     let ctx = ToolContext::new()
         .with_current_file(file_path)
-        .with_workspace(
-            file_path
-                .parent()
-                .unwrap_or(file_path)
-                .to_path_buf(),
-        );
+        .with_workspace(file_path.parent().unwrap_or(file_path).to_path_buf());
 
     tool_registry()
         .execute(tool_name, tool_args, &ctx)
@@ -788,6 +795,10 @@ pub fn execute_compiled_tool(file_path: &Path, tool_name: &str, tool_args: Value
         })
 }
 
-pub fn execute_ai_tool(file_path: &Path, tool_name: &str, tool_args: Value) -> Result<Value, PluginError> {
+pub fn execute_ai_tool(
+    file_path: &Path,
+    tool_name: &str,
+    tool_args: Value,
+) -> Result<Value, PluginError> {
     execute_compiled_tool(file_path, tool_name, tool_args)
 }

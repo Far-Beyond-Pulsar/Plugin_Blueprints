@@ -318,7 +318,11 @@ impl BlueprintEditorPanel {
         var_type: String,
         cx: &mut Context<Self>,
     ) {
-        self.dragging_variable = Some(VariableDrag { var_index, var_name, var_type });
+        self.dragging_variable = Some(VariableDrag {
+            var_index,
+            var_name,
+            var_type,
+        });
         cx.notify();
     }
 
@@ -377,8 +381,8 @@ impl BlueprintEditorPanel {
                 d.clone()
             } else {
                 match rust_type.as_str() {
-                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" |
-                    "i8" | "i16" | "u8" | "u16" | "usize" | "isize" => "0".to_string(),
+                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "i8" | "i16" | "u8" | "u16"
+                    | "usize" | "isize" => "0".to_string(),
                     "bool" => "false".to_string(),
                     "&str" => "\"\"".to_string(),
                     "String" => "String::new()".to_string(),
@@ -430,8 +434,8 @@ fn sanitize_rust_type(raw: &str) -> &str {
 
     // Plain primitive or user type — pass through unchanged.
     match t {
-        "bool" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64"
-        | "f32" | "f64" | "usize" | "isize" | "char" | "String" | "&str" => return t,
+        "bool" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64"
+        | "usize" | "isize" | "char" | "String" | "&str" => return t,
         _ => {}
     }
 
