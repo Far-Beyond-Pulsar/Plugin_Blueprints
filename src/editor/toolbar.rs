@@ -343,12 +343,16 @@ impl ToolbarRenderer {
                                 btn
                             })
                         })
-                        // Step Forward
+                        // Step Forward / Single-step
                         .when(debug_session_active, |el| {
                             el.child({
                                 let btn = Button::new("toolbar-debug-fwd")
                                     .icon(IconName::ArrowRight)
-                                    .tooltip("Step Forward (F10)")
+                                    .tooltip(if debug_is_paused {
+                                        "Step (F10) — execute one node then pause again"
+                                    } else {
+                                        "Step Forward (F10) — go to next recorded frame"
+                                    })
                                     .on_click(cx.listener(|panel, _, _, cx| {
                                         panel.debug_step_forward(cx);
                                     }))

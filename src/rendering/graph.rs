@@ -1191,7 +1191,7 @@ impl NodeGraphRenderer {
                             .items_center()
                             .border_t_1()
                             .border_color(cx.theme().border.opacity(0.4))
-                            // ◀ Step Back
+                            // ◀ History (navigate recorded frames backward)
                             .child(
                                 div()
                                     .px(px(10.0))
@@ -1219,9 +1219,10 @@ impl NodeGraphRenderer {
                                             }
                                         })
                                     })
-                                    .child("◀ Back"),
+                                    .child("◀ History"),
                             )
-                            // ▶ Step Forward
+                            // ▶ Step — advances the executor by one graph node.
+                            // Only active when execution is suspended (is_paused).
                             .child(
                                 div()
                                     .px(px(10.0))
@@ -1229,14 +1230,14 @@ impl NodeGraphRenderer {
                                     .text_size(px(11.0))
                                     .rounded(px(4.0))
                                     .bg(if can_fwd {
-                                        cx.theme().secondary
+                                        gpui::rgba(0x1A3A4AFF) // blue tint to distinguish from Continue
                                     } else {
-                                        cx.theme().muted.opacity(0.3)
+                                        gpui::rgba(0x22222233)
                                     })
                                     .text_color(if can_fwd {
-                                        cx.theme().secondary_foreground
+                                        gpui::rgba(0x88CCFFFF)
                                     } else {
-                                        cx.theme().muted_foreground
+                                        gpui::rgba(0x66666688)
                                     })
                                     .cursor_pointer()
                                     .when(can_fwd, |el| {
@@ -1249,9 +1250,9 @@ impl NodeGraphRenderer {
                                             }
                                         })
                                     })
-                                    .child("▶ Forward"),
+                                    .child("Step →"),
                             )
-                            // ▶ Continue (only if paused)
+                            // ▶▶ Continue (only if paused)
                             .when(is_paused, |el| {
                                 el.child(
                                     div()
