@@ -9,11 +9,11 @@
 // Hit testing is then done entirely in graph space using the same layout
 // constants as the GPU renderer, so click targets exactly match what's drawn.
 
+use crate::core::types::NodeType;
+use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::{
     NodeGraphRenderer, BODY_PAD, HEADER_H, PIN_GAP, PIN_ROW_H, PIN_SIZE, SEP_H,
 };
-use crate::core::types::NodeType;
-use crate::editor::panel::BlueprintEditorPanel;
 use gpui::*;
 use ui::graph::DataType;
 use ui::PixelsExt;
@@ -23,10 +23,7 @@ use ui::PixelsExt;
 /// Window → canvas-relative position using the captured GPU surface origin.
 fn to_canvas(window_pos: Point<Pixels>, panel: &BlueprintEditorPanel) -> Point<f32> {
     let o = *panel.canvas_origin.borrow();
-    Point::new(
-        window_pos.x.as_f32() - o.x,
-        window_pos.y.as_f32() - o.y,
-    )
+    Point::new(window_pos.x.as_f32() - o.x, window_pos.y.as_f32() - o.y)
 }
 
 /// Canvas-relative → graph space.
@@ -71,16 +68,20 @@ fn hit_output_pin(canvas: Point<f32>, panel: &BlueprintEditorPanel) -> Option<(S
 
 /// Find the input pin nearest to a canvas-space point (for connection drop).
 fn hit_input_pin(
-    canvas:      Point<f32>,
-    panel:       &BlueprintEditorPanel,
-    skip_node:   &str,
-    src_type:    &DataType,
+    canvas: Point<f32>,
+    panel: &BlueprintEditorPanel,
+    skip_node: &str,
+    src_type: &DataType,
 ) -> Option<(String, String)> {
     let r = (PIN_SIZE * panel.graph.zoom_level * 1.3).max(8.0);
     for node in &panel.graph.nodes {
-        if node.id == skip_node { continue; }
+        if node.id == skip_node {
+            continue;
+        }
         for (i, pin) in node.inputs.iter().enumerate() {
-            if !src_type.is_compatible_with(&pin.data_type) { continue; }
+            if !src_type.is_compatible_with(&pin.data_type) {
+                continue;
+            }
             let c = NodeGraphRenderer::pin_canvas_pos(node, true, i, &panel.graph);
             let d = ((canvas.x - c.x).powi(2) + (canvas.y - c.y).powi(2)).sqrt();
             if d <= r {
@@ -119,10 +120,10 @@ pub fn on_mouse_down_right(
         entity.update(cx, |panel, cx| {
             // Close any open context menus
             panel.node_context_menu = None;
-            panel.pin_context_menu  = None;
+            panel.pin_context_menu = None;
 
             let canvas = to_canvas(event.position, panel);
-            let gp     = to_graph(canvas, panel);
+            let gp = to_graph(canvas, panel);
 
             panel.popup_palette_graph_pos = Some(gp);
 
@@ -151,7 +152,7 @@ pub fn on_mouse_down_left(
                 return;
             }
             panel.node_context_menu = None;
-            panel.pin_context_menu  = None;
+            panel.pin_context_menu = None;
 
             if panel.editing_comment.is_some() {
                 panel.finish_comment_editing(cx);
@@ -162,7 +163,7 @@ pub fn on_mouse_down_left(
             }
 
             let canvas = to_canvas(event.position, panel);
-            let gp     = to_graph(canvas, panel);
+            let gp = to_graph(canvas, panel);
 
             // Priority: output pin → node → empty space
             if let Some((node_id, pin_id)) = hit_output_pin(canvas, panel) {
@@ -200,7 +201,7 @@ pub fn on_mouse_move(
     move |event: &MouseMoveEvent, _window, cx| {
         entity.update(cx, |panel, cx| {
             let canvas = to_canvas(event.position, panel);
-            let mp     = Point::new(canvas.x, canvas.y);
+            let mp = Point::new(canvas.x, canvas.y);
 
             // Threshold-detect right-drag → pan
             if let Some(right_start) = panel.right_click_start {
@@ -238,8 +239,8 @@ pub fn on_mouse_up_left(
     move |event: &MouseUpEvent, _window, cx| {
         entity.update(cx, |panel, cx| {
             let canvas = to_canvas(event.position, panel);
-            let gp     = to_graph(canvas, panel);
-            let mp     = Point::new(canvas.x, canvas.y);
+            let gp = to_graph(canvas, panel);
+            let mp = Point::new(canvas.x, canvas.y);
 
             if panel.dragging_comment.is_some() {
                 panel.end_comment_drag(cx);
@@ -251,16 +252,18 @@ pub fn on_mouse_up_left(
                 panel.finish_dragging_variable(gp, cx);
             } else if let Some(drag) = panel.dragging_connection.clone() {
                 // Check if we landed on a compatible input pin
-                if let Some((nid, pid)) = hit_input_pin(canvas, panel, &drag.source_node, &drag.source_pin_type) {
+                if let Some((nid, pid)) =
+                    hit_input_pin(canvas, panel, &drag.source_node, &drag.source_pin_type)
+                {
                     panel.complete_connection_on_pin(nid, pid, cx);
                 } else {
                     // Dropped on empty space → open quick palette filtered by type
-                    panel.popup_palette_graph_pos        = Some(gp);
+                    panel.popup_palette_graph_pos = Some(gp);
                     panel.quick_palette_connection_source = Some(drag);
-                    panel.quick_palette_open             = true;
-                    panel.quick_palette_focus_pending    = true;
-                    panel.quick_palette_screen_pos       = event.position;
-                    panel.dragging_connection            = None;
+                    panel.quick_palette_open = true;
+                    panel.quick_palette_focus_pending = true;
+                    panel.quick_palette_screen_pos = event.position;
+                    panel.dragging_connection = None;
                     cx.notify();
                 }
             } else if panel.is_selecting() {
@@ -287,25 +290,25 @@ pub fn on_mouse_up_right(
 
             if was_click {
                 let canvas = to_canvas(event.position, panel);
-                let gp     = to_graph(canvas, panel);
+                let gp = to_graph(canvas, panel);
 
                 // Hit test: pin → node → empty space
                 if let Some((nid, pid)) = hit_any_pin(canvas, panel) {
-                    panel.pin_context_menu  = Some((nid, pid, event.position));
+                    panel.pin_context_menu = Some((nid, pid, event.position));
                     panel.quick_palette_open = false;
                 } else if let Some(node_id) = hit_node(gp, panel).map(str::to_owned) {
                     if !panel.graph.selected_nodes.contains(&node_id) {
                         panel.select_node(Some(node_id.clone()), cx);
                     }
-                    panel.node_context_menu  = Some((node_id, event.position));
+                    panel.node_context_menu = Some((node_id, event.position));
                     panel.quick_palette_open = false;
                 } else {
                     // Empty space → add node palette
-                    panel.quick_palette_open          = true;
+                    panel.quick_palette_open = true;
                     panel.quick_palette_focus_pending = true;
-                    panel.quick_palette_screen_pos    = event.position;
-                    panel.node_context_menu           = None;
-                    panel.pin_context_menu            = None;
+                    panel.quick_palette_screen_pos = event.position;
+                    panel.node_context_menu = None;
+                    panel.pin_context_menu = None;
                 }
                 cx.notify();
             }
@@ -324,7 +327,7 @@ pub fn on_scroll_wheel(
         entity.update(cx, |panel, cx| {
             let delta_y = match event.delta {
                 ScrollDelta::Pixels(p) => p.y.as_f32(),
-                ScrollDelta::Lines(l)  => l.y * 20.0,
+                ScrollDelta::Lines(l) => l.y * 20.0,
             };
             let canvas_pos = to_canvas(event.position, panel);
             let element_pos = Point::new(px(canvas_pos.x), px(canvas_pos.y));
@@ -345,8 +348,10 @@ pub fn on_key_down(
                 event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
 
             if panel.editing_comment.is_some() {
-                if key == "escape" { panel.editing_comment = None; cx.notify(); }
-                else if key == "enter" && event.keystroke.modifiers.control {
+                if key == "escape" {
+                    panel.editing_comment = None;
+                    cx.notify();
+                } else if key == "enter" && event.keystroke.modifiers.control {
                     panel.finish_comment_editing(cx);
                 }
                 return;
@@ -355,7 +360,7 @@ pub fn on_key_down(
             match key.as_str() {
                 "escape" => {
                     panel.node_context_menu = None;
-                    panel.pin_context_menu  = None;
+                    panel.pin_context_menu = None;
                     if panel.variable_drop_menu_position.is_some() {
                         panel.variable_drop_menu_position = None;
                     } else if panel.dragging_connection.is_some() {

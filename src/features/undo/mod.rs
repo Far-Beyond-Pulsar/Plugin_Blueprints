@@ -364,10 +364,7 @@ impl DeleteEntitiesCommand {
     }
 
     pub fn description(&self) -> String {
-        format!(
-            "Delete {} entities",
-            self.nodes.len() + self.comments.len()
-        )
+        format!("Delete {} entities", self.nodes.len() + self.comments.len())
     }
 }
 

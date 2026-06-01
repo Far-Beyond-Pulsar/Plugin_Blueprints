@@ -231,9 +231,10 @@ impl BlueprintEditorPanel {
                 // Move all nodes that were selected when dragging started
                 for (node_id, initial_position) in &self.initial_drag_positions {
                     if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *node_id) {
-                        node.position = NodeGraphRenderer::snap_to_grid(
-                            Point::new(initial_position.x + delta.x, initial_position.y + delta.y),
-                        );
+                        node.position = NodeGraphRenderer::snap_to_grid(Point::new(
+                            initial_position.x + delta.x,
+                            initial_position.y + delta.y,
+                        ));
                     }
                 }
 
@@ -242,9 +243,10 @@ impl BlueprintEditorPanel {
                     if let Some(comment) =
                         self.graph.comments.iter_mut().find(|c| c.id == *comment_id)
                     {
-                        comment.position = NodeGraphRenderer::snap_to_grid(
-                            Point::new(initial_position.x + delta.x, initial_position.y + delta.y),
-                        );
+                        comment.position = NodeGraphRenderer::snap_to_grid(Point::new(
+                            initial_position.x + delta.x,
+                            initial_position.y + delta.y,
+                        ));
                     }
                 }
             }

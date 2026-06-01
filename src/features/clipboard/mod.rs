@@ -70,8 +70,10 @@ impl ClipboardData {
         selected_node_ids: &[String],
         selected_comment_ids: &[String],
     ) -> Self {
-        let selected_node_ids: HashSet<&str> = selected_node_ids.iter().map(|id| id.as_str()).collect();
-        let selected_comment_ids: HashSet<&str> = selected_comment_ids.iter().map(|id| id.as_str()).collect();
+        let selected_node_ids: HashSet<&str> =
+            selected_node_ids.iter().map(|id| id.as_str()).collect();
+        let selected_comment_ids: HashSet<&str> =
+            selected_comment_ids.iter().map(|id| id.as_str()).collect();
 
         // Filter selected nodes
         let selected_nodes: Vec<_> = nodes

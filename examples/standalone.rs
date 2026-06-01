@@ -17,8 +17,14 @@ fn main() {
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: Point { x: px(60.0),    y: px(60.0) },
-                    size:   Size  { width: px(1600.0), height: px(960.0) },
+                    origin: Point {
+                        x: px(60.0),
+                        y: px(60.0),
+                    },
+                    size: Size {
+                        width: px(1600.0),
+                        height: px(960.0),
+                    },
                 })),
                 titlebar: Some(TitlebarOptions {
                     title: Some("Blueprint Editor".into()),
@@ -27,7 +33,11 @@ fn main() {
                 ..Default::default()
             },
             move |window, cx| {
-                let panel = cx.new(|cx| BlueprintEditorPanel::new(window, cx));
+                let panel = cx.new(|cx| {
+                    let mut p = BlueprintEditorPanel::new(window, cx);
+                    p.start_fake_execution_simulation(cx);
+                    p
+                });
                 cx.new(|cx| Root::new(panel.into(), window, cx))
             },
         )

@@ -5,7 +5,7 @@
 
 use gpui::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui::{
     color_picker::ColorPickerState, input::InputState, resizable::ResizableState,
@@ -128,6 +128,7 @@ pub struct BlueprintEditorPanel {
     pub show_graph_controls: bool,
     pub wire_active_test_mode: bool,
     pub wire_hidden_test_mode: bool,
+    pub running_nodes: HashSet<String>,
     pub graph_anim_start: std::time::Instant,
 
     // Quick palette overlay (right-click on graph canvas)
@@ -163,7 +164,7 @@ pub struct BlueprintEditorPanel {
 
     // ── GPU renderer ──────────────────────────────────────────────────────────
     pub bp_renderer: crate::rendering::gpu::BpRenderer,
-    pub bp_surface:  Option<gpui::WgpuSurfaceHandle>,
+    pub bp_surface: Option<gpui::WgpuSurfaceHandle>,
 
     // ── Context menus (shown as GPUI overlays above the GPU surface) ──────────
     /// Right-clicked node: (node_id, window-space position for anchoring)
@@ -452,6 +453,7 @@ impl BlueprintEditorPanel {
             show_graph_controls: true,
             wire_active_test_mode: false,
             wire_hidden_test_mode: false,
+            running_nodes: HashSet::new(),
             graph_anim_start: std::time::Instant::now(),
             popup_palette_graph_pos: None,
             quick_palette_open: false,
@@ -468,9 +470,9 @@ impl BlueprintEditorPanel {
             is_dirty: false,
             undo_manager: crate::features::undo::UndoManager::new(),
             bp_renderer: crate::rendering::gpu::BpRenderer::new(),
-            bp_surface:  None,
+            bp_surface: None,
             node_context_menu: None,
-            pin_context_menu:  None,
+            pin_context_menu: None,
         }
     }
 
@@ -770,6 +772,114 @@ impl BlueprintEditorPanel {
     /// Get mutable reference to graph
     pub fn get_graph_mut(&mut self) -> &mut BlueprintGraph {
         &mut self.graph
+    }
+
+    /// Replace the current runtime execution set used by GPU debug rendering.
+    pub fn set_running_nodes<I, S>(&mut self, node_ids: I, cx: &mut Context<Self>)
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.running_nodes.clear();
+        for id in node_ids {
+            self.running_nodes.insert(id.as_ref().to_string());
+        }
+        cx.notify();
+    }
+
+    /// Mark/unmark a single node as executing.
+    pub fn set_node_running(&mut self, node_id: impl AsRef<str>, running: bool, cx: &mut Context<Self>) {
+        if running {
+            self.running_nodes.insert(node_id.as_ref().to_string());
+        } else {
+            self.running_nodes.remove(node_id.as_ref());
+        }
+        cx.notify();
+    }
+
+    /// Clear all runtime execution highlights.
+    pub fn clear_running_nodes(&mut self, cx: &mut Context<Self>) {
+        self.running_nodes.clear();
+        cx.notify();
+    }
+
+    /// Starts a background fake execution simulator that continuously drives
+    /// runtime "running node" highlights for debugging render behavior.
+    pub fn start_fake_execution_simulation(&mut self, cx: &mut Context<Self>) {
+        let node_ids: Vec<String> = self.graph.nodes.iter().map(|n| n.id.clone()).collect();
+        if node_ids.is_empty() {
+            return;
+        }
+
+        let mut node_index = HashMap::with_capacity(node_ids.len());
+        for (idx, node_id) in node_ids.iter().enumerate() {
+            node_index.insert(node_id.clone(), idx);
+        }
+
+        let mut exec_next: Vec<Vec<usize>> = vec![Vec::new(); node_ids.len()];
+        for conn in &self.graph.connections {
+            if matches!(conn.connection_type, ui::graph::ConnectionType::Execution) {
+                if let (Some(&src), Some(&dst)) = (
+                    node_index.get(&conn.source_node),
+                    node_index.get(&conn.target_node),
+                ) {
+                    exec_next[src].push(dst);
+                }
+            }
+        }
+
+        let weak_panel = cx.weak_entity();
+        cx.spawn(async move |_entity, mut cx| {
+            fn next_u32(seed: &mut u64) -> u32 {
+                // LCG parameters from Numerical Recipes (deterministic, fast).
+                *seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                (*seed >> 16) as u32
+            }
+
+            let mut seed = 0xC0FFEEu64 ^ (node_ids.len() as u64);
+            let walker_count = ((node_ids.len() / 2000).max(8)).min(48);
+            let mut walkers: Vec<usize> = (0..walker_count)
+                .map(|_| (next_u32(&mut seed) as usize) % node_ids.len())
+                .collect();
+
+            loop {
+                let mut running_idx = HashSet::with_capacity(walker_count * 2);
+
+                for walker in &mut walkers {
+                    running_idx.insert(*walker);
+                    let neighbors = &exec_next[*walker];
+
+                    if neighbors.is_empty() {
+                        *walker = (next_u32(&mut seed) as usize) % node_ids.len();
+                        continue;
+                    }
+
+                    let branch = (next_u32(&mut seed) as usize) % neighbors.len();
+                    *walker = neighbors[branch];
+
+                    if (next_u32(&mut seed) % 100) < 12 {
+                        running_idx.insert(*walker);
+                    }
+                }
+
+                let running_nodes: Vec<&str> = running_idx
+                    .iter()
+                    .map(|idx| node_ids[*idx].as_str())
+                    .collect();
+
+                if weak_panel
+                    .update(cx, |panel, cx| {
+                        panel.set_running_nodes(running_nodes.iter().copied(), cx);
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+
+                smol::Timer::after(std::time::Duration::from_millis(90)).await;
+            }
+        })
+        .detach();
     }
 
     /// Get focus handle

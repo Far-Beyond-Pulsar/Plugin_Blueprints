@@ -242,7 +242,7 @@ impl ToolbarRenderer {
                         let btn = Button::new("toolbar-wire-active-test")
                             .icon(IconName::Flash)
                             .label("Pulse")
-                            .tooltip("Test Wire Active State (traveling pulses)")
+                            .tooltip("Test Pulse State using currently selected nodes")
                             .on_click(cx.listener(|panel, _, _, cx| {
                                 panel.wire_active_test_mode = !panel.wire_active_test_mode;
                                 if panel.wire_active_test_mode {

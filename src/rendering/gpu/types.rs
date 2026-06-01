@@ -4,11 +4,11 @@
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GraphUniforms {
-    pub pan:      [f32; 2],
-    pub zoom:     f32,
-    pub time:     f32,
+    pub pan: [f32; 2],
+    pub zoom: f32,
+    pub time: f32,
     pub viewport: [f32; 2], // render-target pixels (surface w/h)
-    pub _pad1:    [f32; 2],
+    pub _pad1: [f32; 2],
 }
 
 // ── Node instances ─────────────────────────────────────────────────────────────
@@ -17,19 +17,19 @@ pub struct GraphUniforms {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct NodeInstance {
-    pub pos:           [f32; 2], // graph space top-left
-    pub size:          [f32; 2], // graph space size
-    pub header_color:  [f32; 4],
-    pub body_color:    [f32; 4],
-    pub border_color:  [f32; 4],
-    pub sep_color:     [f32; 4],
+    pub pos: [f32; 2],  // graph space top-left
+    pub size: [f32; 2], // graph space size
+    pub header_color: [f32; 4],
+    pub body_color: [f32; 4],
+    pub border_color: [f32; 4],
+    pub sep_color: [f32; 4],
     /// header height as fraction of total node height (0..1)
     pub header_h_frac: f32,
     /// corner radius in graph-space units
-    pub corner_r:      f32,
-    /// bit 0: is_selected  bit 1: is_reroute
-    pub flags:         u32,
-    pub _pad:          u32,
+    pub corner_r: f32,
+    /// bit 0: is_reroute  bit 1: is_selected  bit 2: is_running
+    pub flags: u32,
+    pub _pad: u32,
 }
 
 // ── Bezier wire instances ──────────────────────────────────────────────────────
@@ -39,15 +39,15 @@ pub struct NodeInstance {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct WireInstance {
-    pub from:       [f32; 2], // graph-space start
-    pub ctrl1:      [f32; 2], // first bezier control point
-    pub ctrl2:      [f32; 2], // second bezier control point
-    pub to:         [f32; 2], // graph-space end
-    pub color:      [f32; 4],
-    pub thickness:  f32,      // half-thickness in graph units
-    pub flags:      u32,      // bit 0 = active pulse, bit 1 = hidden/dim
-    pub pulse_phase:f32,      // deterministic per-wire pulse offset
-    pub _pad:       f32,
+    pub from: [f32; 2],  // graph-space start
+    pub ctrl1: [f32; 2], // first bezier control point
+    pub ctrl2: [f32; 2], // second bezier control point
+    pub to: [f32; 2],    // graph-space end
+    pub color: [f32; 4],
+    pub thickness: f32,   // half-thickness in graph units
+    pub flags: u32,       // bit 0 = active pulse, bit 1 = hidden/dim
+    pub pulse_phase: f32, // deterministic per-wire pulse offset
+    pub _pad: f32,
 }
 
 // ── Straight-line vertices (selection box, drag preview) ───────────────────────
@@ -57,8 +57,8 @@ pub struct WireInstance {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct WireVertex {
-    pub pos:   [f32; 2], // graph space
-    pub uv:    [f32; 2], // u=edge(0=left,1=right), v=along(0..1)
+    pub pos: [f32; 2], // graph space
+    pub uv: [f32; 2],  // u=edge(0=left,1=right), v=along(0..1)
     pub color: [f32; 4],
 }
 
@@ -68,23 +68,23 @@ pub struct WireVertex {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PinInstance {
-    pub center:     [f32; 2], // graph space
-    pub size:       f32,      // diameter (graph units)
-    pub _pad0:      f32,
-    pub color:      [f32; 4],
+    pub center: [f32; 2], // graph space
+    pub size: f32,        // diameter (graph units)
+    pub _pad0: f32,
+    pub color: [f32; 4],
     /// 0 = circle (data pin)  1 = exec arrow
-    pub kind:       u32,
+    pub kind: u32,
     /// 1 = input side (arrow points left)  0 = output
-    pub is_input:   u32,
+    pub is_input: u32,
     /// 1 = highlighted compatible-drop target
     pub compatible: u32,
-    pub _pad1:      u32,
+    pub _pad1: u32,
 }
 
 // ── Selection box ──────────────────────────────────────────────────────────────
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SelectionInstance {
-    pub pos:   [f32; 2], // graph space
-    pub size:  [f32; 2], // graph space
+    pub pos: [f32; 2],  // graph space
+    pub size: [f32; 2], // graph space
 }

@@ -135,9 +135,7 @@ impl BlueprintEditorPanel {
             if let Some(initial_pos) = initial_pos {
                 // Calculate delta based on dragged entity type
                 let snapped_pos = match &dragged {
-                    EntitySelection::Node(_) => {
-                        NodeGraphRenderer::snap_to_grid(raw_position)
-                    }
+                    EntitySelection::Node(_) => NodeGraphRenderer::snap_to_grid(raw_position),
                     EntitySelection::Comment(_) => self.snap_comment_position(raw_position),
                 };
 
