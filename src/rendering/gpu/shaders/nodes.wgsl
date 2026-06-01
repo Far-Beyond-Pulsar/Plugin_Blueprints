@@ -72,6 +72,7 @@ fn vs_main(inst: NodeInst, @builtin(vertex_index) vi: u32) -> VOut {
 
 const SEP_PX: f32 = 1.0;
 const BORDER_PX: f32 = 1.0;
+const RUNNING_BORDER_PX: f32 = 2.2;
 const SELECT_GLOW_PX: f32 = 4.0;
 
 @fragment
@@ -109,7 +110,10 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     if is_running {
         let pulse = 0.55 + 0.45 * sin(u.time * 6.0);
         let run_border = vec4(mix(in.sep_color.rgb, vec3(1.0), 0.18), 1.0);
-        base = mix(base, run_border, border * (0.70 + pulse * 0.30));
+        let thick_border =
+            smoothstep(-RUNNING_BORDER_PX - 0.5, -RUNNING_BORDER_PX + 0.5, d)
+            * smoothstep(-0.5, 0.5, -d);
+        base = mix(base, run_border, thick_border * (0.72 + pulse * 0.28));
     }
 
     if is_selected {
