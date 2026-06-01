@@ -1,8 +1,9 @@
 # Plugin_Blueprints
 A core Pulsar Engine plugin designed to allow visual programming in the Pulsar game engine
 
-<img width="1399" height="852" alt="Screenshot 2026-05-31 at 10 06 25 PM" src="https://github.com/user-attachments/assets/bd25facc-dc19-4ae2-beb1-7f40c51e5abd" />
-<img width="1554" height="857" alt="Screenshot 2026-05-31 at 10 06 21 PM" src="https://github.com/user-attachments/assets/302ff6fb-1358-4640-ba86-125988a160fc" />
-<img width="1985" height="738" alt="Screenshot 2026-05-31 at 10 05 36 PM" src="https://github.com/user-attachments/assets/07340016-3962-4a92-8bed-23e5ae5b3b66" />
-<img width="2925" height="1083" alt="Screenshot 2026-05-31 at 10 05 31 PM" src="https://github.com/user-attachments/assets/755fedc8-5a86-4d00-bf7d-45032ee18042" />
-<img width="3438" height="1440" alt="Screenshot 2026-05-31 at 9 59 48 PM" src="https://github.com/user-attachments/assets/dad281db-17f0-4797-af18-8637bdb954be" />
+<img width="2248" height="1331" alt="Screenshot 2026-06-01 at 1 12 32 PM" src="https://github.com/user-attachments/assets/77b06eb9-5251-4a64-9b87-c0aea0b44645" />
+<img width="2204" height="1287" alt="Screenshot 2026-06-01 at 1 14 18 PM" src="https://github.com/user-attachments/assets/3def3a57-70c0-4d93-a149-7af8b0421719" />
+<img width="2248" height="1331" alt="Screenshot 2026-06-01 at 1 14 30 PM" src="https://github.com/user-attachments/assets/5e348e05-d382-461b-85de-e0cd7e567ab3" />
+<img width="3034" height="1483" alt="Screenshot 2026-06-01 at 1 15 20 PM" src="https://github.com/user-attachments/assets/e5c8b251-ee78-4861-8899-676401be9f06" />
+<img width="3034" height="1483" alt="Screenshot 2026-06-01 at 1 15 43 PM" src="https://github.com/user-attachments/assets/94a39b15-3c2f-493a-967a-b31602c686c0" />
+<img width="3034" height="1483" alt="Screenshot 2026-06-01 at 1 15 58 PM" src="https://github.com/user-attachments/assets/2850860d-5b7a-4f6d-93cc-6c0e3e447b54" />
