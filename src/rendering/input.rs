@@ -112,12 +112,13 @@ fn hit_any_pin(canvas: Point<f32>, panel: &BlueprintEditorPanel) -> Option<(Stri
 // ─── event handlers ───────────────────────────────────────────────────────────
 
 pub fn on_mouse_down_right(
-    _view_id: String,
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &MouseDownEvent, _window, cx| {
         entity.update(cx, |panel, cx| {
+            panel.activate_interaction_view(&view_id);
             // Close any open context menus
             panel.node_context_menu = None;
             panel.pin_context_menu = None;
@@ -136,12 +137,13 @@ pub fn on_mouse_down_right(
 }
 
 pub fn on_mouse_down_left(
-    _view_id: String,
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &MouseDownEvent, window, cx| {
         entity.update(cx, |panel, cx| {
+            panel.activate_interaction_view(&view_id);
             // Close palette / context menus on any left click
             if panel.quick_palette_open {
                 panel.quick_palette_open = false;
@@ -256,6 +258,7 @@ pub fn on_mouse_move(
     let entity = cx.entity().clone();
     move |event: &MouseMoveEvent, _window, cx| {
         entity.update(cx, |panel, cx| {
+            panel.activate_interaction_view(&view_id);
             let canvas = to_canvas(event.position, panel);
             let mp = Point::new(canvas.x, canvas.y);
 
@@ -300,12 +303,13 @@ pub fn on_mouse_move(
 }
 
 pub fn on_mouse_up_left(
-    _view_id: String,
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseUpEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &MouseUpEvent, _window, cx| {
         entity.update(cx, |panel, cx| {
+            panel.activate_interaction_view(&view_id);
             let canvas = to_canvas(event.position, panel);
             let gp = to_graph(canvas, panel);
             let mp = Point::new(canvas.x, canvas.y);
@@ -351,12 +355,13 @@ pub fn on_mouse_up_left(
 }
 
 pub fn on_mouse_up_right(
-    _view_id: String,
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseUpEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &MouseUpEvent, _window, cx| {
         entity.update(cx, |panel, cx| {
+            panel.activate_interaction_view(&view_id);
             let was_click = panel.right_click_start.is_some() && !panel.is_panning();
 
             if panel.is_panning() {
@@ -394,12 +399,13 @@ pub fn on_mouse_up_right(
 }
 
 pub fn on_scroll_wheel(
-    _view_id: String,
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&ScrollWheelEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &ScrollWheelEvent, _window, cx| {
         entity.update(cx, |panel, cx| {
+            panel.activate_interaction_view(&view_id);
             let delta_y = match event.delta {
                 ScrollDelta::Pixels(p) => p.y.as_f32(),
                 ScrollDelta::Lines(l) => l.y * 20.0,
@@ -412,12 +418,13 @@ pub fn on_scroll_wheel(
 }
 
 pub fn on_key_down(
-    _view_id: String,
+    view_id: String,
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&KeyDownEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
     move |event: &KeyDownEvent, window, cx| {
         entity.update(cx, |panel, cx| {
+            panel.activate_interaction_view(&view_id);
             let key = event.keystroke.key.to_lowercase();
             let has_copy_paste_modifier =
                 event.keystroke.modifiers.control || event.keystroke.modifiers.platform;

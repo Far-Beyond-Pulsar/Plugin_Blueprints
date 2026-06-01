@@ -83,6 +83,10 @@ impl BlueprintEditorPanel {
     ) -> Result<(), String> {
         let target_path = Self::resolve_blueprint_path(path);
 
+        // Persist the currently edited in-memory graph into its tab snapshot
+        // before serializing the asset.
+        self.sync_graph_to_active_tab();
+
         // Convert current graph state to BlueprintAsset
         let asset = self.to_blueprint_asset()?;
 
@@ -144,7 +148,27 @@ impl BlueprintEditorPanel {
 
     /// Convert current editor state to BlueprintAsset
     fn to_blueprint_asset(&self) -> Result<formats::BlueprintAsset, String> {
-        let main_graph = self.convert_graph_to_description(&self.graph)?;
+        // Always serialize the main event graph from the main tab snapshot,
+        // not from `self.graph` (which may currently be a macro tab).
+        let main_tab = self
+            .open_tabs
+            .iter()
+            .find(|tab| tab.is_main)
+            .ok_or("No main graph tab found")?;
+        let main_graph = self.convert_graph_to_description(&main_tab.graph)?;
+
+        // Serialize local macros from the open tab snapshots when those tabs are
+        // present, so each graph is persisted independently.
+        let mut local_macros = self.local_macros.clone();
+        for tab in self
+            .open_tabs
+            .iter()
+            .filter(|tab| !tab.is_main && !tab.is_library_macro)
+        {
+            if let Some(macro_def) = local_macros.iter_mut().find(|m| m.id == tab.id) {
+                macro_def.graph = self.convert_graph_to_description(&tab.graph)?;
+            }
+        }
 
         // Convert local ClassVariable to ui::ClassVariable
         let variables: Vec<ui::graph::ClassVariable> = self
@@ -178,7 +202,7 @@ impl BlueprintEditorPanel {
         Ok(formats::BlueprintAsset {
             format_version: formats::current_format_version(),
             main_graph,
-            local_macros: self.local_macros.clone(),
+            local_macros,
             variables,
             editor_state: Some(formats::BlueprintEditorState {
                 open_tab_ids: self.open_tabs.iter().map(|tab| tab.id.clone()).collect(),

@@ -417,7 +417,6 @@ impl Render for GraphCanvasPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if let Some(editor) = self.editor.upgrade() {
             div().size_full().child(editor.update(cx, |editor, cx| {
-                editor.ensure_active_graph_panel_state(&self.tab_id);
                 NodeGraphRenderer::render(editor, &self.tab_id, cx)
             }))
         } else {
