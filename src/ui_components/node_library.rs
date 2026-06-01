@@ -156,6 +156,64 @@ pub fn build_compatible_palette_items(
     items
 }
 
+/// Filter an existing flat palette list to only categories/nodes that can accept
+/// the given source pin type.
+///
+/// This preserves dynamically injected categories (e.g. prefab component methods,
+/// local macros) that are already present in `all_items`.
+pub fn filter_compatible_palette_items(
+    all_items: &[PaletteItem],
+    source_type: &ui::graph::DataType,
+) -> Vec<PaletteItem> {
+    let mut result = Vec::new();
+    let mut current_header: Option<(String, String)> = None;
+    let mut current_nodes: Vec<PaletteItem> = Vec::new();
+
+    let mut flush_category =
+        |header: &Option<(String, String)>, nodes: &mut Vec<PaletteItem>, out: &mut Vec<PaletteItem>| {
+            if nodes.is_empty() {
+                return;
+            }
+
+            if let Some((name, color)) = header {
+                out.push(PaletteItem::CategoryHeader {
+                    name: name.clone(),
+                    color: color.clone(),
+                    node_count: nodes.len(),
+                });
+            }
+
+            out.append(nodes);
+        };
+
+    for item in all_items {
+        match item {
+            PaletteItem::CategoryHeader { name, color, .. } => {
+                flush_category(&current_header, &mut current_nodes, &mut result);
+                current_header = Some((name.clone(), color.clone()));
+            }
+            PaletteItem::NodeEntry { def, category_color } => {
+                let is_compatible = def.inputs.iter().any(|pin| {
+                    crate::features::connections::compatibility::are_types_compatible(
+                        source_type,
+                        &pin.data_type,
+                    )
+                });
+
+                if is_compatible {
+                    current_nodes.push(PaletteItem::NodeEntry {
+                        def: def.clone(),
+                        category_color: category_color.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    flush_category(&current_header, &mut current_nodes, &mut result);
+    result
+}
+
 /// Count the number of `NodeEntry` items in a slice.
 pub fn count_nodes(items: &[PaletteItem]) -> usize {
     items

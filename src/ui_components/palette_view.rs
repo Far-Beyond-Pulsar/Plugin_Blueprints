@@ -24,7 +24,7 @@ use crate::core::types::BlueprintNode;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::node_library::{
-    build_compatible_palette_items, build_item_sizes, build_palette_items, count_nodes,
+    build_item_sizes, build_palette_items, count_nodes, filter_compatible_palette_items,
     filter_palette_items, PaletteItem, CATEGORY_HEADER_H, NODE_ENTRY_H,
 };
 
@@ -215,7 +215,7 @@ impl Render for NodePaletteView {
             .map(|drag| drag.source_pin_type);
 
         let items = if let Some(source_type) = connection_filter_type {
-            build_compatible_palette_items(NodeDefinitions::load(), &source_type)
+            filter_compatible_palette_items(&self.all_items, &source_type)
         } else {
             self.all_items.clone()
         };
