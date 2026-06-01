@@ -396,73 +396,90 @@ impl NodeGraphRenderer {
         let focus_handle = panel.focus_handle().clone();
         let view_id = view_id.to_string();
 
+        // ── WGPU surface display ──────────────────────────────────────────────
+        // wgpu_surface() composites the GPU texture into the GPUI scene.
+        // It must be present in the element tree for anything to appear.
+        // On the first frame bp_surface is None so we show a dark placeholder;
+        // the canvas prepaint creates the surface and requests a re-render,
+        // so frame 2 immediately shows the GPU output.
+        let gpu_display: AnyElement = if let Some(ref s) = panel.bp_surface {
+            wgpu_surface(s.clone())
+                .defer_resize_until_mouse_up(true)
+                .absolute()
+                .inset_0()
+                .into_any_element()
+        } else {
+            div()
+                .absolute()
+                .inset_0()
+                .bg(gpui::Hsla { h: 0.0, s: 0.0, l: 0.055, a: 1.0 })
+                .into_any_element()
+        };
+
+        // ── Canvas: creates surface in prepaint (has window), renders in paint ─
+        let driver = {
+            let pe_pre = panel_entity.clone();
+            let pe_paint = panel_entity.clone();
+            gpui::canvas(
+                // Prepaint: surface creation (first frame only).
+                // Called before paint — window is available here.
+                move |bounds, window, cx| {
+                    // Capture element bounds for coordinate conversion
+                    let ox = bounds.origin.x.as_f32();
+                    let oy = bounds.origin.y.as_f32();
+                    let sw = bounds.size.width.as_f32()  as u32;
+                    let sh = bounds.size.height.as_f32() as u32;
+
+                    pe_pre.update(cx, |panel, cx| {
+                        *panel.canvas_origin.borrow_mut() = Point::new(ox, oy);
+                        let b = gpui::Bounds {
+                            origin: gpui::Point { x: px(ox), y: px(oy) },
+                            size:   gpui::Size  { width: px(sw as f32), height: px(sh as f32) },
+                        };
+                        panel.graph_element_bounds = Some(b);
+
+                        // Create surface on first call — triggers re-render via notify
+                        if panel.bp_surface.is_none() {
+                            if let Some(s) = window.create_wgpu_surface(
+                                sw.max(64), sh.max(64),
+                                wgpu::TextureFormat::Bgra8UnormSrgb,
+                            ) {
+                                panel.bp_surface = Some(s);
+                                cx.notify(); // re-render to pick up wgpu_surface() element
+                            }
+                        }
+                    });
+                },
+                // Paint: render GPU frame every frame.
+                move |_bounds, _pre, _window, cx| {
+                    pe_paint.update(cx, |panel, _| {
+                        let Some(ref surface) = panel.bp_surface else { return };
+                        if surface.is_resize_pending() { return; }
+                        let Some((view,(w,h))) = surface.back_view_with_size() else { return };
+
+                        let frame_uni = GraphUniforms { viewport:[w as f32, h as f32], ..uniforms };
+                        panel.bp_renderer.render_frame(
+                            surface.device(), surface.queue(),
+                            &view, w, h, surface.format(),
+                            &frame_uni,
+                            &node_instances, &wire_verts, &pin_instances, &text_calls,
+                        );
+                        drop(view);
+                        surface.swap_buffers();
+                    });
+                },
+            )
+            .absolute().inset_0().size_full()
+        };
+
         div()
             .size_full().relative().overflow_hidden()
             .track_focus(&focus_handle)
             .key_context("BlueprintGraph")
-            .on_children_prepainted({
-                let panel_entity = panel_entity.clone();
-                let view_id = view_id.clone();
-                move |children_bounds, _window, cx| {
-                    if !children_bounds.is_empty() {
-                        let mut min_x=f32::MAX; let mut min_y=f32::MAX;
-                        let mut max_x=f32::MIN; let mut max_y=f32::MIN;
-                        for b in &children_bounds {
-                            min_x=min_x.min(b.origin.x.as_f32());
-                            min_y=min_y.min(b.origin.y.as_f32());
-                            max_x=max_x.max((b.origin.x+b.size.width).as_f32());
-                            max_y=max_y.max((b.origin.y+b.size.height).as_f32());
-                        }
-                        panel_entity.update(cx, |panel, _|{
-                            let b = gpui::Bounds {
-                                origin: gpui::Point{x:px(min_x),y:px(min_y)},
-                                size:   gpui::Size{width:px(max_x-min_x),height:px(max_y-min_y)},
-                            };
-                            panel.graph_element_bounds = Some(b);
-                            panel.graph_element_bounds_by_view.insert(view_id.clone(), b);
-                            *panel.canvas_origin.borrow_mut() = Point::new(min_x, min_y);
-                        });
-                    }
-                }
-            })
-            // WGPU surface driver
-            .child({
-                let panel_entity2 = panel_entity.clone();
-                gpui::canvas(
-                    |_,_,_|{},
-                    move |bounds, _, window, cx| {
-                        let surf_w = bounds.size.width.as_f32()  as u32;
-                        let surf_h = bounds.size.height.as_f32() as u32;
+            .child(gpu_display)   // wgpu_surface() or dark placeholder — MUST be first
+            .child(driver)        // invisible canvas that drives GPU rendering
+            // GPUI-only overlays (palette + context menus) sit on top
 
-                        panel_entity2.update(cx, |panel, _|{
-                            // lazy surface creation
-                            if panel.bp_surface.is_none() {
-                                if let Some(s) = window.create_wgpu_surface(
-                                    surf_w.max(64), surf_h.max(64),
-                                    wgpu::TextureFormat::Bgra8UnormSrgb,
-                                ) { panel.bp_surface = Some(s); }
-                            }
-                            *panel.canvas_origin.borrow_mut() =
-                                Point::new(bounds.origin.x.as_f32(), bounds.origin.y.as_f32());
-
-                            let Some(ref surface) = panel.bp_surface else { return };
-                            if surface.is_resize_pending() { return; }
-                            let Some((view,(w,h))) = surface.back_view_with_size() else { return };
-
-                            let frame_uni = GraphUniforms { viewport:[w as f32, h as f32], ..uniforms };
-                            panel.bp_renderer.render_frame(
-                                surface.device(), surface.queue(),
-                                &view, w, h, surface.format(),
-                                &frame_uni,
-                                &node_instances, &wire_verts, &pin_instances, &text_calls,
-                            );
-                            drop(view);
-                            surface.swap_buffers();
-                        });
-                    },
-                )
-                .absolute().inset_0().size_full()
-            })
             // GPUI-only overlays (palette + context menus)
             .child(Self::render_quick_palette_overlay_inner(
                 panel.quick_palette_open,
