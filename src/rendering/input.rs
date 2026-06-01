@@ -387,6 +387,31 @@ pub fn on_key_down(
                 "y" if event.keystroke.modifiers.control => {
                     panel.redo(cx);
                 }
+
+                // ── Debugger shortcuts ────────────────────────────────────────
+                // F9 — toggle breakpoint on the first selected node
+                "f9" => {
+                    if let Some(node_id) = panel.graph.selected_nodes.first().cloned() {
+                        panel.toggle_breakpoint(node_id, cx);
+                    }
+                }
+                // Shift+F5 — stop debug session (must come before plain F5)
+                "f5" if event.keystroke.modifiers.shift => {
+                    panel.debug_stop(cx);
+                }
+                // F5 — continue execution (resume from breakpoint)
+                "f5" => {
+                    panel.debug_continue(cx);
+                }
+                // Shift+F10 — step backward through call stack (must come before plain F10)
+                "f10" if event.keystroke.modifiers.shift => {
+                    panel.debug_step_backward(cx);
+                }
+                // F10 — step forward through call stack
+                "f10" => {
+                    panel.debug_step_forward(cx);
+                }
+
                 _ => {}
             }
         });

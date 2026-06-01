@@ -171,6 +171,12 @@ pub struct BlueprintEditorPanel {
     pub node_context_menu: Option<(String, Point<Pixels>)>,
     /// Right-clicked pin: (node_id, pin_id, window-space position)
     pub pin_context_menu: Option<(String, String, Point<Pixels>)>,
+
+    // ── Debugger ──────────────────────────────────────────────────────────────
+    /// Set of node IDs that have an active breakpoint.
+    pub breakpoints: HashSet<String>,
+    /// Present while a debug session is live (executor paused or navigating frames).
+    pub debug_session: Option<crate::features::debug::DebugSession>,
 }
 
 /// Information about a tab being dragged
@@ -473,6 +479,8 @@ impl BlueprintEditorPanel {
             bp_surface: None,
             node_context_menu: None,
             pin_context_menu: None,
+            breakpoints: HashSet::new(),
+            debug_session: None,
         }
     }
 
@@ -801,85 +809,6 @@ impl BlueprintEditorPanel {
     pub fn clear_running_nodes(&mut self, cx: &mut Context<Self>) {
         self.running_nodes.clear();
         cx.notify();
-    }
-
-    /// Starts a background fake execution simulator that continuously drives
-    /// runtime "running node" highlights for debugging render behavior.
-    pub fn start_fake_execution_simulation(&mut self, cx: &mut Context<Self>) {
-        let node_ids: Vec<String> = self.graph.nodes.iter().map(|n| n.id.clone()).collect();
-        if node_ids.is_empty() {
-            return;
-        }
-
-        let mut node_index = HashMap::with_capacity(node_ids.len());
-        for (idx, node_id) in node_ids.iter().enumerate() {
-            node_index.insert(node_id.clone(), idx);
-        }
-
-        let mut exec_next: Vec<Vec<usize>> = vec![Vec::new(); node_ids.len()];
-        for conn in &self.graph.connections {
-            if matches!(conn.connection_type, ui::graph::ConnectionType::Execution) {
-                if let (Some(&src), Some(&dst)) = (
-                    node_index.get(&conn.source_node),
-                    node_index.get(&conn.target_node),
-                ) {
-                    exec_next[src].push(dst);
-                }
-            }
-        }
-
-        let weak_panel = cx.weak_entity();
-        cx.spawn(async move |_entity, mut cx| {
-            fn next_u32(seed: &mut u64) -> u32 {
-                // LCG parameters from Numerical Recipes (deterministic, fast).
-                *seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
-                (*seed >> 16) as u32
-            }
-
-            let mut seed = 0xC0FFEEu64 ^ (node_ids.len() as u64);
-            let walker_count = ((node_ids.len() / 2000).max(8)).min(48);
-            let mut walkers: Vec<usize> = (0..walker_count)
-                .map(|_| (next_u32(&mut seed) as usize) % node_ids.len())
-                .collect();
-
-            loop {
-                let mut running_idx = HashSet::with_capacity(walker_count * 2);
-
-                for walker in &mut walkers {
-                    running_idx.insert(*walker);
-                    let neighbors = &exec_next[*walker];
-
-                    if neighbors.is_empty() {
-                        *walker = (next_u32(&mut seed) as usize) % node_ids.len();
-                        continue;
-                    }
-
-                    let branch = (next_u32(&mut seed) as usize) % neighbors.len();
-                    *walker = neighbors[branch];
-
-                    if (next_u32(&mut seed) % 100) < 12 {
-                        running_idx.insert(*walker);
-                    }
-                }
-
-                let running_nodes: Vec<&str> = running_idx
-                    .iter()
-                    .map(|idx| node_ids[*idx].as_str())
-                    .collect();
-
-                if weak_panel
-                    .update(cx, |panel, cx| {
-                        panel.set_running_nodes(running_nodes.iter().copied(), cx);
-                    })
-                    .is_err()
-                {
-                    break;
-                }
-
-                smol::Timer::after(std::time::Duration::from_millis(90)).await;
-            }
-        })
-        .detach();
     }
 
     /// Get focus handle

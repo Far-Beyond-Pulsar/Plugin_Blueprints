@@ -10,6 +10,7 @@ pub mod clipboard;
 pub mod comments;
 pub mod compilation;
 pub mod connections;
+pub mod debug;
 pub mod macros;
 pub mod nodes;
 pub mod prefabs;

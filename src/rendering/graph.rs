@@ -834,6 +834,8 @@ impl NodeGraphRenderer {
             ))
             .child(Self::render_node_context_menu(panel, cx))
             .child(Self::render_pin_context_menu(panel, cx))
+            .child(Self::render_breakpoint_badges(panel, cx))
+            .child(Self::render_debug_hud(panel, cx))
             // input
             .on_mouse_down(
                 gpui::MouseButton::Left,
@@ -936,6 +938,368 @@ impl NodeGraphRenderer {
         .into_any_element()
     }
 
+    // ── Breakpoint stop-sign badges ───────────────────────────────────────────
+    //
+    // For every node that has a breakpoint we render a small red octagon badge
+    // in its top-left corner.  The badge is a GPUI overlay element (not GPU
+    // shader) positioned using the same graph→screen coordinate transform used
+    // by the GPU renderer.
+
+    fn render_breakpoint_badges(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        if panel.breakpoints.is_empty() {
+            return div().into_any_element();
+        }
+
+        let origin = *panel.canvas_origin.borrow();
+        let paused_node = panel
+            .debug_session
+            .as_ref()
+            .and_then(|s| s.current())
+            .map(|f| f.node_id.clone());
+
+        // Collect badge positions for all breakpointed nodes that are on screen.
+        let badges: Vec<(Point<Pixels>, bool)> = panel
+            .graph
+            .nodes
+            .iter()
+            .filter(|n| panel.breakpoints.contains(&n.id))
+            .map(|n| {
+                let scr = Self::graph_to_screen_pos(n.position, &panel.graph);
+                let win = Point::new(
+                    px(scr.x + origin.x - 4.0), // slightly outside left edge
+                    px(scr.y + origin.y - 4.0), // slightly above top edge
+                );
+                let is_current = paused_node.as_deref() == Some(n.id.as_str());
+                (win, is_current)
+            })
+            .collect();
+
+        if badges.is_empty() {
+            return div().into_any_element();
+        }
+
+        let mut container = div();
+        for (pos, is_current) in badges {
+            let badge = deferred(
+                anchored()
+                    .position(pos)
+                    .anchor(gpui::Corner::TopLeft)
+                    .child(
+                        div()
+                            // Red octagon badge using a square with a colored border
+                            .w(px(18.0))
+                            .h(px(18.0))
+                            .rounded(px(3.0))
+                            .bg(if is_current {
+                                gpui::rgba(0xFF4400FF) // bright orange-red when active
+                            } else {
+                                gpui::rgba(0xCC1111FF) // darker red when inactive
+                            })
+                            .border_1()
+                            .border_color(gpui::rgba(0xFF8888FF))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .shadow_md()
+                            .child(
+                                div()
+                                    .text_size(px(10.0))
+                                    .text_color(gpui::white())
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .child("⏹"),
+                            ),
+                    ),
+            )
+            .with_priority(3)
+            .into_any_element();
+            container = container.child(badge);
+        }
+
+        // Pulsing ring around the currently-paused node
+        if let Some(ref node_id) = paused_node {
+            if let Some(node) = panel.graph.nodes.iter().find(|n| &n.id == node_id) {
+                let scr = Self::graph_to_screen_pos(node.position, &panel.graph);
+                let w = node.size.width * panel.graph.zoom_level;
+                let h = node.size.height * panel.graph.zoom_level;
+                let ring_pos = Point::new(px(scr.x + origin.x - 2.0), px(scr.y + origin.y - 2.0));
+                let ring = deferred(
+                    anchored()
+                        .position(ring_pos)
+                        .anchor(gpui::Corner::TopLeft)
+                        .child(
+                            div()
+                                .w(px(w + 4.0))
+                                .h(px(h + 4.0))
+                                .rounded(px(8.0))
+                                .border_2()
+                                .border_color(gpui::rgba(0xFF440088))
+                                .shadow_lg(),
+                        ),
+                )
+                .with_priority(2)
+                .into_any_element();
+                container = container.child(ring);
+            }
+        }
+
+        container.into_any_element()
+    }
+
+    // ── Debug HUD ─────────────────────────────────────────────────────────────
+    //
+    // Shown at the bottom-centre of the graph canvas when a debug session is
+    // paused.  Displays the current frame's pin values and navigation controls.
+
+    fn render_debug_hud(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        use ui::{h_flex, v_flex, ActiveTheme};
+
+        let Some(ref session) = panel.debug_session else {
+            return div().into_any_element();
+        };
+        let Some(ref frame) = session.current() else {
+            return div().into_any_element();
+        };
+
+        let frame_title = frame.node_title.clone();
+        let frame_step = frame.step_index;
+        let pin_values = frame.pin_values.clone();
+        let current_idx = session.current_frame;
+        let total_frames = session.frames.len();
+        let can_back = session.can_step_backward();
+        let can_fwd = session.can_step_forward();
+        let is_paused = session.is_paused;
+
+        let pe = cx.entity().clone();
+        let pe_continue = pe.clone();
+        let pe_fwd = pe.clone();
+        let pe_back = pe.clone();
+        let pe_stop = pe.clone();
+
+        let hud = div()
+            .absolute()
+            .bottom(px(16.0))
+            .left_0()
+            .right_0()
+            .flex()
+            .justify_center()
+            .child(
+                v_flex()
+                    .occlude()
+                    .w(px(520.0))
+                    .bg(cx.theme().popover.opacity(0.96))
+                    .border_1()
+                    .border_color(gpui::rgba(0xFF440044))
+                    .shadow_xl()
+                    .rounded(px(8.0))
+                    .overflow_hidden()
+                    // ── Header bar ──────────────────────────────────────────────
+                    .child(
+                        h_flex()
+                            .px(px(12.0))
+                            .py(px(6.0))
+                            .bg(gpui::rgba(0x330000CC))
+                            .justify_between()
+                            .items_center()
+                            .child(
+                                h_flex()
+                                    .gap(px(6.0))
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .text_size(px(12.0))
+                                            .text_color(gpui::rgba(0xFF6666FF))
+                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .child("⏹ BREAKPOINT"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(12.0))
+                                            .text_color(cx.theme().popover_foreground)
+                                            .child(frame_title.clone()),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(11.0))
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(format!(
+                                        "Frame {}/{} · Step {}",
+                                        current_idx + 1,
+                                        total_frames,
+                                        frame_step
+                                    )),
+                            ),
+                    )
+                    // ── Pin values ───────────────────────────────────────────────
+                    .when(!pin_values.is_empty(), |el| {
+                        el.child(
+                            v_flex()
+                                .px(px(12.0))
+                                .py(px(8.0))
+                                .gap(px(3.0))
+                                .children(pin_values.iter().take(8).map(|pv| {
+                                    let pv = pv.clone();
+                                    h_flex()
+                                        .gap(px(8.0))
+                                        .items_center()
+                                        .child(
+                                            div()
+                                                .text_size(px(10.0))
+                                                .text_color(cx.theme().muted_foreground)
+                                                .w(px(80.0))
+                                                .child(pv.pin_name.clone()),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(px(10.0))
+                                                .text_color(cx.theme().muted_foreground.opacity(0.7))
+                                                .w(px(60.0))
+                                                .child(format!("({})", pv.type_label)),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(px(11.0))
+                                                .text_color(gpui::rgba(0x88FF88FF))
+                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .child(pv.value.clone()),
+                                        )
+                                })),
+                        )
+                    })
+                    .when(pin_values.is_empty(), |el| {
+                        el.child(
+                            div()
+                                .px(px(12.0))
+                                .py(px(8.0))
+                                .text_size(px(11.0))
+                                .text_color(cx.theme().muted_foreground)
+                                .child("No data pins on this node"),
+                        )
+                    })
+                    // ── Control bar ──────────────────────────────────────────────
+                    .child(
+                        h_flex()
+                            .px(px(12.0))
+                            .py(px(8.0))
+                            .gap(px(8.0))
+                            .items_center()
+                            .border_t_1()
+                            .border_color(cx.theme().border.opacity(0.4))
+                            // ◀ Step Back
+                            .child(
+                                div()
+                                    .px(px(10.0))
+                                    .py(px(4.0))
+                                    .text_size(px(11.0))
+                                    .rounded(px(4.0))
+                                    .bg(if can_back {
+                                        cx.theme().secondary
+                                    } else {
+                                        cx.theme().muted.opacity(0.3)
+                                    })
+                                    .text_color(if can_back {
+                                        cx.theme().secondary_foreground
+                                    } else {
+                                        cx.theme().muted_foreground
+                                    })
+                                    .cursor_pointer()
+                                    .when(can_back, |el| {
+                                        el.on_mouse_down(gpui::MouseButton::Left, {
+                                            let pe = pe_back.clone();
+                                            move |_, _, cx| {
+                                                pe.update(cx, |panel, cx| {
+                                                    panel.debug_step_backward(cx);
+                                                });
+                                            }
+                                        })
+                                    })
+                                    .child("◀ Back"),
+                            )
+                            // ▶ Step Forward
+                            .child(
+                                div()
+                                    .px(px(10.0))
+                                    .py(px(4.0))
+                                    .text_size(px(11.0))
+                                    .rounded(px(4.0))
+                                    .bg(if can_fwd {
+                                        cx.theme().secondary
+                                    } else {
+                                        cx.theme().muted.opacity(0.3)
+                                    })
+                                    .text_color(if can_fwd {
+                                        cx.theme().secondary_foreground
+                                    } else {
+                                        cx.theme().muted_foreground
+                                    })
+                                    .cursor_pointer()
+                                    .when(can_fwd, |el| {
+                                        el.on_mouse_down(gpui::MouseButton::Left, {
+                                            let pe = pe_fwd.clone();
+                                            move |_, _, cx| {
+                                                pe.update(cx, |panel, cx| {
+                                                    panel.debug_step_forward(cx);
+                                                });
+                                            }
+                                        })
+                                    })
+                                    .child("▶ Forward"),
+                            )
+                            // ▶ Continue (only if paused)
+                            .when(is_paused, |el| {
+                                el.child(
+                                    div()
+                                        .px(px(10.0))
+                                        .py(px(4.0))
+                                        .text_size(px(11.0))
+                                        .rounded(px(4.0))
+                                        .bg(gpui::rgba(0x1A4A1AFF))
+                                        .text_color(gpui::rgba(0x88FF88FF))
+                                        .cursor_pointer()
+                                        .on_mouse_down(gpui::MouseButton::Left, {
+                                            let pe = pe_continue.clone();
+                                            move |_, _, cx| {
+                                                pe.update(cx, |panel, cx| {
+                                                    panel.debug_continue(cx);
+                                                });
+                                            }
+                                        })
+                                        .child("▶ Continue"),
+                                )
+                            })
+                            // flex spacer
+                            .child(div().flex_1())
+                            // ■ Stop
+                            .child(
+                                div()
+                                    .px(px(10.0))
+                                    .py(px(4.0))
+                                    .text_size(px(11.0))
+                                    .rounded(px(4.0))
+                                    .bg(gpui::rgba(0x4A1A1AFF))
+                                    .text_color(gpui::rgba(0xFF8888FF))
+                                    .cursor_pointer()
+                                    .on_mouse_down(gpui::MouseButton::Left, {
+                                        move |_, _, cx| {
+                                            pe_stop.update(cx, |panel, cx| {
+                                                panel.debug_stop(cx);
+                                            });
+                                        }
+                                    })
+                                    .child("■ Stop"),
+                            ),
+                    ),
+            );
+
+        hud.into_any_element()
+    }
+
     // ── Node context menu ─────────────────────────────────────────────────────
 
     fn render_node_context_menu(
@@ -946,12 +1310,17 @@ impl NodeGraphRenderer {
             return div().into_any_element();
         };
         let node_id = node_id.clone();
+        let has_bp = panel.has_breakpoint(&node_id);
+        let bp_label = if has_bp { "Remove Breakpoint" } else { "Add Breakpoint  ⏹" };
+
         let pe = cx.entity().clone();
         let pe2 = pe.clone();
         let pe3 = pe.clone();
+        let pe4 = pe.clone();
         let nid_dup = node_id.clone();
         let nid_copy = node_id.clone();
         let nid_del = node_id.clone();
+        let nid_bp = node_id.clone();
 
         deferred(
             anchored()
@@ -961,13 +1330,35 @@ impl NodeGraphRenderer {
                 .child(
                     div()
                         .occlude()
-                        .w(px(180.0))
+                        .w(px(200.0))
                         .bg(cx.theme().popover)
                         .border_1()
                         .border_color(cx.theme().border)
                         .shadow_lg()
                         .rounded(px(6.0))
                         .py(px(4.0))
+                        // ── Breakpoint section ─────────────────────────────────
+                        .child(Self::menu_item_colored(
+                            bp_label,
+                            if has_bp {
+                                gpui::rgba(0xFF9999FF)
+                            } else {
+                                gpui::rgba(0xFF6666FF)
+                            },
+                            cx,
+                            {
+                                let pe = pe4.clone();
+                                move |_, _, cx| {
+                                    pe.update(cx, |panel, cx| {
+                                        panel.toggle_breakpoint(nid_bp.clone(), cx);
+                                        panel.node_context_menu = None;
+                                        cx.notify();
+                                    });
+                                }
+                            },
+                        ))
+                        .child(Self::menu_divider(cx))
+                        // ── Standard edit actions ──────────────────────────────
                         .child(Self::menu_item("Duplicate Node", cx, {
                             let pe = pe.clone();
                             move |_, _, cx| {
@@ -1076,6 +1467,23 @@ impl NodeGraphRenderer {
             .text_color(cx.theme().popover_foreground)
             .cursor_pointer()
             .hover(|s| s.bg(cx.theme().accent.opacity(0.12)))
+            .on_mouse_down(gpui::MouseButton::Left, handler)
+            .child(label.to_string())
+    }
+
+    fn menu_item_colored(
+        label: &str,
+        color: gpui::Rgba,
+        cx: &mut Context<BlueprintEditorPanel>,
+        handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+    ) -> impl IntoElement {
+        div()
+            .px(px(12.0))
+            .py(px(6.0))
+            .text_sm()
+            .text_color(color)
+            .cursor_pointer()
+            .hover(|s| s.bg(gpui::rgba(0xFF000020)))
             .on_mouse_down(gpui::MouseButton::Left, handler)
             .child(label.to_string())
     }
