@@ -43,6 +43,13 @@ pub struct BlueprintEditorPanel {
     pub initial_drag_positions: HashMap<String, Point<f32>>,
     pub initial_comment_drag_positions: HashMap<String, Point<f32>>,
     pub node_clipboard: Option<BlueprintNode>,
+    /// Node click that *may* become a drag once the mouse moves past the threshold.
+    /// Set on mouse-down; converted to a real drag in mouse-move.
+    pub pending_drag_node: Option<String>,
+    /// Canvas-space position where the pending drag mouse-down landed.
+    pub pending_drag_start: Option<Point<f32>>,
+    /// Pixels of canvas movement required to commit a drag (avoids phantom moves on clicks).
+    pub drag_commit_threshold: f32,
 
     // Connection drag state
     pub dragging_connection: Option<ConnectionDrag>,
@@ -209,6 +216,8 @@ pub struct CompilationHistoryEntry {
 #[derive(Clone, Debug)]
 pub struct GraphInteractionState {
     pub dragging_node: Option<String>,
+    pub pending_drag_node: Option<String>,
+    pub pending_drag_start: Option<Point<f32>>,
     pub drag_offset: Point<f32>,
     pub initial_drag_positions: HashMap<String, Point<f32>>,
     pub initial_comment_drag_positions: HashMap<String, Point<f32>>,
@@ -233,6 +242,8 @@ impl Default for GraphInteractionState {
     fn default() -> Self {
         Self {
             dragging_node: None,
+            pending_drag_node: None,
+            pending_drag_start: None,
             drag_offset: Point::new(0.0, 0.0),
             initial_drag_positions: HashMap::new(),
             initial_comment_drag_positions: HashMap::new(),
@@ -396,6 +407,9 @@ impl BlueprintEditorPanel {
             initial_drag_positions: HashMap::new(),
             initial_comment_drag_positions: HashMap::new(),
             node_clipboard: None,
+            pending_drag_node: None,
+            pending_drag_start: None,
+            drag_commit_threshold: 5.0,
             dragging_connection: None,
             is_panning: false,
             pan_start: Point::new(0.0, 0.0),
@@ -829,6 +843,8 @@ impl BlueprintEditorPanel {
     fn capture_interaction_state(&self) -> GraphInteractionState {
         GraphInteractionState {
             dragging_node: self.dragging_node.clone(),
+            pending_drag_node: self.pending_drag_node.clone(),
+            pending_drag_start: self.pending_drag_start,
             drag_offset: self.drag_offset,
             initial_drag_positions: self.initial_drag_positions.clone(),
             initial_comment_drag_positions: self.initial_comment_drag_positions.clone(),

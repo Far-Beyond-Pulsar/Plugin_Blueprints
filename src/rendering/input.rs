@@ -220,6 +220,7 @@ pub fn on_mouse_down_left(
                     panel.last_click_pos = Some(gp);
                 }
 
+                // Select the node immediately on mouse-down.
                 if !panel.graph.selected_nodes.contains(&node_id) {
                     if !event.modifiers.control {
                         panel.graph.selected_nodes.clear();
@@ -227,7 +228,14 @@ pub fn on_mouse_down_left(
                     }
                     panel.graph.selected_nodes.push(node_id.clone());
                 }
-                panel.start_drag(node_id, gp, cx);
+
+                // Record a *pending* drag rather than starting one immediately.
+                // The drag is only committed once the mouse moves past the threshold
+                // (see on_mouse_move), so a plain click or double-click never
+                // produces a spurious undo entry.
+                panel.pending_drag_node = Some(node_id);
+                panel.pending_drag_start = Some(canvas);
+                cx.notify();
                 return;
             }
 
@@ -260,6 +268,18 @@ pub fn on_mouse_move(
                 }
             }
 
+            // Commit a pending node drag once the mouse has moved far enough.
+            if let Some(ref start) = panel.pending_drag_start.clone() {
+                let dist = ((mp.x - start.x).powi(2) + (mp.y - start.y).powi(2)).sqrt();
+                if dist > panel.drag_commit_threshold {
+                    if let Some(node_id) = panel.pending_drag_node.take() {
+                        panel.pending_drag_start = None;
+                        let gp_start = to_graph(*start, panel);
+                        panel.start_drag(node_id, gp_start, cx);
+                    }
+                }
+            }
+
             let gp = to_graph(canvas, panel);
 
             if panel.dragging_comment.is_some() {
@@ -289,6 +309,13 @@ pub fn on_mouse_up_left(
             let canvas = to_canvas(event.position, panel);
             let gp = to_graph(canvas, panel);
             let mp = Point::new(canvas.x, canvas.y);
+
+            // A pending drag that never committed means the user just clicked
+            // (didn't move far enough).  Clear it without any undo entry.
+            if panel.pending_drag_node.is_some() {
+                panel.pending_drag_node = None;
+                panel.pending_drag_start = None;
+            }
 
             if panel.dragging_comment.is_some() {
                 panel.end_comment_drag(cx);
