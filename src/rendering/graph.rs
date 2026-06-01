@@ -405,19 +405,9 @@ impl NodeGraphRenderer {
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         let panel_entity = cx.entity().clone();
-        
-        // Get the graph for this view
-        let graph = match panel.get_graph_for_view(Some(view_id)) {
-            Some(g) => g,
-            None => {
-                // Fallback if view not found - render empty
-                return div().into_element();
-            }
-        };
-        
-        let zoom = graph.zoom_level;
-        let pan_x = graph.pan_offset.x;
-        let pan_y = graph.pan_offset.y;
+        let zoom = panel.graph.zoom_level;
+        let pan_x = panel.graph.pan_offset.x;
+        let pan_y = panel.graph.pan_offset.y;
         let wire_active_mode = panel.wire_active_test_mode;
         let wire_hidden_mode = panel.wire_hidden_test_mode;
         let anim_time = panel.graph_anim_start.elapsed().as_secs_f32();
@@ -819,7 +809,7 @@ impl NodeGraphRenderer {
                         surface.swap_buffers();
                         if !panel.running_nodes.is_empty()
                             || (panel.wire_active_test_mode
-                                && panel.get_graph().map(|g| !g.selected_nodes.is_empty()).unwrap_or(false))
+                                && !panel.graph.selected_nodes.is_empty())
                         {
                             cx.notify();
                         }
