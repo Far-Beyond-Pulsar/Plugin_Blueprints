@@ -53,6 +53,25 @@ impl ToolbarRenderer {
             .unwrap_or_else(|| "Blueprint Editor".to_string());
         let compile_mode = panel.compile_mode.clone();
 
+        // ── Debug session state ──────────────────────────────────────────────
+        let debug_is_paused = panel
+            .debug_session
+            .as_ref()
+            .map(|s| s.is_paused)
+            .unwrap_or(false);
+        let debug_session_active = panel.debug_session.is_some();
+        let debug_can_back = panel
+            .debug_session
+            .as_ref()
+            .map(|s| s.can_step_backward())
+            .unwrap_or(false);
+        let debug_can_fwd = panel
+            .debug_session
+            .as_ref()
+            .map(|s| s.can_step_forward())
+            .unwrap_or(false);
+        let bp_count = panel.breakpoints.len();
+
         // ── Compile-button icon (reflects last result) ───────────────────────
         let compile_icon = match &compile_state {
             CompilationState::Success => IconName::BadgeCheck,
@@ -275,6 +294,87 @@ impl ToolbarRenderer {
                         }
                     }),
             )
+            // ── Group 6 · Debugger controls ──────────────────────────────────
+            .when(debug_session_active || bp_count > 0, |el| {
+                el.child(toolbar_separator(cx)).child(
+                    h_flex()
+                        .gap_1p5()
+                        .items_center()
+                        // Breakpoint counter badge
+                        .when(bp_count > 0, |el| {
+                            el.child(
+                                div()
+                                    .px_2()
+                                    .h_7()
+                                    .flex()
+                                    .items_center()
+                                    .rounded(cx.theme().radius)
+                                    .bg(gpui::rgba(0x4A0000FF))
+                                    .border_1()
+                                    .border_color(gpui::rgba(0xCC111144))
+                                    .text_size(gpui::px(11.0))
+                                    .text_color(gpui::rgba(0xFF6666FF))
+                                    .child(format!("⏹ {}", bp_count)),
+                            )
+                        })
+                        // Continue button (only when paused)
+                        .when(debug_is_paused, |el| {
+                            el.child({
+                                Button::new("toolbar-debug-continue")
+                                    .icon(IconName::Play)
+                                    .label("Continue")
+                                    .tooltip("Continue Execution (F5)")
+                                    .success()
+                                    .on_click(cx.listener(|panel, _, _, cx| {
+                                        panel.debug_continue(cx);
+                                    }))
+                            })
+                        })
+                        // Step Back
+                        .when(debug_session_active, |el| {
+                            el.child({
+                                let btn = Button::new("toolbar-debug-back")
+                                    .icon(IconName::ArrowLeft)
+                                    .tooltip("Step Back (Shift+F10)")
+                                    .on_click(cx.listener(|panel, _, _, cx| {
+                                        panel.debug_step_backward(cx);
+                                    }))
+                                    .disabled(!debug_can_back);
+                                btn
+                            })
+                        })
+                        // Step Forward / Single-step
+                        .when(debug_session_active, |el| {
+                            el.child({
+                                let btn = Button::new("toolbar-debug-fwd")
+                                    .icon(IconName::ArrowRight)
+                                    .tooltip(if debug_is_paused {
+                                        "Step (F10) — execute one node then pause again"
+                                    } else {
+                                        "Step Forward (F10) — go to next recorded frame"
+                                    })
+                                    .on_click(cx.listener(|panel, _, _, cx| {
+                                        panel.debug_step_forward(cx);
+                                    }))
+                                    .disabled(!debug_can_fwd);
+                                btn
+                            })
+                        })
+                        // Stop session
+                        .when(debug_session_active, |el| {
+                            el.child(
+                                Button::new("toolbar-debug-stop")
+                                    .icon(IconName::X)
+                                    .label("Stop")
+                                    .tooltip("Stop Debug Session (Shift+F5)")
+                                    .danger()
+                                    .on_click(cx.listener(|panel, _, _, cx| {
+                                        panel.debug_stop(cx);
+                                    })),
+                            )
+                        }),
+                )
+            })
             // ── Flex spacer pushes right-side content to the edge ────────────
             .child(div().flex_1())
             // ── Right side · Compile status + Blueprint name pill ────────────
