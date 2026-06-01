@@ -7,6 +7,10 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 name = "blueprint_editor_plugin"
 
+[[example]]
+name = "standalone"
+path = "examples/standalone.rs"
+
 [dependencies]
 # UI dependencies (local paths so traits resolve to the same crate instance)
 gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "62cb53f4a962af82f677bdc05be24133acf3ad2a" }
