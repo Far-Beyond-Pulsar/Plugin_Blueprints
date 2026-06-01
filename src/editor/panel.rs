@@ -158,13 +158,15 @@ pub struct BlueprintEditorPanel {
     // Undo/redo system
     pub undo_manager: crate::features::undo::UndoManager,
 
-    // Connection rendering cache (kept for backwards-compat; GPU renderer no longer uses it)
-    pub connection_render_cache:
-        crate::features::connections::rendering_cached::ConnectionRenderCache,
-
     // ── GPU renderer ──────────────────────────────────────────────────────────
     pub bp_renderer: crate::rendering::gpu::BpRenderer,
     pub bp_surface:  Option<gpui::WgpuSurfaceHandle>,
+
+    // ── Context menus (shown as GPUI overlays above the GPU surface) ──────────
+    /// Right-clicked node: (node_id, window-space position for anchoring)
+    pub node_context_menu: Option<(String, Point<Pixels>)>,
+    /// Right-clicked pin: (node_id, pin_id, window-space position)
+    pub pin_context_menu: Option<(String, String, Point<Pixels>)>,
 }
 
 /// Information about a tab being dragged
@@ -459,10 +461,10 @@ impl BlueprintEditorPanel {
             dragging_tab: None,
             is_dirty: false,
             undo_manager: crate::features::undo::UndoManager::new(),
-            connection_render_cache:
-                crate::features::connections::rendering_cached::ConnectionRenderCache::new(),
             bp_renderer: crate::rendering::gpu::BpRenderer::new(),
             bp_surface:  None,
+            node_context_menu: None,
+            pin_context_menu:  None,
         }
     }
 
