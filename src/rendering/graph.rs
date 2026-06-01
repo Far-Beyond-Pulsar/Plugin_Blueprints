@@ -185,6 +185,21 @@ fn pin_color(dt: &DataType) -> [f32;4] {
     [ps.color.r, ps.color.g, ps.color.b, ps.color.a]
 }
 
+fn wire_phase(conn: &Connection) -> f32 {
+    let mut h: u32 = 2166136261;
+    for b in conn
+        .source_node
+        .bytes()
+        .chain(conn.source_pin.bytes())
+        .chain(conn.target_node.bytes())
+        .chain(conn.target_pin.bytes())
+    {
+        h ^= b as u32;
+        h = h.wrapping_mul(16777619);
+    }
+    (h as f32 / u32::MAX as f32) * 2.0
+}
+
 // ─── geometry helpers — all positions in GRAPH SPACE ─────────────────────────
 // The GPU vertex shaders apply graph→screen transform (pan+zoom).
 // CPU must NOT pre-apply pan or zoom to positions used by the GPU pipelines.
@@ -284,6 +299,9 @@ impl NodeGraphRenderer {
         let zoom   = panel.graph.zoom_level;
         let pan_x  = panel.graph.pan_offset.x;
         let pan_y  = panel.graph.pan_offset.y;
+        let wire_active_mode = panel.wire_active_test_mode;
+        let wire_hidden_mode = panel.wire_hidden_test_mode;
+        let anim_time = panel.graph_anim_start.elapsed().as_secs_f32();
 
         // viewport culling
         let (vw, vh) = panel.graph_element_bounds
@@ -313,11 +331,17 @@ impl NodeGraphRenderer {
 
             let is_sel = selected_nodes.contains(node.id.as_str());
             let is_reroute = node.node_type == NodeType::Reroute;
-            let cat  = category_color(node);
-            let hdr  = darken(cat, 0.60);
-            let body = [0.07, 0.07, 0.075, 1.0_f32];
-            let bord = if is_sel { lighten(cat, 0.42) } else { [0.18, 0.18, 0.19, 1.0] };
-            let sep  = lighten(cat, 0.70);
+            let cat = category_color(node);
+            let hdr = darken(lighten(cat, 1.06), 0.53);
+            let body_tint = darken(cat, 0.2);
+            let body = [
+                (0.040 + body_tint[0] * 0.10).min(1.0),
+                (0.045 + body_tint[1] * 0.10).min(1.0),
+                (0.055 + body_tint[2] * 0.12).min(1.0),
+                1.0,
+            ];
+            let bord = if is_sel { lighten(cat, 0.36) } else { [0.23, 0.24, 0.28, 1.0] };
+            let sep = lighten(cat, 0.76);
 
             let max_rows = node.inputs.len().max(node.outputs.len()).max(1);
             let gw = layout::snap_to_grid(node.size.width);
@@ -333,7 +357,7 @@ impl NodeGraphRenderer {
                 border_color:  bord,
                 sep_color:     sep,
                 header_h_frac: hdr_frac,
-                corner_r:      6.0 / zoom,
+                corner_r:      8.5 / zoom,
                 flags,
                 _pad:          0,
             });
@@ -409,17 +433,25 @@ impl NodeGraphRenderer {
             panel.graph.nodes.iter().filter(|n|visible(n)).map(|n|n.id.as_str()).collect();
 
         // Helper: build a WireInstance from two graph-space endpoints.
-        let make_wire = |fp: (f32,f32), tp: (f32,f32), color: [f32;4], thick: f32| -> WireInstance {
+        let make_wire = |fp: (f32, f32),
+                         tp: (f32, f32),
+                         color: [f32; 4],
+                         thick: f32,
+                         flags: u32,
+                         pulse_phase: f32|
+         -> WireInstance {
             let hd   = (tp.0 - fp.0).abs();
             let ctl  = (hd * 0.45).max(55.0).min(220.0);
             WireInstance {
-                from:      [fp.0, fp.1],
-                ctrl1:     [fp.0 + ctl, fp.1],
-                ctrl2:     [tp.0 - ctl, tp.1],
-                to:        [tp.0, tp.1],
+                from: [fp.0, fp.1],
+                ctrl1: [fp.0 + ctl, fp.1],
+                ctrl2: [tp.0 - ctl, tp.1],
+                to: [tp.0, tp.1],
                 color,
                 thickness: thick,
-                _pad:      [0.0; 3],
+                flags,
+                pulse_phase,
+                _pad: 0.0,
             }
         };
 
@@ -429,13 +461,26 @@ impl NodeGraphRenderer {
             let (fn_, tn) = (node_map.get(conn.source_node.as_str()),
                              node_map.get(conn.target_node.as_str()));
             if let (Some(fn_), Some(tn)) = (fn_, tn) {
-                let fc = fn_.outputs.iter().find(|p|p.id==conn.source_pin)
+                let mut fc = fn_.outputs.iter().find(|p|p.id==conn.source_pin)
                     .map_or([0.8,0.8,0.8,1.0], |p|pin_color(&p.data_type));
+                let mut wire_flags = 0_u32;
+                let mut thick = half_thick;
+                if wire_hidden_mode {
+                    wire_flags |= 2;
+                    fc[3] = 0.18;
+                    thick *= 0.88;
+                } else if wire_active_mode {
+                    wire_flags |= 1;
+                    fc[3] = 0.96;
+                    thick *= 1.05;
+                } else {
+                    fc[3] = 0.88;
+                }
                 if let (Some(fp), Some(tp)) = (
                     pin_gpos_id(fn_, &conn.source_pin, false),
                     pin_gpos_id(tn,  &conn.target_pin, true),
                 ) {
-                    wire_instances.push(make_wire(fp, tp, fc, half_thick));
+                    wire_instances.push(make_wire(fp, tp, fc, thick, wire_flags, wire_phase(conn)));
                 }
             }
         }
@@ -447,7 +492,16 @@ impl NodeGraphRenderer {
                     let dc   = pin_color(&drag.source_pin_type);
                     let mp   = drag.current_mouse_pos;
                     let tp   = (mp.x / zoom - pan_x, mp.y / zoom - pan_y);
-                    wire_instances.push(make_wire(fp, tp, [dc[0],dc[1],dc[2],0.70], half_thick * 0.85));
+                    let drag_flags = if wire_hidden_mode { 2 } else if wire_active_mode { 1 } else { 0 };
+                    let drag_alpha = if wire_hidden_mode { 0.18 } else if wire_active_mode { 0.92 } else { 0.70 };
+                    wire_instances.push(make_wire(
+                        fp,
+                        tp,
+                        [dc[0], dc[1], dc[2], drag_alpha],
+                        half_thick * 0.85,
+                        drag_flags,
+                        0.0,
+                    ));
                 }
             }
         }
@@ -469,7 +523,7 @@ impl NodeGraphRenderer {
         let uniforms = GraphUniforms {
             pan:      [pan_x, pan_y],
             zoom,
-            _pad0:    0.0,
+            time:     anim_time,
             viewport: [vw, vh],
             _pad1:    [0.0;2],
         };
@@ -533,7 +587,7 @@ impl NodeGraphRenderer {
                 },
                 // Paint: render GPU frame every frame.
                 move |_bounds, _pre, _window, cx| {
-                    pe_paint.update(cx, |panel, _| {
+                    pe_paint.update(cx, |panel, cx| {
                         let Some(ref surface) = panel.bp_surface else { return };
                         if surface.is_resize_pending() { return; }
                         let Some((view,(w,h))) = surface.back_view_with_size() else { return };
@@ -551,6 +605,9 @@ impl NodeGraphRenderer {
                         );
                         drop(view);
                         surface.swap_buffers();
+                        if panel.wire_active_test_mode {
+                            cx.notify();
+                        }
                     });
                 },
             )

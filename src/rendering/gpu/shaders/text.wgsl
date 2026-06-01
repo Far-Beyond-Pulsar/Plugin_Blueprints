@@ -5,7 +5,7 @@
 struct GraphUniforms {
     pan:      vec2<f32>,
     zoom:     f32,
-    _pad0:    f32,
+    time:     f32,
     viewport: vec2<f32>,
     _pad1:    vec2<f32>,
 }

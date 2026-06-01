@@ -5,7 +5,7 @@
 struct GraphUniforms {
     pan:      vec2<f32>,
     zoom:     f32,
-    _pad0:    f32,
+    time:     f32,
     viewport: vec2<f32>,
     _pad1:    vec2<f32>,
 }
@@ -105,10 +105,10 @@ fn vs_main(inst: PinInst, @builtin(vertex_index) vi: u32) -> VOut {
 
 @fragment
 fn fs_main(in: VOut) -> @location(0) vec4<f32> {
-    // Compatible override colour (glowing green)
+    // Compatible override colour (clean neon cyan)
     let fill_col = select(
         in.color,
-        vec4(0.28, 0.82, 0.50, 1.0),
+        vec4(0.30, 0.92, 0.86, 1.0),
         in.compatible != 0u,
     );
 
@@ -121,23 +121,25 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         d = sdf_exec(in.uv, in.is_input != 0u);
     }
 
-    // Outer dark ring (border)
-    let border_w = 0.08;
-    let border_col = vec4(0.08, 0.08, 0.09, 1.0);
+    // Outer ring and gentle emissive shell.
+    let border_w = 0.11;
+    let border_col = vec4(0.035, 0.04, 0.05, 1.0);
 
     // Compute final colour
     let inside  = 1.0 - smoothstep(-0.02, 0.02, d);
     let ring    = smoothstep(-0.02, 0.02, d + border_w)
                 * (1.0 - inside);
+    let shell   = smoothstep(0.14, -0.02, d) * (1.0 - inside) * 0.28;
 
-    if inside + ring <= 0.01 { discard; }
+    if inside + ring + shell <= 0.01 { discard; }
 
     var col = mix(border_col, fill_col, inside / (inside + ring + 0.0001));
-    col.a  *= (inside + ring);
+    col = vec4(col.rgb + fill_col.rgb * shell * 0.55, col.a);
+    col.a *= (inside + ring + shell);
 
-    // Tiny highlight at top of circle pins
+    // Crisp top highlight for circular data pins.
     if in.kind == 0u {
-        let high = smoothstep(0.0, -0.5, d) * smoothstep(-0.1, 0.0, in.uv.y) * 0.25;
+        let high = smoothstep(0.0, -0.6, d) * smoothstep(-0.2, 0.05, in.uv.y) * 0.28;
         col = vec4(col.rgb + high, col.a);
     }
 

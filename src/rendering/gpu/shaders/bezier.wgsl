@@ -12,7 +12,7 @@ const WIRE_SEGS: u32 = 32u;
 struct GraphUniforms {
     pan:      vec2<f32>,
     zoom:     f32,
-    _pad0:    f32,
+    time:     f32,
     viewport: vec2<f32>,
     _pad1:    vec2<f32>,
 }
@@ -26,13 +26,17 @@ struct WireInst {
     @location(3) to:        vec2<f32>,
     @location(4) color:     vec4<f32>,
     @location(5) thickness: f32,
-    // _pad: float3 follows in the buffer but not needed in the shader
+    @location(6) flags:     u32,
+    @location(7) phase:     f32,
+    @location(8) _pad:      f32,
 }
 
 struct VOut {
     @builtin(position) pos:   vec4<f32>,
     @location(0)       uv:    vec2<f32>,  // x=edge(0=left,1=right), y=t along curve
     @location(1)       color: vec4<f32>,
+    @location(2)       flags: u32,
+    @location(3)       phase: f32,
 }
 
 // ── coordinate helpers ────────────────────────────────────────────────────────
@@ -95,6 +99,8 @@ fn vs_main(inst: WireInst, @builtin(vertex_index) vi: u32) -> VOut {
     o.pos   = vec4(screen_to_ndc(scr_pos), 0.0, 1.0);
     o.uv    = vec2(select(0.0, 1.0, use_right), t);
     o.color = inst.color;
+    o.flags = inst.flags;
+    o.phase = inst.phase;
     return o;
 }
 
@@ -102,6 +108,8 @@ fn vs_main(inst: WireInst, @builtin(vertex_index) vi: u32) -> VOut {
 
 @fragment
 fn fs_main(in: VOut) -> @location(0) vec4<f32> {
+    let is_active = (in.flags & 1u) != 0u;
+    let is_hidden = (in.flags & 2u) != 0u;
     let edge_dist = abs(in.uv.x * 2.0 - 1.0); // 0=centre, 1=edge
 
     // Soft outer glow
@@ -115,6 +123,25 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     col     = mix(col, in.color.rgb, body);
     col     = mix(col, mix(in.color.rgb, vec3(1.0), 0.45), highlight * 0.55);
 
-    let alpha = in.color.a * max(body, glow * 0.6);
+    if is_active {
+        let pulse_t = fract(in.uv.y * 4.0 - u.time * 1.7 + in.phase);
+        let pulse_d = abs(pulse_t - 0.5);
+        let pulse = smoothstep(0.30, 0.0, pulse_d) * smoothstep(0.18, 0.0, pulse_d);
+        col = mix(col, vec3(1.0), pulse * 0.65);
+    }
+
+    var alpha = in.color.a * max(body, glow * 0.6);
+
+    if is_hidden {
+        let luma = dot(col, vec3(0.299, 0.587, 0.114));
+        col = mix(vec3(luma), col, 0.15);
+        alpha *= 0.24;
+    } else if is_active {
+        let pulse_t = fract(in.uv.y * 4.0 - u.time * 1.7 + in.phase);
+        let pulse_d = abs(pulse_t - 0.5);
+        let pulse = smoothstep(0.30, 0.0, pulse_d) * smoothstep(0.18, 0.0, pulse_d);
+        alpha = min(1.0, alpha + pulse * 0.25);
+    }
+
     return vec4(col, alpha);
 }

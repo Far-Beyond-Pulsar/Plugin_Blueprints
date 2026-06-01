@@ -6,7 +6,7 @@
 pub struct GraphUniforms {
     pub pan:      [f32; 2],
     pub zoom:     f32,
-    pub _pad0:    f32,
+    pub time:     f32,
     pub viewport: [f32; 2], // render-target pixels (surface w/h)
     pub _pad1:    [f32; 2],
 }
@@ -39,13 +39,15 @@ pub struct NodeInstance {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct WireInstance {
-    pub from:      [f32; 2], // graph-space start
-    pub ctrl1:     [f32; 2], // first bezier control point
-    pub ctrl2:     [f32; 2], // second bezier control point
-    pub to:        [f32; 2], // graph-space end
-    pub color:     [f32; 4],
-    pub thickness: f32,      // half-thickness in graph units
-    pub _pad:      [f32; 3],
+    pub from:       [f32; 2], // graph-space start
+    pub ctrl1:      [f32; 2], // first bezier control point
+    pub ctrl2:      [f32; 2], // second bezier control point
+    pub to:         [f32; 2], // graph-space end
+    pub color:      [f32; 4],
+    pub thickness:  f32,      // half-thickness in graph units
+    pub flags:      u32,      // bit 0 = active pulse, bit 1 = hidden/dim
+    pub pulse_phase:f32,      // deterministic per-wire pulse offset
+    pub _pad:       f32,
 }
 
 // ── Straight-line vertices (selection box, drag preview) ───────────────────────

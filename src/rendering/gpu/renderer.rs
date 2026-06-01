@@ -395,7 +395,8 @@ impl BpRenderer {
             immediate_size:     0,
         });
 
-        // WireInstance layout: from(2), ctrl1(2), ctrl2(2), to(2), color(4), thickness(1), _pad(3)
+        // WireInstance layout:
+        // from(2), ctrl1(2), ctrl2(2), to(2), color(4), thickness(1), flags(1u), pulse_phase(1), _pad(1)
         let attrs = wgpu::vertex_attr_array![
             0 => Float32x2,   // from      offset  0
             1 => Float32x2,   // ctrl1     offset  8
@@ -403,7 +404,9 @@ impl BpRenderer {
             3 => Float32x2,   // to        offset 24
             4 => Float32x4,   // color     offset 32
             5 => Float32,     // thickness offset 48
-            // _pad[3] at offset 52 — not exposed to shader
+            6 => Uint32,      // flags     offset 52
+            7 => Float32,     // phase     offset 56
+            8 => Float32,     // _pad      offset 60
         ];
         let vbl = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<WireInstance>() as wgpu::BufferAddress,

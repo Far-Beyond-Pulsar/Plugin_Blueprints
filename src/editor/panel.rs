@@ -126,6 +126,9 @@ pub struct BlueprintEditorPanel {
     pub show_debug_overlay: bool,
     pub show_minimap: bool,
     pub show_graph_controls: bool,
+    pub wire_active_test_mode: bool,
+    pub wire_hidden_test_mode: bool,
+    pub graph_anim_start: std::time::Instant,
 
     // Quick palette overlay (right-click on graph canvas)
     pub popup_palette_graph_pos: Option<Point<f32>>,
@@ -447,6 +450,9 @@ impl BlueprintEditorPanel {
             show_debug_overlay: true,
             show_minimap: true,
             show_graph_controls: true,
+            wire_active_test_mode: false,
+            wire_hidden_test_mode: false,
+            graph_anim_start: std::time::Instant::now(),
             popup_palette_graph_pos: None,
             quick_palette_open: false,
             quick_palette_focus_pending: false,

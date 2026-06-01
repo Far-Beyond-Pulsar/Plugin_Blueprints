@@ -6,7 +6,7 @@
 struct GraphUniforms {
     pan:      vec2<f32>,
     zoom:     f32,
-    _pad0:    f32,
+    time:     f32,
     viewport: vec2<f32>,
     _pad1:    vec2<f32>,
 }
@@ -96,10 +96,10 @@ fn vs_main(inst: NodeInst, @builtin(vertex_index) vi: u32) -> VOut {
 
 // ── fragment ──────────────────────────────────────────────────────────────────
 
-const SEP_PX: f32 = 2.0;  // separator bar height (screen px)
+const SEP_PX: f32 = 1.5;  // separator bar height (screen px)
 const BORDER_PX: f32 = 1.0;
-const GLOW_OUTER_PX: f32 = 5.0;
-const GLOW_INNER_PX: f32 = 1.5;
+const GLOW_OUTER_PX: f32 = 7.5;
+const GLOW_INNER_PX: f32 = 1.4;
 
 @fragment
 fn fs_main(in: VOut) -> @location(0) vec4<f32> {
@@ -142,6 +142,13 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         // Body
         base = in.body_color;
     }
+
+    // Clean futuristic finish: subtle vertical falloff + rim tint from separator color.
+    let grad = mix(1.06, 0.93, in.uv.y);
+    base = vec4(base.rgb * grad, base.a);
+    let edge_uv = min(min(in.uv.x, 1.0 - in.uv.x), min(in.uv.y, 1.0 - in.uv.y));
+    let rim = smoothstep(0.08, 0.0, edge_uv) * 0.09;
+    base = vec4(mix(base.rgb, base.rgb + in.sep_color.rgb * 0.32, rim), base.a);
 
     // ── Border (1px inside edge) ───────────────────────────────────────────────
     let border_a = smoothstep(-BORDER_PX - 0.5, -BORDER_PX + 0.5, d)
