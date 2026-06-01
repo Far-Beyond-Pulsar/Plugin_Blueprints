@@ -148,10 +148,7 @@ impl BlueprintEditorPanel {
                     if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id() == node_id) {
                         let new_pos =
                             Point::new(initial_position.x + delta.x, initial_position.y + delta.y);
-                        node.set_position(NodeGraphRenderer::snap_to_grid(
-                            new_pos,
-                            self.graph.zoom_level,
-                        ));
+                        node.set_position(NodeGraphRenderer::snap_to_grid(new_pos));
                     }
                 }
 

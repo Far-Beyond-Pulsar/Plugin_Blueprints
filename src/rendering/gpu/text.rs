@@ -442,9 +442,9 @@ impl TextRenderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/text.wgsl").into()),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label:                Some("text_layout"),
-            bind_group_layouts:   &[uni_bgl, atlas_bgl],
-            push_constant_ranges: &[],
+            label:              Some("text_layout"),
+            bind_group_layouts: &[Some(uni_bgl), Some(atlas_bgl)],
+            immediate_size:     0,
         });
         let attrs = wgpu::vertex_attr_array![
             0 => Float32x2, // pos
@@ -475,11 +475,11 @@ impl TextRenderer {
                 })],
                 compilation_options: Default::default(),
             }),
-            primitive:     wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample:   wgpu::MultisampleState::default(),
-            multiview:     None,
-            cache:         None,
+            primitive:      wgpu::PrimitiveState::default(),
+            depth_stencil:  None,
+            multisample:    wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache:          None,
         })
     }
 

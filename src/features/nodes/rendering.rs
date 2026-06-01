@@ -283,7 +283,7 @@ pub fn render_all(
                 } else {
                     style::idle_border()
                 },
-                corner_radius: style::corner_radius(zoom).0,
+                corner_radius: 7.0 * zoom,
                 icon: node.icon,
                 title: node.title,
                 inputs,

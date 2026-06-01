@@ -233,7 +233,6 @@ impl BlueprintEditorPanel {
                     if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *node_id) {
                         node.position = NodeGraphRenderer::snap_to_grid(
                             Point::new(initial_position.x + delta.x, initial_position.y + delta.y),
-                            self.graph.zoom_level,
                         );
                     }
                 }
@@ -245,7 +244,6 @@ impl BlueprintEditorPanel {
                     {
                         comment.position = NodeGraphRenderer::snap_to_grid(
                             Point::new(initial_position.x + delta.x, initial_position.y + delta.y),
-                            self.graph.zoom_level,
                         );
                     }
                 }
