@@ -123,14 +123,28 @@ impl BlueprintEditorPanel {
         use pbgc::{
             ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
         };
+        use std::collections::{HashMap, HashSet};
 
         let mut graph = GraphDescription::new("Blueprint Graph");
+        let mut skipped_nodes: HashSet<String> = HashSet::new();
+        let mut valid_input_pins: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut valid_output_pins: HashMap<String, HashSet<String>> = HashMap::new();
 
         // Nodes
         for bp_node in &self.graph.nodes {
+            // Runtime component reference nodes are editor-only wiring helpers.
+            if bp_node.definition_id.starts_with("get_component_ref::") {
+                skipped_nodes.insert(bp_node.id.clone());
+                continue;
+            }
+
+            let node_type = bp_node.definition_id.clone();
+            let is_component_method_node = node_type.starts_with("comp_get_prop::")
+                || node_type.starts_with("comp_set_prop::")
+                || node_type.starts_with("comp_call::");
             let mut node = NodeInstance {
                 id: bp_node.id.clone(),
-                node_type: bp_node.definition_id.clone(),
+                node_type,
                 position: Position {
                     x: bp_node.position.x as f64,
                     y: bp_node.position.y as f64,
@@ -145,6 +159,12 @@ impl BlueprintEditorPanel {
             };
 
             for pin in &bp_node.inputs {
+                // The UI exposes component-ref pins, but current PBGC node handlers
+                // still compile component nodes by class/property/method id.
+                // Strip the editor-only target ref pin before codegen.
+                if is_component_method_node && pin.id == "component_ref" {
+                    continue;
+                }
                 node.inputs.push(PinInstance {
                     id: pin.id.clone(),
                     pin: Pin {
@@ -167,11 +187,33 @@ impl BlueprintEditorPanel {
                 });
             }
 
+            valid_input_pins.insert(
+                bp_node.id.clone(),
+                node.inputs.iter().map(|p| p.id.clone()).collect(),
+            );
+            valid_output_pins.insert(
+                bp_node.id.clone(),
+                node.outputs.iter().map(|p| p.id.clone()).collect(),
+            );
             graph.nodes.insert(bp_node.id.clone(), node);
         }
 
         // Connections
         for conn in &self.graph.connections {
+            if skipped_nodes.contains(&conn.source_node)
+                || skipped_nodes.contains(&conn.target_node)
+            {
+                continue;
+            }
+            let Some(source_pins) = valid_output_pins.get(&conn.source_node) else {
+                continue;
+            };
+            let Some(target_pins) = valid_input_pins.get(&conn.target_node) else {
+                continue;
+            };
+            if !source_pins.contains(&conn.source_pin) || !target_pins.contains(&conn.target_pin) {
+                continue;
+            }
             let conn_type = match conn.connection_type {
                 ui::graph::ConnectionType::Execution => ConnectionType::Execution,
                 ui::graph::ConnectionType::Data => ConnectionType::Data,

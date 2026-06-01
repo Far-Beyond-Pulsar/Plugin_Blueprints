@@ -309,8 +309,8 @@ impl NodeDefinitions {
     /// Generate component nodes for all components in a prefab.
     ///
     /// For each component class the prefab references, this creates:
-    /// - A **Get Property** node per property (`comp_get_prop::ClassName::PropName`)
-    /// - A **Set Property** node per property (`comp_set_prop::ClassName::PropName`)
+    /// - A **Get Property** method node per property (`comp_get_prop::ClassName::PropName`)
+    /// - A **Set Property** method node per property (`comp_set_prop::ClassName::PropName`)
     /// - A **Call Method** node per blueprint-callable method (`comp_call::ClassName::MethodName`)
     ///
     /// These node IDs follow the convention expected by the PBGC Rust codegen so that
@@ -373,7 +373,7 @@ impl NodeDefinitions {
         categories
     }
 
-    /// Create a `comp_get_prop::ClassName::PropName` node definition (pure — no exec pins).
+    /// Create a `comp_get_prop::ClassName::PropName` method node definition.
     fn make_comp_get_prop_node(
         class_name: &str,
         prop_name: &str,
@@ -382,18 +382,23 @@ impl NodeDefinitions {
     ) -> NodeDefinition {
         NodeDefinition {
             id: format!("comp_get_prop::{}::{}", class_name, prop_name),
-            name: format!("Get {} ({})", display_name, class_name),
+            name: format!("Get {}", display_name),
             icon: "⬇".to_string(),
             description: format!(
-                "Get {}.{} from this prefab's component",
+                "Get {}.{} from a component reference",
                 class_name, prop_name
             ),
             documentation: format!(
-                "Reads the `{}` property of the `{}` component attached to this prefab.\n\n\
+                "Reads the `{}` property from a `{}` component reference.\n\n\
                  **Returns** the current value of the property.",
                 prop_name, class_name
             ),
-            inputs: vec![],
+            inputs: vec![PinDefinition {
+                id: "component_ref".to_string(),
+                name: "component".to_string(),
+                data_type: DataType::from_type_str(class_name),
+                pin_type: PinType::Input,
+            }],
             outputs: vec![PinDefinition {
                 id: "value".to_string(),
                 name: "value".to_string(),
@@ -405,7 +410,7 @@ impl NodeDefinitions {
         }
     }
 
-    /// Create a `comp_set_prop::ClassName::PropName` node definition (exec node).
+    /// Create a `comp_set_prop::ClassName::PropName` method node definition (exec).
     fn make_comp_set_prop_node(
         class_name: &str,
         prop_name: &str,
@@ -414,11 +419,11 @@ impl NodeDefinitions {
     ) -> NodeDefinition {
         NodeDefinition {
             id: format!("comp_set_prop::{}::{}", class_name, prop_name),
-            name: format!("Set {} ({})", display_name, class_name),
+            name: format!("Set {}", display_name),
             icon: "⬆".to_string(),
-            description: format!("Set {}.{} on this prefab's component", class_name, prop_name),
+            description: format!("Set {}.{} on a component reference", class_name, prop_name),
             documentation: format!(
-                "Writes a new value to the `{}` property of the `{}` component attached to this prefab.",
+                "Writes a new value to the `{}` property on a `{}` component reference.",
                 prop_name, class_name
             ),
             inputs: vec![
@@ -426,6 +431,12 @@ impl NodeDefinitions {
                     id: "exec".to_string(),
                     name: "exec".to_string(),
                     data_type: DataType::from_type_str("execution"),
+                    pin_type: PinType::Input,
+                },
+                PinDefinition {
+                    id: "component_ref".to_string(),
+                    name: "component".to_string(),
+                    data_type: DataType::from_type_str(class_name),
                     pin_type: PinType::Input,
                 },
                 PinDefinition {
@@ -446,19 +457,25 @@ impl NodeDefinitions {
         }
     }
 
-    /// Create a `comp_call::ClassName::MethodName` node definition (exec node).
+    /// Create a `comp_call::ClassName::MethodName` node definition (exec method call).
     fn make_comp_call_node(
         class_name: &str,
         method: &pulsar_reflection::MethodMetadata,
     ) -> NodeDefinition {
-        use pulsar_reflection::runtime_types::RuntimeTypeInfo;
-
-        let mut inputs = vec![PinDefinition {
-            id: "exec".to_string(),
-            name: "exec".to_string(),
-            data_type: DataType::from_type_str("execution"),
-            pin_type: PinType::Input,
-        }];
+        let mut inputs = vec![
+            PinDefinition {
+                id: "exec".to_string(),
+                name: "exec".to_string(),
+                data_type: DataType::from_type_str("execution"),
+                pin_type: PinType::Input,
+            },
+            PinDefinition {
+                id: "component_ref".to_string(),
+                name: "component".to_string(),
+                data_type: DataType::from_type_str(class_name),
+                pin_type: PinType::Input,
+            },
+        ];
 
         for param in &method.params {
             inputs.push(PinDefinition {
@@ -487,11 +504,14 @@ impl NodeDefinitions {
 
         NodeDefinition {
             id: format!("comp_call::{}::{}", class_name, method.name),
-            name: format!("{} ({})", method.display_name, class_name),
+            name: method.display_name.to_string(),
             icon: "▶".to_string(),
-            description: format!("Call {}.{}()", class_name, method.name),
+            description: format!(
+                "Call {}.{}() on a component reference",
+                class_name, method.name
+            ),
             documentation: format!(
-                "Calls the `{}` method on the `{}` component attached to this prefab.",
+                "Calls the `{}` method on a `{}` component reference.",
                 method.name, class_name
             ),
             inputs,
