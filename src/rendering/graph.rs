@@ -185,15 +185,50 @@ fn pin_color(dt: &DataType) -> [f32;4] {
     [ps.color.r, ps.color.g, ps.color.b, ps.color.a]
 }
 
-// ─── bezier tessellation ──────────────────────────────────────────────────────
+// ─── geometry helpers — all positions in GRAPH SPACE ─────────────────────────
+// The GPU vertex shaders apply graph→screen transform (pan+zoom).
+// CPU must NOT pre-apply pan or zoom to positions used by the GPU pipelines.
+// Exception: text positions are in screen space because text.wgsl uses NDC direct.
+
+/// Graph-space pin centre for a given node row (input or output side).
+/// No pan or zoom applied — the GPU shader handles the transform.
+fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) {
+    if node.node_type == NodeType::Reroute {
+        return (node.position.x, node.position.y);
+    }
+    let py = node.position.y + HEADER_H + SEP_H + BODY_PAD
+        + row as f32 * (PIN_ROW_H + PIN_GAP) + PIN_ROW_H * 0.5;
+    let px = if is_input {
+        node.position.x + BODY_PAD
+    } else {
+        node.position.x + node.size.width - BODY_PAD
+    };
+    (px, py)
+}
+
+/// Graph-space pin centre addressed by pin ID.
+fn pin_gpos_id(node: &BlueprintNode, pin_id: &str, is_input: bool) -> Option<(f32, f32)> {
+    if node.node_type == NodeType::Reroute {
+        return Some((node.position.x, node.position.y));
+    }
+    let row = if is_input {
+        node.inputs.iter().position(|p| p.id == pin_id)?
+    } else {
+        node.outputs.iter().position(|p| p.id == pin_id)?
+    };
+    Some(pin_gpos_row(node, is_input, row))
+}
 
 fn bezier(p0:(f32,f32),p1:(f32,f32),p2:(f32,f32),p3:(f32,f32),t:f32)->(f32,f32){
     let u=1.0-t; let a=u*u*u; let b=3.0*u*u*t; let c=3.0*u*t*t; let d=t*t*t;
     (a*p0.0+b*p1.0+c*p2.0+d*p3.0, a*p0.1+b*p1.1+c*p2.1+d*p3.1)
 }
 
+/// Tessellate a bezier wire into thick-quad segments — positions in GRAPH SPACE.
+/// half_thick is in graph units (not multiplied by zoom — shader handles scale).
 fn tessellate_wire(from:(f32,f32), to:(f32,f32), color:[f32;4], half_thick:f32) -> Vec<WireVertex> {
     let hd  = (to.0-from.0).abs();
+    // Control point offset in graph units — keeps wire shape consistent at all zoom levels.
     let ctl = (hd*0.45).max(55.0).min(220.0);
     let c1  = (from.0+ctl, from.1);
     let c2  = (to.0-ctl,   to.1);
@@ -216,6 +251,23 @@ fn tessellate_wire(from:(f32,f32), to:(f32,f32), color:[f32;4], half_thick:f32) 
         prev=cur;
     }
     out
+}
+
+/// Tessellate a straight line segment — no bezier, no S-curves.
+/// Used for the selection box where all edges must be perfectly straight.
+fn tessellate_line(from:(f32,f32), to:(f32,f32), color:[f32;4], half_thick:f32) -> Vec<WireVertex> {
+    let dx = to.0-from.0; let dy = to.1-from.1;
+    let len = (dx*dx+dy*dy).sqrt();
+    if len < 0.0001 { return vec![]; }
+    let (nx,ny) = (-dy/len*half_thick, dx/len*half_thick);
+    vec![
+        WireVertex{pos:[from.0+nx,from.1+ny],uv:[0.0,0.0],color},
+        WireVertex{pos:[from.0-nx,from.1-ny],uv:[1.0,0.0],color},
+        WireVertex{pos:[to.0+nx,  to.1+ny  ],uv:[0.0,1.0],color},
+        WireVertex{pos:[to.0+nx,  to.1+ny  ],uv:[0.0,1.0],color},
+        WireVertex{pos:[from.0-nx,from.1-ny],uv:[1.0,0.0],color},
+        WireVertex{pos:[to.0-nx,  to.1-ny  ],uv:[1.0,1.0],color},
+    ]
 }
 
 // ─── main render ──────────────────────────────────────────────────────────────
