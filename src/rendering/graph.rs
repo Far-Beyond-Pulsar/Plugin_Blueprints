@@ -387,9 +387,11 @@ impl NodeGraphRenderer {
             }
         }
 
-        // wires
+        // wires — positions in GRAPH SPACE (shader applies pan+zoom)
         let mut wire_verts: Vec<WireVertex> = Vec::new();
-        let half_thick = WIRE_THICKNESS * zoom * 0.5;
+        // Wire half-thickness in graph units: shader multiplies by zoom giving screen pixels.
+        // At zoom=1 → 2.8 px, at zoom=2 → 5.6 px (scales naturally with zoom level).
+        let half_thick = WIRE_THICKNESS * 0.5;
         let node_map: std::collections::HashMap<&str,&BlueprintNode> =
             panel.graph.nodes.iter().map(|n|(n.id.as_str(),n)).collect();
         let vis_ids: std::collections::HashSet<&str> =
@@ -403,41 +405,44 @@ impl NodeGraphRenderer {
             if let (Some(fn_), Some(tn)) = (fn_, tn) {
                 let fc = fn_.outputs.iter().find(|p|p.id==conn.source_pin)
                     .map_or([0.8,0.8,0.8,1.0], |p|pin_color(&p.data_type));
-                if let (Some(fp),Some(tp)) = (
-                    Self::calculate_pin_position(fn_, &conn.source_pin, false, &panel.graph),
-                    Self::calculate_pin_position(tn,  &conn.target_pin, true,  &panel.graph),
+                // Use graph-space pin positions — no pan/zoom applied here
+                if let (Some(fp), Some(tp)) = (
+                    pin_gpos_id(fn_, &conn.source_pin, false),
+                    pin_gpos_id(tn,  &conn.target_pin, true),
                 ) {
-                    wire_verts.extend(tessellate_wire((fp.x,fp.y),(tp.x,tp.y),fc,half_thick));
+                    wire_verts.extend(tessellate_wire(fp, tp, fc, half_thick));
                 }
             }
         }
 
-        // drag wire
+        // drag wire — source is graph space, mouse pos is canvas/screen space → convert
         if let Some(ref drag) = panel.dragging_connection.clone() {
             if let Some(fn_) = node_map.get(drag.source_node.as_str()) {
-                if let Some(fp) = Self::calculate_pin_position(fn_,&drag.source_pin,false,&panel.graph) {
+                if let Some(fp) = pin_gpos_id(fn_, &drag.source_pin, false) {
                     let dc = pin_color(&drag.source_pin_type);
-                    let tp = drag.current_mouse_pos;
+                    // current_mouse_pos is canvas-relative (screen) — convert to graph space
+                    let mp = drag.current_mouse_pos;
+                    let tp = (mp.x / zoom - pan_x, mp.y / zoom - pan_y);
                     wire_verts.extend(tessellate_wire(
-                        (fp.x,fp.y),(tp.x,tp.y),
+                        fp, tp,
                         [dc[0],dc[1],dc[2],0.75],
-                        half_thick*0.85,
+                        half_thick * 0.85,
                     ));
                 }
             }
         }
 
-        // selection box outline (as wire rect)
+        // selection box — straight lines only (no bezier), in GRAPH SPACE.
+        // The half-thickness should appear constant in screen pixels regardless of zoom:
+        // half_thick_graph = desired_screen_pixels / zoom / 2
         if let (Some(start), Some(end)) = (panel.selection_start, panel.selection_end) {
-            let sp = Self::graph_to_screen_pos(start, &panel.graph);
-            let ep = Self::graph_to_screen_pos(end,   &panel.graph);
-            let (sx,sy,ex,ey) = (sp.x,sp.y,ep.x,ep.y);
+            let (sx,sy,ex,ey) = (start.x, start.y, end.x, end.y);
             let sc = [0.30,0.55,0.90,0.80_f32];
-            let ht = 0.85_f32;
-            wire_verts.extend(tessellate_wire((sx,sy),(ex,sy),sc,ht));
-            wire_verts.extend(tessellate_wire((sx,ey),(ex,ey),sc,ht));
-            wire_verts.extend(tessellate_wire((sx,sy),(sx,ey),sc,ht));
-            wire_verts.extend(tessellate_wire((ex,sy),(ex,ey),sc,ht));
+            let ht = 1.0 / zoom; // ~2 screen pixels at any zoom level
+            wire_verts.extend(tessellate_line((sx,sy),(ex,sy),sc,ht)); // top
+            wire_verts.extend(tessellate_line((sx,ey),(ex,ey),sc,ht)); // bottom
+            wire_verts.extend(tessellate_line((sx,sy),(sx,ey),sc,ht)); // left
+            wire_verts.extend(tessellate_line((ex,sy),(ex,ey),sc,ht)); // right
         }
 
         let uniforms = GraphUniforms {
