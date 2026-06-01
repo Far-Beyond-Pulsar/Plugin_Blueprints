@@ -463,7 +463,7 @@ impl NodeGraphRenderer {
                 )
                 .absolute().inset_0().size_full()
             })
-            // GPUI-only overlays (palette, tooltips)
+            // GPUI-only overlays (palette + context menus)
             .child(Self::render_quick_palette_overlay_inner(
                 panel.quick_palette_open,
                 panel.quick_palette_screen_pos,
@@ -471,6 +471,8 @@ impl NodeGraphRenderer {
                 panel.quick_palette_focus_pending,
                 cx,
             ))
+            .child(Self::render_node_context_menu(panel, cx))
+            .child(Self::render_pin_context_menu(panel, cx))
             // input
             .on_mouse_down(gpui::MouseButton::Left, cx.listener(move|panel,_,window,cx|{
                 panel.focus_handle().focus(window,cx);
