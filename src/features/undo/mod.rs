@@ -20,7 +20,11 @@ pub enum Command {
 
 impl Command {
     /// Execute the command
-    pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         match self {
             Command::AddNode(cmd) => cmd.execute(panel, cx),
             Command::DeleteNode(cmd) => cmd.execute(panel, cx),
@@ -34,7 +38,11 @@ impl Command {
     }
 
     /// Undo the command
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         match self {
             Command::AddNode(cmd) => cmd.undo(panel, cx),
             Command::DeleteNode(cmd) => cmd.undo(panel, cx),
@@ -77,7 +85,11 @@ impl AddNodeCommand {
         }
     }
 
-    pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if !self.executed {
             println!("[UNDO] Executing AddNode: {}", self.node.id);
             panel.graph.nodes.push(self.node.clone());
@@ -86,7 +98,11 @@ impl AddNodeCommand {
         }
     }
 
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if self.executed {
             println!("[UNDO] Undoing AddNode: {}", self.node.id);
             panel.graph.nodes.retain(|n| n.id != self.node.id);
@@ -118,20 +134,29 @@ impl DeleteNodeCommand {
         }
     }
 
-    pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if !self.executed {
             println!("[UNDO] Executing DeleteNode: {}", self.node.id);
             panel.graph.nodes.retain(|n| n.id != self.node.id);
-            panel.graph.connections.retain(|c|
-                c.source_node != self.node.id && c.target_node != self.node.id
-            );
+            panel
+                .graph
+                .connections
+                .retain(|c| c.source_node != self.node.id && c.target_node != self.node.id);
             panel.graph.selected_nodes.retain(|id| *id != self.node.id);
             self.executed = true;
             cx.notify();
         }
     }
 
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if self.executed {
             println!("[UNDO] Undoing DeleteNode: {}", self.node.id);
             panel.graph.nodes.push(self.node.clone());
@@ -163,7 +188,11 @@ impl AddCommentCommand {
         }
     }
 
-    pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if !self.executed {
             println!("[UNDO] Executing AddComment: {}", self.comment.id);
             panel.graph.comments.push(self.comment.clone());
@@ -172,11 +201,18 @@ impl AddCommentCommand {
         }
     }
 
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if self.executed {
             println!("[UNDO] Undoing AddComment: {}", self.comment.id);
             panel.graph.comments.retain(|c| c.id != self.comment.id);
-            panel.graph.selected_comments.retain(|id| *id != self.comment.id);
+            panel
+                .graph
+                .selected_comments
+                .retain(|id| *id != self.comment.id);
             self.executed = false;
             cx.notify();
         }
@@ -202,17 +238,28 @@ impl DeleteCommentCommand {
         }
     }
 
-    pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if !self.executed {
             println!("[UNDO] Executing DeleteComment: {}", self.comment.id);
             panel.graph.comments.retain(|c| c.id != self.comment.id);
-            panel.graph.selected_comments.retain(|id| *id != self.comment.id);
+            panel
+                .graph
+                .selected_comments
+                .retain(|id| *id != self.comment.id);
             self.executed = true;
             cx.notify();
         }
     }
 
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if self.executed {
             println!("[UNDO] Undoing DeleteComment: {}", self.comment.id);
             panel.graph.comments.push(self.comment.clone());
@@ -258,10 +305,17 @@ impl MoveEntitiesCommand {
         }
     }
 
-    pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if !self.executed {
-            println!("[UNDO] Executing MoveEntities: {} nodes, {} comments",
-                self.node_moves.len(), self.comment_moves.len());
+            println!(
+                "[UNDO] Executing MoveEntities: {} nodes, {} comments",
+                self.node_moves.len(),
+                self.comment_moves.len()
+            );
 
             for (node_id, _old_pos, new_pos) in &self.node_moves {
                 if let Some(node) = panel.graph.nodes.iter_mut().find(|n| &n.id == node_id) {
@@ -270,7 +324,12 @@ impl MoveEntitiesCommand {
             }
 
             for (comment_id, _old_pos, new_pos) in &self.comment_moves {
-                if let Some(comment) = panel.graph.comments.iter_mut().find(|c| &c.id == comment_id) {
+                if let Some(comment) = panel
+                    .graph
+                    .comments
+                    .iter_mut()
+                    .find(|c| &c.id == comment_id)
+                {
                     comment.position = *new_pos;
                 }
             }
@@ -280,10 +339,17 @@ impl MoveEntitiesCommand {
         }
     }
 
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if self.executed {
-            println!("[UNDO] Undoing MoveEntities: {} nodes, {} comments",
-                self.node_moves.len(), self.comment_moves.len());
+            println!(
+                "[UNDO] Undoing MoveEntities: {} nodes, {} comments",
+                self.node_moves.len(),
+                self.comment_moves.len()
+            );
 
             for (node_id, old_pos, _new_pos) in &self.node_moves {
                 if let Some(node) = panel.graph.nodes.iter_mut().find(|n| &n.id == node_id) {
@@ -292,7 +358,12 @@ impl MoveEntitiesCommand {
             }
 
             for (comment_id, old_pos, _new_pos) in &self.comment_moves {
-                if let Some(comment) = panel.graph.comments.iter_mut().find(|c| &c.id == comment_id) {
+                if let Some(comment) = panel
+                    .graph
+                    .comments
+                    .iter_mut()
+                    .find(|c| &c.id == comment_id)
+                {
                     comment.position = *old_pos;
                 }
             }
@@ -303,7 +374,10 @@ impl MoveEntitiesCommand {
     }
 
     pub fn description(&self) -> String {
-        format!("Move {} entities", self.node_moves.len() + self.comment_moves.len())
+        format!(
+            "Move {} entities",
+            self.node_moves.len() + self.comment_moves.len()
+        )
     }
 }
 
@@ -322,7 +396,11 @@ impl AddConnectionCommand {
         }
     }
 
-    pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if !self.executed {
             println!("[UNDO] Executing AddConnection: {}", self.connection.id);
             panel.graph.connections.push(self.connection.clone());
@@ -331,10 +409,17 @@ impl AddConnectionCommand {
         }
     }
 
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if self.executed {
             println!("[UNDO] Undoing AddConnection: {}", self.connection.id);
-            panel.graph.connections.retain(|c| c.id != self.connection.id);
+            panel
+                .graph
+                .connections
+                .retain(|c| c.id != self.connection.id);
             self.executed = false;
             cx.notify();
         }
@@ -360,16 +445,27 @@ impl DeleteConnectionCommand {
         }
     }
 
-    pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if !self.executed {
             println!("[UNDO] Executing DeleteConnection: {}", self.connection.id);
-            panel.graph.connections.retain(|c| c.id != self.connection.id);
+            panel
+                .graph
+                .connections
+                .retain(|c| c.id != self.connection.id);
             self.executed = true;
             cx.notify();
         }
     }
 
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if self.executed {
             println!("[UNDO] Undoing DeleteConnection: {}", self.connection.id);
             panel.graph.connections.push(self.connection.clone());
@@ -404,9 +500,17 @@ impl BatchCommand {
         self.commands.push(command);
     }
 
-    pub fn execute(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if !self.executed {
-            println!("[UNDO] Executing Batch: {} ({} commands)", self.description, self.commands.len());
+            println!(
+                "[UNDO] Executing Batch: {} ({} commands)",
+                self.description,
+                self.commands.len()
+            );
             for command in &mut self.commands {
                 command.execute(panel, cx);
             }
@@ -414,9 +518,17 @@ impl BatchCommand {
         }
     }
 
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) {
         if self.executed {
-            println!("[UNDO] Undoing Batch: {} ({} commands)", self.description, self.commands.len());
+            println!(
+                "[UNDO] Undoing Batch: {} ({} commands)",
+                self.description,
+                self.commands.len()
+            );
             // Undo in reverse order
             for command in self.commands.iter_mut().rev() {
                 command.undo(panel, cx);
@@ -462,7 +574,11 @@ impl UndoManager {
     }
 
     /// Undo the last command
-    pub fn undo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) -> bool {
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) -> bool {
         if let Some(mut command) = self.undo_stack.pop() {
             println!("[UNDO] Undoing: {}", command.description());
             command.undo(panel, cx);
@@ -475,7 +591,11 @@ impl UndoManager {
     }
 
     /// Redo the last undone command
-    pub fn redo(&mut self, panel: &mut crate::editor::panel::BlueprintEditorPanel, cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>) -> bool {
+    pub fn redo(
+        &mut self,
+        panel: &mut crate::editor::panel::BlueprintEditorPanel,
+        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+    ) -> bool {
         if let Some(mut command) = self.redo_stack.pop() {
             println!("[UNDO] Redoing: {}", command.description());
             command.execute(panel, cx);

@@ -9,16 +9,16 @@
 //! Node rendering - visual representation of blueprint nodes
 use gpui::prelude::*;
 use gpui::*;
+use ui::context_menu::ContextMenu;
+use ui::popup_menu::PopupMenu;
 use ui::ActiveTheme;
 use ui::PixelsExt;
 use ui::Sizable;
 use ui::StyledExt;
 use ui::{h_flex, v_flex};
-use ui::context_menu::ContextMenu;
-use ui::popup_menu::PopupMenu;
 
-use crate::core::types::*;
 use crate::core::events::{CopyNode, DeleteNode, DisconnectPin, DuplicateNode};
+use crate::core::types::*;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::rendering::{layout, style};
@@ -63,7 +63,7 @@ fn compute_graph_cull_bounds(panel: &BlueprintEditorPanel) -> GraphCullBounds {
 fn is_node_visible_in_bounds(node: &BlueprintNode, bounds: &GraphCullBounds) -> bool {
     let node_left = node.position.x;
     let node_top = node.position.y;
-    let node_right = node.position.x + node.size.width; 
+    let node_right = node.position.x + node.size.width;
     let node_bottom = node.position.y + node.size.height;
 
     !(node_left > bounds.right
@@ -72,13 +72,46 @@ fn is_node_visible_in_bounds(node: &BlueprintNode, bounds: &GraphCullBounds) -> 
         || node_bottom < bounds.top)
 }
 
+#[derive(Clone)]
+struct CanvasPinRender {
+    name: String,
+    center: Point<f32>,
+    size: f32,
+    color: gpui::Hsla,
+    is_exec: bool,
+    is_compatible_target: bool,
+}
+
+#[derive(Clone)]
+struct CanvasNodeRender {
+    origin: Point<f32>,
+    size: Size<f32>,
+    is_reroute: bool,
+    is_selected: bool,
+    title_color: gpui::Hsla,
+    body_color: gpui::Hsla,
+    border_color: gpui::Hsla,
+    corner_radius: f32,
+    icon: String,
+    title: String,
+    inputs: Vec<CanvasPinRender>,
+    outputs: Vec<CanvasPinRender>,
+}
+
 /// Render all nodes in the graph with virtualization
 pub fn render_all(
     panel: &mut BlueprintEditorPanel,
-    cx: &mut Context<BlueprintEditorPanel>,
+    _cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl IntoElement {
-    let _render_start = std::time::Instant::now();
+    const PIN_TEXT_SIZE: f32 = 11.0;
+    const HEADER_ICON_SIZE: f32 = 12.0;
+    const HEADER_TITLE_SIZE: f32 = 13.0;
+    const HEADER_PAD_X: f32 = 10.0;
+    const ICON_TITLE_GAP: f32 = 8.0;
+    const PIN_TEXT_PAD: f32 = 14.0;
+
     let cull_bounds = compute_graph_cull_bounds(panel);
+    let graph = panel.graph.clone();
 
     // Only render nodes that are visible within the viewport (virtualization)
     let visible_nodes: Vec<BlueprintNode> = panel
@@ -103,11 +136,463 @@ pub fn render_all(
         );
     }
 
-    div().absolute().inset_0().children(
-        visible_nodes
-            .into_iter()
-            .map(|node| crate::features::nodes::rendering_spans::render_blueprint_node_spans(&node, panel, cx)),
+    let node_renders: Vec<CanvasNodeRender> = visible_nodes
+        .into_iter()
+        .map(|node| {
+            let ue_node_color = match node.node_type {
+                NodeType::Event => gpui::Hsla {
+                    h: 0.00,
+                    s: 0.82,
+                    l: 0.38,
+                    a: 1.0,
+                },
+                NodeType::Logic => gpui::Hsla {
+                    h: 0.61,
+                    s: 0.78,
+                    l: 0.40,
+                    a: 1.0,
+                },
+                NodeType::Math => gpui::Hsla {
+                    h: 0.42,
+                    s: 0.68,
+                    l: 0.36,
+                    a: 1.0,
+                },
+                NodeType::Object => gpui::Hsla {
+                    h: 0.10,
+                    s: 0.72,
+                    l: 0.38,
+                    a: 1.0,
+                },
+                NodeType::Reroute => gpui::Hsla {
+                    h: 0.0,
+                    s: 0.0,
+                    l: 0.45,
+                    a: 1.0,
+                },
+                NodeType::MacroEntry | NodeType::MacroExit => gpui::Hsla {
+                    h: 0.76,
+                    s: 0.62,
+                    l: 0.36,
+                    a: 1.0,
+                },
+                NodeType::MacroInstance => gpui::Hsla {
+                    h: 0.76,
+                    s: 0.50,
+                    l: 0.28,
+                    a: 1.0,
+                },
+            };
+
+            let node_color = node
+                .color
+                .as_deref()
+                .and_then(parse_hex_color)
+                .unwrap_or(ue_node_color);
+
+            let zoom = graph.zoom_level;
+            let origin = NodeGraphRenderer::graph_to_screen_pos(node.position, &graph);
+            let scaled_width = layout::snap_to_grid(node.size.width) * zoom;
+            let max_rows = node.inputs.len().max(node.outputs.len()).max(1);
+            let scaled_height =
+                layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)) * zoom;
+            let is_reroute = node.node_type == NodeType::Reroute;
+
+            let inputs = node
+                .inputs
+                .iter()
+                .enumerate()
+                .map(|(row, pin)| {
+                    let graph_center = NodeGraphRenderer::calculate_pin_position_graph_space(
+                        &node, true, row, &graph,
+                    );
+                    let center = NodeGraphRenderer::graph_to_screen_pos(graph_center, &graph);
+                    let pin_style = pin.data_type.generate_pin_style();
+                    let color = gpui::Hsla::from(gpui::Rgba {
+                        r: pin_style.color.r,
+                        g: pin_style.color.g,
+                        b: pin_style.color.b,
+                        a: pin_style.color.a,
+                    });
+                    let is_compatible_target = if let Some(ref drag) = panel.dragging_connection {
+                        node.id != drag.source_node
+                            && pin.data_type.is_compatible_with(&drag.source_pin_type)
+                    } else {
+                        false
+                    };
+
+                    CanvasPinRender {
+                        name: pin.name.clone(),
+                        center,
+                        size: layout::PIN_SIZE * zoom,
+                        color,
+                        is_exec: pin.data_type == DataType::Execution,
+                        is_compatible_target,
+                    }
+                })
+                .collect();
+
+            let outputs = node
+                .outputs
+                .iter()
+                .enumerate()
+                .map(|(row, pin)| {
+                    let graph_center = NodeGraphRenderer::calculate_pin_position_graph_space(
+                        &node, false, row, &graph,
+                    );
+                    let center = NodeGraphRenderer::graph_to_screen_pos(graph_center, &graph);
+                    let pin_style = pin.data_type.generate_pin_style();
+                    let color = gpui::Hsla::from(gpui::Rgba {
+                        r: pin_style.color.r,
+                        g: pin_style.color.g,
+                        b: pin_style.color.b,
+                        a: pin_style.color.a,
+                    });
+
+                    CanvasPinRender {
+                        name: pin.name.clone(),
+                        center,
+                        size: layout::PIN_SIZE * zoom,
+                        color,
+                        is_exec: pin.data_type == DataType::Execution,
+                        is_compatible_target: false,
+                    }
+                })
+                .collect();
+
+            CanvasNodeRender {
+                origin,
+                size: Size {
+                    width: if is_reroute {
+                        (layout::PIN_SIZE * zoom * 1.6).max(10.0)
+                    } else {
+                        scaled_width
+                    },
+                    height: if is_reroute {
+                        (layout::PIN_SIZE * zoom * 1.6).max(10.0)
+                    } else {
+                        scaled_height
+                    },
+                },
+                is_reroute,
+                is_selected: node.is_selected,
+                title_color: style::title_bg(node_color),
+                body_color: style::body_bg(),
+                border_color: if node.is_selected {
+                    style::selected_border(node_color)
+                } else {
+                    style::idle_border()
+                },
+                corner_radius: style::corner_radius(zoom).0,
+                icon: node.icon,
+                title: node.title,
+                inputs,
+                outputs,
+            }
+        })
+        .collect();
+
+    gpui::canvas(
+        |_bounds, _window, _cx| {},
+        move |_bounds, _prepaint, window, cx| {
+            for node in &node_renders {
+                if node.is_reroute {
+                    let radius = node.size.width.min(node.size.height) * 0.5;
+                    let center = point(
+                        px(node.origin.x + node.size.width * 0.5),
+                        px(node.origin.y + node.size.height * 0.5),
+                    );
+                    let reroute_bounds = Bounds::from_corners(
+                        point(
+                            px(center.x.as_f32() - radius),
+                            px(center.y.as_f32() - radius),
+                        ),
+                        point(
+                            px(center.x.as_f32() + radius),
+                            px(center.y.as_f32() + radius),
+                        ),
+                    );
+                    window.paint_quad(quad(
+                        reroute_bounds,
+                        Corners::all(px(radius)),
+                        gpui::Hsla {
+                            h: 0.0,
+                            s: 0.0,
+                            l: 0.35,
+                            a: 1.0,
+                        },
+                        px(if node.is_selected { 2.0 } else { 1.0 }),
+                        node.border_color,
+                        BorderStyle::Solid,
+                    ));
+                    continue;
+                }
+
+                let node_bounds = Bounds::from_corners(
+                    point(px(node.origin.x), px(node.origin.y)),
+                    point(
+                        px(node.origin.x + node.size.width),
+                        px(node.origin.y + node.size.height),
+                    ),
+                );
+
+                window.paint_quad(quad(
+                    node_bounds,
+                    Corners::all(px(node.corner_radius)),
+                    node.body_color,
+                    px(1.0),
+                    node.border_color,
+                    BorderStyle::Solid,
+                ));
+
+                let header_height = layout::HEADER_H * graph.zoom_level;
+                let header_bounds = Bounds::from_corners(
+                    point(px(node.origin.x), px(node.origin.y)),
+                    point(
+                        px(node.origin.x + node.size.width),
+                        px(node.origin.y + header_height),
+                    ),
+                );
+                window.paint_quad(quad(
+                    header_bounds,
+                    Corners {
+                        top_left: px(node.corner_radius),
+                        top_right: px(node.corner_radius),
+                        bottom_left: px(0.0),
+                        bottom_right: px(0.0),
+                    },
+                    node.title_color,
+                    px(0.0),
+                    gpui::transparent_black(),
+                    BorderStyle::Solid,
+                ));
+
+                let pin_row_height = layout::PIN_ROW_H * graph.zoom_level;
+                let title_y = node.origin.y + (layout::HEADER_H * 0.5 + 3.0) * graph.zoom_level;
+                paint_canvas_text(
+                    window,
+                    cx,
+                    &node.icon,
+                    point(
+                        px(node.origin.x + HEADER_PAD_X * graph.zoom_level),
+                        px(title_y),
+                    ),
+                    HEADER_ICON_SIZE * graph.zoom_level,
+                    gpui::Hsla {
+                        h: 0.0,
+                        s: 0.0,
+                        l: 1.0,
+                        a: 0.85,
+                    },
+                    TextAlign::Left,
+                );
+
+                paint_canvas_text(
+                    window,
+                    cx,
+                    &node.title,
+                    point(
+                        px(node.origin.x
+                            + (HEADER_PAD_X + ICON_TITLE_GAP) * graph.zoom_level
+                            + 10.0),
+                        px(title_y),
+                    ),
+                    HEADER_TITLE_SIZE * graph.zoom_level,
+                    gpui::white(),
+                    TextAlign::Left,
+                );
+
+                let pin_label_color = gpui::Hsla {
+                    h: 0.0,
+                    s: 0.0,
+                    l: 0.92,
+                    a: 1.0,
+                };
+
+                for pin in &node.inputs {
+                    paint_canvas_pin(window, pin, true);
+                    paint_canvas_text(
+                        window,
+                        cx,
+                        &pin.name,
+                        point(
+                            px(pin.center.x + (pin.size + PIN_TEXT_PAD) * 0.5),
+                            px(pin.center.y + pin_row_height * 0.16),
+                        ),
+                        PIN_TEXT_SIZE * graph.zoom_level,
+                        pin_label_color,
+                        TextAlign::Left,
+                    );
+                }
+
+                for pin in &node.outputs {
+                    paint_canvas_pin(window, pin, false);
+                    paint_canvas_text(
+                        window,
+                        cx,
+                        &pin.name,
+                        point(
+                            px(pin.center.x - (pin.size + PIN_TEXT_PAD) * 0.5),
+                            px(pin.center.y + pin_row_height * 0.16),
+                        ),
+                        PIN_TEXT_SIZE * graph.zoom_level,
+                        pin_label_color,
+                        TextAlign::Right,
+                    );
+                }
+            }
+        },
     )
+    .absolute()
+    .inset_0()
+    .size_full()
+}
+
+fn paint_canvas_pin(window: &mut Window, pin: &CanvasPinRender, is_input: bool) {
+    if pin.is_exec {
+        let half = pin.size * 0.5;
+        let body = pin.size * 0.52;
+        let left = pin.center.x - half;
+        let top = pin.center.y - half;
+        let right = pin.center.x + half;
+        let bottom = pin.center.y + half;
+        let mid_y = pin.center.y;
+        let fill = if pin.is_compatible_target {
+            gpui::Hsla {
+                h: 0.36,
+                s: 0.82,
+                l: 0.56,
+                a: 1.0,
+            }
+        } else {
+            gpui::Hsla {
+                h: 0.0,
+                s: 0.0,
+                l: 0.88,
+                a: 1.0,
+            }
+        };
+        let border = if pin.is_compatible_target {
+            fill
+        } else {
+            gpui::Hsla {
+                h: 0.0,
+                s: 0.0,
+                l: 0.50,
+                a: 0.9,
+            }
+        };
+
+        let (flat_x, tip_x) = if is_input {
+            (left, right)
+        } else {
+            (right, left)
+        };
+        let body_x = if is_input { left + body } else { right - body };
+
+        let mut outline = gpui::PathBuilder::fill();
+        outline.move_to(point(px(flat_x - 1.0), px(top - 1.0)));
+        outline.line_to(point(px(body_x), px(top - 1.0)));
+        outline.line_to(point(
+            px(tip_x + if is_input { 1.0 } else { -1.0 }),
+            px(mid_y),
+        ));
+        outline.line_to(point(px(body_x), px(bottom + 1.0)));
+        outline.line_to(point(px(flat_x - 1.0), px(bottom + 1.0)));
+        outline.close();
+        if let Ok(path) = outline.build() {
+            window.paint_path(path, border);
+        }
+
+        let mut fill_path = gpui::PathBuilder::fill();
+        fill_path.move_to(point(px(flat_x), px(top)));
+        fill_path.line_to(point(px(body_x), px(top)));
+        fill_path.line_to(point(px(tip_x), px(mid_y)));
+        fill_path.line_to(point(px(body_x), px(bottom)));
+        fill_path.line_to(point(px(flat_x), px(bottom)));
+        fill_path.close();
+        if let Ok(path) = fill_path.build() {
+            window.paint_path(path, fill);
+        }
+        return;
+    }
+
+    let fill = if pin.is_compatible_target {
+        gpui::Hsla {
+            h: 0.36,
+            s: 0.82,
+            l: 0.56,
+            a: 1.0,
+        }
+    } else {
+        pin.color
+    };
+
+    let border = if pin.is_compatible_target {
+        fill
+    } else {
+        gpui::Hsla {
+            h: 0.0,
+            s: 0.0,
+            l: 0.25,
+            a: 0.9,
+        }
+    };
+
+    let radius = pin.size * 0.5;
+    let pin_bounds = Bounds::from_corners(
+        point(px(pin.center.x - radius), px(pin.center.y - radius)),
+        point(px(pin.center.x + radius), px(pin.center.y + radius)),
+    );
+
+    window.paint_quad(quad(
+        pin_bounds,
+        Corners::all(px(radius)),
+        fill,
+        px(1.0),
+        border,
+        BorderStyle::Solid,
+    ));
+}
+
+fn paint_canvas_text(
+    window: &mut Window,
+    cx: &mut App,
+    text: &str,
+    origin: Point<Pixels>,
+    font_size: f32,
+    color: gpui::Hsla,
+    align: TextAlign,
+) {
+    if text.is_empty() {
+        return;
+    }
+
+    let text_run = TextRun {
+        len: text.len(),
+        font: window.text_style().font(),
+        color: color.into(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+
+    if let Ok(lines) = window.text_system().shape_text(
+        text.to_string().into(),
+        px(font_size.max(1.0)),
+        &[text_run],
+        None,
+        Some(1),
+    ) {
+        for line in lines {
+            let line_origin = match align {
+                TextAlign::Left => origin,
+                TextAlign::Right => origin - point(line.size(px(font_size)).width, px(0.0)),
+                _ => origin - point(line.size(px(font_size)).width / 2.0, px(0.0)),
+            };
+            let _ = line.paint(line_origin, px(font_size), align, None, window, cx);
+        }
+    }
 }
 
 /// Render a single blueprint node
@@ -238,10 +723,24 @@ fn render_blueprint_node(
             let menu_id = format!("node-context-menu-{}", node_id);
             let menu_node_id = node_id.clone();
             ContextMenu::new(menu_id).menu(move |menu: PopupMenu, _window, _cx| {
-                menu
-                    .menu("Duplicate Node", Box::new(DuplicateNode { node_id: menu_node_id.clone() }))
-                    .menu("Copy Node", Box::new(CopyNode { node_id: menu_node_id.clone() }))
-                    .menu("Delete Node", Box::new(DeleteNode { node_id: menu_node_id.clone() }))
+                menu.menu(
+                    "Duplicate Node",
+                    Box::new(DuplicateNode {
+                        node_id: menu_node_id.clone(),
+                    }),
+                )
+                .menu(
+                    "Copy Node",
+                    Box::new(CopyNode {
+                        node_id: menu_node_id.clone(),
+                    }),
+                )
+                .menu(
+                    "Delete Node",
+                    Box::new(DeleteNode {
+                        node_id: menu_node_id.clone(),
+                    }),
+                )
             })
         })
         // Header
@@ -739,10 +1238,13 @@ fn render_pin(
             let disconnect_node_id = node_id.to_string();
             let disconnect_pin_id = pin.id.clone();
             ContextMenu::new(menu_id).menu(move |menu: PopupMenu, _window, _cx| {
-                menu.menu("Disconnect Pin", Box::new(DisconnectPin {
-                    node_id: disconnect_node_id.clone(),
-                    pin_id: disconnect_pin_id.clone(),
-                }))
+                menu.menu(
+                    "Disconnect Pin",
+                    Box::new(DisconnectPin {
+                        node_id: disconnect_node_id.clone(),
+                        pin_id: disconnect_pin_id.clone(),
+                    }),
+                )
             })
         })
         .w(px(sz))

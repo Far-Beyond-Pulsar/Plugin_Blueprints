@@ -151,34 +151,33 @@ pub fn render_comment(
                                     }
 
                                     let now = std::time::Instant::now();
-                                    let should_edit = if let Some(last_click) =
-                                        panel.last_click_time
-                                    {
-                                        if now.duration_since(last_click).as_millis() < 500 {
-                                            if let Some(last_pos) = panel.last_click_pos {
-                                                let element_pos =
+                                    let should_edit =
+                                        if let Some(last_click) = panel.last_click_time {
+                                            if now.duration_since(last_click).as_millis() < 500 {
+                                                if let Some(last_pos) = panel.last_click_pos {
+                                                    let element_pos =
                                                     NodeGraphRenderer::window_to_graph_element_pos(
                                                         event.position,
                                                         panel,
                                                     );
-                                                let current_pos = Point::new(
-                                                    element_pos.x.as_f32(),
-                                                    element_pos.y.as_f32(),
-                                                );
-                                                let distance = ((current_pos.x - last_pos.x)
-                                                    .powi(2)
-                                                    + (current_pos.y - last_pos.y).powi(2))
-                                                .sqrt();
-                                                distance < 10.0
+                                                    let current_pos = Point::new(
+                                                        element_pos.x.as_f32(),
+                                                        element_pos.y.as_f32(),
+                                                    );
+                                                    let distance = ((current_pos.x - last_pos.x)
+                                                        .powi(2)
+                                                        + (current_pos.y - last_pos.y).powi(2))
+                                                    .sqrt();
+                                                    distance < 10.0
+                                                } else {
+                                                    false
+                                                }
                                             } else {
                                                 false
                                             }
                                         } else {
                                             false
-                                        }
-                                    } else {
-                                        false
-                                    };
+                                        };
 
                                     if should_edit {
                                         panel.editing_comment = Some(comment_id.clone());

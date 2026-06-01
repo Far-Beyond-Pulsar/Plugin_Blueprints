@@ -55,17 +55,20 @@ impl HierarchyItem for VariableHierarchyItem {
         let type_info = ui::graph::TypeInfo::parse(&self.variable.var_type);
         let pin_color = type_info.generate_color();
 
-        Some(Hsla {
-            h: 0.0,
-            s: 0.0,
-            l: 0.0,
-            a: 1.0,
-        }.blend(Hsla {
-            h: pin_color.r as f32 * 360.0,
-            s: pin_color.g as f32,
-            l: pin_color.b as f32,
-            a: pin_color.a as f32,
-        }))
+        Some(
+            Hsla {
+                h: 0.0,
+                s: 0.0,
+                l: 0.0,
+                a: 1.0,
+            }
+            .blend(Hsla {
+                h: pin_color.r as f32 * 360.0,
+                s: pin_color.g as f32,
+                l: pin_color.b as f32,
+                a: pin_color.a as f32,
+            }),
+        )
     }
 
     fn children_ids(&self) -> Vec<Self::Id> {

@@ -16,17 +16,17 @@ use gpui::prelude::*;
 use gpui::*;
 use ui::context_menu::ContextMenu;
 use ui::popup_menu::PopupMenu;
-use ui::PixelsExt;
 use ui::ActiveTheme;
+use ui::PixelsExt;
 use ui::StyledExt;
 
-use crate::core::types::*;
 use crate::core::events::{CopyNode, DeleteNode, DisconnectPin, DuplicateNode};
+use crate::core::types::*;
 use crate::editor::panel::BlueprintEditorPanel;
+use crate::features::nodes::rendering::parse_hex_color;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::rendering::{layout, style};
 use ui::graph::DataType;
-use crate::features::nodes::rendering::parse_hex_color;
 
 /// Render a blueprint node using span-based (absolutely positioned div) rendering.
 pub fn render_blueprint_node_spans(
@@ -145,7 +145,7 @@ pub fn render_blueprint_node_spans(
                 .rounded(corner_r)
                 .border_color(border_color)
                 .when(node.is_selected, |s| s.border_2().shadow_2xl())
-                .when(!node.is_selected, |s| s.border_1().shadow_md())
+                .when(!node.is_selected, |s| s.border_1().shadow_md()),
         )
         // Layer 2: Header background
         .child(
@@ -161,7 +161,7 @@ pub fn render_blueprint_node_spans(
                     top_right: corner_r,
                     bottom_right: px(0.0),
                     bottom_left: px(0.0),
-                })
+                }),
         )
         // Layer 3: Separator line
         .child(
@@ -171,10 +171,21 @@ pub fn render_blueprint_node_spans(
                 .left_0()
                 .w_full()
                 .h(px(sep_h))
-                .bg(style::accent_separator(node_color))
+                .bg(style::accent_separator(node_color)),
         )
         // Layer 4: Pins
-        .children(render_pins_spans(node, z, body_pad, pin_body_y, pin_row_h, pin_gap, pin_size, scaled_width, panel, cx))
+        .children(render_pins_spans(
+            node,
+            z,
+            body_pad,
+            pin_body_y,
+            pin_row_h,
+            pin_gap,
+            pin_size,
+            scaled_width,
+            panel,
+            cx,
+        ))
         // Layer 5: Text - Icon
         .child(
             div()
@@ -188,7 +199,7 @@ pub fn render_blueprint_node_spans(
                     l: 1.0,
                     a: 0.85,
                 })
-                .child(node.icon.clone())
+                .child(node.icon.clone()),
         )
         // Layer 5: Text - Title
         .child(
@@ -199,7 +210,7 @@ pub fn render_blueprint_node_spans(
                 .text_size(px(13.0 * z))
                 .font_semibold()
                 .text_color(gpui::white())
-                .child(node.title.clone())
+                .child(node.title.clone()),
         )
         // Layer 5: Text - Macro badge (if subgraph)
         .when(node.definition_id.starts_with("subgraph:"), |container| {
@@ -231,7 +242,7 @@ pub fn render_blueprint_node_spans(
                         b: 1.0,
                         a: 1.0,
                     })
-                    .child("MACRO")
+                    .child("MACRO"),
             )
         })
         // Layer 6: Event handlers and overlays
@@ -248,10 +259,24 @@ pub fn render_blueprint_node_spans(
             let menu_id = format!("node-context-menu-{}", node_id);
             let menu_node_id = node_id.clone();
             ContextMenu::new(menu_id).menu(move |menu: PopupMenu, _window, _cx| {
-                menu
-                    .menu("Duplicate Node", Box::new(DuplicateNode { node_id: menu_node_id.clone() }))
-                    .menu("Copy Node", Box::new(CopyNode { node_id: menu_node_id.clone() }))
-                    .menu("Delete Node", Box::new(DeleteNode { node_id: menu_node_id.clone() }))
+                menu.menu(
+                    "Duplicate Node",
+                    Box::new(DuplicateNode {
+                        node_id: menu_node_id.clone(),
+                    }),
+                )
+                .menu(
+                    "Copy Node",
+                    Box::new(CopyNode {
+                        node_id: menu_node_id.clone(),
+                    }),
+                )
+                .menu(
+                    "Delete Node",
+                    Box::new(DeleteNode {
+                        node_id: menu_node_id.clone(),
+                    }),
+                )
             })
         })
         // Header mouse handler (for dragging and double-click to open subgraph)
@@ -283,8 +308,7 @@ pub fn render_blueprint_node_spans(
                                         panel,
                                     );
                                     let cp = Point::new(ep.x.as_f32(), ep.y.as_f32());
-                                    ((cp.x - last_p.x).powi(2) + (cp.y - last_p.y).powi(2))
-                                        .sqrt()
+                                    ((cp.x - last_p.x).powi(2) + (cp.y - last_p.y).powi(2)).sqrt()
                                         < 10.0
                                 } else {
                                     false
@@ -299,9 +323,7 @@ pub fn render_blueprint_node_spans(
                                 .strip_prefix("subgraph:")
                                 .unwrap_or(&node_definition_id)
                                 .to_string();
-                            if let Some(library_id) =
-                                panel.get_macro_library_id(&subgraph_id)
-                            {
+                            if let Some(library_id) = panel.get_macro_library_id(&subgraph_id) {
                                 let library_name = panel
                                     .library_manager
                                     .get_libraries()
@@ -337,15 +359,13 @@ pub fn render_blueprint_node_spans(
                                 event.position,
                                 panel,
                             );
-                            let gp =
-                                NodeGraphRenderer::screen_to_graph_pos(ep, &panel.graph);
+                            let gp = NodeGraphRenderer::screen_to_graph_pos(ep, &panel.graph);
                             panel.start_drag(node_id.clone(), gp, cx);
                             panel.last_click_time = Some(now);
-                            panel.last_click_pos =
-                                Some(Point::new(ep.x.as_f32(), ep.y.as_f32()));
+                            panel.last_click_pos = Some(Point::new(ep.x.as_f32(), ep.y.as_f32()));
                         }
                     })
-                })
+                }),
         )
         // Body mouse handler (select on click)
         .on_mouse_down(gpui::MouseButton::Left, {
@@ -384,19 +404,9 @@ fn render_pins_spans(
 
         // Input pin
         if let Some(pin) = node.inputs.get(i) {
-            elements.push(
-                render_pin_span(
-                    pin,
-                    true,
-                    &node.id,
-                    body_pad,
-                    row_y,
-                    pin_size,
-                    z,
-                    panel,
-                    cx,
-                )
-            );
+            elements.push(render_pin_span(
+                pin, true, &node.id, body_pad, row_y, pin_size, z, panel, cx,
+            ));
 
             // Input pin label
             if !pin.name.is_empty() {
@@ -408,7 +418,7 @@ fn render_pins_spans(
                         .text_size(px(11.0 * z))
                         .text_color(label_color)
                         .child(pin.name.clone())
-                        .into_any_element()
+                        .into_any_element(),
                 );
             }
         }
@@ -427,23 +437,13 @@ fn render_pins_spans(
                         .text_size(px(11.0 * z))
                         .text_color(label_color)
                         .child(pin.name.clone())
-                        .into_any_element()
+                        .into_any_element(),
                 );
             }
 
-            elements.push(
-                render_pin_span(
-                    pin,
-                    false,
-                    &node.id,
-                    output_x,
-                    row_y,
-                    pin_size,
-                    z,
-                    panel,
-                    cx,
-                )
-            );
+            elements.push(render_pin_span(
+                pin, false, &node.id, output_x, row_y, pin_size, z, panel, cx,
+            ));
         }
     }
 
@@ -522,10 +522,13 @@ fn render_pin_span(
             let disconnect_node_id = node_id.to_string();
             let disconnect_pin_id = pin.id.clone();
             ContextMenu::new(menu_id).menu(move |menu: PopupMenu, _window, _cx| {
-                menu.menu("Disconnect Pin", Box::new(DisconnectPin {
-                    node_id: disconnect_node_id.clone(),
-                    pin_id: disconnect_pin_id.clone(),
-                }))
+                menu.menu(
+                    "Disconnect Pin",
+                    Box::new(DisconnectPin {
+                        node_id: disconnect_node_id.clone(),
+                        pin_id: disconnect_pin_id.clone(),
+                    }),
+                )
             })
         })
         .when(is_exec, |s| {

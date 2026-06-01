@@ -22,13 +22,13 @@ use std::{path::PathBuf, sync::Arc};
 use ui::dock::PanelView;
 
 // Module declarations
+mod ai_tools;
 mod core;
 mod editor;
 mod features;
 mod io;
 mod rendering;
 mod ui_components;
-mod ai_tools;
 
 // Re-export main types for plugin API compatibility
 pub use core::definitions::*;

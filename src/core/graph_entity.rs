@@ -33,10 +33,7 @@ pub trait GraphEntity {
         let entity_right = pos.x + size.width;
         let entity_bottom = pos.y + size.height;
 
-        !(entity_right < min.x
-            || pos.x > max.x
-            || entity_bottom < min.y
-            || pos.y > max.y)
+        !(entity_right < min.x || pos.x > max.x || entity_bottom < min.y || pos.y > max.y)
     }
 }
 

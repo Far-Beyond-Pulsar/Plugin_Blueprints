@@ -264,9 +264,9 @@ impl ClipboardData {
                     },
                     contained_node_ids: new_contained_ids,
                     is_selected: false,
-                    color_picker_state: Some(cx.new(|cx| {
-                        ui::color_picker::ColorPickerState::new(window, cx)
-                    })),
+                    color_picker_state: Some(
+                        cx.new(|cx| ui::color_picker::ColorPickerState::new(window, cx)),
+                    ),
                 })
             })
             .collect();

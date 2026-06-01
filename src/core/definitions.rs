@@ -384,7 +384,10 @@ impl NodeDefinitions {
             id: format!("comp_get_prop::{}::{}", class_name, prop_name),
             name: format!("Get {} ({})", display_name, class_name),
             icon: "⬇".to_string(),
-            description: format!("Get {}.{} from this prefab's component", class_name, prop_name),
+            description: format!(
+                "Get {}.{} from this prefab's component",
+                class_name, prop_name
+            ),
             documentation: format!(
                 "Reads the `{}` property of the `{}` component attached to this prefab.\n\n\
                  **Returns** the current value of the property.",

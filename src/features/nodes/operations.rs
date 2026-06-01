@@ -14,8 +14,7 @@ impl BlueprintEditorPanel {
         node.position = NodeGraphRenderer::snap_to_grid(node.position, self.graph.zoom_level);
         println!(
             "Adding node: {} at position {:?}",
-            node.title,
-            node.position
+            node.title, node.position
         );
 
         // Create and execute undo command
@@ -45,9 +44,11 @@ impl BlueprintEditorPanel {
             let pin_data_type = target_pin.data_type.clone();
             let target_pin_id = target_pin.id.clone();
 
-            let source_is_reroute = self.graph.nodes.iter().any(|n| {
-                n.id == source.source_node && n.node_type == NodeType::Reroute
-            });
+            let source_is_reroute = self
+                .graph
+                .nodes
+                .iter()
+                .any(|n| n.id == source.source_node && n.node_type == NodeType::Reroute);
             let target_is_reroute = self
                 .graph
                 .nodes
@@ -56,7 +57,8 @@ impl BlueprintEditorPanel {
 
             if source.source_pin_type == GraphDataType::Execution || source_is_reroute {
                 self.graph.connections.retain(|conn| {
-                    !(conn.source_node == source.source_node && conn.source_pin == source.source_pin)
+                    !(conn.source_node == source.source_node
+                        && conn.source_pin == source.source_pin)
                 });
             }
 
@@ -119,7 +121,9 @@ impl BlueprintEditorPanel {
     pub fn delete_node(&mut self, node_id: String, cx: &mut Context<Self>) {
         // Find the node and its connections before deleting
         if let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id).cloned() {
-            let connections: Vec<_> = self.graph.connections
+            let connections: Vec<_> = self
+                .graph
+                .connections
                 .iter()
                 .filter(|c| c.source_node == node_id || c.target_node == node_id)
                 .cloned()
@@ -160,8 +164,7 @@ impl BlueprintEditorPanel {
     pub fn start_drag(&mut self, node_id: String, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
         println!(
             "[DRAG] Starting drag for node {} at mouse position {:?}",
-            node_id,
-            mouse_pos
+            node_id, mouse_pos
         );
 
         if let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id) {
@@ -194,8 +197,7 @@ impl BlueprintEditorPanel {
                     self.graph.selected_comments.len()
                 );
                 for comment_id in &self.graph.selected_comments {
-                    if let Some(comment) =
-                        self.graph.comments.iter().find(|c| c.id == *comment_id)
+                    if let Some(comment) = self.graph.comments.iter().find(|c| c.id == *comment_id)
                     {
                         self.initial_comment_drag_positions
                             .insert(comment_id.clone(), comment.position);
@@ -238,7 +240,9 @@ impl BlueprintEditorPanel {
 
                 // Move all comments that were selected when dragging started
                 for (comment_id, initial_position) in &self.initial_comment_drag_positions.clone() {
-                    if let Some(comment) = self.graph.comments.iter_mut().find(|c| c.id == *comment_id) {
+                    if let Some(comment) =
+                        self.graph.comments.iter_mut().find(|c| c.id == *comment_id)
+                    {
                         comment.position = NodeGraphRenderer::snap_to_grid(
                             Point::new(initial_position.x + delta.x, initial_position.y + delta.y),
                             self.graph.zoom_level,

@@ -4,24 +4,23 @@
 //! constructors, and basic accessors.
 
 use gpui::*;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use ui::{
-    color_picker::ColorPickerState,
-    input::InputState,
-    resizable::ResizableState,
-    scroll::ScrollbarState,
-    VirtualListScrollHandle,
+    color_picker::ColorPickerState, input::InputState, resizable::ResizableState,
+    scroll::ScrollbarState, VirtualListScrollHandle,
 };
 
 use super::tabs::GraphTab;
-use crate::ui_components::palette_view::NodePaletteView;
 use crate::core::{definitions::NodeDefinitions, events::*, graph::*, types::*};
 use crate::editor::workspace_panels::GraphCanvasPanel;
-use crate::features::prefabs::add_component_dialog::AddPrefabComponentDialog;
 use crate::features::connections::operations::ConnectionDrag;
+use crate::features::prefabs::add_component_dialog::AddPrefabComponentDialog;
 use crate::features::prefabs::PrefabAsset;
 use crate::features::variables::ClassVariable;
 use crate::rendering::graph::NodeGraphRenderer;
+use crate::ui_components::palette_view::NodePaletteView;
 use ui::dock::{DockItem, DockPlacement};
 use ui::graph::DataType;
 use ui::graph::{DataType as GraphDataType, LibraryManager, SubGraphDefinition};
@@ -67,6 +66,9 @@ pub struct BlueprintEditorPanel {
     pub last_click_pos: Option<Point<f32>>,
 
     // Coordinate conversion
+    /// Window-space origin of the single bp canvas element, captured each frame during paint.
+    /// Event handlers subtract this to get canvas-relative (= "screen") coordinates.
+    pub canvas_origin: Rc<RefCell<Point<f32>>>,
     pub graph_element_bounds: Option<Bounds<Pixels>>,
     pub graph_element_bounds_by_view: HashMap<String, Bounds<Pixels>>,
     pub interaction_view_id: Option<String>,
@@ -132,7 +134,8 @@ pub struct BlueprintEditorPanel {
     /// Whether the quick-palette search input should be focused on next paint.
     pub quick_palette_focus_pending: bool,
     /// When opening quick palette from a connection drag, this is the source drag metadata.
-    pub quick_palette_connection_source: Option<crate::features::connections::operations::ConnectionDrag>,
+    pub quick_palette_connection_source:
+        Option<crate::features::connections::operations::ConnectionDrag>,
     /// Window-space position where the user right-clicked (used to anchor the overlay).
     pub quick_palette_screen_pos: Point<Pixels>,
     /// The shared palette view rendered inside the overlay.
@@ -155,8 +158,13 @@ pub struct BlueprintEditorPanel {
     // Undo/redo system
     pub undo_manager: crate::features::undo::UndoManager,
 
-    // Connection rendering cache
-    pub connection_render_cache: crate::features::connections::rendering_cached::ConnectionRenderCache,
+    // Connection rendering cache (kept for backwards-compat; GPU renderer no longer uses it)
+    pub connection_render_cache:
+        crate::features::connections::rendering_cached::ConnectionRenderCache,
+
+    // ── GPU renderer ──────────────────────────────────────────────────────────
+    pub bp_renderer: crate::rendering::gpu::BpRenderer,
+    pub bp_surface:  Option<gpui::WgpuSurfaceHandle>,
 }
 
 /// Information about a tab being dragged
@@ -379,6 +387,7 @@ impl BlueprintEditorPanel {
             right_click_threshold: 5.0,
             last_click_time: None,
             last_click_pos: None,
+            canvas_origin: Rc::new(RefCell::new(Point::new(0.0, 0.0))),
             graph_element_bounds: None,
             graph_element_bounds_by_view: HashMap::new(),
             interaction_view_id: None,
@@ -450,7 +459,10 @@ impl BlueprintEditorPanel {
             dragging_tab: None,
             is_dirty: false,
             undo_manager: crate::features::undo::UndoManager::new(),
-            connection_render_cache: crate::features::connections::rendering_cached::ConnectionRenderCache::new(),
+            connection_render_cache:
+                crate::features::connections::rendering_cached::ConnectionRenderCache::new(),
+            bp_renderer: crate::rendering::gpu::BpRenderer::new(),
+            bp_surface:  None,
         }
     }
 
@@ -842,7 +854,7 @@ impl BlueprintEditorPanel {
     // ============================================================================
 
     pub(crate) fn snap_comment_position(&self, position: Point<f32>) -> Point<f32> {
-        crate::rendering::graph::NodeGraphRenderer::snap_to_grid(position, self.graph.zoom_level)
+        crate::rendering::graph::NodeGraphRenderer::snap_to_grid(position)
     }
 
     fn snap_comment_size(size: Size<f32>) -> Size<f32> {
@@ -907,11 +919,15 @@ impl BlueprintEditorPanel {
     }
 
     /// Start dragging a comment (stores initial positions of all selected items)
-    pub fn start_comment_drag(&mut self, comment_id: String, mouse_pos: Point<f32>, _cx: &mut Context<Self>) {
+    pub fn start_comment_drag(
+        &mut self,
+        comment_id: String,
+        mouse_pos: Point<f32>,
+        _cx: &mut Context<Self>,
+    ) {
         println!(
             "[DRAG] Starting drag for comment {} at mouse position {:?}",
-            comment_id,
-            mouse_pos
+            comment_id, mouse_pos
         );
 
         if let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) {
@@ -947,7 +963,8 @@ impl BlueprintEditorPanel {
                 );
                 for node_id in &self.graph.selected_nodes {
                     if let Some(node) = self.graph.nodes.iter().find(|n| n.id == *node_id) {
-                        self.initial_drag_positions.insert(node_id.clone(), node.position);
+                        self.initial_drag_positions
+                            .insert(node_id.clone(), node.position);
                     }
                 }
             } else {
@@ -989,7 +1006,6 @@ impl BlueprintEditorPanel {
                     if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *node_id) {
                         node.position = crate::rendering::graph::NodeGraphRenderer::snap_to_grid(
                             Point::new(initial_position.x + delta.x, initial_position.y + delta.y),
-                            self.graph.zoom_level,
                         );
                     }
                 }
@@ -1149,22 +1165,20 @@ impl BlueprintEditorPanel {
 
                 // Write to system clipboard using arboard
                 match arboard::Clipboard::new() {
-                    Ok(mut clipboard) => {
-                        match clipboard.set_text(&json) {
-                            Ok(_) => {
-                                println!("[CLIPBOARD] Successfully wrote to clipboard via arboard");
-                                println!(
-                                    "[CLIPBOARD] Copied {} nodes, {} comments, {} connections",
-                                    clipboard_data.nodes.len(),
-                                    clipboard_data.comments.len(),
-                                    clipboard_data.connections.len()
-                                );
-                            }
-                            Err(e) => {
-                                eprintln!("[CLIPBOARD] arboard set_text failed: {}", e);
-                            }
+                    Ok(mut clipboard) => match clipboard.set_text(&json) {
+                        Ok(_) => {
+                            println!("[CLIPBOARD] Successfully wrote to clipboard via arboard");
+                            println!(
+                                "[CLIPBOARD] Copied {} nodes, {} comments, {} connections",
+                                clipboard_data.nodes.len(),
+                                clipboard_data.comments.len(),
+                                clipboard_data.connections.len()
+                            );
                         }
-                    }
+                        Err(e) => {
+                            eprintln!("[CLIPBOARD] arboard set_text failed: {}", e);
+                        }
+                    },
                     Err(e) => {
                         eprintln!("[CLIPBOARD] Failed to create arboard clipboard: {}", e);
                     }
@@ -1184,18 +1198,19 @@ impl BlueprintEditorPanel {
 
         // Read from system clipboard using arboard
         let json = match arboard::Clipboard::new() {
-            Ok(mut clipboard) => {
-                match clipboard.get_text() {
-                    Ok(text) => {
-                        println!("[CLIPBOARD] Successfully read from clipboard, length: {} bytes", text.len());
-                        text
-                    }
-                    Err(e) => {
-                        println!("[CLIPBOARD] arboard get_text failed: {}", e);
-                        return;
-                    }
+            Ok(mut clipboard) => match clipboard.get_text() {
+                Ok(text) => {
+                    println!(
+                        "[CLIPBOARD] Successfully read from clipboard, length: {} bytes",
+                        text.len()
+                    );
+                    text
                 }
-            }
+                Err(e) => {
+                    println!("[CLIPBOARD] arboard get_text failed: {}", e);
+                    return;
+                }
+            },
             Err(e) => {
                 eprintln!("[CLIPBOARD] Failed to create arboard clipboard: {}", e);
                 return;
@@ -1215,14 +1230,10 @@ impl BlueprintEditorPanel {
                 // Compute the center of the copied formation so it can be pasted centered
                 // at the current mouse cursor rather than offset from the original location.
                 let mouse_window_pos = window.mouse_position();
-                let mouse_element_pos = NodeGraphRenderer::window_to_graph_element_pos(
-                    mouse_window_pos,
-                    self,
-                );
-                let mouse_graph_pos = NodeGraphRenderer::screen_to_graph_pos(
-                    mouse_element_pos,
-                    &self.graph,
-                );
+                let mouse_element_pos =
+                    NodeGraphRenderer::window_to_graph_element_pos(mouse_window_pos, self);
+                let mouse_graph_pos =
+                    NodeGraphRenderer::screen_to_graph_pos(mouse_element_pos, &self.graph);
 
                 let mut min_x = f32::MAX;
                 let mut min_y = f32::MAX;

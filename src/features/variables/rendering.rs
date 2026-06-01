@@ -99,24 +99,28 @@ impl VariablesRenderer {
                     });
                 });
             }),
-            on_drop: Arc::new(move |payload, target_id: &usize, _modifiers: &Modifiers, _window, cx| {
-                let from_index = payload.var_index;
-                let to_index = *target_id;
-                let panel = panel_entity_for_drop.clone();
+            on_drop: Arc::new(
+                move |payload, target_id: &usize, _modifiers: &Modifiers, _window, cx| {
+                    let from_index = payload.var_index;
+                    let to_index = *target_id;
+                    let panel = panel_entity_for_drop.clone();
 
-                if from_index != to_index {
-                    cx.defer(move |cx| {
-                        panel.update(cx, |panel, cx| {
-                            // Reorder variables
-                            if from_index < panel.class_variables.len() && to_index < panel.class_variables.len() {
-                                let variable = panel.class_variables.remove(from_index);
-                                panel.class_variables.insert(to_index, variable);
-                                cx.notify();
-                            }
+                    if from_index != to_index {
+                        cx.defer(move |cx| {
+                            panel.update(cx, |panel, cx| {
+                                // Reorder variables
+                                if from_index < panel.class_variables.len()
+                                    && to_index < panel.class_variables.len()
+                                {
+                                    let variable = panel.class_variables.remove(from_index);
+                                    panel.class_variables.insert(to_index, variable);
+                                    cx.notify();
+                                }
+                            });
                         });
-                    });
-                }
-            }),
+                    }
+                },
+            ),
         };
 
         HierarchicalTreeView::new(config).render(cx)

@@ -14,12 +14,12 @@ use crate::core::types::{BlueprintNode, Connection};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
-use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use ui::graph::DataType;
-use ui::PixelsExt;
 use ui::ActiveTheme;
+use ui::PixelsExt;
 
 /// Cached bezier path for a single connection
 #[derive(Clone, Debug)]
@@ -71,11 +71,7 @@ impl ConnectionRenderCache {
     }
 
     /// Rebuild the cache from current graph state
-    fn rebuild(
-        &mut self,
-        panel: &BlueprintEditorPanel,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) {
+    fn rebuild(&mut self, panel: &BlueprintEditorPanel, cx: &mut Context<BlueprintEditorPanel>) {
         self.paths.clear();
 
         // Build node lookup
@@ -88,12 +84,9 @@ impl ConnectionRenderCache {
 
         // Pre-calculate all connection paths in graph space
         for connection in &panel.graph.connections {
-            if let Some(path) = Self::calculate_connection_path(
-                connection,
-                &panel.graph,
-                &node_by_id,
-                cx,
-            ) {
+            if let Some(path) =
+                Self::calculate_connection_path(connection, &panel.graph, &node_by_id, cx)
+            {
                 let key = format!(
                     "{}:{}->{}:{}",
                     connection.source_node,
@@ -166,16 +159,10 @@ impl ConnectionRenderCache {
         let to_node = node_by_id.get(connection.target_node.as_str()).copied()?;
 
         // Calculate pin positions in GRAPH SPACE (not screen space)
-        let from_pos = Self::calculate_pin_position_graph_space(
-            from_node,
-            &connection.source_pin,
-            false,
-        )?;
-        let to_pos = Self::calculate_pin_position_graph_space(
-            to_node,
-            &connection.target_pin,
-            true,
-        )?;
+        let from_pos =
+            Self::calculate_pin_position_graph_space(from_node, &connection.source_pin, false)?;
+        let to_pos =
+            Self::calculate_pin_position_graph_space(to_node, &connection.target_pin, true)?;
 
         // Get pin color
         let color = if let Some(pin) = from_node
@@ -222,34 +209,24 @@ impl ConnectionRenderCache {
         let zoom = panel.graph.zoom_level;
 
         // Dragging connection (not cached - in graph space)
-        let dragging_shape = panel
-            .dragging_connection
-            .as_ref()
-            .and_then(|drag| {
-                if let Some(from_node) = panel.graph.nodes.iter().find(|n| n.id == drag.source_node)
+        let dragging_shape = panel.dragging_connection.as_ref().and_then(|drag| {
+            if let Some(from_node) = panel.graph.nodes.iter().find(|n| n.id == drag.source_node) {
+                if let Some(from_pin_pos) =
+                    Self::calculate_pin_position_graph_space(from_node, &drag.source_pin, false)
                 {
-                    if let Some(from_pin_pos) =
-                        Self::calculate_pin_position_graph_space(
-                            from_node,
-                            &drag.source_pin,
-                            false,
-                        )
+                    let to_pos = drag.current_mouse_pos; // Already in graph space
+                    let color = if let Some(pin) =
+                        from_node.outputs.iter().find(|p| p.id == drag.source_pin)
                     {
-                        let to_pos = drag.current_mouse_pos; // Already in graph space
-                        let color = if let Some(pin) = from_node
-                            .outputs
-                            .iter()
-                            .find(|p| p.id == drag.source_pin)
-                        {
-                            BlueprintEditorPanel::get_pin_color(&pin.data_type, cx)
-                        } else {
-                            cx.theme().primary
-                        };
-                        return Some((from_pin_pos, to_pos, color));
-                    }
+                        BlueprintEditorPanel::get_pin_color(&pin.data_type, cx)
+                    } else {
+                        cx.theme().primary
+                    };
+                    return Some((from_pin_pos, to_pos, color));
                 }
-                None
-            });
+            }
+            None
+        });
 
         gpui::canvas(
             move |_bounds, _window, _cx| {},
@@ -307,7 +284,15 @@ impl ConnectionRenderCache {
                     let cp1 = Point::new(screen_start.x + control_offset, screen_start.y);
                     let cp2 = Point::new(screen_end.x - control_offset, screen_end.y);
 
-                    paint_bezier_with_controls(window, screen_start, cp1, cp2, screen_end, *color, zoom);
+                    paint_bezier_with_controls(
+                        window,
+                        screen_start,
+                        cp1,
+                        cp2,
+                        screen_end,
+                        *color,
+                        zoom,
+                    );
                 }
             },
         )
@@ -368,14 +353,8 @@ fn paint_bezier_with_controls(
             let mt3 = mt2 * mt;
 
             // Cubic bezier formula
-            let x = mt3 * start.x
-                + 3.0 * mt2 * t * cp1.x
-                + 3.0 * mt * t2 * cp2.x
-                + t3 * end.x;
-            let y = mt3 * start.y
-                + 3.0 * mt2 * t * cp1.y
-                + 3.0 * mt * t2 * cp2.y
-                + t3 * end.y;
+            let x = mt3 * start.x + 3.0 * mt2 * t * cp1.x + 3.0 * mt * t2 * cp2.x + t3 * end.x;
+            let y = mt3 * start.y + 3.0 * mt2 * t * cp1.y + 3.0 * mt * t2 * cp2.y + t3 * end.y;
 
             builder.line_to(point(px(x), px(y)));
         }
