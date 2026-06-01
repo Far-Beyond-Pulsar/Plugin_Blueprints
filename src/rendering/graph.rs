@@ -543,4 +543,155 @@ impl NodeGraphRenderer {
         .with_priority(1)
         .into_any_element()
     }
+
+    // ── Node context menu ─────────────────────────────────────────────────────
+
+    fn render_node_context_menu(
+        panel: &BlueprintEditorPanel,
+        cx:    &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        let Some((ref node_id, pos)) = panel.node_context_menu else {
+            return div().into_any_element();
+        };
+        let node_id    = node_id.clone();
+        let pe         = cx.entity().clone();
+        let pe2        = pe.clone();
+        let pe3        = pe.clone();
+        let nid_dup    = node_id.clone();
+        let nid_copy   = node_id.clone();
+        let nid_del    = node_id.clone();
+
+        deferred(
+            anchored()
+                .position(pos)
+                .snap_to_window_with_margin(px(8.0))
+                .anchor(gpui::Corner::TopLeft)
+                .child(
+                    div()
+                        .occlude()
+                        .w(px(180.0))
+                        .bg(cx.theme().popover)
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .shadow_lg()
+                        .rounded(px(6.0))
+                        .py(px(4.0))
+                        .child(Self::menu_item("Duplicate Node", cx, {
+                            let pe = pe.clone();
+                            move |_, _, cx| {
+                                pe.update(cx, |panel, cx| {
+                                    panel.duplicate_node(nid_dup.clone(), cx);
+                                    panel.node_context_menu = None;
+                                    cx.notify();
+                                });
+                            }
+                        }))
+                        .child(Self::menu_item("Copy Node", cx, {
+                            let pe = pe2.clone();
+                            move |_, _, cx| {
+                                pe.update(cx, |panel, cx| {
+                                    panel.copy_node(nid_copy.clone(), cx);
+                                    panel.node_context_menu = None;
+                                    cx.notify();
+                                });
+                            }
+                        }))
+                        .child(Self::menu_divider(cx))
+                        .child(Self::menu_item("Delete Node", cx, {
+                            let pe = pe3.clone();
+                            move |_, _, cx| {
+                                pe.update(cx, |panel, cx| {
+                                    panel.delete_node(nid_del.clone(), cx);
+                                    panel.node_context_menu = None;
+                                    cx.notify();
+                                });
+                            }
+                        }))
+                        .on_mouse_down_out(move |_, _, cx| {
+                            pe.update(cx, |panel, cx| {
+                                panel.node_context_menu = None;
+                                cx.notify();
+                            });
+                        }),
+                ),
+        )
+        .with_priority(2)
+        .into_any_element()
+    }
+
+    // ── Pin context menu ──────────────────────────────────────────────────────
+
+    fn render_pin_context_menu(
+        panel: &BlueprintEditorPanel,
+        cx:    &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        let Some((ref node_id, ref pin_id, pos)) = panel.pin_context_menu else {
+            return div().into_any_element();
+        };
+        let node_id = node_id.clone();
+        let pin_id  = pin_id.clone();
+        let pe      = cx.entity().clone();
+        let pe2     = pe.clone();
+
+        deferred(
+            anchored()
+                .position(pos)
+                .snap_to_window_with_margin(px(8.0))
+                .anchor(gpui::Corner::TopLeft)
+                .child(
+                    div()
+                        .occlude()
+                        .w(px(180.0))
+                        .bg(cx.theme().popover)
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .shadow_lg()
+                        .rounded(px(6.0))
+                        .py(px(4.0))
+                        .child(Self::menu_item("Disconnect Pin", cx, {
+                            let pe = pe.clone();
+                            move |_, _, cx| {
+                                pe.update(cx, |panel, cx| {
+                                    panel.disconnect_pin(node_id.clone(), pin_id.clone(), cx);
+                                    panel.pin_context_menu = None;
+                                    cx.notify();
+                                });
+                            }
+                        }))
+                        .on_mouse_down_out(move |_, _, cx| {
+                            pe2.update(cx, |panel, cx| {
+                                panel.pin_context_menu = None;
+                                cx.notify();
+                            });
+                        }),
+                ),
+        )
+        .with_priority(2)
+        .into_any_element()
+    }
+
+    // ── Shared menu primitives ────────────────────────────────────────────────
+
+    fn menu_item(
+        label:   &str,
+        cx:      &mut Context<BlueprintEditorPanel>,
+        handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+    ) -> impl IntoElement {
+        div()
+            .px(px(12.0)).py(px(6.0))
+            .text_sm()
+            .text_color(cx.theme().popover_foreground)
+            .cursor_pointer()
+            .hover(|s| s.bg(cx.theme().accent.opacity(0.12)))
+            .on_mouse_down(gpui::MouseButton::Left, handler)
+            .child(label.to_string())
+    }
+
+    fn menu_divider(cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+        div()
+            .my(px(4.0))
+            .mx(px(8.0))
+            .h(px(1.0))
+            .bg(cx.theme().border)
+    }
 }
