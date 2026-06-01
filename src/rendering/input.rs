@@ -140,7 +140,7 @@ pub fn on_mouse_down_left(
     cx: &mut Context<BlueprintEditorPanel>,
 ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
-    move |event: &MouseDownEvent, _window, cx| {
+    move |event: &MouseDownEvent, window, cx| {
         entity.update(cx, |panel, cx| {
             // Close palette / context menus on any left click
             if panel.quick_palette_open {
@@ -172,6 +172,54 @@ pub fn on_mouse_down_left(
             }
 
             if let Some(node_id) = hit_node(gp, panel).map(str::to_owned) {
+                // ── Double-click detection ────────────────────────────────────
+                let now = std::time::Instant::now();
+                let is_double_click = if let (Some(t), Some(p)) =
+                    (panel.last_click_time, panel.last_click_pos)
+                {
+                    let ms = now.duration_since(t).as_millis();
+                    let d = ((gp.x - p.x).powi(2) + (gp.y - p.y).powi(2)).sqrt();
+                    ms < 500 && d < 50.0
+                } else {
+                    false
+                };
+
+                if is_double_click {
+                    // Double-clicking a MacroInstance opens the macro's source tab.
+                    if let Some(node) = panel.graph.nodes.iter().find(|n| n.id == node_id) {
+                        if node.node_type == crate::core::types::NodeType::MacroInstance {
+                            if let Some(macro_id) = node.definition_id.strip_prefix("macro:") {
+                                let macro_id = macro_id.to_string();
+                                let macro_name = panel
+                                    .local_macros
+                                    .iter()
+                                    .find(|m| m.id == macro_id)
+                                    .map(|m| m.name.clone())
+                                    .unwrap_or_else(|| "Macro".to_string());
+                                panel.last_click_time = None;
+                                panel.last_click_pos = None;
+                                // open_local_macro needs &mut Window; capture the handle
+                                // before the deferred closure so it remains valid.
+                                let win_handle = window.window_handle();
+                                let entity2 = cx.entity().clone();
+                                cx.defer(move |cx| {
+                                    let _ = cx.update_window(win_handle, |_, window, cx| {
+                                        entity2.update(cx, |panel, cx| {
+                                            panel.open_local_macro(macro_id, macro_name, window, cx);
+                                        });
+                                    });
+                                });
+                                return;
+                            }
+                        }
+                    }
+                    panel.last_click_time = None;
+                    panel.last_click_pos = None;
+                } else {
+                    panel.last_click_time = Some(now);
+                    panel.last_click_pos = Some(gp);
+                }
+
                 if !panel.graph.selected_nodes.contains(&node_id) {
                     if !event.modifiers.control {
                         panel.graph.selected_nodes.clear();
