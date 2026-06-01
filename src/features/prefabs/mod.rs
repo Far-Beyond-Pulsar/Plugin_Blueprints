@@ -7,6 +7,7 @@ pub mod panel;
 // Re-export commonly used types
 pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
 
+use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
 use engine_backend::scene::metadata::ComponentInstance;
 use gpui::{AppContext, Context, Entity, Hsla, Window};
@@ -18,6 +19,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use ui::color_picker::{ColorPickerEvent, ColorPickerState};
 use ui::input::{InputEvent, InputState};
+use ui::PixelsExt;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct PrefabAsset {
@@ -51,6 +53,62 @@ impl PrefabAsset {
 }
 
 impl BlueprintEditorPanel {
+    /// Create a getter node that outputs a runtime reference to a prefab component instance.
+    pub fn create_component_getter_node(
+        &mut self,
+        component_index: usize,
+        class_name: String,
+        position: gpui::Point<f32>,
+        cx: &mut Context<Self>,
+    ) {
+        let node = BlueprintNode {
+            id: format!("get_component_node_{}", uuid::Uuid::new_v4()),
+            definition_id: format!("get_component_ref::{}::{}", class_name, component_index),
+            title: format!("Get {}", class_name),
+            icon: "📦".to_string(),
+            node_type: NodeType::Object,
+            position,
+            size: gpui::Size::new(220.0, 80.0),
+            inputs: vec![],
+            outputs: vec![Pin {
+                id: "component".to_string(),
+                name: class_name.clone(),
+                pin_type: PinType::Output,
+                data_type: ui::graph::DataType::from_type_str(&class_name),
+            }],
+            properties: HashMap::from([
+                ("component_index".to_string(), component_index.to_string()),
+                ("component_class".to_string(), class_name.clone()),
+            ]),
+            is_selected: false,
+            description: format!("Gets a runtime reference to component {}", class_name),
+            color: Some("#9B59B6".to_string()),
+        };
+
+        self.add_node(node, cx);
+    }
+
+    /// Handle dropping a component from the prefab hierarchy onto the graph canvas.
+    pub fn finish_dragging_component(
+        &mut self,
+        drag: ComponentDrag,
+        window_pos: gpui::Point<gpui::Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        let origin = *self.canvas_origin.borrow();
+        let canvas = gpui::Point::new(
+            window_pos.x.as_f32() - origin.x,
+            window_pos.y.as_f32() - origin.y,
+        );
+        let z = self.graph.zoom_level;
+        let graph_pos = gpui::Point::new(
+            canvas.x / z - self.graph.pan_offset.x,
+            canvas.y / z - self.graph.pan_offset.y,
+        );
+
+        self.create_component_getter_node(drag.component_index, drag.class_name, graph_pos, cx);
+    }
+
     pub fn prefab_file_path(&self) -> Option<PathBuf> {
         self.current_class_path
             .as_ref()

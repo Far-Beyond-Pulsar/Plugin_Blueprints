@@ -470,7 +470,12 @@ impl NodeGraphRenderer {
             ];
             let body = [0.102, 0.117, 0.138, 1.0]; // dark slate
             let bord = if is_sel {
-                [0.56 + cat[0] * 0.24, 0.58 + cat[1] * 0.24, 0.62 + cat[2] * 0.26, 1.0]
+                [
+                    0.56 + cat[0] * 0.24,
+                    0.58 + cat[1] * 0.24,
+                    0.62 + cat[2] * 0.26,
+                    1.0,
+                ]
             } else {
                 [0.205, 0.218, 0.246, 1.0]
             };
@@ -622,8 +627,8 @@ impl NodeGraphRenderer {
                 let mut fc = [src[0], src[1], src[2], 1.0];
                 let mut wire_flags = 0_u32;
                 let mut thick = half_thick;
-                let is_runtime_active =
-                    node_is_active(conn.source_node.as_str()) || node_is_active(conn.target_node.as_str());
+                let is_runtime_active = node_is_active(conn.source_node.as_str())
+                    || node_is_active(conn.target_node.as_str());
                 if wire_hidden_mode {
                     wire_flags |= 2;
                     fc[3] = 0.18;
@@ -803,7 +808,8 @@ impl NodeGraphRenderer {
                         drop(view);
                         surface.swap_buffers();
                         if !panel.running_nodes.is_empty()
-                            || (panel.wire_active_test_mode && !panel.graph.selected_nodes.is_empty())
+                            || (panel.wire_active_test_mode
+                                && !panel.graph.selected_nodes.is_empty())
                         {
                             cx.notify();
                         }
@@ -815,81 +821,97 @@ impl NodeGraphRenderer {
             .size_full()
         };
 
-        // Wrap the canvas in a DropArea so macros can be dragged from the sidebar.
-        ui::drop_area::DropArea::<crate::features::macros::MacroDrag>::new("blueprint-canvas-drop")
-            .can_accept(|_| true)
-            .on_drop(cx.listener(|panel, payload: &crate::features::macros::MacroDrag, window, cx| {
-                panel.dragging_macro = Some(payload.clone());
+        // Wrap the canvas in DropAreas so sidebars can drag items directly onto the graph.
+        ui::drop_area::DropArea::<crate::features::prefabs::ComponentDrag>::new(
+            "blueprint-canvas-component-drop",
+        )
+        .can_accept(|_| true)
+        .on_drop(cx.listener(
+            |panel, payload: &crate::features::prefabs::ComponentDrag, window, cx| {
                 let mouse_pos = window.mouse_position();
-                panel.finish_dragging_macro(mouse_pos, cx);
-            }))
+                panel.finish_dragging_component(payload.clone(), mouse_pos, cx);
+            },
+        ))
+        .child(
+            ui::drop_area::DropArea::<crate::features::macros::MacroDrag>::new(
+                "blueprint-canvas-macro-drop",
+            )
+            .can_accept(|_| true)
+            .on_drop(cx.listener(
+                |panel, payload: &crate::features::macros::MacroDrag, window, cx| {
+                    panel.dragging_macro = Some(payload.clone());
+                    let mouse_pos = window.mouse_position();
+                    panel.finish_dragging_macro(mouse_pos, cx);
+                },
+            ))
             .child(
-        div()
-            .size_full()
-            .relative()
-            .overflow_hidden()
-            .track_focus(&focus_handle)
-            .key_context("BlueprintGraph")
-            .child(gpu_display) // wgpu_surface() or dark placeholder — MUST be first
-            .child(driver) // invisible canvas that drives GPU rendering
-            // GPUI-only overlays (palette + context menus) sit on top
-            .child(Self::render_quick_palette_overlay_inner(
-                panel.quick_palette_open,
-                panel.quick_palette_screen_pos,
-                panel.quick_palette_view.clone(),
-                panel.quick_palette_focus_pending,
-                cx,
-            ))
-            .child(Self::render_node_context_menu(panel, cx))
-            .child(Self::render_pin_context_menu(panel, cx))
-            .child(Self::render_breakpoint_badges(panel, cx))
-            .child(Self::render_debug_hud(panel, cx))
-            .child(Self::render_macro_pin_editor(panel, cx))
-            // input
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(move |panel, _, window, cx| {
-                    panel.focus_handle().focus(window, cx);
-                    if panel.editing_comment.is_some() {
-                        panel.finish_comment_editing(cx);
-                    }
-                    if panel.variable_drop_menu_position.is_some() {
-                        panel.variable_drop_menu_position = None;
-                        cx.notify();
-                    }
-                }),
-            )
-            .on_mouse_down(
-                gpui::MouseButton::Right,
-                crate::rendering::input::on_mouse_down_right(view_id.clone(), cx),
-            )
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                crate::rendering::input::on_mouse_down_left(view_id.clone(), cx),
-            )
-            .on_mouse_move(crate::rendering::input::on_mouse_move(view_id.clone(), cx))
-            .on_mouse_up(
-                gpui::MouseButton::Left,
-                crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
-            )
-            .on_mouse_up_out(
-                gpui::MouseButton::Left,
-                crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
-            )
-            .on_mouse_up(
-                gpui::MouseButton::Right,
-                crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
-            )
-            .on_mouse_up_out(
-                gpui::MouseButton::Right,
-                crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
-            )
-            .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(
-                view_id.clone(),
-                cx,
-            ))
-            .on_key_down(crate::rendering::input::on_key_down(view_id, cx))
-        ) // close DropArea child
+                div()
+                    .size_full()
+                    .relative()
+                    .overflow_hidden()
+                    .track_focus(&focus_handle)
+                    .key_context("BlueprintGraph")
+                    .child(gpu_display) // wgpu_surface() or dark placeholder — MUST be first
+                    .child(driver) // invisible canvas that drives GPU rendering
+                    // GPUI-only overlays (palette + context menus) sit on top
+                    .child(Self::render_quick_palette_overlay_inner(
+                        panel.quick_palette_open,
+                        panel.quick_palette_screen_pos,
+                        panel.quick_palette_view.clone(),
+                        panel.quick_palette_focus_pending,
+                        cx,
+                    ))
+                    .child(Self::render_node_context_menu(panel, cx))
+                    .child(Self::render_pin_context_menu(panel, cx))
+                    .child(Self::render_breakpoint_badges(panel, cx))
+                    .child(Self::render_debug_hud(panel, cx))
+                    .child(Self::render_macro_pin_editor(panel, cx))
+                    // input
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(move |panel, _, window, cx| {
+                            panel.focus_handle().focus(window, cx);
+                            if panel.editing_comment.is_some() {
+                                panel.finish_comment_editing(cx);
+                            }
+                            if panel.variable_drop_menu_position.is_some() {
+                                panel.variable_drop_menu_position = None;
+                                cx.notify();
+                            }
+                        }),
+                    )
+                    .on_mouse_down(
+                        gpui::MouseButton::Right,
+                        crate::rendering::input::on_mouse_down_right(view_id.clone(), cx),
+                    )
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        crate::rendering::input::on_mouse_down_left(view_id.clone(), cx),
+                    )
+                    .on_mouse_move(crate::rendering::input::on_mouse_move(view_id.clone(), cx))
+                    .on_mouse_up(
+                        gpui::MouseButton::Left,
+                        crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
+                    )
+                    .on_mouse_up_out(
+                        gpui::MouseButton::Left,
+                        crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
+                    )
+                    .on_mouse_up(
+                        gpui::MouseButton::Right,
+                        crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
+                    )
+                    .on_mouse_up_out(
+                        gpui::MouseButton::Right,
+                        crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
+                    )
+                    .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(
+                        view_id.clone(),
+                        cx,
+                    ))
+                    .on_key_down(crate::rendering::input::on_key_down(view_id, cx)),
+            ), // close macro DropArea child
+        ) // close component DropArea child
     }
 
     fn render_quick_palette_overlay_inner(
@@ -1021,7 +1043,13 @@ impl NodeGraphRenderer {
                         .cursor_pointer()
                         .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
                             pe_submit.update(cx, |panel, cx| {
-                                let name = panel.variable_name_input.read(cx).text().to_string().trim().to_string();
+                                let name = panel
+                                    .variable_name_input
+                                    .read(cx)
+                                    .text()
+                                    .to_string()
+                                    .trim()
+                                    .to_string();
                                 let type_str = panel
                                     .variable_type_dropdown
                                     .read(cx)
@@ -1064,39 +1092,36 @@ impl NodeGraphRenderer {
         let inputs_col = {
             let pe_add = pe.clone();
             let mid_add = mid.clone();
-            let mut col = v_flex()
-                .gap(px(3.0))
-                .min_w(px(140.0))
-                .child(
-                    h_flex()
-                        .gap(px(4.0))
-                        .items_center()
-                        .child(
-                            div()
-                                .text_size(px(10.0))
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(cx.theme().success)
-                                .child("INPUTS"),
-                        )
-                        .child(
-                            div()
-                                .px(px(6.0))
-                                .py(px(2.0))
-                                .text_size(px(9.0))
-                                .rounded(px(3.0))
-                                .bg(cx.theme().success.opacity(0.15))
-                                .text_color(cx.theme().success)
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
-                                    pe_add.update(cx, |panel, cx| {
-                                        panel.macro_pin_add_mode = Some(true);
-                                        panel.start_creating_variable(window, cx);
-                                        cx.notify();
-                                    });
-                                })
-                                .child("+ Add"),
-                        ),
-                );
+            let mut col = v_flex().gap(px(3.0)).min_w(px(140.0)).child(
+                h_flex()
+                    .gap(px(4.0))
+                    .items_center()
+                    .child(
+                        div()
+                            .text_size(px(10.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(cx.theme().success)
+                            .child("INPUTS"),
+                    )
+                    .child(
+                        div()
+                            .px(px(6.0))
+                            .py(px(2.0))
+                            .text_size(px(9.0))
+                            .rounded(px(3.0))
+                            .bg(cx.theme().success.opacity(0.15))
+                            .text_color(cx.theme().success)
+                            .cursor_pointer()
+                            .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+                                pe_add.update(cx, |panel, cx| {
+                                    panel.macro_pin_add_mode = Some(true);
+                                    panel.start_creating_variable(window, cx);
+                                    cx.notify();
+                                });
+                            })
+                            .child("+ Add"),
+                    ),
+            );
             for pin in &macro_def.interface.inputs {
                 let pe2 = pe.clone();
                 let mid2 = mid.clone();
@@ -1154,39 +1179,36 @@ impl NodeGraphRenderer {
         let outputs_col = {
             let pe_add = pe.clone();
             let mid_add = mid.clone();
-            let mut col = v_flex()
-                .gap(px(3.0))
-                .min_w(px(140.0))
-                .child(
-                    h_flex()
-                        .gap(px(4.0))
-                        .items_center()
-                        .child(
-                            div()
-                                .text_size(px(10.0))
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(cx.theme().warning)
-                                .child("OUTPUTS"),
-                        )
-                        .child(
-                            div()
-                                .px(px(6.0))
-                                .py(px(2.0))
-                                .text_size(px(9.0))
-                                .rounded(px(3.0))
-                                .bg(cx.theme().warning.opacity(0.15))
-                                .text_color(cx.theme().warning)
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
-                                    pe_add.update(cx, |panel, cx| {
-                                        panel.macro_pin_add_mode = Some(false);
-                                        panel.start_creating_variable(window, cx);
-                                        cx.notify();
-                                    });
-                                })
-                                .child("+ Add"),
-                        ),
-                );
+            let mut col = v_flex().gap(px(3.0)).min_w(px(140.0)).child(
+                h_flex()
+                    .gap(px(4.0))
+                    .items_center()
+                    .child(
+                        div()
+                            .text_size(px(10.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(cx.theme().warning)
+                            .child("OUTPUTS"),
+                    )
+                    .child(
+                        div()
+                            .px(px(6.0))
+                            .py(px(2.0))
+                            .text_size(px(9.0))
+                            .rounded(px(3.0))
+                            .bg(cx.theme().warning.opacity(0.15))
+                            .text_color(cx.theme().warning)
+                            .cursor_pointer()
+                            .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+                                pe_add.update(cx, |panel, cx| {
+                                    panel.macro_pin_add_mode = Some(false);
+                                    panel.start_creating_variable(window, cx);
+                                    cx.notify();
+                                });
+                            })
+                            .child("+ Add"),
+                    ),
+            );
             for pin in &macro_def.interface.outputs {
                 let pe2 = pe.clone();
                 let mid2 = mid.clone();
@@ -1492,39 +1514,35 @@ impl NodeGraphRenderer {
                     )
                     // ── Pin values ───────────────────────────────────────────────
                     .when(!pin_values.is_empty(), |el| {
-                        el.child(
-                            v_flex()
-                                .px(px(12.0))
-                                .py(px(8.0))
-                                .gap(px(3.0))
-                                .children(pin_values.iter().take(8).map(|pv| {
-                                    let pv = pv.clone();
-                                    h_flex()
-                                        .gap(px(8.0))
-                                        .items_center()
-                                        .child(
-                                            div()
-                                                .text_size(px(10.0))
-                                                .text_color(cx.theme().muted_foreground)
-                                                .w(px(80.0))
-                                                .child(pv.pin_name.clone()),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_size(px(10.0))
-                                                .text_color(cx.theme().muted_foreground.opacity(0.7))
-                                                .w(px(60.0))
-                                                .child(format!("({})", pv.type_label)),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_size(px(11.0))
-                                                .text_color(gpui::rgba(0x88FF88FF))
-                                                .font_weight(gpui::FontWeight::MEDIUM)
-                                                .child(pv.value.clone()),
-                                        )
-                                })),
-                        )
+                        el.child(v_flex().px(px(12.0)).py(px(8.0)).gap(px(3.0)).children(
+                            pin_values.iter().take(8).map(|pv| {
+                                let pv = pv.clone();
+                                h_flex()
+                                    .gap(px(8.0))
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .text_size(px(10.0))
+                                            .text_color(cx.theme().muted_foreground)
+                                            .w(px(80.0))
+                                            .child(pv.pin_name.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(10.0))
+                                            .text_color(cx.theme().muted_foreground.opacity(0.7))
+                                            .w(px(60.0))
+                                            .child(format!("({})", pv.type_label)),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(11.0))
+                                            .text_color(gpui::rgba(0x88FF88FF))
+                                            .font_weight(gpui::FontWeight::MEDIUM)
+                                            .child(pv.value.clone()),
+                                    )
+                            }),
+                        ))
                     })
                     .when(pin_values.is_empty(), |el| {
                         el.child(
@@ -1666,7 +1684,11 @@ impl NodeGraphRenderer {
         };
         let node_id = node_id.clone();
         let has_bp = panel.has_breakpoint(&node_id);
-        let bp_label = if has_bp { "Remove Breakpoint" } else { "Add Breakpoint  ⏹" };
+        let bp_label = if has_bp {
+            "Remove Breakpoint"
+        } else {
+            "Add Breakpoint  ⏹"
+        };
 
         let pe = cx.entity().clone();
         let pe2 = pe.clone();
