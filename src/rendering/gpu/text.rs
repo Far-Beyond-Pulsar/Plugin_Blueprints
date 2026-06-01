@@ -171,14 +171,14 @@ impl GlyphAtlas {
 
         if self.dirty {
             queue.write_texture(
-                wgpu::ImageCopyTexture {
+                wgpu::TexelCopyTextureInfo {
                     texture:   self.texture.as_ref().unwrap(),
                     mip_level: 0,
                     origin:    wgpu::Origin3d::ZERO,
                     aspect:    wgpu::TextureAspect::All,
                 },
                 &self.data,
-                wgpu::ImageDataLayout {
+                wgpu::TexelCopyBufferLayout {
                     offset:         0,
                     bytes_per_row:  Some(ATLAS_W),
                     rows_per_image: Some(ATLAS_H),

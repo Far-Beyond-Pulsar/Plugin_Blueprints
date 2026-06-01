@@ -133,7 +133,7 @@ impl BlueprintEditorPanel {
                 if let Some(data_type) = self.get_connection_data_type(&connection) {
                     // Create reroute node
                     let reroute_pos =
-                        NodeGraphRenderer::snap_to_grid(graph_pos, self.graph.zoom_level);
+                        NodeGraphRenderer::snap_to_grid(graph_pos);
                     let reroute_node = BlueprintNode::create_reroute(reroute_pos);
                     let reroute_id = reroute_node.id.clone();
 

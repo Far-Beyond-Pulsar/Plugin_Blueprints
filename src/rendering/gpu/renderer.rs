@@ -92,6 +92,7 @@ impl BpRenderer {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view,
                     resolve_target: None,
+                    depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.055, g: 0.055, b: 0.058, a: 1.0 }),
                         store: wgpu::StoreOp::Store,
@@ -100,6 +101,7 @@ impl BpRenderer {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             // ── Grid ───────────────────────────────────────────────────────────
@@ -251,8 +253,8 @@ impl BpRenderer {
         let (uni_buf, bind_group) = Self::uni_buf_and_bg(device, &bgl);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label:                Some("grid_layout"),
-            bind_group_layouts:   &[&bgl],
-            push_constant_ranges: &[],
+            bind_group_layouts:   &[Some(&bgl)],
+            immediate_size: 0,
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label:         Some("grid"),
@@ -272,7 +274,7 @@ impl BpRenderer {
             primitive:     wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample:   wgpu::MultisampleState::default(),
-            multiview:     None,
+            multiview_mask: None,
             cache:         None,
         });
         GridState { pipeline, uni_buf, bind_group }
@@ -288,8 +290,8 @@ impl BpRenderer {
         let (uni_buf, uni_bg) = Self::uni_buf_and_bg(device, &bgl);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label:                Some("nodes_layout"),
-            bind_group_layouts:   &[&bgl],
-            push_constant_ranges: &[],
+            bind_group_layouts:   &[Some(&bgl)],
+            immediate_size: 0,
         });
 
         // Instance vertex buffer layout — 10 attributes from NodeInstance
@@ -329,7 +331,7 @@ impl BpRenderer {
             primitive:     wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample:   wgpu::MultisampleState::default(),
-            multiview:     None,
+            multiview_mask: None,
             cache:         None,
         });
 
@@ -354,8 +356,8 @@ impl BpRenderer {
         let (uni_buf, uni_bg) = Self::uni_buf_and_bg(device, &bgl);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label:                Some("wires_layout"),
-            bind_group_layouts:   &[&bgl],
-            push_constant_ranges: &[],
+            bind_group_layouts:   &[Some(&bgl)],
+            immediate_size: 0,
         });
 
         let wire_attrs = wgpu::vertex_attr_array![
@@ -387,7 +389,7 @@ impl BpRenderer {
             primitive:     wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample:   wgpu::MultisampleState::default(),
-            multiview:     None,
+            multiview_mask: None,
             cache:         None,
         });
 
@@ -412,8 +414,8 @@ impl BpRenderer {
         let (uni_buf, uni_bg) = Self::uni_buf_and_bg(device, &bgl);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label:                Some("pins_layout"),
-            bind_group_layouts:   &[&bgl],
-            push_constant_ranges: &[],
+            bind_group_layouts:   &[Some(&bgl)],
+            immediate_size: 0,
         });
 
         let pin_attrs = wgpu::vertex_attr_array![
@@ -450,7 +452,7 @@ impl BpRenderer {
             primitive:     wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample:   wgpu::MultisampleState::default(),
-            multiview:     None,
+            multiview_mask: None,
             cache:         None,
         });
 

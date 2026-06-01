@@ -11,7 +11,7 @@ use ui::graph::DataType as GraphDataType;
 impl BlueprintEditorPanel {
     /// Add a node to the graph
     pub fn add_node(&mut self, mut node: BlueprintNode, cx: &mut Context<Self>) {
-        node.position = NodeGraphRenderer::snap_to_grid(node.position, self.graph.zoom_level);
+        node.position = NodeGraphRenderer::snap_to_grid(node.position);
         println!(
             "Adding node: {} at position {:?}",
             node.title, node.position
@@ -220,7 +220,7 @@ impl BlueprintEditorPanel {
                 mouse_pos.x - self.drag_offset.x,
                 mouse_pos.y - self.drag_offset.y,
             );
-            let new_position = NodeGraphRenderer::snap_to_grid(raw_position, self.graph.zoom_level);
+            let new_position = NodeGraphRenderer::snap_to_grid(raw_position);
 
             if let Some(initial_pos) = self.initial_drag_positions.get(dragging_id) {
                 let delta = Point::new(

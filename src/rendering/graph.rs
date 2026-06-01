@@ -18,6 +18,7 @@ use gpui::prelude::*;
 use gpui::*;
 use ui::graph::DataType;
 use ui::ActiveTheme;
+use ui::PixelsExt;
 
 use crate::core::graph::BlueprintGraph;
 use crate::core::types::{BlueprintNode, Connection, NodeType, Pin};
