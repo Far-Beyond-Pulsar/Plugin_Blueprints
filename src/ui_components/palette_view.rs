@@ -71,25 +71,97 @@ impl NodePaletteView {
         }
     }
 
-    /// Rebuild the palette items (called when prefab changes)
+    /// Rebuild the palette items (called when prefab or macros change).
     pub fn rebuild_items(&mut self, cx: &mut Context<Self>) {
-        // Build base node items
         let mut all_items = build_palette_items(NodeDefinitions::load());
 
-        // Add component method nodes if editor is available
         if let Some(editor_entity) = self.editor.upgrade() {
-            // Safe to read here because this is called after construction is complete
             let editor_ref = editor_entity.read(cx);
+
+            // Component method nodes
             let component_categories =
                 NodeDefinitions::generate_component_nodes(&editor_ref.prefab_asset);
             for category in component_categories {
                 all_items.extend(build_palette_items_for_category(&category));
             }
+
+            // Local macros — filtered to exclude the macro currently being edited
+            // (prevents a macro from containing itself).
+            let editing_macro_id = editor_ref.current_editing_macro_id().map(str::to_owned);
+            let local_macro_items =
+                build_local_macro_palette_items(&editor_ref.local_macros, editing_macro_id.as_deref());
+            all_items.extend(local_macro_items);
         }
 
         self.all_items = all_items;
         self.component_nodes_loaded = true;
     }
+}
+
+/// Build palette items for all local macros, excluding `editing_macro_id` to
+/// prevent a macro from being placed inside itself.
+fn build_local_macro_palette_items(
+    macros: &[ui::graph::SubGraphDefinition],
+    editing_macro_id: Option<&str>,
+) -> Vec<PaletteItem> {
+    use crate::core::definitions::{NodeDefinition, PinDefinition};
+    use crate::core::types::PinType;
+
+    let visible: Vec<_> = macros
+        .iter()
+        .filter(|m| Some(m.id.as_str()) != editing_macro_id)
+        .collect();
+
+    if visible.is_empty() {
+        return Vec::new();
+    }
+
+    let mut items = vec![PaletteItem::CategoryHeader {
+        name: "Local Macros".to_string(),
+        color: "#9B59B6".to_string(),
+        node_count: visible.len(),
+    }];
+
+    for m in visible {
+        let inputs = m
+            .interface
+            .inputs
+            .iter()
+            .map(|p| PinDefinition {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                data_type: p.data_type.clone(),
+                pin_type: PinType::Input,
+            })
+            .collect();
+        let outputs = m
+            .interface
+            .outputs
+            .iter()
+            .map(|p| PinDefinition {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                data_type: p.data_type.clone(),
+                pin_type: PinType::Output,
+            })
+            .collect();
+
+        items.push(PaletteItem::NodeEntry {
+            def: NodeDefinition {
+                id: format!("macro:{}", m.id),
+                name: m.name.clone(),
+                icon: "📦".to_string(),
+                description: m.description.clone(),
+                documentation: m.description.clone(),
+                inputs,
+                outputs,
+                properties: std::collections::HashMap::new(),
+                color: Some("#9B59B6".to_string()),
+            },
+            category_color: "#9B59B6".to_string(),
+        });
+    }
+    items
 }
 
 /// Build palette items for a single category
@@ -430,12 +502,23 @@ fn palette_node_row(
 
                         let stagger = (ep.graph.nodes.len() % 8) as f32 * 18.0;
                         let place_pos = Point::new(base.x + stagger, base.y + stagger);
-                        let node = BlueprintNode::from_definition(&def_now, place_pos);
-                        let node_clone = node.clone();
-                        ep.add_node(node, cx);
 
-                        if let Some(source) = ep.quick_palette_connection_source.take() {
-                            ep.complete_connection_to_new_node(source, &node_clone, cx);
+                        // Local macros use a special "macro:<id>" definition_id.
+                        let node_clone = if let Some(macro_id) = def_now.id.strip_prefix("macro:") {
+                            ep.create_macro_instance_node(macro_id.to_string(), place_pos, cx);
+                            // For connection completion we need the just-added node.
+                            ep.graph.nodes.last().cloned()
+                        } else {
+                            let node = BlueprintNode::from_definition(&def_now, place_pos);
+                            let clone = node.clone();
+                            ep.add_node(node, cx);
+                            Some(clone)
+                        };
+
+                        if let (Some(source), Some(ref new_node)) =
+                            (ep.quick_palette_connection_source.take(), node_clone.as_ref())
+                        {
+                            ep.complete_connection_to_new_node(source, new_node, cx);
                         }
 
                         ep.popup_palette_graph_pos = None;

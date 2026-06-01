@@ -177,6 +177,14 @@ pub struct BlueprintEditorPanel {
     pub breakpoints: HashSet<String>,
     /// Present while a debug session is live (executor paused or navigating frames).
     pub debug_session: Option<crate::features::debug::DebugSession>,
+
+    // ── Macro drag ────────────────────────────────────────────────────────────
+    /// Payload from a macro drag that is in flight toward the canvas.
+    pub dragging_macro: Option<crate::features::macros::MacroDrag>,
+
+    // ── Macro pin editor state ────────────────────────────────────────────────
+    /// When Some: true = adding an input, false = adding an output.
+    pub macro_pin_add_mode: Option<bool>,
 }
 
 /// Information about a tab being dragged
@@ -481,6 +489,8 @@ impl BlueprintEditorPanel {
             pin_context_menu: None,
             breakpoints: HashSet::new(),
             debug_session: None,
+            dragging_macro: None,
+            macro_pin_add_mode: None,
         }
     }
 

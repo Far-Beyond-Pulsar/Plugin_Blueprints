@@ -815,6 +815,15 @@ impl NodeGraphRenderer {
             .size_full()
         };
 
+        // Wrap the canvas in a DropArea so macros can be dragged from the sidebar.
+        ui::drop_area::DropArea::<crate::features::macros::MacroDrag>::new("blueprint-canvas-drop")
+            .can_accept(|_| true)
+            .on_drop(cx.listener(|panel, payload: &crate::features::macros::MacroDrag, window, cx| {
+                panel.dragging_macro = Some(payload.clone());
+                let mouse_pos = window.mouse_position();
+                panel.finish_dragging_macro(mouse_pos, cx);
+            }))
+            .child(
         div()
             .size_full()
             .relative()
@@ -824,7 +833,6 @@ impl NodeGraphRenderer {
             .child(gpu_display) // wgpu_surface() or dark placeholder — MUST be first
             .child(driver) // invisible canvas that drives GPU rendering
             // GPUI-only overlays (palette + context menus) sit on top
-            // GPUI-only overlays (palette + context menus)
             .child(Self::render_quick_palette_overlay_inner(
                 panel.quick_palette_open,
                 panel.quick_palette_screen_pos,
@@ -836,6 +844,7 @@ impl NodeGraphRenderer {
             .child(Self::render_pin_context_menu(panel, cx))
             .child(Self::render_breakpoint_badges(panel, cx))
             .child(Self::render_debug_hud(panel, cx))
+            .child(Self::render_macro_pin_editor(panel, cx))
             // input
             .on_mouse_down(
                 gpui::MouseButton::Left,
@@ -880,6 +889,7 @@ impl NodeGraphRenderer {
                 cx,
             ))
             .on_key_down(crate::rendering::input::on_key_down(view_id, cx))
+        ) // close DropArea child
     }
 
     fn render_quick_palette_overlay_inner(
@@ -936,6 +946,350 @@ impl NodeGraphRenderer {
         )
         .with_priority(1)
         .into_any_element()
+    }
+
+    // ── Macro Pin Editor ──────────────────────────────────────────────────────
+    //
+    // Shown as a top-right overlay when the active tab is a local macro.
+    // Lets the user add and remove interface pins (inputs / outputs) and reflects
+    // changes immediately in the Macro Entry / Exit nodes and all instances.
+
+    fn render_macro_pin_editor(
+        panel: &BlueprintEditorPanel,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        use ui::{h_flex, v_flex, ActiveTheme};
+
+        // Only show when we're inside a macro graph tab.
+        let macro_id = match panel.current_editing_macro_id() {
+            Some(id) => id.to_string(),
+            None => return div().into_any_element(),
+        };
+
+        let macro_def = match panel.local_macros.iter().find(|m| m.id == macro_id) {
+            Some(m) => m.clone(),
+            None => return div().into_any_element(),
+        };
+
+        let pe = cx.entity().clone();
+        let mid = macro_id.clone();
+
+        // ── Add-pin form (shown when macro_pin_add_mode is Some) ──────────────
+        let add_form = if let Some(is_input) = panel.macro_pin_add_mode {
+            let pe_submit = pe.clone();
+            let pe_cancel = pe.clone();
+            let mid2 = mid.clone();
+            let mid3 = mid.clone();
+            let name_input = panel.variable_name_input.clone();
+            let type_dd = panel.variable_type_dropdown.clone();
+            let dir_label = if is_input { "Input" } else { "Output" };
+
+            h_flex()
+                .gap(px(6.0))
+                .items_center()
+                .px(px(8.0))
+                .py(px(4.0))
+                .bg(cx.theme().muted.opacity(0.4))
+                .rounded(px(4.0))
+                .child(
+                    div()
+                        .text_size(px(10.0))
+                        .text_color(cx.theme().muted_foreground)
+                        .child(format!("+ {} pin:", dir_label)),
+                )
+                .child(
+                    div()
+                        .w(px(110.0))
+                        .h(px(24.0))
+                        .child(ui::input::TextInput::new(&name_input)),
+                )
+                .child(
+                    div()
+                        .w(px(90.0))
+                        .h(px(24.0))
+                        .child(ui::dropdown::Dropdown::new(&type_dd)),
+                )
+                // Confirm
+                .child(
+                    div()
+                        .px(px(8.0))
+                        .py(px(3.0))
+                        .text_size(px(10.0))
+                        .rounded(px(3.0))
+                        .bg(gpui::rgba(0x1A4A1AFF))
+                        .text_color(gpui::rgba(0x88FF88FF))
+                        .cursor_pointer()
+                        .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
+                            pe_submit.update(cx, |panel, cx| {
+                                let name = panel.variable_name_input.read(cx).text().to_string().trim().to_string();
+                                let type_str = panel
+                                    .variable_type_dropdown
+                                    .read(cx)
+                                    .selected_value()
+                                    .map(|v| v.to_string())
+                                    .unwrap_or_else(|| "f32".to_string());
+                                if !name.is_empty() {
+                                    panel.add_macro_pin(&mid2, name, type_str, is_input, cx);
+                                }
+                                panel.macro_pin_add_mode = None;
+                                cx.notify();
+                            });
+                        })
+                        .child("✓ Add"),
+                )
+                // Cancel
+                .child(
+                    div()
+                        .px(px(8.0))
+                        .py(px(3.0))
+                        .text_size(px(10.0))
+                        .rounded(px(3.0))
+                        .bg(cx.theme().muted.opacity(0.3))
+                        .text_color(cx.theme().muted_foreground)
+                        .cursor_pointer()
+                        .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
+                            pe_cancel.update(cx, |panel, cx| {
+                                panel.macro_pin_add_mode = None;
+                                cx.notify();
+                            });
+                        })
+                        .child("✕"),
+                )
+                .into_any_element()
+        } else {
+            div().into_any_element()
+        };
+
+        // ── Pin list ──────────────────────────────────────────────────────────
+        let inputs_col = {
+            let pe_add = pe.clone();
+            let mid_add = mid.clone();
+            let mut col = v_flex()
+                .gap(px(3.0))
+                .min_w(px(140.0))
+                .child(
+                    h_flex()
+                        .gap(px(4.0))
+                        .items_center()
+                        .child(
+                            div()
+                                .text_size(px(10.0))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(cx.theme().success)
+                                .child("INPUTS"),
+                        )
+                        .child(
+                            div()
+                                .px(px(6.0))
+                                .py(px(2.0))
+                                .text_size(px(9.0))
+                                .rounded(px(3.0))
+                                .bg(cx.theme().success.opacity(0.15))
+                                .text_color(cx.theme().success)
+                                .cursor_pointer()
+                                .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+                                    pe_add.update(cx, |panel, cx| {
+                                        panel.macro_pin_add_mode = Some(true);
+                                        panel.start_creating_variable(window, cx);
+                                        cx.notify();
+                                    });
+                                })
+                                .child("+ Add"),
+                        ),
+                );
+            for pin in &macro_def.interface.inputs {
+                let pe2 = pe.clone();
+                let mid2 = mid.clone();
+                let pin_id = pin.id.clone();
+                let pin_name = pin.name.clone();
+                let type_label = format!("{:?}", pin.data_type)
+                    .split('(')
+                    .next()
+                    .unwrap_or("?")
+                    .to_string();
+                col = col.child(
+                    h_flex()
+                        .gap(px(4.0))
+                        .items_center()
+                        .px(px(4.0))
+                        .py(px(2.0))
+                        .rounded(px(3.0))
+                        .bg(cx.theme().muted.opacity(0.2))
+                        .child(
+                            div()
+                                .text_size(px(10.0))
+                                .text_color(cx.theme().foreground)
+                                .child(pin_name),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(9.0))
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!(":{}", type_label)),
+                        )
+                        .child(div().flex_1())
+                        .child(
+                            div()
+                                .w(px(14.0))
+                                .h(px(14.0))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_size(px(9.0))
+                                .text_color(cx.theme().muted_foreground)
+                                .cursor_pointer()
+                                .hover(|s| s.text_color(gpui::rgba(0xFF6666FF)))
+                                .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
+                                    pe2.update(cx, |panel, cx| {
+                                        panel.remove_macro_pin(&mid2, &pin_id, true, cx);
+                                    });
+                                })
+                                .child("✕"),
+                        ),
+                );
+            }
+            col
+        };
+
+        let outputs_col = {
+            let pe_add = pe.clone();
+            let mid_add = mid.clone();
+            let mut col = v_flex()
+                .gap(px(3.0))
+                .min_w(px(140.0))
+                .child(
+                    h_flex()
+                        .gap(px(4.0))
+                        .items_center()
+                        .child(
+                            div()
+                                .text_size(px(10.0))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(cx.theme().warning)
+                                .child("OUTPUTS"),
+                        )
+                        .child(
+                            div()
+                                .px(px(6.0))
+                                .py(px(2.0))
+                                .text_size(px(9.0))
+                                .rounded(px(3.0))
+                                .bg(cx.theme().warning.opacity(0.15))
+                                .text_color(cx.theme().warning)
+                                .cursor_pointer()
+                                .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+                                    pe_add.update(cx, |panel, cx| {
+                                        panel.macro_pin_add_mode = Some(false);
+                                        panel.start_creating_variable(window, cx);
+                                        cx.notify();
+                                    });
+                                })
+                                .child("+ Add"),
+                        ),
+                );
+            for pin in &macro_def.interface.outputs {
+                let pe2 = pe.clone();
+                let mid2 = mid.clone();
+                let pin_id = pin.id.clone();
+                let pin_name = pin.name.clone();
+                let type_label = format!("{:?}", pin.data_type)
+                    .split('(')
+                    .next()
+                    .unwrap_or("?")
+                    .to_string();
+                col = col.child(
+                    h_flex()
+                        .gap(px(4.0))
+                        .items_center()
+                        .px(px(4.0))
+                        .py(px(2.0))
+                        .rounded(px(3.0))
+                        .bg(cx.theme().muted.opacity(0.2))
+                        .child(
+                            div()
+                                .text_size(px(10.0))
+                                .text_color(cx.theme().foreground)
+                                .child(pin_name),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(9.0))
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!(":{}", type_label)),
+                        )
+                        .child(div().flex_1())
+                        .child(
+                            div()
+                                .w(px(14.0))
+                                .h(px(14.0))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_size(px(9.0))
+                                .text_color(cx.theme().muted_foreground)
+                                .cursor_pointer()
+                                .hover(|s| s.text_color(gpui::rgba(0xFF6666FF)))
+                                .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
+                                    pe2.update(cx, |panel, cx| {
+                                        panel.remove_macro_pin(&mid2, &pin_id, false, cx);
+                                    });
+                                })
+                                .child("✕"),
+                        ),
+                );
+            }
+            col
+        };
+
+        // ── Outer panel (top-right of canvas) ─────────────────────────────────
+        div()
+            .absolute()
+            .top(px(8.0))
+            .right(px(8.0))
+            .child(
+                v_flex()
+                    .occlude()
+                    .gap(px(6.0))
+                    .p(px(10.0))
+                    .bg(cx.theme().popover.opacity(0.95))
+                    .border_1()
+                    .border_color(gpui::rgba(0x9B59B644))
+                    .shadow_lg()
+                    .rounded(px(8.0))
+                    .child(
+                        h_flex()
+                            .gap(px(6.0))
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_size(px(11.0))
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(gpui::rgba(0xC084FCFF))
+                                    .child("📦 Macro Interface"),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(10.0))
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(format!("— {}", macro_def.name)),
+                            ),
+                    )
+                    .child(add_form)
+                    .child(
+                        h_flex()
+                            .gap(px(16.0))
+                            .items_start()
+                            .child(inputs_col)
+                            .child(
+                                div()
+                                    .w(px(1.0))
+                                    .self_stretch()
+                                    .bg(cx.theme().border.opacity(0.4)),
+                            )
+                            .child(outputs_col),
+                    ),
+            )
+            .into_any_element()
     }
 
     // ── Breakpoint stop-sign badges ───────────────────────────────────────────

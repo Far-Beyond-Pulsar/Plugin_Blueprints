@@ -18,8 +18,10 @@ pub struct MacroDrag {
 #[derive(Clone)]
 pub struct MacroHierarchyItem {
     pub subgraph: ui::graph::SubGraphDefinition,
-    pub index: usize, // Index in the macros list
+    pub index: usize,
     pub is_selected: bool,
+    /// Weak back-ref so context-menu actions can reach the panel.
+    pub panel: gpui::WeakEntity<crate::editor::panel::BlueprintEditorPanel>,
 }
 
 impl HierarchyItem for MacroHierarchyItem {
@@ -116,8 +118,34 @@ impl HierarchyItem for MacroHierarchyItem {
         _window: &mut Window,
         _cx: &mut Context<PopupMenu>,
     ) -> PopupMenu {
-        // TODO: Add context menu items for macros (duplicate, rename, export, etc.)
-        menu
+        let macro_id = self.subgraph.id.clone();
+        let panel = self.panel.clone();
+        let panel2 = panel.clone();
+        let mid2 = macro_id.clone();
+
+        menu.menu_handler("Rename Macro", move |_window, cx| {
+            // TODO: open inline rename — for now use a sensible default name cycle.
+            // A proper rename input would use the variable_name_input field.
+            if let Some(p) = panel.upgrade() {
+                p.update(cx, |panel, cx| {
+                    let current = panel
+                        .local_macros
+                        .iter()
+                        .find(|m| m.id == macro_id)
+                        .map(|m| m.name.clone())
+                        .unwrap_or_default();
+                    let new_name = format!("{} (copy)", current);
+                    panel.rename_local_macro(&macro_id, new_name, cx);
+                });
+            }
+        })
+        .menu_handler("Delete Macro", move |_window, cx| {
+            if let Some(p) = panel2.upgrade() {
+                p.update(cx, |panel, cx| {
+                    panel.delete_local_macro(&mid2, cx);
+                });
+            }
+        })
     }
 }
 

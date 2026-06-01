@@ -37,6 +37,8 @@ impl MacrosRenderer {
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         // Convert macros to hierarchy items
+        let panel_entity = cx.entity().clone();
+        let panel_entity_for_drop = panel_entity.clone();
         let items: Vec<MacroHierarchyItem> = panel
             .local_macros
             .iter()
@@ -45,14 +47,11 @@ impl MacrosRenderer {
                 subgraph: subgraph.clone(),
                 index,
                 is_selected: panel.selected_macro == Some(index),
+                panel: cx.entity().downgrade(),
             })
             .collect();
 
         let root_ids: Vec<usize> = (0..items.len()).collect();
-
-        // Get entity for proper GPUI pattern
-        let panel_entity = cx.entity().clone();
-        let panel_entity_for_drop = panel_entity.clone();
 
         let config = HierarchyConfig {
             items,

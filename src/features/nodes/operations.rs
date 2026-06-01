@@ -119,6 +119,13 @@ impl BlueprintEditorPanel {
 
     /// Delete a node and its connections
     pub fn delete_node(&mut self, node_id: String, cx: &mut Context<Self>) {
+        // MacroEntry and MacroExit nodes are structural — never allow deletion.
+        if let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id) {
+            if matches!(node.node_type, NodeType::MacroEntry | NodeType::MacroExit) {
+                return;
+            }
+        }
+
         // Find the node and its connections before deleting
         if let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id).cloned() {
             let connections: Vec<_> = self
