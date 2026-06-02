@@ -24,8 +24,8 @@ impl Command {
     /// Execute the command
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         match self {
             Command::AddNode(cmd) => cmd.execute(panel, cx),
@@ -43,8 +43,8 @@ impl Command {
     /// Undo the command
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         match self {
             Command::AddNode(cmd) => cmd.undo(panel, cx),
@@ -92,8 +92,8 @@ impl AddNodeCommand {
 
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if !self.executed {
             println!("[UNDO] Executing AddNode: {}", self.node.id);
@@ -105,8 +105,8 @@ impl AddNodeCommand {
 
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if self.executed {
             println!("[UNDO] Undoing AddNode: {}", self.node.id);
@@ -141,8 +141,8 @@ impl DeleteNodeCommand {
 
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if !self.executed {
             println!("[UNDO] Executing DeleteNode: {}", self.node.id);
@@ -159,8 +159,8 @@ impl DeleteNodeCommand {
 
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if self.executed {
             println!("[UNDO] Undoing DeleteNode: {}", self.node.id);
@@ -195,8 +195,8 @@ impl AddCommentCommand {
 
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if !self.executed {
             println!("[UNDO] Executing AddComment: {}", self.comment.id);
@@ -208,8 +208,8 @@ impl AddCommentCommand {
 
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if self.executed {
             println!("[UNDO] Undoing AddComment: {}", self.comment.id);
@@ -245,8 +245,8 @@ impl DeleteCommentCommand {
 
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if !self.executed {
             println!("[UNDO] Executing DeleteComment: {}", self.comment.id);
@@ -262,8 +262,8 @@ impl DeleteCommentCommand {
 
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if self.executed {
             println!("[UNDO] Undoing DeleteComment: {}", self.comment.id);
@@ -303,8 +303,8 @@ impl DeleteEntitiesCommand {
 
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if !self.executed {
             println!(
@@ -343,8 +343,8 @@ impl DeleteEntitiesCommand {
 
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if self.executed {
             println!(
@@ -402,8 +402,8 @@ impl MoveEntitiesCommand {
 
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if !self.executed {
             println!(
@@ -436,8 +436,8 @@ impl MoveEntitiesCommand {
 
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if self.executed {
             println!(
@@ -493,8 +493,8 @@ impl AddConnectionCommand {
 
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if !self.executed {
             println!("[UNDO] Executing AddConnection: {}", self.connection.id);
@@ -506,8 +506,8 @@ impl AddConnectionCommand {
 
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if self.executed {
             println!("[UNDO] Undoing AddConnection: {}", self.connection.id);
@@ -542,8 +542,8 @@ impl DeleteConnectionCommand {
 
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if !self.executed {
             println!("[UNDO] Executing DeleteConnection: {}", self.connection.id);
@@ -558,8 +558,8 @@ impl DeleteConnectionCommand {
 
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if self.executed {
             println!("[UNDO] Undoing DeleteConnection: {}", self.connection.id);
@@ -597,8 +597,8 @@ impl BatchCommand {
 
     pub fn execute(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if !self.executed {
             println!(
@@ -615,8 +615,8 @@ impl BatchCommand {
 
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) {
         if self.executed {
             println!(
@@ -671,8 +671,8 @@ impl UndoManager {
     /// Undo the last command
     pub fn undo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) -> bool {
         if let Some(mut command) = self.undo_stack.pop() {
             println!("[UNDO] Undoing: {}", command.description());
@@ -688,8 +688,8 @@ impl UndoManager {
     /// Redo the last undone command
     pub fn redo(
         &mut self,
-        panel: &mut crate::editor::panel::BlueprintEditorPanel,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
     ) -> bool {
         if let Some(mut command) = self.redo_stack.pop() {
             println!("[UNDO] Redoing: {}", command.description());

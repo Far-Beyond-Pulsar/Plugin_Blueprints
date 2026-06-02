@@ -7,7 +7,12 @@
       "Bash(grep:*)",
       "Bash(1)",
       "Bash(xargs:*)",
-      "Bash(gh issue create:*)"
+      "Bash(gh issue create:*)",
+      "Bash(perl -0777 -i -pe 's/\\\\bself\\\\.graph\\\\./self.open_tabs[self.active_tab_index].graph./g' src/editor/entity_ops.rs src/editor/panel_render.rs src/features/compilation/compiler.rs src/features/compilation/conversion.rs src/features/connections/operations.rs src/features/macros/operations.rs src/features/nodes/operations.rs src/features/nodes/selection.rs src/features/prefabs/mod.rs src/features/viewport/operations.rs src/io/save_load.rs)",
+      "Bash(perl -0777 -i -pe 's/Self::graph_to_screen_pos\\\\\\(\\([^,]+\\), &panel\\\\.active_graph\\\\\\(\\\\\\)\\\\\\)/Self::graph_to_screen_pos\\($1, panel.active_graph\\(\\)\\)/g' src/rendering/graph.rs)",
+      "Bash(git -C /Users/tristanpoland/Documents/GitHub/Plugin_Blueprints/.claude/worktrees/agent-a3d3f1f312dbf2d6d log --oneline main..HEAD)",
+      "Bash(git -C /Users/tristanpoland/Documents/GitHub/Plugin_Blueprints/.claude/worktrees/agent-a3d3f1f312dbf2d6d diff --stat HEAD)",
+      "Bash(perl -0pi -e 's/crate::editor::panel::BlueprintEditorPanel/crate::editor::workspace_panels::GraphCanvasPanel/g' src/features/undo/mod.rs)"
     ]
   }
 }

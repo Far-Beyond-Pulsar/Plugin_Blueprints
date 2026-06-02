@@ -180,11 +180,11 @@ impl ClipboardData {
     }
 
     /// Convert back to graph entities with new IDs and offset positions
-    pub fn to_graph_entities(
+    pub fn to_graph_entities<E: 'static>(
         &self,
         offset: Point<f32>,
         window: &mut Window,
-        cx: &mut Context<crate::editor::panel::BlueprintEditorPanel>,
+        cx: &mut Context<E>,
     ) -> (Vec<BlueprintNode>, Vec<BlueprintComment>, Vec<Connection>) {
         use ui::graph::DataType;
 

@@ -10,6 +10,7 @@
 use super::types::{ClassVariable, TypeItem, VariableDrag};
 use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
 use ui::graph::DataType;
 
@@ -146,6 +147,105 @@ impl BlueprintEditorPanel {
         Ok(())
     }
 
+    /// Generate vars/mod.rs from current variables
+    pub(crate) fn generate_vars_module(&self) -> Result<(), String> {
+        let class_path = self
+            .current_class_path
+            .as_ref()
+            .ok_or_else(|| "No class currently loaded".to_string())?;
+
+        let vars_dir = class_path.join("vars");
+        std::fs::create_dir_all(&vars_dir)
+            .map_err(|e| format!("Failed to create vars directory: {}", e))?;
+
+        let mut code = String::new();
+        code.push_str("//! Auto-generated variables module\n");
+        code.push_str("//! DO NOT EDIT MANUALLY - YOUR CHANGES WILL BE OVERWRITTEN\n\n");
+
+        let sanitized_vars: Vec<(String, String, Option<String>)> = self
+            .class_variables
+            .iter()
+            .map(|v| {
+                let rust_type = sanitize_rust_type(&v.var_type).to_string();
+                (v.name.clone(), rust_type, v.default_value.clone())
+            })
+            .collect();
+
+        let needs_refcell = sanitized_vars.iter().any(|(_, t, _)| {
+            !matches!(
+                t.as_str(),
+                "i32"
+                    | "i64"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "usize"
+                    | "isize"
+                    | "i8"
+                    | "i16"
+                    | "u8"
+                    | "u16"
+            )
+        });
+
+        code.push_str("use std::cell::Cell;\n");
+        if needs_refcell {
+            code.push_str("use std::cell::RefCell;\n");
+        }
+        code.push_str("\n");
+
+        for (name, rust_type, default_value) in &sanitized_vars {
+            let default = if let Some(d) = default_value {
+                d.clone()
+            } else {
+                match rust_type.as_str() {
+                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "i8" | "i16" | "u8" | "u16"
+                    | "usize" | "isize" => "0".to_string(),
+                    "bool" => "false".to_string(),
+                    "&str" => "\"\"".to_string(),
+                    "String" => "String::new()".to_string(),
+                    _ => "Default::default()".to_string(),
+                }
+            };
+
+            let use_cell = matches!(
+                rust_type.as_str(),
+                "i32"
+                    | "i64"
+                    | "u32"
+                    | "u64"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "usize"
+                    | "isize"
+                    | "i8"
+                    | "i16"
+                    | "u8"
+                    | "u16"
+            );
+
+            let cell_type = if use_cell { "Cell" } else { "RefCell" };
+            code.push_str(&format!(
+                "thread_local! {{\n    pub static {}: {cell_type}::<{rust_type}> = {cell_type}::new({default});\n}}\n\n",
+                name.to_uppercase(),
+            ));
+        }
+
+        let vars_mod_file = vars_dir.join("mod.rs");
+        std::fs::write(&vars_mod_file, code)
+            .map_err(|e| format!("Failed to write vars/mod.rs: {}", e))?;
+
+        Ok(())
+    }
+}
+
+// ── Canvas-side variable operations (drag, node creation) ──────────────────────
+impl GraphCanvasPanel {
     /// Finish dragging variable and show Get/Set context menu
     pub fn finish_dragging_variable(&mut self, drop_position: Point<f32>, cx: &mut Context<Self>) {
         if self.dragging_variable.is_some() {
@@ -258,102 +358,6 @@ impl BlueprintEditorPanel {
             var_type,
         });
         cx.notify();
-    }
-
-    /// Generate vars/mod.rs from current variables
-    pub(crate) fn generate_vars_module(&self) -> Result<(), String> {
-        let class_path = self
-            .current_class_path
-            .as_ref()
-            .ok_or_else(|| "No class currently loaded".to_string())?;
-
-        let vars_dir = class_path.join("vars");
-        std::fs::create_dir_all(&vars_dir)
-            .map_err(|e| format!("Failed to create vars directory: {}", e))?;
-
-        let mut code = String::new();
-        code.push_str("//! Auto-generated variables module\n");
-        code.push_str("//! DO NOT EDIT MANUALLY - YOUR CHANGES WILL BE OVERWRITTEN\n\n");
-
-        let sanitized_vars: Vec<(String, String, Option<String>)> = self
-            .class_variables
-            .iter()
-            .map(|v| {
-                let rust_type = sanitize_rust_type(&v.var_type).to_string();
-                (v.name.clone(), rust_type, v.default_value.clone())
-            })
-            .collect();
-
-        let needs_refcell = sanitized_vars.iter().any(|(_, t, _)| {
-            !matches!(
-                t.as_str(),
-                "i32"
-                    | "i64"
-                    | "u32"
-                    | "u64"
-                    | "f32"
-                    | "f64"
-                    | "bool"
-                    | "char"
-                    | "usize"
-                    | "isize"
-                    | "i8"
-                    | "i16"
-                    | "u8"
-                    | "u16"
-            )
-        });
-
-        code.push_str("use std::cell::Cell;\n");
-        if needs_refcell {
-            code.push_str("use std::cell::RefCell;\n");
-        }
-        code.push_str("\n");
-
-        for (name, rust_type, default_value) in &sanitized_vars {
-            let default = if let Some(d) = default_value {
-                d.clone()
-            } else {
-                match rust_type.as_str() {
-                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "i8" | "i16" | "u8" | "u16"
-                    | "usize" | "isize" => "0".to_string(),
-                    "bool" => "false".to_string(),
-                    "&str" => "\"\"".to_string(),
-                    "String" => "String::new()".to_string(),
-                    _ => "Default::default()".to_string(),
-                }
-            };
-
-            let use_cell = matches!(
-                rust_type.as_str(),
-                "i32"
-                    | "i64"
-                    | "u32"
-                    | "u64"
-                    | "f32"
-                    | "f64"
-                    | "bool"
-                    | "char"
-                    | "usize"
-                    | "isize"
-                    | "i8"
-                    | "i16"
-                    | "u8"
-                    | "u16"
-            );
-
-            let cell_type = if use_cell { "Cell" } else { "RefCell" };
-            code.push_str(&format!(
-                "thread_local! {{\n    pub static {}: {cell_type}::<{rust_type}> = {cell_type}::new({default});\n}}\n\n",
-                name.to_uppercase(),
-            ));
-        }
-
-        let vars_mod_file = vars_dir.join("mod.rs");
-        std::fs::write(&vars_mod_file, code)
-            .map_err(|e| format!("Failed to write vars/mod.rs: {}", e))?;
-
-        Ok(())
     }
 }
 

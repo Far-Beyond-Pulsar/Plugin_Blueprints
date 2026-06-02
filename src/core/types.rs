@@ -167,10 +167,10 @@ pub struct BlueprintComment {
 }
 
 impl BlueprintComment {
-    pub fn new(
+    pub fn new<E: 'static>(
         position: Point<f32>,
         window: &mut gpui::Window,
-        cx: &mut gpui::Context<crate::editor::panel::BlueprintEditorPanel>,
+        cx: &mut gpui::Context<E>,
     ) -> Self {
         let color_picker_state = Some(cx.new(|cx| ColorPickerState::new(window, cx)));
         Self {

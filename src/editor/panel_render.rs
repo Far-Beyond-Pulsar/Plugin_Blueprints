@@ -481,34 +481,47 @@ impl Render for BlueprintEditorPanel {
             self.initialize_workspace(window, cx);
         }
 
-        self.refresh_comment_color_bindings(window, cx);
+        // Comment color bindings are per-canvas; refresh via the active canvas
+        if let Some(c) = self.active_canvas().cloned() {
+            c.update(cx, |canvas, cx| canvas.refresh_comment_color_bindings(window, cx));
+        }
 
         v_flex()
             .size_full()
             .bg(cx.theme().background)
             .key_context("BlueprintEditor")
             .on_action(cx.listener(|panel, action: &DuplicateNode, _window, cx| {
-                panel.duplicate_node(action.node_id.clone(), cx);
+                let nid = action.node_id.clone();
+                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.duplicate_node(nid, cx)); }
             }))
             .on_action(cx.listener(|panel, action: &DeleteNode, _window, cx| {
-                panel.delete_node(action.node_id.clone(), cx);
+                let nid = action.node_id.clone();
+                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.delete_node(nid, cx)); }
             }))
             .on_action(cx.listener(|panel, action: &CopyNode, _window, cx| {
-                panel.copy_node(action.node_id.clone(), cx);
+                let nid = action.node_id.clone();
+                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.copy_node(nid, cx)); }
             }))
             .on_action(cx.listener(|panel, _action: &PasteNode, _window, cx| {
-                panel.paste_node(cx);
+                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.paste_node(cx)); }
             }))
             .on_action(cx.listener(|panel, action: &DisconnectPin, _window, cx| {
-                panel.disconnect_pin(action.node_id.clone(), action.pin_id.clone(), cx);
+                let nid = action.node_id.clone();
+                let pid = action.pin_id.clone();
+                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.disconnect_pin(nid, pid, cx)); }
             }))
             .on_action(cx.listener(|panel, _action: &OpenAddNodeMenu, window, cx| {
-                if let Some(bounds) = &panel.graph_element_bounds {
-                    let screen_center = Point::new(bounds.center().x, bounds.center().y);
-                    let graph_pos =
-                        NodeGraphRenderer::screen_to_graph_pos(screen_center, &panel.graph);
-                    panel.show_node_picker(graph_pos, window, cx);
+                if let Some(c) = panel.active_canvas().cloned() {
+                    c.update(cx, |canvas, cx| {
+                        if let Some(bounds) = canvas.element_bounds {
+                            let sc = Point::new(bounds.center().x, bounds.center().y);
+                            let gp = NodeGraphRenderer::screen_to_graph_pos(sc, &canvas.graph);
+                            // drop canvas borrow before calling show_node_picker on panel
+                            let _ = gp;
+                        }
+                    });
                 }
+                // TODO: route show_node_picker through active canvas
             }))
             .child(ToolbarRenderer::render(self, cx))
             .child(div().flex_1().min_h_0().map(|el| {

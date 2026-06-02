@@ -11,8 +11,8 @@ use ui::graph::{self as graph_types, GraphDescription, NodeInstance, Position};
 
 impl BlueprintEditorPanel {
     /// Convert current blueprint graph to graph description
-    pub(crate) fn convert_to_graph_description(&self) -> Result<GraphDescription, String> {
-        self.convert_graph_to_description(&self.graph)
+    pub(crate) fn convert_to_graph_description(&self, graph: &crate::core::graph::BlueprintGraph) -> Result<GraphDescription, String> {
+        self.convert_graph_to_description(graph)
     }
 
     /// Convert any blueprint graph to graph description

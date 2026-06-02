@@ -9,6 +9,7 @@ pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
 
 use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use engine_backend::scene::metadata::ComponentInstance;
 use gpui::{AppContext, Context, Entity, Hsla, Window};
 use pulsar_reflection::{
@@ -52,7 +53,7 @@ impl PrefabAsset {
     }
 }
 
-impl BlueprintEditorPanel {
+impl GraphCanvasPanel {
     /// Create a getter node that outputs a runtime reference to a prefab component instance.
     pub fn create_component_getter_node(
         &mut self,
@@ -108,7 +109,9 @@ impl BlueprintEditorPanel {
 
         self.create_component_getter_node(drag.component_index, drag.class_name, graph_pos, cx);
     }
+}
 
+impl BlueprintEditorPanel {
     pub fn prefab_file_path(&self) -> Option<PathBuf> {
         self.current_class_path
             .as_ref()
@@ -174,7 +177,8 @@ impl BlueprintEditorPanel {
             });
         }
 
-        let graph_desc = self.convert_to_graph_description()?;
+        let graph = self.graph.clone();
+        let graph_desc = self.convert_to_graph_description(&graph)?;
         self.prefab_asset.script_graph = Some(graph_desc);
         Ok(())
     }

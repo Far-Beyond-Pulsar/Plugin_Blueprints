@@ -2,11 +2,11 @@
 
 use crate::core::graph_entity::GraphEntity;
 use crate::core::types::{BlueprintNode, Connection};
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
 
-impl BlueprintEditorPanel {
+impl GraphCanvasPanel {
     /// Select a single node (or clear selection if None)
     pub fn select_node(&mut self, node_id: Option<String>, cx: &mut Context<Self>) {
         self.graph.selected_nodes.clear();
@@ -68,7 +68,7 @@ impl BlueprintEditorPanel {
                 .nodes
                 .iter()
                 .filter(|node| node.intersects_rect(min, max))
-                .map(|node| node.id().to_string())
+                .map(|node| node.id.clone())
                 .collect();
 
             self.graph.selected_comments = self
@@ -76,7 +76,7 @@ impl BlueprintEditorPanel {
                 .comments
                 .iter()
                 .filter(|comment| comment.intersects_rect(min, max))
-                .map(|comment| comment.id().to_string())
+                .map(|comment| comment.id.clone())
                 .collect();
 
             cx.notify();

@@ -228,7 +228,7 @@ impl BlueprintEditorPanel {
             ));
         }
 
-        self.graph = self.convert_graph_description_to_blueprint(&asset.main_graph, window, cx)?;
+        let main_graph = self.convert_graph_description_to_blueprint(&asset.main_graph, window, cx)?;
         self.comment_color_bindings_dirty = true;
         self.local_macros = asset.local_macros;
 
@@ -243,7 +243,7 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
-        self.open_tabs = vec![GraphTab::new_main(self.graph.clone())];
+        self.open_tabs = vec![GraphTab::new_main(main_graph)];
         self.active_tab_index = 0;
 
         if let Some(editor_state) = asset.editor_state {
@@ -278,11 +278,9 @@ impl BlueprintEditorPanel {
             }
 
             if let Some(main_view) = editor_state.graph_view_states.get("main") {
-                self.graph.pan_offset = Point::new(main_view.pan_offset_x, main_view.pan_offset_y);
-                self.graph.zoom_level = main_view.zoom;
                 if let Some(main_tab) = self.open_tabs.get_mut(0) {
-                    main_tab.graph.pan_offset = self.graph.pan_offset;
-                    main_tab.graph.zoom_level = self.graph.zoom_level;
+                    main_tab.graph.pan_offset = Point::new(main_view.pan_offset_x, main_view.pan_offset_y);
+                    main_tab.graph.zoom_level = main_view.zoom;
                 }
             }
 
@@ -290,10 +288,8 @@ impl BlueprintEditorPanel {
                 .active_tab_index
                 .min(self.open_tabs.len().saturating_sub(1));
 
-            if let Some(active_tab) = self.open_tabs.get(self.active_tab_index) {
-                self.graph = active_tab.graph.clone();
-                self.comment_color_bindings_dirty = true;
-            }
+            // No need to copy into self.graph — the active tab IS the graph now.
+            self.comment_color_bindings_dirty = true;
         }
 
         cx.notify();

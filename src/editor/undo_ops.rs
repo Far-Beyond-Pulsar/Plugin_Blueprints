@@ -1,10 +1,10 @@
-//! Undo/redo operations for the editor panel
+//! Undo/redo operations for the graph canvas
 
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::undo::Command;
 use gpui::*;
 
-impl BlueprintEditorPanel {
+impl GraphCanvasPanel {
     /// Undo the last operation
     pub fn undo(&mut self, cx: &mut Context<Self>) {
         // Pop command from undo stack and perform undo
@@ -12,11 +12,7 @@ impl BlueprintEditorPanel {
             println!("[UNDO] Undoing: {}", command.description());
             command.undo(self, cx);
             self.undo_manager.redo_stack.push(command);
-
-            // Mark tab as dirty
-            if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-                tab.is_dirty = true;
-            }
+            self.is_dirty = true;
         } else {
             println!("[UNDO] Nothing to undo");
         }
@@ -29,11 +25,7 @@ impl BlueprintEditorPanel {
             println!("[UNDO] Redoing: {}", command.description());
             command.execute(self, cx);
             self.undo_manager.undo_stack.push(command);
-
-            // Mark tab as dirty
-            if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-                tab.is_dirty = true;
-            }
+            self.is_dirty = true;
         } else {
             println!("[UNDO] Nothing to redo");
         }
@@ -42,6 +34,7 @@ impl BlueprintEditorPanel {
     /// Push a command to the undo stack
     pub fn push_undo_command(&mut self, command: Command) {
         self.undo_manager.push(command);
+        self.is_dirty = true;
     }
 
     /// Check if undo is available

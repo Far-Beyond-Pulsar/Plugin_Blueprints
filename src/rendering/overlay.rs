@@ -7,7 +7,7 @@
 
 //! Overlay rendering - debug info, selection box, viewport bounds
 use super::graph::NodeGraphRenderer;
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
 use ui::{
     button::{Button, ButtonVariants},
@@ -16,11 +16,11 @@ use ui::{
 
 /// Render the selection box during drag-select
 pub fn render_selection_box(
-    panel: &BlueprintEditorPanel,
-    view_id: &str,
-    cx: &mut Context<BlueprintEditorPanel>,
+    panel: &crate::editor::workspace_panels::GraphCanvasPanel,
+    _view_id: &str,
+    cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
 ) -> impl IntoElement {
-    if panel.interaction_view_id.as_deref() != Some(view_id) {
+    if false {
         return div().into_any_element();
     }
 
@@ -67,8 +67,8 @@ pub fn render_selection_box(
 
 /// Render viewport bounds debug visualization (yellow border showing culling frustum)
 pub fn render_viewport_bounds_debug(
-    panel: &BlueprintEditorPanel,
-    _cx: &mut Context<BlueprintEditorPanel>,
+    panel: &crate::editor::workspace_panels::GraphCanvasPanel,
+    cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
 ) -> impl IntoElement {
     if !cfg!(debug_assertions) {
         return div().into_any_element();
@@ -115,8 +115,8 @@ pub fn render_viewport_bounds_debug(
 
 /// Render debug overlay showing viewport metrics and virtualization stats
 pub fn render_debug_overlay(
-    panel: &BlueprintEditorPanel,
-    cx: &mut Context<BlueprintEditorPanel>,
+    panel: &crate::editor::workspace_panels::GraphCanvasPanel,
+    cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
 ) -> impl IntoElement {
     // Calculate all the viewport metrics
     let screen_to_graph_origin =
@@ -297,8 +297,8 @@ pub fn render_debug_overlay(
 
 /// Render graph controls (zoom level, fit button, etc.)
 pub fn render_graph_controls(
-    panel: &BlueprintEditorPanel,
-    cx: &mut Context<BlueprintEditorPanel>,
+    panel: &crate::editor::workspace_panels::GraphCanvasPanel,
+    cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
 ) -> impl IntoElement {
     div().absolute().bottom_4().right_4().w(px(280.0)).child(
         v_flex().gap_2().items_end().w(px(280.0)).child(
@@ -326,7 +326,7 @@ pub fn render_graph_controls(
                                 .icon(IconName::BadgeCheck)
                                 .tooltip("Fit to View")
                                 .on_click(cx.listener(|panel, _, _window, cx| {
-                                    let graph = panel.get_graph_mut();
+                                    let graph = &mut panel.graph;
                                     graph.zoom_level = 1.0;
                                     graph.pan_offset = Point::new(0.0, 0.0);
                                     cx.notify();

@@ -20,6 +20,10 @@ impl PropertiesRenderer {
         panel: &BlueprintEditorPanel,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
+        // Snapshot the active graph for read-only rendering
+        let panel_graph: crate::core::graph::BlueprintGraph = panel.active_canvas()
+            .map(|c| c.read(cx).graph.clone())
+            .unwrap_or_default();
         v_flex()
             .size_full()
             .bg(cx.theme().sidebar)
@@ -55,9 +59,9 @@ impl PropertiesRenderer {
                                     div()
                                         .text_xs()
                                         .text_color(cx.theme().muted_foreground)
-                                        .child(if panel.graph.selected_nodes.len() > 1 {
-                                            format!("{} items", panel.graph.selected_nodes.len())
-                                        } else if panel.graph.selected_nodes.len() == 1 {
+                                        .child(if panel_graph.selected_nodes.len() > 1 {
+                                            format!("{} items", panel_graph.selected_nodes.len())
+                                        } else if panel_graph.selected_nodes.len() == 1 {
                                             "1 item".to_string()
                                         } else {
                                             "None".to_string()
@@ -77,7 +81,7 @@ impl PropertiesRenderer {
                             .items_center()
                             .gap_1p5()
                             .child(
-                                ui::Icon::new(if panel.graph.selected_nodes.len() > 1 {
+                                ui::Icon::new(if panel_graph.selected_nodes.len() > 1 {
                                     IconName::Copy
                                 } else {
                                     IconName::Component
@@ -89,15 +93,15 @@ impl PropertiesRenderer {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(if panel.graph.selected_nodes.len() > 1 {
+                                    .child(if panel_graph.selected_nodes.len() > 1 {
                                         "Multiple"
-                                    } else if panel.graph.selected_nodes.len() == 1 {
+                                    } else if panel_graph.selected_nodes.len() == 1 {
                                         "Properties"
                                     } else {
                                         "NO SELECTION"
                                     }),
                             )
-                            .child(if !panel.graph.selected_nodes.is_empty() {
+                            .child(if !panel_graph.selected_nodes.is_empty() {
                                 div()
                                     .px_2()
                                     .py_1()
@@ -106,7 +110,7 @@ impl PropertiesRenderer {
                                     .text_xs()
                                     .font_family("JetBrainsMono-Regular")
                                     .text_color(cx.theme().info)
-                                    .child(format!("{}", panel.graph.selected_nodes.len()))
+                                    .child(format!("{}", panel_graph.selected_nodes.len()))
                             } else {
                                 div() // Empty div when no selection
                             }),
@@ -127,9 +131,12 @@ impl PropertiesRenderer {
         panel: &BlueprintEditorPanel,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        if let Some(selected_node_id) = panel.graph.selected_nodes.first() {
+        let panel_graph: crate::core::graph::BlueprintGraph = panel.active_canvas()
+            .map(|c| c.read(cx).graph.clone())
+            .unwrap_or_default();
+        if let Some(selected_node_id) = panel_graph.selected_nodes.first() {
             if let Some(selected_node) =
-                panel.graph.nodes.iter().find(|n| n.id == *selected_node_id)
+                panel_graph.nodes.iter().find(|n| n.id == *selected_node_id)
             {
                 v_flex()
                     .gap_4()

@@ -35,7 +35,7 @@ fn main() {
             move |window, cx| {
                 let panel = cx.new(|cx| {
                     let mut p = BlueprintEditorPanel::new(window, cx);
-                    p.start_fake_execution_simulation(cx);
+                    p.start_compilation(cx);
                     p
                 });
                 cx.new(|cx| Root::new(panel.into(), window, cx))

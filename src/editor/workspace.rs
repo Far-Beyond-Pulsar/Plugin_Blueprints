@@ -47,9 +47,14 @@ impl BlueprintEditorPanel {
                 .open_tabs
                 .iter()
                 .map(|tab| {
-                    let tab_id = tab.id.clone();
-                    let panel =
-                        cx.new(|cx| GraphCanvasPanel::new(editor_weak.clone(), tab_id.clone(), cx));
+                    let tid = tab.id.clone();
+                    let tname = tab.name.clone();
+                    let tis_main = tab.is_main;
+                    let tgraph = tab.graph.clone();
+                    let ew = editor_weak.clone();
+                    let panel = cx.new(|cx| {
+                        GraphCanvasPanel::new(ew, tid.clone(), tname, tis_main, tgraph, window, cx)
+                    });
                     (tab.id.clone(), panel)
                 })
                 .collect();

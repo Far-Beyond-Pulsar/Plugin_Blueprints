@@ -3,12 +3,12 @@
 //! All operations related to node manipulation in the graph.
 
 use crate::core::types::{BlueprintNode, Connection, NodeType};
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
 use ui::graph::DataType as GraphDataType;
 
-impl BlueprintEditorPanel {
+impl GraphCanvasPanel {
     /// Add a node to the graph
     pub fn add_node(&mut self, mut node: BlueprintNode, cx: &mut Context<Self>) {
         node.position = NodeGraphRenderer::snap_to_grid(node.position);
@@ -23,9 +23,7 @@ impl BlueprintEditorPanel {
         self.push_undo_command(crate::features::undo::Command::AddNode(cmd));
 
         // Mark tab as dirty
-        if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-            tab.is_dirty = true;
-        }
+        self.is_dirty = true;
     }
 
     /// Connect a newly added node to the active connection drag source.

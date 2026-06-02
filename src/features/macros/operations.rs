@@ -4,7 +4,7 @@ use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::GraphTab;
 use crate::rendering::layout;
-use crate::BlueprintGraph;
+use crate::core::graph::BlueprintGraph;
 use gpui::*;
 use std::collections::HashMap;
 use ui::graph::DataType;
@@ -352,63 +352,18 @@ impl BlueprintEditorPanel {
     /// Create a `MacroInstance` node at `position` for the local macro identified
     /// by `macro_id`.  Rejects the operation silently if the active tab IS that
     /// macro (prevents a macro from containing itself).
+    /// Delegate macro instance creation to the active canvas.
     pub fn create_macro_instance_node(
         &mut self,
         macro_id: String,
         position: Point<f32>,
         cx: &mut Context<Self>,
     ) {
-        // Anti-nesting guard.
-        if self.would_nest_macro(&macro_id) {
-            return;
+        if let Some(canvas) = self.active_canvas().cloned() {
+            canvas.update(cx, |canvas, cx| {
+                canvas.create_macro_instance_node(macro_id, position, cx);
+            });
         }
-
-        let Some(macro_def) = self.local_macros.iter().find(|m| m.id == macro_id).cloned() else {
-            return;
-        };
-
-        let inputs: Vec<Pin> = macro_def
-            .interface
-            .inputs
-            .iter()
-            .map(|p| Pin {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                pin_type: PinType::Input,
-                data_type: p.data_type.clone(),
-            })
-            .collect();
-
-        let outputs: Vec<Pin> = macro_def
-            .interface
-            .outputs
-            .iter()
-            .map(|p| Pin {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                pin_type: PinType::Output,
-                data_type: p.data_type.clone(),
-            })
-            .collect();
-
-        let max_rows = inputs.len().max(outputs.len()).max(1);
-        let node = BlueprintNode {
-            id: uuid::Uuid::new_v4().to_string(),
-            definition_id: format!("macro:{}", macro_id),
-            title: macro_def.name.clone(),
-            icon: "📦".to_string(),
-            node_type: NodeType::MacroInstance,
-            position,
-            size: gpui::Size::new(200.0, layout::node_height_for_pin_rows(max_rows)),
-            inputs,
-            outputs,
-            properties: HashMap::new(),
-            is_selected: false,
-            description: format!("Instance of macro '{}'", macro_def.name),
-            color: Some("#9B59B6".to_string()),
-        };
-
-        self.add_node(node, cx);
     }
 
     /// Update the pins of every `MacroInstance` node that references `macro_id`
@@ -459,30 +414,81 @@ impl BlueprintEditorPanel {
         cx.notify();
     }
 
-    // ─── Drag-to-canvas ───────────────────────────────────────────────────────
+    // ─── Palette invalidation ─────────────────────────────────────────────────
 
-    /// Called when the user drops a `MacroDrag` payload onto the canvas.
-    /// `window_pos` is in window-space pixels.
-    pub fn finish_dragging_macro(
+    /// Notify the active canvas's quick-palette to rebuild so local macros appear.
+    pub fn invalidate_palette(&self, cx: &mut Context<Self>) {
+        if let Some(canvas) = self.active_canvas().cloned() {
+            cx.defer(move |cx| {
+                canvas.update(cx, |canvas, cx| {
+                    let v = canvas.quick_palette_view.clone();
+                    cx.defer(move |cx| { v.update(cx, |view, cx| view.rebuild_items(cx)); });
+                });
+            });
+        }
+    }
+}
+
+// ─── Canvas-side macro operations ────────────────────────────────────────────
+
+impl crate::editor::workspace_panels::GraphCanvasPanel {
+    /// Place a MacroInstance node built from an already-resolved macro definition.
+    pub fn create_macro_instance_node(
         &mut self,
-        window_pos: Point<Pixels>,
+        macro_id: String,
+        position: Point<f32>,
         cx: &mut Context<Self>,
     ) {
-        let Some(drag) = self.dragging_macro.take() else {
-            return;
-        };
+        // Get the macro definition from the shared panel
+        let macro_def = self
+            .panel
+            .upgrade()
+            .and_then(|p| {
+                p.read(cx)
+                    .local_macros
+                    .iter()
+                    .find(|m| m.id == macro_id)
+                    .cloned()
+            });
+        let Some(macro_def) = macro_def else { return };
 
+        let inputs: Vec<crate::core::types::Pin> = macro_def
+            .interface.inputs.iter()
+            .map(|p| crate::core::types::Pin { id: p.id.clone(), name: p.name.clone(), pin_type: crate::core::types::PinType::Input, data_type: p.data_type.clone() })
+            .collect();
+        let outputs: Vec<crate::core::types::Pin> = macro_def
+            .interface.outputs.iter()
+            .map(|p| crate::core::types::Pin { id: p.id.clone(), name: p.name.clone(), pin_type: crate::core::types::PinType::Output, data_type: p.data_type.clone() })
+            .collect();
+        let max_rows = inputs.len().max(outputs.len()).max(1);
+        let node = crate::core::types::BlueprintNode {
+            id: uuid::Uuid::new_v4().to_string(),
+            definition_id: format!("macro:{}", macro_id),
+            title: macro_def.name.clone(),
+            icon: "📦".to_string(),
+            node_type: crate::core::types::NodeType::MacroInstance,
+            position,
+            size: gpui::Size::new(200.0, layout::node_height_for_pin_rows(max_rows)),
+            inputs,
+            outputs,
+            properties: std::collections::HashMap::new(),
+            is_selected: false,
+            description: format!("Instance of macro '{}'", macro_def.name),
+            color: Some("#9B59B6".to_string()),
+        };
+        self.add_node(node, cx);
+    }
+
+    /// Called when the user drops a `MacroDrag` payload onto this canvas.
+    pub fn finish_dragging_macro(&mut self, window_pos: Point<Pixels>, cx: &mut Context<Self>) {
+        let Some(drag) = self.dragging_macro.take() else { return };
         let origin = *self.canvas_origin.borrow();
-        let canvas = Point::new(
-            window_pos.x.as_f32() - origin.x,
-            window_pos.y.as_f32() - origin.y,
-        );
+        let cp = Point::new(window_pos.x.as_f32() - origin.x, window_pos.y.as_f32() - origin.y);
         let z = self.graph.zoom_level;
         let graph_pos = Point::new(
-            canvas.x / z - self.graph.pan_offset.x,
-            canvas.y / z - self.graph.pan_offset.y,
+            cp.x / z - self.graph.pan_offset.x,
+            cp.y / z - self.graph.pan_offset.y,
         );
-
         self.create_macro_instance_node(drag.macro_id, graph_pos, cx);
     }
 
@@ -490,19 +496,5 @@ impl BlueprintEditorPanel {
     pub fn cancel_dragging_macro(&mut self, cx: &mut Context<Self>) {
         self.dragging_macro = None;
         cx.notify();
-    }
-
-    // ─── Palette invalidation ─────────────────────────────────────────────────
-
-    /// Tell the quick-palette to rebuild its item list so local macros appear.
-    ///
-    /// The rebuild must be deferred because `rebuild_items` calls
-    /// `editor_entity.read(cx)` — which would panic if invoked while the panel
-    /// entity is currently being mutably updated.
-    pub fn invalidate_palette(&self, cx: &mut Context<Self>) {
-        let v = self.quick_palette_view.clone();
-        cx.defer(move |cx| {
-            v.update(cx, |view, cx| view.rebuild_items(cx));
-        });
     }
 }

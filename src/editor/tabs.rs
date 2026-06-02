@@ -17,60 +17,19 @@ pub struct GraphTab {
 }
 
 impl GraphTab {
-    /// Create a new tab
     pub fn new(id: String, name: String, graph: BlueprintGraph) -> Self {
-        Self {
-            id,
-            name,
-            graph,
-            is_main: false,
-            is_dirty: false,
-            is_library_macro: false,
-            library_id: None,
-        }
+        Self { id, name, graph, is_main: false, is_dirty: false, is_library_macro: false, library_id: None }
     }
 
-    /// Create the main event graph tab
     pub fn new_main(graph: BlueprintGraph) -> Self {
-        Self {
-            id: "main".to_string(),
-            name: "EventGraph".to_string(),
-            graph,
-            is_main: true,
-            is_dirty: false,
-            is_library_macro: false,
-            library_id: None,
-        }
+        Self { id: "main".to_string(), name: "EventGraph".to_string(), graph, is_main: true, is_dirty: false, is_library_macro: false, library_id: None }
     }
 
-    /// Create a tab for a local macro
     pub fn new_local_macro(id: String, name: String, graph: BlueprintGraph) -> Self {
-        Self {
-            id,
-            name,
-            graph,
-            is_main: false,
-            is_dirty: false,
-            is_library_macro: false,
-            library_id: None,
-        }
+        Self { id, name, graph, is_main: false, is_dirty: false, is_library_macro: false, library_id: None }
     }
 
-    /// Create a tab for a library macro
-    pub fn new_library_macro(
-        id: String,
-        name: String,
-        library_id: String,
-        graph: BlueprintGraph,
-    ) -> Self {
-        Self {
-            id,
-            name,
-            graph,
-            is_main: false,
-            is_dirty: false,
-            is_library_macro: true,
-            library_id: Some(library_id),
-        }
+    pub fn new_library_macro(id: String, name: String, library_id: String, graph: BlueprintGraph) -> Self {
+        Self { id, name, graph, is_main: false, is_dirty: false, is_library_macro: true, library_id: Some(library_id) }
     }
 }

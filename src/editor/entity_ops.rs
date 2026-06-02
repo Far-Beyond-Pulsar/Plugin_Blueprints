@@ -2,22 +2,22 @@
 
 use crate::core::graph_entity::{DragState, EntitySelection, GraphEntity};
 use crate::core::types::{BlueprintComment, BlueprintNode};
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
 use std::collections::HashSet;
 
-impl BlueprintEditorPanel {
+impl GraphCanvasPanel {
     /// Get all currently selected entities as a unified list
     pub fn get_selected_entities(&self) -> Vec<EntitySelection> {
-        let mut selections = Vec::new();
+        let mut selections: Vec<EntitySelection> = Vec::new();
 
         for node_id in &self.graph.selected_nodes {
-            selections.push(EntitySelection::Node(node_id.clone()));
+            selections.push(EntitySelection::Node(node_id.as_str().to_owned()));
         }
 
         for comment_id in &self.graph.selected_comments {
-            selections.push(EntitySelection::Comment(comment_id.clone()));
+            selections.push(EntitySelection::Comment(comment_id.as_str().to_owned()));
         }
 
         selections
@@ -56,15 +56,15 @@ impl BlueprintEditorPanel {
             for selection in selections {
                 match selection {
                     EntitySelection::Node(ref id) => {
-                        if let Some(node) = self.graph.nodes.iter().find(|n| n.id() == id) {
+                        if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
                             self.initial_drag_positions
-                                .insert(id.clone(), node.position());
+                                .insert(id.clone(), node.position);
                         }
                     }
                     EntitySelection::Comment(ref id) => {
-                        if let Some(comment) = self.graph.comments.iter().find(|c| c.id() == id) {
+                        if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
                             self.initial_comment_drag_positions
-                                .insert(id.clone(), comment.position());
+                                .insert(id.clone(), comment.position);
                         }
                     }
                 }
@@ -73,15 +73,15 @@ impl BlueprintEditorPanel {
             // Single drag
             match &dragged_entity {
                 EntitySelection::Node(id) => {
-                    if let Some(node) = self.graph.nodes.iter().find(|n| n.id() == id) {
+                    if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
                         self.initial_drag_positions
-                            .insert(id.clone(), node.position());
+                            .insert(id.clone(), node.position);
                     }
                 }
                 EntitySelection::Comment(id) => {
-                    if let Some(comment) = self.graph.comments.iter().find(|c| c.id() == id) {
+                    if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
                         self.initial_comment_drag_positions
-                            .insert(id.clone(), comment.position());
+                            .insert(id.clone(), comment.position);
                     }
                 }
             }
@@ -90,15 +90,15 @@ impl BlueprintEditorPanel {
         // Set drag offset
         match &dragged_entity {
             EntitySelection::Node(id) => {
-                if let Some(node) = self.graph.nodes.iter().find(|n| n.id() == id) {
-                    let pos = node.position();
+                if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
+                    let pos = node.position;
                     self.drag_offset = Point::new(mouse_pos.x - pos.x, mouse_pos.y - pos.y);
                     self.dragging_node = Some(id.clone());
                 }
             }
             EntitySelection::Comment(id) => {
-                if let Some(comment) = self.graph.comments.iter().find(|c| c.id() == id) {
-                    let pos = comment.position();
+                if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
+                    let pos = comment.position;
                     self.drag_offset = Point::new(mouse_pos.x - pos.x, mouse_pos.y - pos.y);
                     self.dragging_comment = Some(id.clone());
                 }
@@ -144,10 +144,10 @@ impl BlueprintEditorPanel {
 
                 // Move all nodes in the selection
                 for (node_id, initial_position) in &self.initial_drag_positions.clone() {
-                    if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id() == node_id) {
+                    if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id.as_str() == node_id) {
                         let new_pos =
                             Point::new(initial_position.x + delta.x, initial_position.y + delta.y);
-                        node.set_position(NodeGraphRenderer::snap_to_grid(new_pos));
+                        node.position = NodeGraphRenderer::snap_to_grid(new_pos);
                     }
                 }
 
@@ -161,9 +161,9 @@ impl BlueprintEditorPanel {
                         .graph
                         .comments
                         .iter_mut()
-                        .find(|c| c.id() == comment_id)
+                        .find(|c| c.id.as_str() == comment_id.as_str())
                     {
-                        comment.set_position(snapped_pos);
+                        comment.position = snapped_pos;
                     }
                 }
 
@@ -217,7 +217,8 @@ impl BlueprintEditorPanel {
 
         // Update comment containment after drag
         for comment in self.graph.comments.iter_mut() {
-            comment.update_contained_nodes(&self.graph.nodes);
+            let nodes = self.graph.nodes.clone();
+            comment.update_contained_nodes(&nodes);
         }
 
         // Clear drag state
@@ -245,13 +246,13 @@ impl BlueprintEditorPanel {
             .graph
             .selected_nodes
             .iter()
-            .map(|id| id.as_str())
+            .map(|id: &String| id.as_str())
             .collect();
         let selected_comment_ids: HashSet<&str> = self
             .graph
             .selected_comments
             .iter()
-            .map(|id| id.as_str())
+            .map(|id: &String| id.as_str())
             .collect();
 
         let deleted_nodes: Vec<_> = self

@@ -22,6 +22,7 @@ use ui::{
 use crate::core::definitions::{NodeDefinition, NodeDefinitions};
 use crate::core::types::BlueprintNode;
 use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::node_library::{
     build_item_sizes, build_palette_items, count_nodes, filter_compatible_palette_items,
@@ -37,6 +38,10 @@ use crate::ui_components::node_library::{
 /// Embed this entity in any parent that needs to show the node library.
 pub struct NodePaletteView {
     pub editor: WeakEntity<BlueprintEditorPanel>,
+    /// When this palette belongs to a specific canvas tab (the right-click quick
+    /// palette), placement targets that canvas directly. When `None` (the dock
+    /// palette panel) placement targets the editor's active canvas.
+    pub canvas: Option<WeakEntity<GraphCanvasPanel>>,
     focus_handle: FocusHandle,
     /// Full unfiltered flat list — built once, never mutated.
     all_items: Vec<PaletteItem>,
@@ -56,12 +61,33 @@ impl NodePaletteView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        Self::new_inner(editor, None, window, cx)
+    }
+
+    /// Construct a palette bound to a specific canvas (the quick right-click palette).
+    /// The shell editor reference is derived from the canvas's `panel` weak-ref.
+    pub fn new_for_canvas(
+        canvas: WeakEntity<GraphCanvasPanel>,
+        panel: WeakEntity<crate::editor::panel::BlueprintEditorPanel>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self::new_inner(panel, Some(canvas), window, cx)
+    }
+
+    fn new_inner(
+        editor: WeakEntity<BlueprintEditorPanel>,
+        canvas: Option<WeakEntity<GraphCanvasPanel>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         // Build base node items only - component nodes will be loaded lazily
         let all_items = build_palette_items(NodeDefinitions::load());
 
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
         Self {
             editor,
+            canvas,
             focus_handle: cx.focus_handle(),
             all_items,
             search_input,
@@ -69,6 +95,15 @@ impl NodePaletteView {
             scrollbar_state: ScrollbarState::default(),
             component_nodes_loaded: false,
         }
+    }
+
+    /// Resolve the canvas this palette places nodes into: the bound canvas if any,
+    /// otherwise the editor's active canvas.
+    fn resolve_canvas(&self, cx: &App) -> Option<Entity<GraphCanvasPanel>> {
+        if let Some(weak) = &self.canvas {
+            return weak.upgrade();
+        }
+        self.editor.upgrade().and_then(|e| e.read(cx).active_canvas().cloned())
     }
 
     /// Rebuild the palette items (called when prefab or macros change).
@@ -485,48 +520,42 @@ fn palette_node_row(
             MouseButton::Left,
             cx.listener(move |view, _event, _window, cx| {
                 let def_now = def_for_click.clone();
-                if let Some(editor) = view.editor.upgrade() {
-                    editor.update(cx, |ep, cx| {
-                        // Prefer the right-click position; fall back to graph centre.
-                        let base = ep
+                // Route node placement through the resolved canvas entity.
+                if let Some(canvas_entity) = view.resolve_canvas(cx) {
+                    canvas_entity.update(cx, |canvas, cx| {
+                        let base = canvas
                             .popup_palette_graph_pos
                             .or_else(|| {
-                                ep.graph_element_bounds.map(|b| {
+                                canvas.element_bounds.map(|b| {
                                     let center = b.center();
-                                    let gp =
-                                        NodeGraphRenderer::screen_to_graph_pos(center, &ep.graph);
+                                    let gp = NodeGraphRenderer::screen_to_graph_pos(center, &canvas.graph);
                                     Point::new(gp.x, gp.y)
                                 })
                             })
                             .unwrap_or(Point::new(0.0, 0.0));
-
-                        let stagger = (ep.graph.nodes.len() % 8) as f32 * 18.0;
+                        let stagger = (canvas.graph.nodes.len() % 8) as f32 * 18.0;
                         let place_pos = Point::new(base.x + stagger, base.y + stagger);
 
-                        // Local macros use a special "macro:<id>" definition_id.
                         let node_clone = if let Some(macro_id) = def_now.id.strip_prefix("macro:") {
-                            ep.create_macro_instance_node(macro_id.to_string(), place_pos, cx);
-                            // For connection completion we need the just-added node.
-                            ep.graph.nodes.last().cloned()
+                            canvas.create_macro_instance_node(macro_id.to_string(), place_pos, cx);
+                            canvas.graph.nodes.last().cloned()
                         } else {
-                            let node = BlueprintNode::from_definition(&def_now, place_pos);
+                            let node = crate::core::types::BlueprintNode::from_definition(&def_now, place_pos);
                             let clone = node.clone();
-                            ep.add_node(node, cx);
+                            canvas.add_node(node, cx);
                             Some(clone)
                         };
 
                         if let (Some(source), Some(ref new_node)) =
-                            (ep.quick_palette_connection_source.take(), node_clone.as_ref())
+                            (canvas.quick_palette_connection_source.take(), node_clone.as_ref())
                         {
-                            ep.complete_connection_to_new_node(source, new_node, cx);
+                            canvas.complete_connection_to_new_node(source, new_node, cx);
                         }
 
-                        ep.popup_palette_graph_pos = None;
-                        ep.quick_palette_connection_source = None;
-                        // Dismiss the quick-palette overlay when it is active.
-                        // In the dock-panel context this is always false already.
-                        ep.quick_palette_open = false;
-                        ep.quick_palette_focus_pending = false;
+                        canvas.popup_palette_graph_pos = None;
+                        canvas.quick_palette_connection_source = None;
+                        canvas.quick_palette_open = false;
+                        canvas.quick_palette_focus_pending = false;
                         cx.notify();
                     });
                 }

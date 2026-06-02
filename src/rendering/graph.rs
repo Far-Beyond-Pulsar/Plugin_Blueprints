@@ -22,10 +22,9 @@ use ui::PixelsExt;
 
 use crate::core::graph::BlueprintGraph;
 use crate::core::types::{BlueprintNode, Connection, NodeType, Pin};
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
-use crate::rendering::gpu::{
-    BpRenderer, GraphUniforms, NodeInstance, PinInstance, TextRenderer, WireInstance, WireVertex,
+use crate::rendering::gpu::{ GraphUniforms, NodeInstance, PinInstance, WireInstance, WireVertex,
 };
 use crate::rendering::layout;
 
@@ -66,18 +65,18 @@ impl NodeGraphRenderer {
 
     pub fn window_to_graph_element_pos(
         window_pos: Point<Pixels>,
-        panel: &BlueprintEditorPanel,
+        canvas: &GraphCanvasPanel,
     ) -> Point<Pixels> {
-        let o = *panel.canvas_origin.borrow();
+        let o = *canvas.canvas_origin.borrow();
         Point::new(window_pos.x - px(o.x), window_pos.y - px(o.y))
     }
 
     pub fn window_to_graph_element_pos_for_view(
         window_pos: Point<Pixels>,
-        panel: &BlueprintEditorPanel,
+        canvas: &GraphCanvasPanel,
         _view_id: &str,
     ) -> Point<Pixels> {
-        Self::window_to_graph_element_pos(window_pos, panel)
+        Self::window_to_graph_element_pos(window_pos, canvas)
     }
 
     pub fn snap_to_grid(pos: Point<f32>) -> Point<f32> {
@@ -400,21 +399,20 @@ type TextCall = (String, f32, f32, f32, [f32; 4], bool); // (text, x, y, size, c
 
 impl NodeGraphRenderer {
     pub fn render(
-        panel: &mut BlueprintEditorPanel,
-        view_id: &str,
-        cx: &mut Context<BlueprintEditorPanel>,
+        canvas: &mut GraphCanvasPanel,
+        cx: &mut Context<GraphCanvasPanel>,
     ) -> impl IntoElement {
-        let panel_entity = cx.entity().clone();
-        let zoom = panel.graph.zoom_level;
-        let pan_x = panel.graph.pan_offset.x;
-        let pan_y = panel.graph.pan_offset.y;
-        let wire_active_mode = panel.wire_active_test_mode;
-        let wire_hidden_mode = panel.wire_hidden_test_mode;
-        let anim_time = panel.graph_anim_start.elapsed().as_secs_f32();
+        let canvas_entity = cx.entity().clone();
+        let zoom = canvas.graph.zoom_level;
+        let pan_x = canvas.graph.pan_offset.x;
+        let pan_y = canvas.graph.pan_offset.y;
+        let wire_active_mode = canvas.wire_active_test_mode;
+        let wire_hidden_mode = canvas.wire_hidden_test_mode;
+        let anim_time = canvas.graph_anim_start.elapsed().as_secs_f32();
 
         // viewport culling
-        let (vw, vh) = panel
-            .graph_element_bounds
+        let (vw, vh) = canvas
+            .element_bounds
             .map(|b| {
                 (
                     b.size.width.as_f32().max(1.0),
@@ -436,15 +434,15 @@ impl NodeGraphRenderer {
                 || n.position.y + n.size.height < vt)
         };
 
-        let dragging_conn = panel.dragging_connection.clone();
-        let selected_nodes: std::collections::HashSet<&str> = panel
+        let dragging_conn = canvas.dragging_connection.clone();
+        let selected_nodes: std::collections::HashSet<&str> = canvas
             .graph
             .selected_nodes
             .iter()
             .map(|id| id.as_str())
             .collect();
         let running_nodes: std::collections::HashSet<&str> =
-            panel.running_nodes.iter().map(|id| id.as_str()).collect();
+            canvas.running_nodes.iter().map(|id| id.as_str()).collect();
         let node_is_active = |node_id: &str| {
             running_nodes.contains(node_id)
                 || (wire_active_mode && selected_nodes.contains(node_id))
@@ -454,7 +452,7 @@ impl NodeGraphRenderer {
         let mut pin_instances: Vec<PinInstance> = Vec::new();
         let mut text_calls: Vec<TextCall> = Vec::new();
 
-        for node in &panel.graph.nodes {
+        for node in &canvas.graph.nodes {
             if !visible(node) {
                 continue;
             }
@@ -508,7 +506,7 @@ impl NodeGraphRenderer {
 
             // Node title
             if zoom >= LOD_TITLES && !is_reroute {
-                let scr = Self::graph_to_screen_pos(node.position, &panel.graph);
+                let scr = Self::graph_to_screen_pos(node.position, &canvas.graph);
                 text_calls.push((
                     node.title.clone(),
                     scr.x + HEADER_PAD_X * zoom,
@@ -571,13 +569,13 @@ impl NodeGraphRenderer {
         let mut wire_instances: Vec<WireInstance> = Vec::new();
         let half_thick = WIRE_THICKNESS * 0.5; // graph-space half-thickness; shader × zoom → px
 
-        let node_map: std::collections::HashMap<&str, &BlueprintNode> = panel
+        let node_map: std::collections::HashMap<&str, &BlueprintNode> = canvas
             .graph
             .nodes
             .iter()
             .map(|n| (n.id.as_str(), n))
             .collect();
-        let vis_ids: std::collections::HashSet<&str> = panel
+        let vis_ids: std::collections::HashSet<&str> = canvas
             .graph
             .nodes
             .iter()
@@ -608,7 +606,7 @@ impl NodeGraphRenderer {
             }
         };
 
-        for conn in &panel.graph.connections {
+        for conn in &canvas.graph.connections {
             if !vis_ids.contains(conn.source_node.as_str())
                 && !vis_ids.contains(conn.target_node.as_str())
             {
@@ -650,7 +648,7 @@ impl NodeGraphRenderer {
         }
 
         // Drag wire preview — source pin in graph space, mouse pos converted from canvas space.
-        if let Some(ref drag) = panel.dragging_connection.clone() {
+        if let Some(ref drag) = canvas.dragging_connection.clone() {
             if let Some(fn_) = node_map.get(drag.source_node.as_str()) {
                 if let Some(fp) = pin_gpos_id(fn_, &drag.source_pin, false) {
                     let dc = pin_color(&drag.source_pin_type);
@@ -687,7 +685,7 @@ impl NodeGraphRenderer {
         // Kept as a vertex buffer because there are at most 4 segments and no GPU
         // instancing overhead is worth it for that count.
         let mut line_verts: Vec<WireVertex> = Vec::new();
-        if let (Some(start), Some(end)) = (panel.selection_start, panel.selection_end) {
+        if let (Some(start), Some(end)) = (canvas.selection_start, canvas.selection_end) {
             let (sx, sy, ex, ey) = (start.x, start.y, end.x, end.y);
             let sc = [0.30, 0.55, 0.90, 0.80_f32];
             let ht = 1.0 / zoom; // constant ~2 screen pixels
@@ -705,16 +703,14 @@ impl NodeGraphRenderer {
             _pad1: [0.0; 2],
         };
 
-        let focus_handle = panel.focus_handle().clone();
-        let view_id = view_id.to_string();
-
+        let focus_handle = canvas.focus_handle().clone();
         // ── WGPU surface display ──────────────────────────────────────────────
         // wgpu_surface() composites the GPU texture into the GPUI scene.
         // It must be present in the element tree for anything to appear.
         // On the first frame bp_surface is None so we show a dark placeholder;
         // the canvas prepaint creates the surface and requests a re-render,
         // so frame 2 immediately shows the GPU output.
-        let gpu_display: AnyElement = if let Some(ref s) = panel.bp_surface {
+        let gpu_display: AnyElement = if let Some(ref s) = canvas.surface {
             wgpu_surface(s.clone())
                 .defer_resize_until_mouse_up(true)
                 .absolute()
@@ -735,8 +731,8 @@ impl NodeGraphRenderer {
 
         // ── Canvas: creates surface in prepaint (has window), renders in paint ─
         let driver = {
-            let pe_pre = panel_entity.clone();
-            let pe_paint = panel_entity.clone();
+            let pe_pre = canvas_entity.clone();
+            let pe_paint = canvas_entity.clone();
             gpui::canvas(
                 // Prepaint: surface creation (first frame only).
                 // Called before paint — window is available here.
@@ -747,8 +743,8 @@ impl NodeGraphRenderer {
                     let sw = bounds.size.width.as_f32() as u32;
                     let sh = bounds.size.height.as_f32() as u32;
 
-                    pe_pre.update(cx, |panel, cx| {
-                        *panel.canvas_origin.borrow_mut() = Point::new(ox, oy);
+                    pe_pre.update(cx, |canvas, cx| {
+                        *canvas.canvas_origin.borrow_mut() = Point::new(ox, oy);
                         let b = gpui::Bounds {
                             origin: gpui::Point {
                                 x: px(ox),
@@ -759,16 +755,16 @@ impl NodeGraphRenderer {
                                 height: px(sh as f32),
                             },
                         };
-                        panel.graph_element_bounds = Some(b);
+                        canvas.element_bounds = Some(b);
 
                         // Create surface on first call — triggers re-render via notify
-                        if panel.bp_surface.is_none() {
+                        if canvas.surface.is_none() {
                             if let Some(s) = window.create_wgpu_surface(
                                 sw.max(64),
                                 sh.max(64),
                                 wgpu::TextureFormat::Bgra8UnormSrgb,
                             ) {
-                                panel.bp_surface = Some(s);
+                                canvas.surface = Some(s);
                                 cx.notify(); // re-render to pick up wgpu_surface() element
                             }
                         }
@@ -776,8 +772,8 @@ impl NodeGraphRenderer {
                 },
                 // Paint: render GPU frame every frame.
                 move |_bounds, _pre, _window, cx| {
-                    pe_paint.update(cx, |panel, cx| {
-                        let Some(ref surface) = panel.bp_surface else {
+                    pe_paint.update(cx, |canvas, cx| {
+                        let Some(ref surface) = canvas.surface else {
                             return;
                         };
                         if surface.is_resize_pending() {
@@ -791,7 +787,7 @@ impl NodeGraphRenderer {
                             viewport: [w as f32, h as f32],
                             ..uniforms
                         };
-                        panel.bp_renderer.render_frame(
+                        canvas.renderer.render_frame(
                             surface.device(),
                             surface.queue(),
                             &view,
@@ -807,9 +803,9 @@ impl NodeGraphRenderer {
                         );
                         drop(view);
                         surface.swap_buffers();
-                        if !panel.running_nodes.is_empty()
-                            || (panel.wire_active_test_mode
-                                && !panel.graph.selected_nodes.is_empty())
+                        if !canvas.running_nodes.is_empty()
+                            || (canvas.wire_active_test_mode
+                                && !canvas.graph.selected_nodes.is_empty())
                         {
                             cx.notify();
                         }
@@ -827,9 +823,9 @@ impl NodeGraphRenderer {
         )
         .can_accept(|_| true)
         .on_drop(cx.listener(
-            |panel, payload: &crate::features::prefabs::ComponentDrag, window, cx| {
+            |canvas, payload: &crate::features::prefabs::ComponentDrag, window, cx| {
                 let mouse_pos = window.mouse_position();
-                panel.finish_dragging_component(payload.clone(), mouse_pos, cx);
+                canvas.finish_dragging_component(payload.clone(), mouse_pos, cx);
             },
         ))
         .child(
@@ -838,10 +834,10 @@ impl NodeGraphRenderer {
             )
             .can_accept(|_| true)
             .on_drop(cx.listener(
-                |panel, payload: &crate::features::macros::MacroDrag, window, cx| {
-                    panel.dragging_macro = Some(payload.clone());
+                |canvas, payload: &crate::features::macros::MacroDrag, window, cx| {
+                    canvas.dragging_macro = Some(payload.clone());
                     let mouse_pos = window.mouse_position();
-                    panel.finish_dragging_macro(mouse_pos, cx);
+                    canvas.finish_dragging_macro(mouse_pos, cx);
                 },
             ))
             .child(
@@ -855,61 +851,58 @@ impl NodeGraphRenderer {
                     .child(driver) // invisible canvas that drives GPU rendering
                     // GPUI-only overlays (palette + context menus) sit on top
                     .child(Self::render_quick_palette_overlay_inner(
-                        panel.quick_palette_open,
-                        panel.quick_palette_screen_pos,
-                        panel.quick_palette_view.clone(),
-                        panel.quick_palette_focus_pending,
+                        canvas.quick_palette_open,
+                        canvas.quick_palette_screen_pos,
+                        canvas.quick_palette_view.clone(),
+                        canvas.quick_palette_focus_pending,
                         cx,
                     ))
-                    .child(Self::render_node_context_menu(panel, cx))
-                    .child(Self::render_pin_context_menu(panel, cx))
-                    .child(Self::render_breakpoint_badges(panel, cx))
-                    .child(Self::render_debug_hud(panel, cx))
-                    .child(Self::render_macro_pin_editor(panel, cx))
+                    .child(Self::render_node_context_menu(canvas, cx))
+                    .child(Self::render_pin_context_menu(canvas, cx))
+                    .child(Self::render_breakpoint_badges(canvas, cx))
+                    .child(Self::render_debug_hud(canvas, cx))
+                    .child(Self::render_macro_pin_editor(canvas, cx))
                     // input
                     .on_mouse_down(
                         gpui::MouseButton::Left,
-                        cx.listener(move |panel, _, window, cx| {
-                            panel.focus_handle().focus(window, cx);
-                            if panel.editing_comment.is_some() {
-                                panel.finish_comment_editing(cx);
+                        cx.listener(move |canvas, _, window, cx| {
+                            canvas.focus_handle().focus(window, cx);
+                            if canvas.editing_comment.is_some() {
+                                canvas.finish_comment_editing(cx);
                             }
-                            if panel.variable_drop_menu_position.is_some() {
-                                panel.variable_drop_menu_position = None;
+                            if canvas.variable_drop_menu_position.is_some() {
+                                canvas.variable_drop_menu_position = None;
                                 cx.notify();
                             }
                         }),
                     )
                     .on_mouse_down(
                         gpui::MouseButton::Right,
-                        crate::rendering::input::on_mouse_down_right(view_id.clone(), cx),
+                        crate::rendering::input::on_mouse_down_right(cx),
                     )
                     .on_mouse_down(
                         gpui::MouseButton::Left,
-                        crate::rendering::input::on_mouse_down_left(view_id.clone(), cx),
+                        crate::rendering::input::on_mouse_down_left(cx),
                     )
-                    .on_mouse_move(crate::rendering::input::on_mouse_move(view_id.clone(), cx))
+                    .on_mouse_move(crate::rendering::input::on_mouse_move(cx))
                     .on_mouse_up(
                         gpui::MouseButton::Left,
-                        crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
+                        crate::rendering::input::on_mouse_up_left(cx),
                     )
                     .on_mouse_up_out(
                         gpui::MouseButton::Left,
-                        crate::rendering::input::on_mouse_up_left(view_id.clone(), cx),
+                        crate::rendering::input::on_mouse_up_left(cx),
                     )
                     .on_mouse_up(
                         gpui::MouseButton::Right,
-                        crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
+                        crate::rendering::input::on_mouse_up_right(cx),
                     )
                     .on_mouse_up_out(
                         gpui::MouseButton::Right,
-                        crate::rendering::input::on_mouse_up_right(view_id.clone(), cx),
+                        crate::rendering::input::on_mouse_up_right(cx),
                     )
-                    .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(
-                        view_id.clone(),
-                        cx,
-                    ))
-                    .on_key_down(crate::rendering::input::on_key_down(view_id, cx)),
+                    .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(cx))
+                    .on_key_down(crate::rendering::input::on_key_down(cx)),
             ), // close macro DropArea child
         ) // close component DropArea child
     }
@@ -919,12 +912,12 @@ impl NodeGraphRenderer {
         screen_pos: Point<Pixels>,
         palette_view: gpui::Entity<crate::ui_components::palette_view::NodePaletteView>,
         focus_pending: bool,
-        cx: &mut Context<BlueprintEditorPanel>,
+        cx: &mut Context<GraphCanvasPanel>,
     ) -> AnyElement {
         if !open {
             return div().into_any_element();
         }
-        let panel_entity = cx.entity().clone();
+        let canvas_entity = cx.entity().clone();
         deferred(
             anchored()
                 .position(screen_pos)
@@ -942,25 +935,25 @@ impl NodeGraphRenderer {
                         .border_color(cx.theme().border)
                         .child(palette_view)
                         .on_children_prepainted({
-                            let pe = panel_entity.clone();
+                            let pe = canvas_entity.clone();
                             move |_, window, cx| {
-                                pe.update(cx, |panel, cx| {
-                                    if !panel.quick_palette_focus_pending {
+                                pe.update(cx, |canvas, cx| {
+                                    if !canvas.quick_palette_focus_pending {
                                         return;
                                     }
                                     let h =
-                                        panel.quick_palette_view.read(cx).search_focus_handle(cx);
-                                    panel.quick_palette_focus_pending = false;
+                                        canvas.quick_palette_view.read(cx).search_focus_handle(cx);
+                                    canvas.quick_palette_focus_pending = false;
                                     window.focus(&h, cx);
                                 });
                             }
                         })
                         .on_mouse_down_out(move |_, _, cx| {
-                            panel_entity.update(cx, |panel, cx| {
-                                panel.quick_palette_open = false;
-                                panel.quick_palette_focus_pending = false;
-                                panel.quick_palette_connection_source = None;
-                                panel.popup_palette_graph_pos = None;
+                            canvas_entity.update(cx, |canvas, cx| {
+                                canvas.quick_palette_open = false;
+                                canvas.quick_palette_focus_pending = false;
+                                canvas.quick_palette_connection_source = None;
+                                canvas.popup_palette_graph_pos = None;
                                 cx.notify();
                             });
                         }),
@@ -977,33 +970,52 @@ impl NodeGraphRenderer {
     // changes immediately in the Macro Entry / Exit nodes and all instances.
 
     fn render_macro_pin_editor(
-        panel: &BlueprintEditorPanel,
-        cx: &mut Context<BlueprintEditorPanel>,
+        canvas: &GraphCanvasPanel,
+        cx: &mut Context<GraphCanvasPanel>,
     ) -> AnyElement {
         use ui::{h_flex, v_flex, ActiveTheme};
 
         // Only show when we're inside a macro graph tab.
-        let macro_id = match panel.current_editing_macro_id() {
-            Some(id) => id.to_string(),
+        if canvas.is_main {
+            return div().into_any_element();
+        }
+        let macro_id = canvas.id.clone();
+
+        // local_macros live on the shared panel
+        let local_macros = canvas
+            .panel
+            .upgrade()
+            .map(|p| p.read(cx).local_macros.clone())
+            .unwrap_or_default();
+        let macro_def = match local_macros.iter().find(|m| m.id == macro_id) {
+            Some(m) => m.clone(),
             None => return div().into_any_element(),
         };
 
-        let macro_def = match panel.local_macros.iter().find(|m| m.id == macro_id) {
-            Some(m) => m.clone(),
-            None => return div().into_any_element(),
+        // UI inputs for pin name / type also live on the shared panel
+        let (name_input_opt, type_dd_opt) = canvas
+            .panel
+            .upgrade()
+            .map(|p| {
+                let r = p.read(cx);
+                (r.variable_name_input.clone(), r.variable_type_dropdown.clone())
+            })
+            .unzip();
+        let (Some(name_input_shared), Some(type_dd_shared)) = (name_input_opt, type_dd_opt)
+        else {
+            return div().into_any_element();
         };
 
         let pe = cx.entity().clone();
         let mid = macro_id.clone();
 
         // ── Add-pin form (shown when macro_pin_add_mode is Some) ──────────────
-        let add_form = if let Some(is_input) = panel.macro_pin_add_mode {
+        let add_form = if let Some(is_input) = canvas.macro_pin_add_mode {
             let pe_submit = pe.clone();
             let pe_cancel = pe.clone();
             let mid2 = mid.clone();
-            let mid3 = mid.clone();
-            let name_input = panel.variable_name_input.clone();
-            let type_dd = panel.variable_type_dropdown.clone();
+            let name_input = name_input_shared.clone();
+            let type_dd = type_dd_shared.clone();
             let dir_label = if is_input { "Input" } else { "Output" };
 
             h_flex()
@@ -1042,24 +1054,37 @@ impl NodeGraphRenderer {
                         .text_color(gpui::rgba(0x88FF88FF))
                         .cursor_pointer()
                         .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
-                            pe_submit.update(cx, |panel, cx| {
-                                let name = panel
-                                    .variable_name_input
-                                    .read(cx)
-                                    .text()
-                                    .to_string()
+                            pe_submit.update(cx, |canvas, cx| {
+                                let name = canvas
+                                    .panel
+                                    .upgrade()
+                                    .map(|p| {
+                                        p.read(cx)
+                                            .variable_name_input
+                                            .read(cx)
+                                            .text()
+                                            .to_string()
+                                    })
+                                    .unwrap_or_default()
                                     .trim()
                                     .to_string();
-                                let type_str = panel
-                                    .variable_type_dropdown
-                                    .read(cx)
-                                    .selected_value()
-                                    .map(|v| v.to_string())
+                                let type_str = canvas
+                                    .panel
+                                    .upgrade()
+                                    .and_then(|p| {
+                                        p.read(cx)
+                                            .variable_type_dropdown
+                                            .read(cx)
+                                            .selected_value()
+                                            .map(|v| v.to_string())
+                                    })
                                     .unwrap_or_else(|| "f32".to_string());
                                 if !name.is_empty() {
-                                    panel.add_macro_pin(&mid2, name, type_str, is_input, cx);
+                                    if let Some(p) = canvas.panel.upgrade() {
+                                        p.update(cx, |panel, cx| panel.add_macro_pin(&mid2, name, type_str, is_input, cx));
+                                    }
                                 }
-                                panel.macro_pin_add_mode = None;
+                                canvas.macro_pin_add_mode = None;
                                 cx.notify();
                             });
                         })
@@ -1076,8 +1101,8 @@ impl NodeGraphRenderer {
                         .text_color(cx.theme().muted_foreground)
                         .cursor_pointer()
                         .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
-                            pe_cancel.update(cx, |panel, cx| {
-                                panel.macro_pin_add_mode = None;
+                            pe_cancel.update(cx, |canvas, cx| {
+                                canvas.macro_pin_add_mode = None;
                                 cx.notify();
                             });
                         })
@@ -1113,9 +1138,9 @@ impl NodeGraphRenderer {
                             .text_color(cx.theme().success)
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
-                                pe_add.update(cx, |panel, cx| {
-                                    panel.macro_pin_add_mode = Some(true);
-                                    panel.start_creating_variable(window, cx);
+                                pe_add.update(cx, |canvas, cx| {
+                                    canvas.macro_pin_add_mode = Some(true);
+                                    if let Some(p) = canvas.panel.upgrade() { p.update(cx, |panel, cx| panel.start_creating_variable(window, cx)); };
                                     cx.notify();
                                 });
                             })
@@ -1165,8 +1190,10 @@ impl NodeGraphRenderer {
                                 .cursor_pointer()
                                 .hover(|s| s.text_color(gpui::rgba(0xFF6666FF)))
                                 .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
-                                    pe2.update(cx, |panel, cx| {
-                                        panel.remove_macro_pin(&mid2, &pin_id, true, cx);
+                                    pe2.update(cx, |canvas, cx| {
+                                        if let Some(p) = canvas.panel.upgrade() {
+                                            p.update(cx, |panel, cx| panel.remove_macro_pin(&mid2, &pin_id, true, cx));
+                                        }
                                     });
                                 })
                                 .child("✕"),
@@ -1200,9 +1227,9 @@ impl NodeGraphRenderer {
                             .text_color(cx.theme().warning)
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
-                                pe_add.update(cx, |panel, cx| {
-                                    panel.macro_pin_add_mode = Some(false);
-                                    panel.start_creating_variable(window, cx);
+                                pe_add.update(cx, |canvas, cx| {
+                                    canvas.macro_pin_add_mode = Some(false);
+                                    if let Some(p) = canvas.panel.upgrade() { p.update(cx, |panel, cx| panel.start_creating_variable(window, cx)); };
                                     cx.notify();
                                 });
                             })
@@ -1252,8 +1279,10 @@ impl NodeGraphRenderer {
                                 .cursor_pointer()
                                 .hover(|s| s.text_color(gpui::rgba(0xFF6666FF)))
                                 .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
-                                    pe2.update(cx, |panel, cx| {
-                                        panel.remove_macro_pin(&mid2, &pin_id, false, cx);
+                                    pe2.update(cx, |canvas, cx| {
+                                        if let Some(p) = canvas.panel.upgrade() {
+                                            p.update(cx, |panel, cx| panel.remove_macro_pin(&mid2, &pin_id, false, cx));
+                                        }
                                     });
                                 })
                                 .child("✕"),
@@ -1322,28 +1351,28 @@ impl NodeGraphRenderer {
     // by the GPU renderer.
 
     fn render_breakpoint_badges(
-        panel: &BlueprintEditorPanel,
-        cx: &mut Context<BlueprintEditorPanel>,
+        canvas: &GraphCanvasPanel,
+        cx: &mut Context<GraphCanvasPanel>,
     ) -> AnyElement {
-        if panel.breakpoints.is_empty() {
+        if canvas.breakpoints.is_empty() {
             return div().into_any_element();
         }
 
-        let origin = *panel.canvas_origin.borrow();
-        let paused_node = panel
+        let origin = *canvas.canvas_origin.borrow();
+        let paused_node = canvas
             .debug_session
             .as_ref()
             .and_then(|s| s.current())
             .map(|f| f.node_id.clone());
 
         // Collect badge positions for all breakpointed nodes that are on screen.
-        let badges: Vec<(Point<Pixels>, bool)> = panel
+        let badges: Vec<(Point<Pixels>, bool)> = canvas
             .graph
             .nodes
             .iter()
-            .filter(|n| panel.breakpoints.contains(&n.id))
+            .filter(|n| canvas.breakpoints.contains(&n.id))
             .map(|n| {
-                let scr = Self::graph_to_screen_pos(n.position, &panel.graph);
+                let scr = Self::graph_to_screen_pos(n.position, &canvas.graph);
                 let win = Point::new(
                     px(scr.x + origin.x - 4.0), // slightly outside left edge
                     px(scr.y + origin.y - 4.0), // slightly above top edge
@@ -1396,10 +1425,10 @@ impl NodeGraphRenderer {
 
         // Pulsing ring around the currently-paused node
         if let Some(ref node_id) = paused_node {
-            if let Some(node) = panel.graph.nodes.iter().find(|n| &n.id == node_id) {
-                let scr = Self::graph_to_screen_pos(node.position, &panel.graph);
-                let w = node.size.width * panel.graph.zoom_level;
-                let h = node.size.height * panel.graph.zoom_level;
+            if let Some(node) = canvas.graph.nodes.iter().find(|n| &n.id == node_id) {
+                let scr = Self::graph_to_screen_pos(node.position, &canvas.graph);
+                let w = node.size.width * canvas.graph.zoom_level;
+                let h = node.size.height * canvas.graph.zoom_level;
                 let ring_pos = Point::new(px(scr.x + origin.x - 2.0), px(scr.y + origin.y - 2.0));
                 let ring = deferred(
                     anchored()
@@ -1430,12 +1459,12 @@ impl NodeGraphRenderer {
     // paused.  Displays the current frame's pin values and navigation controls.
 
     fn render_debug_hud(
-        panel: &BlueprintEditorPanel,
-        cx: &mut Context<BlueprintEditorPanel>,
+        canvas: &GraphCanvasPanel,
+        cx: &mut Context<GraphCanvasPanel>,
     ) -> AnyElement {
         use ui::{h_flex, v_flex, ActiveTheme};
 
-        let Some(ref session) = panel.debug_session else {
+        let Some(ref session) = canvas.debug_session else {
             return div().into_any_element();
         };
         let Some(ref frame) = session.current() else {
@@ -1585,8 +1614,8 @@ impl NodeGraphRenderer {
                                         el.on_mouse_down(gpui::MouseButton::Left, {
                                             let pe = pe_back.clone();
                                             move |_, _, cx| {
-                                                pe.update(cx, |panel, cx| {
-                                                    panel.debug_step_backward(cx);
+                                                pe.update(cx, |canvas, cx| {
+                                                    canvas.debug_step_backward(cx);
                                                 });
                                             }
                                         })
@@ -1616,8 +1645,8 @@ impl NodeGraphRenderer {
                                         el.on_mouse_down(gpui::MouseButton::Left, {
                                             let pe = pe_fwd.clone();
                                             move |_, _, cx| {
-                                                pe.update(cx, |panel, cx| {
-                                                    panel.debug_step_forward(cx);
+                                                pe.update(cx, |canvas, cx| {
+                                                    canvas.debug_step_forward(cx);
                                                 });
                                             }
                                         })
@@ -1638,8 +1667,8 @@ impl NodeGraphRenderer {
                                         .on_mouse_down(gpui::MouseButton::Left, {
                                             let pe = pe_continue.clone();
                                             move |_, _, cx| {
-                                                pe.update(cx, |panel, cx| {
-                                                    panel.debug_continue(cx);
+                                                pe.update(cx, |canvas, cx| {
+                                                    canvas.debug_continue(cx);
                                                 });
                                             }
                                         })
@@ -1660,8 +1689,8 @@ impl NodeGraphRenderer {
                                     .cursor_pointer()
                                     .on_mouse_down(gpui::MouseButton::Left, {
                                         move |_, _, cx| {
-                                            pe_stop.update(cx, |panel, cx| {
-                                                panel.debug_stop(cx);
+                                            pe_stop.update(cx, |canvas, cx| {
+                                                canvas.debug_stop(cx);
                                             });
                                         }
                                     })
@@ -1676,14 +1705,14 @@ impl NodeGraphRenderer {
     // ── Node context menu ─────────────────────────────────────────────────────
 
     fn render_node_context_menu(
-        panel: &BlueprintEditorPanel,
-        cx: &mut Context<BlueprintEditorPanel>,
+        canvas: &GraphCanvasPanel,
+        cx: &mut Context<GraphCanvasPanel>,
     ) -> AnyElement {
-        let Some((ref node_id, pos)) = panel.node_context_menu else {
+        let Some((ref node_id, pos)) = canvas.node_context_menu else {
             return div().into_any_element();
         };
         let node_id = node_id.clone();
-        let has_bp = panel.has_breakpoint(&node_id);
+        let has_bp = canvas.has_breakpoint(&node_id);
         let bp_label = if has_bp {
             "Remove Breakpoint"
         } else {
@@ -1726,9 +1755,9 @@ impl NodeGraphRenderer {
                             {
                                 let pe = pe4.clone();
                                 move |_, _, cx| {
-                                    pe.update(cx, |panel, cx| {
-                                        panel.toggle_breakpoint(nid_bp.clone(), cx);
-                                        panel.node_context_menu = None;
+                                    pe.update(cx, |canvas, cx| {
+                                        canvas.toggle_breakpoint(nid_bp.clone(), cx);
+                                        canvas.node_context_menu = None;
                                         cx.notify();
                                     });
                                 }
@@ -1739,9 +1768,9 @@ impl NodeGraphRenderer {
                         .child(Self::menu_item("Duplicate Node", cx, {
                             let pe = pe.clone();
                             move |_, _, cx| {
-                                pe.update(cx, |panel, cx| {
-                                    panel.duplicate_node(nid_dup.clone(), cx);
-                                    panel.node_context_menu = None;
+                                pe.update(cx, |canvas, cx| {
+                                    canvas.duplicate_node(nid_dup.clone(), cx);
+                                    canvas.node_context_menu = None;
                                     cx.notify();
                                 });
                             }
@@ -1749,9 +1778,9 @@ impl NodeGraphRenderer {
                         .child(Self::menu_item("Copy Node", cx, {
                             let pe = pe2.clone();
                             move |_, _, cx| {
-                                pe.update(cx, |panel, cx| {
-                                    panel.copy_node(nid_copy.clone(), cx);
-                                    panel.node_context_menu = None;
+                                pe.update(cx, |canvas, cx| {
+                                    canvas.copy_node(nid_copy.clone(), cx);
+                                    canvas.node_context_menu = None;
                                     cx.notify();
                                 });
                             }
@@ -1760,16 +1789,16 @@ impl NodeGraphRenderer {
                         .child(Self::menu_item("Delete Node", cx, {
                             let pe = pe3.clone();
                             move |_, _, cx| {
-                                pe.update(cx, |panel, cx| {
-                                    panel.delete_node(nid_del.clone(), cx);
-                                    panel.node_context_menu = None;
+                                pe.update(cx, |canvas, cx| {
+                                    canvas.delete_node(nid_del.clone(), cx);
+                                    canvas.node_context_menu = None;
                                     cx.notify();
                                 });
                             }
                         }))
                         .on_mouse_down_out(move |_, _, cx| {
-                            pe.update(cx, |panel, cx| {
-                                panel.node_context_menu = None;
+                            pe.update(cx, |canvas, cx| {
+                                canvas.node_context_menu = None;
                                 cx.notify();
                             });
                         }),
@@ -1782,10 +1811,10 @@ impl NodeGraphRenderer {
     // ── Pin context menu ──────────────────────────────────────────────────────
 
     fn render_pin_context_menu(
-        panel: &BlueprintEditorPanel,
-        cx: &mut Context<BlueprintEditorPanel>,
+        canvas: &GraphCanvasPanel,
+        cx: &mut Context<GraphCanvasPanel>,
     ) -> AnyElement {
-        let Some((ref node_id, ref pin_id, pos)) = panel.pin_context_menu else {
+        let Some((ref node_id, ref pin_id, pos)) = canvas.pin_context_menu else {
             return div().into_any_element();
         };
         let node_id = node_id.clone();
@@ -1811,16 +1840,16 @@ impl NodeGraphRenderer {
                         .child(Self::menu_item("Disconnect Pin", cx, {
                             let pe = pe.clone();
                             move |_, _, cx| {
-                                pe.update(cx, |panel, cx| {
-                                    panel.disconnect_pin(node_id.clone(), pin_id.clone(), cx);
-                                    panel.pin_context_menu = None;
+                                pe.update(cx, |canvas, cx| {
+                                    canvas.disconnect_pin(node_id.clone(), pin_id.clone(), cx);
+                                    canvas.pin_context_menu = None;
                                     cx.notify();
                                 });
                             }
                         }))
                         .on_mouse_down_out(move |_, _, cx| {
-                            pe2.update(cx, |panel, cx| {
-                                panel.pin_context_menu = None;
+                            pe2.update(cx, |canvas, cx| {
+                                canvas.pin_context_menu = None;
                                 cx.notify();
                             });
                         }),
@@ -1834,7 +1863,7 @@ impl NodeGraphRenderer {
 
     fn menu_item(
         label: &str,
-        cx: &mut Context<BlueprintEditorPanel>,
+        cx: &mut Context<GraphCanvasPanel>,
         handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
     ) -> impl IntoElement {
         div()
@@ -1851,7 +1880,7 @@ impl NodeGraphRenderer {
     fn menu_item_colored(
         label: &str,
         color: gpui::Rgba,
-        cx: &mut Context<BlueprintEditorPanel>,
+        cx: &mut Context<GraphCanvasPanel>,
         handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
     ) -> impl IntoElement {
         div()
@@ -1865,7 +1894,7 @@ impl NodeGraphRenderer {
             .child(label.to_string())
     }
 
-    fn menu_divider(cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    fn menu_divider(cx: &mut Context<GraphCanvasPanel>) -> impl IntoElement {
         div()
             .my(px(4.0))
             .mx(px(8.0))

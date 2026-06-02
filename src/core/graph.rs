@@ -8,7 +8,7 @@ use gpui::*;
 
 /// The main container for a blueprint graph, including all nodes, connections,
 /// comments, selection state, and viewport information.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BlueprintGraph {
     pub nodes: Vec<BlueprintNode>,
     pub connections: Vec<Connection>,

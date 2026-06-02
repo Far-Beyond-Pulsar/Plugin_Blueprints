@@ -131,7 +131,7 @@ impl BlueprintEditorPanel {
         let mut valid_output_pins: HashMap<String, HashSet<String>> = HashMap::new();
 
         // Nodes
-        for bp_node in &self.graph.nodes {
+        for bp_node in &self.open_tabs[self.active_tab_index].graph.nodes {
             // Runtime component reference nodes are editor-only wiring helpers.
             if bp_node.definition_id.starts_with("get_component_ref::") {
                 skipped_nodes.insert(bp_node.id.clone());
@@ -199,7 +199,7 @@ impl BlueprintEditorPanel {
         }
 
         // Connections
-        for conn in &self.graph.connections {
+        for conn in &self.open_tabs[self.active_tab_index].graph.connections {
             if skipped_nodes.contains(&conn.source_node)
                 || skipped_nodes.contains(&conn.target_node)
             {
@@ -336,6 +336,7 @@ impl BlueprintEditorPanel {
             .map_err(|e| format!("Failed to create events directory: {}", e))?;
 
         let has_events = self
+            .open_tabs[self.active_tab_index]
             .graph
             .nodes
             .iter()

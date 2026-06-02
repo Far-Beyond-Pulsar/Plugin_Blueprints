@@ -1,7 +1,7 @@
 //! Connection operations - dragging and managing connections between nodes
 
 use crate::core::types::{Connection, NodeType};
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
 use ui::graph::DataType as GraphDataType;
 
@@ -15,7 +15,7 @@ pub struct ConnectionDrag {
     pub target_pin: Option<(String, String)>,
 }
 
-impl BlueprintEditorPanel {
+impl GraphCanvasPanel {
     /// Start dragging a connection from a pin
     pub fn start_connection_drag_from_pin(
         &mut self,

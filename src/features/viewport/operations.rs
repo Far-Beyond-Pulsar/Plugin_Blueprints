@@ -2,10 +2,10 @@
 
 use super::coordinates::screen_to_graph_pos;
 use crate::core::BlueprintGraph;
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
 
-impl BlueprintEditorPanel {
+impl GraphCanvasPanel {
     /// Start panning the viewport
     pub fn start_panning(&mut self, start_pos: Point<f32>, cx: &mut Context<Self>) {
         self.is_panning = true;

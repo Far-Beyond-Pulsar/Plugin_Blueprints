@@ -189,7 +189,7 @@ impl ToolbarRenderer {
                             .icon(IconName::Message)
                             .tooltip("Add Comment to Graph")
                             .on_click(cx.listener(|panel, _, window, cx| {
-                                panel.create_comment_at_center(window, cx);
+                                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.create_comment_at_center(window, cx)); }
                             })),
                     ),
             )
@@ -326,7 +326,7 @@ impl ToolbarRenderer {
                                     .tooltip("Continue Execution (F5)")
                                     .success()
                                     .on_click(cx.listener(|panel, _, _, cx| {
-                                        panel.debug_continue(cx);
+                                        if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.debug_continue(cx)); }
                                     }))
                             })
                         })
@@ -337,7 +337,7 @@ impl ToolbarRenderer {
                                     .icon(IconName::ArrowLeft)
                                     .tooltip("Step Back (Shift+F10)")
                                     .on_click(cx.listener(|panel, _, _, cx| {
-                                        panel.debug_step_backward(cx);
+                                        if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.debug_step_backward(cx)); }
                                     }))
                                     .disabled(!debug_can_back);
                                 btn
@@ -354,7 +354,7 @@ impl ToolbarRenderer {
                                         "Step Forward (F10) — go to next recorded frame"
                                     })
                                     .on_click(cx.listener(|panel, _, _, cx| {
-                                        panel.debug_step_forward(cx);
+                                        if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.debug_step_forward(cx)); }
                                     }))
                                     .disabled(!debug_can_fwd);
                                 btn
@@ -369,7 +369,7 @@ impl ToolbarRenderer {
                                     .tooltip("Stop Debug Session (Shift+F5)")
                                     .danger()
                                     .on_click(cx.listener(|panel, _, _, cx| {
-                                        panel.debug_stop(cx);
+                                        if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.debug_stop(cx)); }
                                     })),
                             )
                         }),
