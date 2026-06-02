@@ -13,17 +13,15 @@ use ui::{
 };
 
 use super::tabs::GraphTab;
-use crate::core::{definitions::NodeDefinitions, events::*, graph::*, types::*};
+use crate::core::{events::*, graph::*, types::*};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
 use crate::features::prefabs::add_component_dialog::AddPrefabComponentDialog;
 use crate::features::prefabs::PrefabAsset;
 use crate::features::variables::ClassVariable;
-use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::palette_view::NodePaletteView;
 use ui::dock::{DockItem, DockPlacement};
-use ui::graph::DataType;
-use ui::graph::{DataType as GraphDataType, LibraryManager, SubGraphDefinition};
+use ui::graph::{LibraryManager, SubGraphDefinition};
 
 /// Main Blueprint Editor Panel struct
 pub struct BlueprintEditorPanel {
@@ -796,16 +794,6 @@ impl BlueprintEditorPanel {
         }
     }
 
-    /// Get immutable reference to graph
-    pub fn get_graph(&self) -> &BlueprintGraph {
-        &self.graph
-    }
-
-    /// Get mutable reference to graph
-    pub fn get_graph_mut(&mut self) -> &mut BlueprintGraph {
-        &mut self.graph
-    }
-
     /// Replace the current runtime execution set used by GPU debug rendering.
     pub fn set_running_nodes<I, S>(&mut self, node_ids: I, cx: &mut Context<Self>)
     where
@@ -1048,12 +1036,26 @@ impl BlueprintEditorPanel {
         });
     }
 
-    /// Switch to a different tab
+    /// Switch to a different tab, flushing the current canvas first.
     pub fn switch_to_tab(&mut self, tab_index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if tab_index < self.open_tabs.len() && tab_index != self.active_tab_index {
-            self.sync_graph_to_active_tab();
+            // Flush the current active canvas into its tab snapshot before leaving.
+            let active_tab_id = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone());
+            if let Some(tab_id) = active_tab_id {
+                if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
+                    let live = canvas.read(cx).graph.clone();
+                    self.graph = live.clone();
+                    if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
+                        tab.graph = live;
+                    }
+                }
+            }
             self.active_tab_index = tab_index;
-            self.load_active_tab_graph();
+            // Update self.graph shadow from the new active tab.
+            if let Some(tab) = self.open_tabs.get(tab_index) {
+                self.graph = tab.graph.clone();
+                self.comment_color_bindings_dirty = true;
+            }
             self.activate_graph_workspace_tab(tab_index, window, cx);
             cx.notify();
         }
@@ -1078,58 +1080,66 @@ impl BlueprintEditorPanel {
             if let Ok(blueprint_graph) =
                 self.convert_graph_description_to_blueprint(&macro_graph, window, cx)
             {
-                // Sync current tab before switching
-                self.sync_graph_to_active_tab();
+                // Flush the current active canvas into its tab before switching.
+                let active_tab_id = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone());
+                if let Some(tab_id) = active_tab_id {
+                    if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
+                        let live = canvas.read(cx).graph.clone();
+                        self.graph = live.clone();
+                        if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
+                            tab.graph = live;
+                        }
+                    }
+                }
 
-                // Create new tab
+                // Create new tab seeded from the saved macro graph.
                 self.open_tabs.push(GraphTab {
                     id: macro_id.to_string(),
                     name: macro_name,
-                    graph: blueprint_graph,
+                    graph: blueprint_graph.clone(),
                     is_main: false,
                     is_dirty: false,
                     is_library_macro: false,
                     library_id: None,
                 });
 
-                // Switch to the new tab
                 let new_tab_index = self.open_tabs.len() - 1;
                 self.active_tab_index = new_tab_index;
-                self.load_active_tab_graph();
+                self.graph = blueprint_graph;
                 self.graph_workspace_tabs_dirty = true;
                 cx.notify();
             }
         }
     }
 
-    /// Sync current graph to active tab
+    /// Flush the active canvas's live graph into its tab snapshot.
+    /// Only call when a canvas exists for the active tab.
+    /// Kept for legacy call-sites that run before any canvas is created.
     pub fn sync_graph_to_active_tab(&mut self) {
-        let tab_id = if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
-            tab.id.clone()
-        } else {
-            return;
-        };
-
-        let is_main = if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
-            tab.is_main
-        } else {
-            return;
-        };
-
         if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
             tab.graph = self.graph.clone();
             tab.is_dirty = true;
         }
+    }
 
-        // Sync local macros
-        if !is_main && !tab_id.starts_with("🌐") {
-            if let Some(_macro_def) = self.local_macros.iter_mut().find(|m| m.id == tab_id) {
-                // Graph conversion would happen here if needed
+    /// Flush every open canvas's live graph back into its matching tab snapshot.
+    ///
+    /// This is the **only** correct sync direction: canvas → tab.
+    /// All serialisation paths must call this before reading `open_tabs`.
+    pub fn sync_all_canvases_to_tabs(&mut self, cx: &App) {
+        let snapshots: Vec<(String, crate::core::graph::BlueprintGraph)> = self
+            .graph_panels
+            .iter()
+            .map(|(tab_id, canvas)| (tab_id.clone(), canvas.read(cx).graph.clone()))
+            .collect();
+        for (tab_id, live_graph) in snapshots {
+            if let Some(tab) = self.open_tabs.iter_mut().find(|t| t.id == tab_id) {
+                tab.graph = live_graph;
             }
         }
     }
 
-    /// Load active tab's graph
+    /// Update `self.graph` shadow from the active tab (or its live canvas if one exists).
     pub fn load_active_tab_graph(&mut self) {
         if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
             self.graph = tab.graph.clone();
@@ -1158,313 +1168,24 @@ impl BlueprintEditorPanel {
     // File I/O Operations
     // ============================================================================
 
-    /// Load blueprint from file
+    /// Load blueprint from file.
+    /// Delegates to `load_from_path` which uses the authoritative format/legacy
+    /// pipeline and the clean `load_blueprint_asset` loader.
     pub fn load_blueprint(
         &mut self,
         file_path: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
-        println!("📂 ═══════════════════════════════════════════════════════════════");
-        println!("📂 LOADING BLUEPRINT FROM FILE");
-        println!("📂 ═══════════════════════════════════════════════════════════════");
-        println!("📂 File: {}", file_path);
+        let path = std::path::PathBuf::from(file_path);
+        self.load_from_path(&path, window, cx)?;
 
-        let content = std::fs::read_to_string(file_path).map_err(|e| {
-            let error_msg = format!("Failed to read file: {}", e);
-            eprintln!("❌ {}", error_msg);
-            error_msg
-        })?;
-
-        println!("📂 ✓ File read successfully ({} bytes)", content.len());
-
-        // Strip header comments
-        let json = content
-            .lines()
-            .skip_while(|line| line.trim().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        // Try new unified format first
-        match serde_json::from_str::<ui::graph::BlueprintAsset>(&json) {
-            Ok(blueprint_asset) => {
-                println!("📂 ✓ Detected unified blueprint format");
-                self.load_from_blueprint_asset(blueprint_asset, file_path, window, cx)?;
-            }
-            Err(unified_err) => {
-                println!("📂 ⚠️  Unified format parse failed:");
-                println!("📂    Error: {}", unified_err);
-                println!(
-                    "📂    Line: {}, Column: {}",
-                    unified_err.line(),
-                    unified_err.column()
-                );
-
-                // Show context around the error location
-                let lines: Vec<&str> = json.lines().collect();
-                let error_line = unified_err.line().saturating_sub(1);
-                if error_line < lines.len() {
-                    println!("📂    Context:");
-                    for i in error_line.saturating_sub(2)
-                        ..=error_line
-                            .saturating_add(2)
-                            .min(lines.len().saturating_sub(1))
-                    {
-                        println!(
-                            "📂      {}{}: {}",
-                            if i == error_line { ">>> " } else { "    " },
-                            i + 1,
-                            lines.get(i).unwrap_or(&"")
-                        );
-                    }
-                }
-
-                println!("📂 ✓ Trying legacy format...");
-
-                // Try parsing as legacy format
-                self.load_legacy_format(&json, file_path, window, cx)
-                    .map_err(|e| {
-                        let error_msg = format!("Failed to parse as both unified and legacy format.\nUnified error: {}\nLegacy error: {}", unified_err, e);
-                        eprintln!("❌ {}", error_msg);
-                        error_msg
-                    })?;
-            }
-        }
-
-        // Reload library manager
+        // Reload library manager so any library macros are available.
         self.library_manager = ui::graph::LibraryManager::default();
         if let Err(e) = self.library_manager.load_all_libraries() {
             eprintln!("Failed to reload sub-graph libraries: {}", e);
         }
 
-        cx.notify();
-        Ok(())
-    }
-
-    /// Load from unified blueprint asset
-    fn load_from_blueprint_asset(
-        &mut self,
-        asset: ui::graph::BlueprintAsset,
-        file_path: &str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Result<(), String> {
-        let file_path_buf = std::path::Path::new(file_path);
-        if let Some(parent) = file_path_buf.parent() {
-            self.set_path(parent.to_path_buf());
-        }
-
-        // Load main graph
-        self.graph = self.convert_graph_description_to_blueprint(&asset.main_graph, window, cx)?;
-        self.comment_color_bindings_dirty = true;
-
-        // Load local macros
-        self.local_macros = asset.local_macros;
-
-        // Load variables
-        self.class_variables = asset
-            .variables
-            .iter()
-            .map(|v| ClassVariable {
-                name: v.name.clone(),
-                var_type: v.data_type.to_string(),
-                default_value: v.default_value.clone(),
-            })
-            .collect();
-
-        // Restore main tab
-        self.open_tabs = vec![GraphTab {
-            id: "main".to_string(),
-            name: "EventGraph".to_string(),
-            graph: self.graph.clone(),
-            is_main: true,
-            is_dirty: false,
-            is_library_macro: false,
-            library_id: None,
-        }];
-        self.active_tab_index = 0;
-
-        // Restore editor state (open tabs, active tab, view states)
-        if let Some(editor_state) = asset.editor_state {
-            // Restore open tabs
-            for tab_id in &editor_state.open_tab_ids {
-                if tab_id == "main" {
-                    continue; // Already added
-                }
-
-                // Check if this is a local macro
-                let macro_data = self
-                    .local_macros
-                    .iter()
-                    .find(|m| &m.id == tab_id)
-                    .map(|m| (m.name.clone(), m.graph.clone()));
-
-                if let Some((macro_name, macro_graph)) = macro_data {
-                    if let Ok(mut blueprint_graph) =
-                        self.convert_graph_description_to_blueprint(&macro_graph, window, cx)
-                    {
-                        // Restore view state for this tab if available
-                        if let Some(view_state) = editor_state.graph_view_states.get(tab_id) {
-                            blueprint_graph.pan_offset = Point {
-                                x: view_state.pan_offset_x,
-                                y: view_state.pan_offset_y,
-                            };
-                            blueprint_graph.zoom_level = view_state.zoom;
-                        }
-
-                        self.open_tabs.push(GraphTab {
-                            id: tab_id.clone(),
-                            name: macro_name,
-                            graph: blueprint_graph,
-                            is_main: false,
-                            is_dirty: false,
-                            is_library_macro: false,
-                            library_id: None,
-                        });
-                    }
-                }
-            }
-
-            // Restore view state for main tab
-            if let Some(view_state) = editor_state.graph_view_states.get("main") {
-                if let Some(main_tab) = self.open_tabs.iter_mut().find(|t| t.is_main) {
-                    main_tab.graph.pan_offset = Point {
-                        x: view_state.pan_offset_x,
-                        y: view_state.pan_offset_y,
-                    };
-                    main_tab.graph.zoom_level = view_state.zoom;
-                }
-
-                self.graph.pan_offset = Point {
-                    x: view_state.pan_offset_x,
-                    y: view_state.pan_offset_y,
-                };
-                self.graph.zoom_level = view_state.zoom;
-            }
-
-            // Restore active tab index (with bounds check)
-            self.active_tab_index = editor_state
-                .active_tab_index
-                .min(self.open_tabs.len().saturating_sub(1));
-
-            // Load the active tab's graph into self.graph
-            if let Some(active_tab) = self.open_tabs.get(self.active_tab_index) {
-                self.graph = active_tab.graph.clone();
-                self.comment_color_bindings_dirty = true;
-            }
-        }
-
-        println!("📂 Loaded unified blueprint format");
-        println!("📂   ✓ Main Graph: {} nodes", self.graph.nodes.len());
-        println!("📂   ✓ Local Macros: {}", self.local_macros.len());
-        println!("📂   ✓ Variables: {}", self.class_variables.len());
-        println!("📂   ✓ Open Tabs: {}", self.open_tabs.len());
-        println!("📂   ✓ Active Tab Index: {}", self.active_tab_index);
-        println!("📂 ═══════════════════════════════════════════════════════════════");
-
-        Ok(())
-    }
-
-    /// Load legacy format (old format before unified blueprint)
-    fn load_legacy_format(
-        &mut self,
-        json: &str,
-        file_path: &str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Result<(), String> {
-        // Define legacy structures inline for backward compatibility
-        #[derive(serde::Deserialize)]
-        struct LegacyGraphDescription {
-            pub nodes: HashMap<String, ui::graph::NodeInstance>,
-            pub connections: Vec<ui::graph::Connection>,
-            pub metadata: ui::graph::GraphMetadata,
-            #[serde(default)]
-            pub comments: Vec<LegacyBlueprintComment>,
-        }
-
-        #[derive(serde::Deserialize)]
-        struct LegacyBlueprintComment {
-            pub id: String,
-            pub text: String,
-            pub position: LegacyPosition,
-            pub size: LegacySize,
-            pub color: LegacyColor,
-            pub contained_node_ids: Vec<String>,
-        }
-
-        #[derive(serde::Deserialize)]
-        struct LegacyPosition {
-            pub x: f32,
-            pub y: f32,
-        }
-
-        #[derive(serde::Deserialize)]
-        struct LegacySize {
-            pub width: f32,
-            pub height: f32,
-        }
-
-        #[derive(serde::Deserialize)]
-        struct LegacyColor {
-            pub h: f32,
-            pub s: f32,
-            pub l: f32,
-            pub a: f32,
-        }
-
-        let legacy_graph: LegacyGraphDescription = serde_json::from_str(json)
-            .map_err(|e| format!("Failed to parse legacy format: {}", e))?;
-
-        println!("📂 ✓ Legacy format parsed successfully");
-
-        // Convert legacy format to current format
-        let graph_description = ui::graph::GraphDescription {
-            nodes: legacy_graph.nodes,
-            connections: legacy_graph.connections,
-            metadata: legacy_graph.metadata,
-            comments: legacy_graph
-                .comments
-                .into_iter()
-                .map(|c| {
-                    let (r, g, b) = hsl_to_rgb(c.color.h, c.color.s, c.color.l);
-                    ui::graph::BlueprintComment {
-                        id: c.id,
-                        text: c.text,
-                        position: (c.position.x, c.position.y),
-                        size: (c.size.width, c.size.height),
-                        color: [r, g, b, c.color.a],
-                        contained_node_ids: c.contained_node_ids,
-                    }
-                })
-                .collect(),
-        };
-
-        self.graph = self.convert_graph_description_to_blueprint(&graph_description, window, cx)?;
-        self.comment_color_bindings_dirty = true;
-
-        // Reset to main tab
-        self.open_tabs = vec![GraphTab {
-            id: "main".to_string(),
-            name: "EventGraph".to_string(),
-            graph: self.graph.clone(),
-            is_main: true,
-            is_dirty: false,
-            is_library_macro: false,
-            library_id: None,
-        }];
-        self.active_tab_index = 0;
-
-        // Load separate legacy files
-        let file_path_buf = std::path::Path::new(file_path);
-        if let Some(parent) = file_path_buf.parent() {
-            self.set_path(parent.to_path_buf());
-            let _ = self.load_local_macros(parent);
-            let _ = self.restore_tabs_state(parent, window, cx);
-            let _ = self.load_variables_from_class(parent);
-        }
-
-        println!("📂 Loaded blueprint in legacy format");
         Ok(())
     }
 
@@ -1572,43 +1293,4 @@ impl BlueprintEditorPanel {
         println!("📂 Restored {} tabs from tabs.json", self.open_tabs.len());
         Ok(())
     }
-}
-
-// Helper function for HSL to RGB conversion
-fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (f32, f32, f32) {
-    if s == 0.0 {
-        return (l, l, l);
-    }
-
-    let q = if l < 0.5 {
-        l * (1.0 + s)
-    } else {
-        l + s - l * s
-    };
-    let p = 2.0 * l - q;
-
-    let hue_to_rgb = |p: f32, q: f32, mut t: f32| -> f32 {
-        if t < 0.0 {
-            t += 1.0;
-        }
-        if t > 1.0 {
-            t -= 1.0;
-        }
-        if t < 1.0 / 6.0 {
-            return p + (q - p) * 6.0 * t;
-        }
-        if t < 1.0 / 2.0 {
-            return q;
-        }
-        if t < 2.0 / 3.0 {
-            return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
-        }
-        p
-    };
-
-    (
-        hue_to_rgb(p, q, h + 1.0 / 3.0),
-        hue_to_rgb(p, q, h),
-        hue_to_rgb(p, q, h - 1.0 / 3.0),
-    )
 }

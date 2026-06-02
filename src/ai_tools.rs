@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use gpui::{Point, Size};
 use plugin_editor_api::{AiToolDefinition, PluginError};
 use serde_json::{json, Value};
@@ -13,7 +13,7 @@ use ui::graph::ConnectionType;
 
 use crate::core::definitions::NodeDefinitions;
 use crate::core::graph::BlueprintGraph;
-use crate::core::types::{BlueprintComment, BlueprintNode, Connection};
+use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType};
 
 #[derive(Clone)]
 struct BlueprintAiSession {
@@ -453,6 +453,17 @@ pub fn blueprint_update_node(
 #[tool(category = "blueprint")]
 pub fn blueprint_remove_node(id: String) -> Result<Value> {
     with_session_mut(|session| {
+        // Macro entry/exit nodes are structural — never allow deletion.
+        if let Some(node) = session.graph.nodes.iter().find(|n| n.id == id) {
+            if matches!(node.node_type, NodeType::MacroEntry | NodeType::MacroExit) {
+                return Ok(json!({
+                    "ok": false,
+                    "error": "Cannot delete macro entry or return nodes",
+                    "removed": false,
+                }));
+            }
+        }
+
         let before_nodes = session.graph.nodes.len();
         let before_connections = session.graph.connections.len();
 

@@ -161,7 +161,7 @@ impl EditorPlugin for BlueprintEditorPlugin {
             });
 
             // Register/refresh AI session state from the live editor graph.
-            let graph_snapshot = panel.read(cx).get_graph().clone();
+            let graph_snapshot = panel.read(cx).graph.clone();
             ai_tools::upsert_session(file_path.clone(), graph_snapshot);
 
             // Wrap the panel in Arc - will be shared with main app

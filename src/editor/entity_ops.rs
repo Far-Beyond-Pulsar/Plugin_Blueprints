@@ -1,7 +1,7 @@
 //! Unified operations for graph entities (nodes and comments)
 
-use crate::core::graph_entity::{DragState, EntitySelection, GraphEntity};
-use crate::core::types::{BlueprintComment, BlueprintNode};
+use crate::core::graph_entity::EntitySelection;
+use crate::core::types::NodeType;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
@@ -259,7 +259,10 @@ impl GraphCanvasPanel {
             .graph
             .nodes
             .iter()
-            .filter(|node| selected_node_ids.contains(node.id.as_str()))
+            .filter(|node| {
+                selected_node_ids.contains(node.id.as_str())
+                    && !matches!(node.node_type, NodeType::MacroEntry | NodeType::MacroExit)
+            })
             .cloned()
             .collect();
         let deleted_comments: Vec<_> = self

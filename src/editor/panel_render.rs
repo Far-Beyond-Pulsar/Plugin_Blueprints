@@ -251,10 +251,24 @@ impl BlueprintEditorPanel {
     }
 
     pub fn render_find_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let node_count = self.graph.nodes.len();
-        let comment_count = self.graph.comments.len();
-        let nodes = self.graph.nodes.clone();
-        let selected_nodes = self.graph.selected_nodes.clone();
+        // Read nodes from the live canvas if available; fall back to self.graph shadow.
+        let (node_count, comment_count, nodes, selected_nodes) =
+            if let Some(canvas) = self.active_canvas() {
+                let g = canvas.read(cx).graph.clone();
+                (
+                    g.nodes.len(),
+                    g.comments.len(),
+                    g.nodes.clone(),
+                    g.selected_nodes.clone(),
+                )
+            } else {
+                (
+                    self.graph.nodes.len(),
+                    self.graph.comments.len(),
+                    self.graph.nodes.clone(),
+                    self.graph.selected_nodes.clone(),
+                )
+            };
         let item_sizes = std::rc::Rc::new(
             nodes
                 .iter()

@@ -79,13 +79,13 @@ impl BlueprintEditorPanel {
         &mut self,
         path: &Path,
         _window: &mut Window,
-        _cx: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) -> Result<(), String> {
         let target_path = Self::resolve_blueprint_path(path);
 
-        // Persist the currently edited in-memory graph into its tab snapshot
-        // before serializing the asset.
-        self.sync_graph_to_active_tab();
+        // Flush every open canvas's live graph into its tab snapshot before
+        // serializing. This is the single authoritative sync: canvas → tab.
+        self.sync_all_canvases_to_tabs(cx);
 
         // Convert current graph state to BlueprintAsset
         let asset = self.to_blueprint_asset()?;
@@ -288,9 +288,20 @@ impl BlueprintEditorPanel {
                 .active_tab_index
                 .min(self.open_tabs.len().saturating_sub(1));
 
-            // No need to copy into self.graph — the active tab IS the graph now.
             self.comment_color_bindings_dirty = true;
         }
+
+        // Update self.graph shadow from the active tab.
+        if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
+            self.graph = tab.graph.clone();
+        }
+
+        // Rebuild workspace canvas panels from the freshly-loaded tabs.
+        // For initial load the workspace doesn't exist yet — render() will call
+        // initialize_workspace() which reads open_tabs directly.
+        // For reload (workspace already exists) we rebuild panels in-place.
+        self.graph_workspace_tabs_dirty = true;
+        self.refresh_graph_workspace_tabs(window, cx);
 
         cx.notify();
         Ok(())
@@ -374,11 +385,12 @@ impl BlueprintEditorPanel {
 
     /// Export blueprint to a different format or location
     pub fn export_blueprint(
-        &self,
+        &mut self,
         export_path: &Path,
         _window: &mut Window,
-        _cx: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) -> Result<(), String> {
+        self.sync_all_canvases_to_tabs(cx);
         let asset = self.to_blueprint_asset()?;
         let content = formats::serialize_blueprint_with_header(&asset)?;
 

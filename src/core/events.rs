@@ -6,7 +6,7 @@
 
 use gpui::*;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 // ============================================================================
 // Context Menu Actions

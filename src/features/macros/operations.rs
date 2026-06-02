@@ -44,8 +44,19 @@ impl BlueprintEditorPanel {
             return;
         }
 
-        self.sync_graph_to_active_tab();
+        // Flush the current active canvas into its tab before leaving.
+        let active_tab_id = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone());
+        if let Some(tab_id) = active_tab_id {
+            if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
+                let live = canvas.read(cx).graph.clone();
+                self.graph = live.clone();
+                if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
+                    tab.graph = live;
+                }
+            }
+        }
 
+        // Push an empty tab for the new macro.
         let new_tab = GraphTab {
             id: macro_id.clone(),
             name: macro_name.clone(),
@@ -67,13 +78,10 @@ impl BlueprintEditorPanel {
 
         self.open_tabs.push(new_tab);
         self.active_tab_index = self.open_tabs.len() - 1;
-        self.load_active_tab_graph();
 
-        // Seed the macro graph with properly-pinned Entry and Exit nodes.
+        // Seed entry/exit nodes directly into the tab graph.
+        // No canvas exists yet — it will be created from this tab graph.
         self.sync_entry_exit_in_active_graph(&macro_id, cx);
-        // Persist seeded nodes into the newly-created tab graph before
-        // workspace panel creation, otherwise the canvas starts from an empty graph.
-        self.sync_graph_to_active_tab();
 
         self.graph_workspace_tabs_dirty = true;
         self.refresh_graph_workspace_tabs(window, cx);
@@ -289,9 +297,12 @@ impl BlueprintEditorPanel {
 
     // ─── Entry / Exit synchronisation ────────────────────────────────────────
 
-    /// Ensure the Macro Entry and Macro Exit nodes in `panel.graph` reflect the
-    /// current interface of `macro_id`.  Only works when that macro's tab is
-    /// the active tab (because `panel.graph` IS the active tab's graph).
+    /// Ensure the Macro Entry and Macro Exit nodes in the macro's graph reflect
+    /// the current interface of `macro_id`.
+    ///
+    /// If the macro canvas is already open, the live canvas graph is updated
+    /// directly (no full replacement — user nodes are preserved).
+    /// The matching tab snapshot is always updated so serialisation is correct.
     pub fn sync_entry_exit_in_active_graph(&mut self, macro_id: &str, cx: &mut Context<Self>) {
         // Only run when the active tab belongs to this macro.
         let is_active = self
@@ -310,7 +321,7 @@ impl BlueprintEditorPanel {
         let entry_id = format!("macro_entry_{}", macro_id);
         let exit_id = format!("macro_exit_{}", macro_id);
 
-        // ── Entry node (outputs = macro inputs) ──
+        // Build the desired pin lists.
         let entry_outputs: Vec<Pin> = macro_def
             .interface
             .inputs
@@ -323,34 +334,6 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
-        if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == entry_id) {
-            node.title = macro_def.name.clone();
-            node.outputs = entry_outputs;
-            let rows = node.outputs.len().max(1);
-            node.size.height = layout::node_height_for_pin_rows(rows);
-        } else {
-            let rows = entry_outputs.len().max(1);
-            self.graph.nodes.insert(
-                0,
-                BlueprintNode {
-                    id: entry_id,
-                    definition_id: "macro_entry".to_string(),
-                    title: macro_def.name.clone(),
-                    icon: "▶".to_string(),
-                    node_type: NodeType::MacroEntry,
-                    position: Point::new(60.0, 180.0),
-                    size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
-                    inputs: vec![],
-                    outputs: entry_outputs,
-                    properties: HashMap::new(),
-                    is_selected: false,
-                    description: format!("Entry — provides inputs into '{}'", macro_def.name),
-                    color: Some("#7C3AED".to_string()),
-                },
-            );
-        }
-
-        // ── Exit node (inputs = macro outputs) ──
         let exit_inputs: Vec<Pin> = macro_def
             .interface
             .outputs
@@ -363,43 +346,90 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
-        if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == exit_id) {
-            node.title = format!("{} (Return)", macro_def.name);
-            node.inputs = exit_inputs;
-            let rows = node.inputs.len().max(1);
-            node.size.height = layout::node_height_for_pin_rows(rows);
-        } else {
-            let rows = exit_inputs.len().max(1);
-            self.graph.nodes.push(BlueprintNode {
-                id: exit_id,
-                definition_id: "macro_exit".to_string(),
-                title: format!("{} (Return)", macro_def.name),
-                icon: "◀".to_string(),
-                node_type: NodeType::MacroExit,
-                position: Point::new(820.0, 180.0),
-                size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
-                inputs: exit_inputs,
-                outputs: vec![],
-                properties: HashMap::new(),
-                is_selected: false,
-                description: format!("Exit — collects outputs from '{}'", macro_def.name),
-                color: Some("#7C3AED".to_string()),
-            });
-        }
+        // Helper: apply entry/exit changes to a graph in-place.
+        // Does NOT replace the whole graph — only touches the sentinel nodes.
+        let apply = |graph: &mut BlueprintGraph| {
+            // Entry node
+            if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == entry_id) {
+                node.title = macro_def.name.clone();
+                node.outputs = entry_outputs.clone();
+                let rows = node.outputs.len().max(1);
+                node.size.height = layout::node_height_for_pin_rows(rows);
+            } else {
+                let rows = entry_outputs.len().max(1);
+                graph.nodes.insert(
+                    0,
+                    BlueprintNode {
+                        id: entry_id.clone(),
+                        definition_id: "macro_entry".to_string(),
+                        title: macro_def.name.clone(),
+                        icon: "▶".to_string(),
+                        node_type: NodeType::MacroEntry,
+                        position: Point::new(60.0, 180.0),
+                        size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
+                        inputs: vec![],
+                        outputs: entry_outputs.clone(),
+                        properties: HashMap::new(),
+                        is_selected: false,
+                        description: format!("Entry — provides inputs into '{}'", macro_def.name),
+                        color: Some("#7C3AED".to_string()),
+                    },
+                );
+            }
 
-        // Persist structural updates into the active tab snapshot.
-        self.sync_graph_to_active_tab();
-
-        // Mirror to the active canvas graph. Defer to avoid re-entrant entity
-        // borrows when this is invoked from within a canvas update callback.
-        if let Some(canvas) = self.active_canvas().cloned() {
-            let graph = self.graph.clone();
-            cx.defer(move |cx| {
-                canvas.update(cx, |canvas, cx| {
-                    canvas.graph = graph.clone();
-                    cx.notify();
+            // Exit node
+            if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == exit_id) {
+                node.title = format!("{} (Return)", macro_def.name);
+                node.inputs = exit_inputs.clone();
+                let rows = node.inputs.len().max(1);
+                node.size.height = layout::node_height_for_pin_rows(rows);
+            } else {
+                let rows = exit_inputs.len().max(1);
+                graph.nodes.push(BlueprintNode {
+                    id: exit_id.clone(),
+                    definition_id: "macro_exit".to_string(),
+                    title: format!("{} (Return)", macro_def.name),
+                    icon: "◀".to_string(),
+                    node_type: NodeType::MacroExit,
+                    position: Point::new(820.0, 180.0),
+                    size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
+                    inputs: exit_inputs.clone(),
+                    outputs: vec![],
+                    properties: HashMap::new(),
+                    is_selected: false,
+                    description: format!("Exit — collects outputs from '{}'", macro_def.name),
+                    color: Some("#7C3AED".to_string()),
                 });
+            }
+        };
+
+        // If the canvas for this macro is already open, update it directly.
+        // This preserves all user-added nodes — only entry/exit sentinels are touched.
+        if let Some(canvas) = self.active_canvas().cloned() {
+            canvas.update(cx, |canvas_panel, cx| {
+                apply(&mut canvas_panel.graph);
+                cx.notify();
             });
+            // Snapshot the canvas state into the tab so serialisation is correct.
+            let updated_graph = self
+                .graph_panels
+                .iter()
+                .find(|(id, _)| id == macro_id)
+                .map(|(_, c)| c.read(cx).graph.clone());
+            if let Some(graph) = updated_graph {
+                self.graph = graph.clone();
+                if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
+                    tab.graph = graph;
+                }
+            }
+        } else {
+            // Canvas not yet created (e.g. during open_local_macro before workspace
+            // refresh). Write directly into the tab graph — canvas will be seeded
+            // from it when created.
+            if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
+                apply(&mut tab.graph);
+                self.graph = tab.graph.clone();
+            }
         }
 
         cx.notify();
@@ -425,7 +455,7 @@ impl BlueprintEditorPanel {
     }
 
     /// Update the pins of every `MacroInstance` node that references `macro_id`
-    /// across `panel.graph` and all open tabs.
+    /// across all tab snapshots AND all live canvas graphs.
     pub fn sync_all_macro_instances(&mut self, macro_id: &str, cx: &mut Context<Self>) {
         let def_prefix = format!("macro:{}", macro_id);
         let Some(macro_def) = self.local_macros.iter().find(|m| m.id == macro_id).cloned() else {
@@ -461,15 +491,29 @@ impl BlueprintEditorPanel {
             }
         };
 
-        for node in self.graph.nodes.iter_mut() {
-            rebuild_node(node);
-        }
+        // Update all tab snapshots (covers closed tabs and the authoritative store).
         for tab in self.open_tabs.iter_mut() {
             for node in tab.graph.nodes.iter_mut() {
                 rebuild_node(node);
             }
         }
-        cx.notify();
+
+        // Also update live canvas graphs so the display is immediately correct.
+        let canvases: Vec<Entity<crate::editor::workspace_panels::GraphCanvasPanel>> =
+            self.graph_panels.iter().map(|(_, c)| c.clone()).collect();
+        for canvas in canvases {
+            canvas.update(cx, |canvas_panel, cx| {
+                for node in canvas_panel.graph.nodes.iter_mut() {
+                    rebuild_node(node);
+                }
+                cx.notify();
+            });
+        }
+
+        // Keep the self.graph shadow in sync with the active tab.
+        if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
+            self.graph = tab.graph.clone();
+        }
     }
 
     // ─── Palette invalidation ─────────────────────────────────────────────────
