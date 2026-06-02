@@ -179,18 +179,6 @@ pub fn on_mouse_down_left(
                         if node.node_type == NodeType::MacroInstance {
                             if let Some(macro_id) = node.definition_id.strip_prefix("macro:") {
                                 let macro_id: String = macro_id.to_string();
-                                // Read macro name from shared panel
-                                let macro_name = canvas
-                                    .panel
-                                    .upgrade()
-                                    .and_then(|p| {
-                                        p.read(cx)
-                                            .local_macros
-                                            .iter()
-                                            .find(|m| m.id == macro_id)
-                                            .map(|m| m.name.clone())
-                                    })
-                                    .unwrap_or_else(|| "Macro".to_string());
                                 canvas.last_click_time = None;
                                 canvas.last_click_pos = None;
                                 let win_handle = window.window_handle();
@@ -199,9 +187,8 @@ pub fn on_mouse_down_left(
                                     let _ = cx.update_window(win_handle, |_, window, cx| {
                                         if let Some(p) = panel_weak.upgrade() {
                                             p.update(cx, |panel, cx| {
-                                                panel.open_local_macro(
-                                                    macro_id.clone(),
-                                                    macro_name.clone(),
+                                                panel.open_macro_from_instance(
+                                                    &macro_id,
                                                     window,
                                                     cx,
                                                 );

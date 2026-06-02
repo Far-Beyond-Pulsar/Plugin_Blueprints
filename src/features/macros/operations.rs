@@ -103,6 +103,44 @@ impl BlueprintEditorPanel {
         }
     }
 
+    /// Open the graph backing a placed macro instance.
+    ///
+    /// Local macros open/switch to a local macro tab.
+    /// Library macros route through `OpenEngineLibraryRequest`.
+    pub fn open_macro_from_instance(
+        &mut self,
+        macro_id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(local) = self.local_macros.iter().find(|m| m.id == macro_id) {
+            self.open_local_macro(local.id.clone(), local.name.clone(), window, cx);
+            return;
+        }
+
+        if let Some(lib_id) = self.get_macro_library_id(macro_id) {
+            let macro_name = self
+                .library_manager
+                .get_libraries()
+                .get(&lib_id)
+                .and_then(|lib| {
+                    lib.subgraphs
+                        .iter()
+                        .find(|sg| sg.id == macro_id)
+                        .map(|sg| sg.name.clone())
+                })
+                .unwrap_or_else(|| "Macro".to_string());
+
+            self.request_open_engine_library(
+                lib_id,
+                "Engine Library".to_string(),
+                Some(macro_id.to_string()),
+                Some(macro_name),
+                cx,
+            );
+        }
+    }
+
     /// Return the library ID that owns `macro_id`, or `None` if it is a local macro.
     pub fn get_macro_library_id(&self, macro_id: &str) -> Option<String> {
         if self.local_macros.iter().any(|m| m.id == macro_id) {
@@ -346,6 +384,21 @@ impl BlueprintEditorPanel {
                 is_selected: false,
                 description: format!("Exit — collects outputs from '{}'", macro_def.name),
                 color: Some("#7C3AED".to_string()),
+            });
+        }
+
+        // Persist structural updates into the active tab snapshot.
+        self.sync_graph_to_active_tab();
+
+        // Mirror to the active canvas graph. Defer to avoid re-entrant entity
+        // borrows when this is invoked from within a canvas update callback.
+        if let Some(canvas) = self.active_canvas().cloned() {
+            let graph = self.graph.clone();
+            cx.defer(move |cx| {
+                canvas.update(cx, |canvas, cx| {
+                    canvas.graph = graph.clone();
+                    cx.notify();
+                });
             });
         }
 
