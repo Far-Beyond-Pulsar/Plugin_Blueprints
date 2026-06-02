@@ -1,10 +1,10 @@
 //! Macro operations — creating, opening, editing, and placing macro instances.
 
+use crate::core::graph::BlueprintGraph;
 use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::GraphTab;
 use crate::rendering::layout;
-use crate::core::graph::BlueprintGraph;
 use gpui::*;
 use std::collections::HashMap;
 use ui::graph::DataType;
@@ -71,6 +71,9 @@ impl BlueprintEditorPanel {
 
         // Seed the macro graph with properly-pinned Entry and Exit nodes.
         self.sync_entry_exit_in_active_graph(&macro_id, cx);
+        // Persist seeded nodes into the newly-created tab graph before
+        // workspace panel creation, otherwise the canvas starts from an empty graph.
+        self.sync_graph_to_active_tab();
 
         self.graph_workspace_tabs_dirty = true;
         self.refresh_graph_workspace_tabs(window, cx);
@@ -178,7 +181,9 @@ impl BlueprintEditorPanel {
         let before = self.open_tabs.len();
         self.open_tabs.retain(|t| t.id != macro_id);
         if self.open_tabs.len() < before {
-            self.active_tab_index = self.active_tab_index.min(self.open_tabs.len().saturating_sub(1));
+            self.active_tab_index = self
+                .active_tab_index
+                .min(self.open_tabs.len().saturating_sub(1));
         }
         self.invalidate_palette(cx);
         cx.notify();
@@ -422,7 +427,9 @@ impl BlueprintEditorPanel {
             cx.defer(move |cx| {
                 canvas.update(cx, |canvas, cx| {
                     let v = canvas.quick_palette_view.clone();
-                    cx.defer(move |cx| { v.update(cx, |view, cx| view.rebuild_items(cx)); });
+                    cx.defer(move |cx| {
+                        v.update(cx, |view, cx| view.rebuild_items(cx));
+                    });
                 });
             });
         }
@@ -440,25 +447,36 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         cx: &mut Context<Self>,
     ) {
         // Get the macro definition from the shared panel
-        let macro_def = self
-            .panel
-            .upgrade()
-            .and_then(|p| {
-                p.read(cx)
-                    .local_macros
-                    .iter()
-                    .find(|m| m.id == macro_id)
-                    .cloned()
-            });
+        let macro_def = self.panel.upgrade().and_then(|p| {
+            p.read(cx)
+                .local_macros
+                .iter()
+                .find(|m| m.id == macro_id)
+                .cloned()
+        });
         let Some(macro_def) = macro_def else { return };
 
         let inputs: Vec<crate::core::types::Pin> = macro_def
-            .interface.inputs.iter()
-            .map(|p| crate::core::types::Pin { id: p.id.clone(), name: p.name.clone(), pin_type: crate::core::types::PinType::Input, data_type: p.data_type.clone() })
+            .interface
+            .inputs
+            .iter()
+            .map(|p| crate::core::types::Pin {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                pin_type: crate::core::types::PinType::Input,
+                data_type: p.data_type.clone(),
+            })
             .collect();
         let outputs: Vec<crate::core::types::Pin> = macro_def
-            .interface.outputs.iter()
-            .map(|p| crate::core::types::Pin { id: p.id.clone(), name: p.name.clone(), pin_type: crate::core::types::PinType::Output, data_type: p.data_type.clone() })
+            .interface
+            .outputs
+            .iter()
+            .map(|p| crate::core::types::Pin {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                pin_type: crate::core::types::PinType::Output,
+                data_type: p.data_type.clone(),
+            })
             .collect();
         let max_rows = inputs.len().max(outputs.len()).max(1);
         let node = crate::core::types::BlueprintNode {
@@ -481,9 +499,14 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
 
     /// Called when the user drops a `MacroDrag` payload onto this canvas.
     pub fn finish_dragging_macro(&mut self, window_pos: Point<Pixels>, cx: &mut Context<Self>) {
-        let Some(drag) = self.dragging_macro.take() else { return };
+        let Some(drag) = self.dragging_macro.take() else {
+            return;
+        };
         let origin = *self.canvas_origin.borrow();
-        let cp = Point::new(window_pos.x.as_f32() - origin.x, window_pos.y.as_f32() - origin.y);
+        let cp = Point::new(
+            window_pos.x.as_f32() - origin.x,
+            window_pos.y.as_f32() - origin.y,
+        );
         let z = self.graph.zoom_level;
         let graph_pos = Point::new(
             cp.x / z - self.graph.pan_offset.x,
