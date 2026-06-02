@@ -7,7 +7,7 @@ use crate::{
     PinType,
 };
 use gpui::*;
-use ui::graph::{self as graph_types, GraphDescription, NodeInstance, Position};
+use ui::graph::{self as graph_types, GraphDescription, NodeInstance, PinInstance, Position};
 
 impl BlueprintEditorPanel {
     /// Convert current blueprint graph to graph description
@@ -33,12 +33,30 @@ impl BlueprintEditorPanel {
                 },
             );
 
-            // Convert pins
+            // Convert pins — preserve both UUID id and human-readable name.
+            // add_input_pin/add_output_pin use their single argument as both id
+            // and name, so we push PinInstances directly to keep them separate.
             for pin in &bp_node.inputs {
-                node_instance.add_input_pin(&pin.id, pin.data_type.clone());
+                node_instance.inputs.push(PinInstance {
+                    id: pin.id.clone(),
+                    pin: graph_types::Pin {
+                        name: pin.name.clone(),
+                        pin_type: graph_types::PinType::Input,
+                        data_type: pin.data_type.clone(),
+                        connected_to: Vec::new(),
+                    },
+                });
             }
             for pin in &bp_node.outputs {
-                node_instance.add_output_pin(&pin.id, pin.data_type.clone());
+                node_instance.outputs.push(PinInstance {
+                    id: pin.id.clone(),
+                    pin: graph_types::Pin {
+                        name: pin.name.clone(),
+                        pin_type: graph_types::PinType::Output,
+                        data_type: pin.data_type.clone(),
+                        connected_to: Vec::new(),
+                    },
+                });
             }
 
             // Convert properties
