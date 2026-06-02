@@ -403,33 +403,77 @@ impl BlueprintEditorPanel {
             }
         };
 
-        // If the canvas for this macro is already open, update it directly.
-        // This preserves all user-added nodes — only entry/exit sentinels are touched.
+        // Apply to the active tab snapshot synchronously — safe because we are
+        // only modifying data, not crossing entity update boundaries.
+        if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
+            apply(&mut tab.graph);
+            self.graph = tab.graph.clone();
+        }
+
+        // If the canvas entity is already open we must also update it, BUT we
+        // cannot call canvas.update(cx, …) here if we were called from inside a
+        // canvas update (e.g. from the "Add pin" button in graph.rs).  Defer to
+        // the next event-loop tick so the current update chain has unwound first.
         if let Some(canvas) = self.active_canvas().cloned() {
-            canvas.update(cx, |canvas_panel, cx| {
-                apply(&mut canvas_panel.graph);
-                cx.notify();
+            // Clone the data the deferred closure needs — all 'static types.
+            let entry_id_d = entry_id.clone();
+            let exit_id_d = exit_id.clone();
+            let macro_name_d = macro_def.name.clone();
+            let entry_outputs_d = entry_outputs.clone();
+            let exit_inputs_d = exit_inputs.clone();
+            cx.defer(move |cx| {
+                canvas.update(cx, |canvas_panel, cx| {
+                    // Entry sentinel
+                    if let Some(node) = canvas_panel.graph.nodes.iter_mut().find(|n| n.id == entry_id_d) {
+                        node.title = macro_name_d.clone();
+                        node.outputs = entry_outputs_d.clone();
+                        let rows = node.outputs.len().max(1);
+                        node.size.height = layout::node_height_for_pin_rows(rows);
+                    } else {
+                        let rows = entry_outputs_d.len().max(1);
+                        canvas_panel.graph.nodes.insert(0, BlueprintNode {
+                            id: entry_id_d.clone(),
+                            definition_id: "macro_entry".to_string(),
+                            title: macro_name_d.clone(),
+                            icon: "▶".to_string(),
+                            node_type: NodeType::MacroEntry,
+                            position: Point::new(60.0, 180.0),
+                            size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
+                            inputs: vec![],
+                            outputs: entry_outputs_d.clone(),
+                            properties: HashMap::new(),
+                            is_selected: false,
+                            description: format!("Entry — provides inputs into '{}'", macro_name_d),
+                            color: Some("#7C3AED".to_string()),
+                        });
+                    }
+                    // Exit sentinel
+                    if let Some(node) = canvas_panel.graph.nodes.iter_mut().find(|n| n.id == exit_id_d) {
+                        node.title = format!("{} (Return)", macro_name_d);
+                        node.inputs = exit_inputs_d.clone();
+                        let rows = node.inputs.len().max(1);
+                        node.size.height = layout::node_height_for_pin_rows(rows);
+                    } else {
+                        let rows = exit_inputs_d.len().max(1);
+                        canvas_panel.graph.nodes.push(BlueprintNode {
+                            id: exit_id_d.clone(),
+                            definition_id: "macro_exit".to_string(),
+                            title: format!("{} (Return)", macro_name_d),
+                            icon: "◀".to_string(),
+                            node_type: NodeType::MacroExit,
+                            position: Point::new(820.0, 180.0),
+                            size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
+                            inputs: exit_inputs_d.clone(),
+                            outputs: vec![],
+                            properties: HashMap::new(),
+                            is_selected: false,
+                            description: format!("Exit — collects outputs from '{}'", macro_name_d),
+                            color: Some("#7C3AED".to_string()),
+                        });
+                    }
+                    cx.notify();
+                });
             });
-            // Snapshot the canvas state into the tab so serialisation is correct.
-            let updated_graph = self
-                .graph_panels
-                .iter()
-                .find(|(id, _)| id == macro_id)
-                .map(|(_, c)| c.read(cx).graph.clone());
-            if let Some(graph) = updated_graph {
-                self.graph = graph.clone();
-                if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-                    tab.graph = graph;
-                }
-            }
-        } else {
-            // Canvas not yet created (e.g. during open_local_macro before workspace
-            // refresh). Write directly into the tab graph — canvas will be seeded
-            // from it when created.
-            if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-                apply(&mut tab.graph);
-                self.graph = tab.graph.clone();
-            }
         }
 
         cx.notify();
