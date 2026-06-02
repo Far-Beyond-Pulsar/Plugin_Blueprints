@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 //! # Blueprint Editor Plugin
 //!
 //! Visual scripting editor for creating blueprint classes through node-based programming.

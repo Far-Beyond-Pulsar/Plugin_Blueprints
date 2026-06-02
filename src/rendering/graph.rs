@@ -550,7 +550,7 @@ impl NodeGraphRenderer {
                             text_calls.push((
                                 pin.name.clone(),
                                 lx,
-                                scr_y + PIN_FONT * zoom * 0.35,
+                                scr_y + PIN_FONT * zoom * 0.45,
                                 PIN_FONT * zoom,
                                 [0.78, 0.81, 0.87, 0.98],
                                 !is_input,
