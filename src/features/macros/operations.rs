@@ -492,8 +492,10 @@ impl BlueprintEditorPanel {
         cx: &mut Context<Self>,
     ) {
         if let Some(canvas) = self.active_canvas().cloned() {
-            canvas.update(cx, |canvas, cx| {
-                canvas.create_macro_instance_node(macro_id, position, cx);
+            cx.defer(move |cx| {
+                canvas.update(cx, |canvas, cx| {
+                    canvas.create_macro_instance_node(macro_id, position, cx);
+                });
             });
         }
     }
@@ -543,14 +545,35 @@ impl BlueprintEditorPanel {
         }
 
         // Also update live canvas graphs so the display is immediately correct.
+        // Defer each canvas.update to avoid reentrancy — this function can be
+        // called from within a canvas update (e.g. add/remove macro pin button).
         let canvases: Vec<Entity<crate::editor::workspace_panels::GraphCanvasPanel>> =
             self.graph_panels.iter().map(|(_, c)| c.clone()).collect();
         for canvas in canvases {
-            canvas.update(cx, |canvas_panel, cx| {
-                for node in canvas_panel.graph.nodes.iter_mut() {
-                    rebuild_node(node);
-                }
-                cx.notify();
+            let def_prefix_d = def_prefix.clone();
+            let macro_def_d = macro_def.clone();
+            cx.defer(move |cx| {
+                canvas.update(cx, |canvas_panel, cx| {
+                    for node in canvas_panel.graph.nodes.iter_mut() {
+                        if node.definition_id == def_prefix_d && node.node_type == NodeType::MacroInstance {
+                            node.inputs = macro_def_d.interface.inputs.iter().map(|p| Pin {
+                                id: p.id.clone(),
+                                name: p.name.clone(),
+                                pin_type: PinType::Input,
+                                data_type: p.data_type.clone(),
+                            }).collect();
+                            node.outputs = macro_def_d.interface.outputs.iter().map(|p| Pin {
+                                id: p.id.clone(),
+                                name: p.name.clone(),
+                                pin_type: PinType::Output,
+                                data_type: p.data_type.clone(),
+                            }).collect();
+                            let rows = node.inputs.len().max(node.outputs.len()).max(1);
+                            node.size.height = layout::node_height_for_pin_rows(rows);
+                        }
+                    }
+                    cx.notify();
+                });
             });
         }
 
