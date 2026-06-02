@@ -537,7 +537,7 @@ fn main() {
                 let panel = cx.new(|cx| {
                     let mut p = BlueprintEditorPanel::new(window, cx);
                     p.graph = graph.clone();
-                    p.start_fake_execution_simulation(cx);
+                    p.start_compilation(cx);
                     p
                 });
                 cx.new(|cx| Root::new(panel.into(), window, cx))
