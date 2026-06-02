@@ -87,8 +87,8 @@ impl GlyphAtlas {
                 uv_max: [0.0; 2],
                 width: 0,
                 height: 0,
-                bearing_x: metrics.bounds.xmin,
-                bearing_y: metrics.bounds.ymin,
+                bearing_x: metrics.xmin as f32,
+                bearing_y: metrics.ymin as f32,
                 advance: metrics.advance_width,
             };
             self.slots.insert(key, slot);
@@ -130,8 +130,8 @@ impl GlyphAtlas {
             ],
             width: gw,
             height: gh,
-            bearing_x: metrics.bounds.xmin,
-            bearing_y: metrics.bounds.ymin,
+            bearing_x: metrics.xmin as f32,
+            bearing_y: metrics.ymin as f32,
             advance: metrics.advance_width,
         };
 

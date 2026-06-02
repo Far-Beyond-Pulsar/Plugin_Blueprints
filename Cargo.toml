@@ -15,6 +15,7 @@ path = "examples/standalone.rs"
 name = "standalone_stress"
 path = "examples/standalone_stress.rs"
 
+
 [dependencies]
 # UI dependencies (local paths so traits resolve to the same crate instance)
 gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "3458d987317e30f6cda800e03822292e27ef4a33" }
