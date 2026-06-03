@@ -92,8 +92,9 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let compat_accent = vec3(0.50, 0.63, 0.88);
     let active_accent = select(accent, compat_accent, in.compatible != 0u);
 
-    let ring_col = vec3(0.20, 0.22, 0.26);
-    let fill_col = mix(vec3(0.11, 0.12, 0.14), active_accent, 0.78);
+    let ring_col = vec3(0.24, 0.27, 0.31);
+    let fill_col = mix(vec3(0.12, 0.13, 0.15), active_accent, 0.74);
+    let glow_col = mix(active_accent, vec3(1.0), 0.20);
 
     var d: f32;
     if in.kind == 0u {
@@ -102,8 +103,11 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         d = sdf_exec(in.uv, in.is_input != 0u);
     }
 
-    let inside = 1.0 - smoothstep(-0.02, 0.02, d);
-    let ring = smoothstep(-0.02, 0.02, d + 0.12) * (1.0 - inside);
+    let aa = max(fwidth(d), 0.02);
+    let ring_w = 0.13;
+    let inside = 1.0 - smoothstep(-aa, aa, d);
+    let ring_outer = 1.0 - smoothstep(-aa, aa, d + ring_w);
+    let ring = clamp(ring_outer - inside, 0.0, 1.0);
     if inside + ring <= 0.01 { discard; }
 
     var base = mix(ring_col, fill_col, inside / (inside + ring + 0.0001));
@@ -115,10 +119,13 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         base = mix(base, active_accent, stripe * 0.30);
     }
 
-    let alpha = inside + ring;
+    let glow = smoothstep(0.36, 0.0, d) * smoothstep(-aa, aa, d);
+    base = mix(base, glow_col, glow * 0.16);
+
+    let alpha = clamp(inside + ring, 0.0, 1.0);
     if in.compatible != 0u {
         let pulse = 0.90 + 0.10 * sin(u.time * 3.0);
-        base = base * pulse;
+        base = mix(base, glow_col, 0.18) * pulse;
     }
 
     return vec4(base, alpha);

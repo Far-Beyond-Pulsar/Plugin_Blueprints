@@ -117,6 +117,20 @@ fn hit_comment<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a s
     None
 }
 
+fn hit_comment_header<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str> {
+    let header_h = (30.0 / canvas.graph.zoom_level.max(0.25)).clamp(18.0, 44.0);
+    for comment in canvas.graph.comments.iter().rev() {
+        let left = comment.position.x;
+        let top = comment.position.y;
+        let right = left + comment.size.width;
+        let bottom = top + header_h;
+        if gp.x >= left && gp.x <= right && gp.y >= top && gp.y <= bottom {
+            return Some(&comment.id);
+        }
+    }
+    None
+}
+
 fn hit_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel, comment_id: &str) -> Option<ResizeHandle> {
     let comment = canvas.graph.comments.iter().find(|c| c.id == comment_id)?;
     let left = comment.position.x;
@@ -142,6 +156,23 @@ fn hit_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel, comment_id: &st
     }
 }
 
+fn hit_any_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, ResizeHandle)> {
+    let edge = (12.0 / canvas.graph.zoom_level.max(0.25)).clamp(6.0, 24.0);
+    for comment in canvas.graph.comments.iter().rev() {
+        let left = comment.position.x - edge;
+        let top = comment.position.y - edge;
+        let right = comment.position.x + comment.size.width + edge;
+        let bottom = comment.position.y + comment.size.height + edge;
+        if gp.x < left || gp.x > right || gp.y < top || gp.y > bottom {
+            continue;
+        }
+        if let Some(handle) = hit_comment_resize(gp, canvas, &comment.id) {
+            return Some((comment.id.clone(), handle));
+        }
+    }
+    None
+}
+
 fn cursor_for_resize_handle(handle: &ResizeHandle) -> CursorStyle {
     match handle {
         ResizeHandle::TopLeft | ResizeHandle::BottomRight => CursorStyle::ResizeUpLeftDownRight,
@@ -158,16 +189,20 @@ fn update_graph_cursor(window: &mut Window, canvas: &GraphCanvasPanel, cp: Point
         CursorStyle::ClosedHand
     } else if canvas.dragging_connection.is_some() {
         CursorStyle::DragLink
-    } else if let Some(comment_id) = hit_comment(gp, canvas) {
-        if let Some(handle) = hit_comment_resize(gp, canvas, comment_id) {
-            cursor_for_resize_handle(&handle)
-        } else {
-            CursorStyle::OpenHand
-        }
+    } else if let Some((_, handle)) = hit_any_comment_resize(gp, canvas) {
+        cursor_for_resize_handle(&handle)
     } else if hit_any_pin(cp, canvas).is_some() {
         CursorStyle::PointingHand
     } else if hit_node(gp, canvas).is_some() {
         CursorStyle::OpenHand
+    } else if hit_comment_header(gp, canvas).is_some() {
+        CursorStyle::OpenHand
+    } else if let Some(comment_id) = hit_comment(gp, canvas) {
+        if let Some(handle) = hit_comment_resize(gp, canvas, comment_id) {
+            cursor_for_resize_handle(&handle)
+        } else {
+            CursorStyle::Arrow
+        }
     } else if canvas.is_selecting() {
         CursorStyle::Crosshair
     } else {
@@ -235,7 +270,21 @@ pub fn on_mouse_down_left(
             let cp = to_canvas(event.position, canvas);
             let gp = to_graph(cp, canvas);
 
-            // Priority: output pin → node → empty space
+            // Priority: comment resize handles → output pin → node → comment header drag
+            if let Some((comment_id, handle)) = hit_any_comment_resize(gp, canvas) {
+                if !event.modifiers.control {
+                    canvas.graph.selected_nodes.clear();
+                    canvas.graph.selected_comments.clear();
+                }
+                if !canvas.graph.selected_comments.contains(&comment_id) {
+                    canvas.graph.selected_comments.push(comment_id.clone());
+                }
+                canvas.start_comment_resize(comment_id, handle, gp, cx);
+                update_graph_cursor(window, canvas, cp, gp);
+                cx.notify();
+                return;
+            }
+
             if let Some((node_id, pin_id)) = hit_output_pin(cp, canvas) {
                 canvas.start_connection_drag_from_pin(node_id, pin_id, gp, cx);
                 update_graph_cursor(window, canvas, cp, gp);
@@ -302,6 +351,20 @@ pub fn on_mouse_down_left(
                 return;
             }
 
+            if let Some(comment_id) = hit_comment_header(gp, canvas).map(str::to_owned) {
+                if !event.modifiers.control {
+                    canvas.graph.selected_nodes.clear();
+                    canvas.graph.selected_comments.clear();
+                }
+                if !canvas.graph.selected_comments.contains(&comment_id) {
+                    canvas.graph.selected_comments.push(comment_id.clone());
+                }
+                canvas.start_comment_drag(comment_id, gp, cx);
+                update_graph_cursor(window, canvas, cp, gp);
+                cx.notify();
+                return;
+            }
+
             if let Some(comment_id) = hit_comment(gp, canvas).map(str::to_owned) {
                 if !event.modifiers.control {
                     canvas.graph.selected_nodes.clear();
@@ -310,14 +373,7 @@ pub fn on_mouse_down_left(
                 if !canvas.graph.selected_comments.contains(&comment_id) {
                     canvas.graph.selected_comments.push(comment_id.clone());
                 }
-
-                if let Some(handle) = hit_comment_resize(gp, canvas, &comment_id) {
-                    canvas.start_comment_resize(comment_id, handle, gp, cx);
-                    update_graph_cursor(window, canvas, cp, gp);
-                } else {
-                    canvas.start_comment_drag(comment_id, gp, cx);
-                    update_graph_cursor(window, canvas, cp, gp);
-                }
+                update_graph_cursor(window, canvas, cp, gp);
                 cx.notify();
                 return;
             }
