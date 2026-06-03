@@ -536,7 +536,11 @@ fn main() {
             move |window, cx| {
                 let panel = cx.new(|cx| {
                     let mut p = BlueprintEditorPanel::new(window, cx);
+                    // Keep editor shadow graph and main tab graph in sync.
                     p.graph = graph.clone();
+                    if let Some(main_tab) = p.open_tabs.get_mut(0) {
+                        main_tab.graph = graph.clone();
+                    }
                     p.start_compilation(cx);
                     p
                 });
