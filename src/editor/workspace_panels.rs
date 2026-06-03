@@ -489,6 +489,9 @@ pub struct GraphCanvasPanel {
     pub resizing_comment: Option<(String, ResizeHandle)>,
     pub resizing_comment_start: Option<(Point<f32>, Size<f32>)>,
     pub editing_comment: Option<String>,
+    pub last_comment_click_time: Option<std::time::Instant>,
+    pub last_comment_click_pos: Option<Point<f32>>,
+    pub last_comment_click_id: Option<String>,
     pub comment_text_input: Entity<InputState>,
     pub comment_color_bindings_dirty: bool,
 
@@ -522,7 +525,10 @@ impl GraphCanvasPanel {
             &comment_text_input,
             window,
             |this, state: &Entity<InputState>, event: &InputEvent, _window, cx| {
-                if matches!(event, InputEvent::Change | InputEvent::Blur) {
+                if matches!(
+                    event,
+                    InputEvent::Change | InputEvent::Blur | InputEvent::PressEnter { .. }
+                ) {
                     let text = state.read(cx).text().to_string();
                     if let Some(comment_id) = this
                         .editing_comment
@@ -537,6 +543,12 @@ impl GraphCanvasPanel {
                             cx.notify();
                         }
                     }
+                }
+
+                if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. })
+                    && this.editing_comment.is_some()
+                {
+                    this.finish_comment_editing(cx);
                 }
             },
         )
@@ -598,6 +610,9 @@ impl GraphCanvasPanel {
             resizing_comment: None,
             resizing_comment_start: None,
             editing_comment: None,
+            last_comment_click_time: None,
+            last_comment_click_pos: None,
+            last_comment_click_id: None,
             comment_text_input,
             comment_color_bindings_dirty: true,
             dragging_variable: None,
@@ -715,6 +730,7 @@ impl GraphCanvasPanel {
             return;
         };
 
+        self.editing_comment = None;
         self.dragging_comment = Some(comment_id.clone());
         self.drag_offset = Point::new(mouse_pos.x - comment.position.x, mouse_pos.y - comment.position.y);
         self.initial_drag_positions.clear();
@@ -758,9 +774,26 @@ impl GraphCanvasPanel {
             return;
         };
 
+        self.editing_comment = None;
         self.resizing_comment = Some((comment_id, handle));
         self.resizing_comment_start = Some((comment.position, comment.size));
         self.drag_offset = mouse_pos;
+    }
+
+    pub fn start_comment_title_editing(
+        &mut self,
+        comment_id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) {
+            self.editing_comment = Some(comment_id);
+            self.comment_text_input.update(cx, |input, cx| {
+                input.set_value(comment.text.clone(), window, cx);
+                input.focus(window, cx);
+            });
+            cx.notify();
+        }
     }
 
     pub(crate) fn collect_comment_drag_group(
@@ -915,16 +948,10 @@ impl GraphCanvasPanel {
 
     pub fn sync_comment_inspector_state(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(comment_id) = self.graph.selected_comments.first().cloned() else {
-            self.editing_comment = None;
             return;
         };
 
-        if self.editing_comment.as_deref() == Some(comment_id.as_str()) {
-            return;
-        }
-
         if let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) {
-            self.editing_comment = Some(comment_id);
             let current_text = self.comment_text_input.read(cx).text().to_string();
             if current_text != comment.text {
                 self.comment_text_input.update(cx, |input, cx| {

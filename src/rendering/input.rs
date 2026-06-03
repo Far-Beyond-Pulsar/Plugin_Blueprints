@@ -131,13 +131,36 @@ fn hit_comment_header<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Optio
     None
 }
 
+fn hit_comment_title<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str> {
+    let header_h = (30.0 / canvas.graph.zoom_level.max(0.25)).clamp(18.0, 44.0);
+    let pad_x = 12.0;
+    let title_top = 2.0;
+    let title_bottom = header_h - 3.0;
+    for comment in canvas.graph.comments.iter().rev() {
+        let left = comment.position.x + pad_x;
+        let top = comment.position.y + title_top;
+        let right = comment.position.x + comment.size.width - pad_x;
+        let bottom = comment.position.y + title_bottom;
+        if gp.x >= left && gp.x <= right && gp.y >= top && gp.y <= bottom {
+            return Some(&comment.id);
+        }
+    }
+    None
+}
+
+#[inline]
+fn comment_resize_edge(canvas: &GraphCanvasPanel) -> f32 {
+    // Keep edges reachable without swallowing title double-clicks.
+    (6.0 / canvas.graph.zoom_level.max(0.25)).clamp(3.0, 12.0)
+}
+
 fn hit_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel, comment_id: &str) -> Option<ResizeHandle> {
     let comment = canvas.graph.comments.iter().find(|c| c.id == comment_id)?;
     let left = comment.position.x;
     let top = comment.position.y;
     let right = left + comment.size.width;
     let bottom = top + comment.size.height;
-    let edge = (12.0 / canvas.graph.zoom_level.max(0.25)).clamp(6.0, 24.0);
+    let edge = comment_resize_edge(canvas);
     let near_left = (gp.x - left).abs() <= edge;
     let near_right = (gp.x - right).abs() <= edge;
     let near_top = (gp.y - top).abs() <= edge;
@@ -157,7 +180,7 @@ fn hit_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel, comment_id: &st
 }
 
 fn hit_any_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, ResizeHandle)> {
-    let edge = (12.0 / canvas.graph.zoom_level.max(0.25)).clamp(6.0, 24.0);
+    let edge = comment_resize_edge(canvas);
     for comment in canvas.graph.comments.iter().rev() {
         let left = comment.position.x - edge;
         let top = comment.position.y - edge;
@@ -270,8 +293,52 @@ pub fn on_mouse_down_left(
             let cp = to_canvas(event.position, canvas);
             let gp = to_graph(cp, canvas);
 
+            // Dedicated comment-title double-click path (must run before resize/node priority).
+            if let Some(comment_id) = hit_comment_title(gp, canvas).map(str::to_owned) {
+                let now = std::time::Instant::now();
+                let is_double_click = if let (Some(t), Some(p), Some(id)) = (
+                    canvas.last_comment_click_time,
+                    canvas.last_comment_click_pos,
+                    canvas.last_comment_click_id.as_deref(),
+                ) {
+                    let ms = now.duration_since(t).as_millis();
+                    let d = ((gp.x - p.x).powi(2) + (gp.y - p.y).powi(2)).sqrt();
+                    id == comment_id.as_str() && ms < 500 && d < 50.0
+                } else {
+                    false
+                };
+
+                if !event.modifiers.control {
+                    canvas.graph.selected_nodes.clear();
+                    canvas.graph.selected_comments.clear();
+                }
+                if !canvas.graph.selected_comments.contains(&comment_id) {
+                    canvas.graph.selected_comments.push(comment_id.clone());
+                }
+
+                if is_double_click {
+                    canvas.last_comment_click_time = None;
+                    canvas.last_comment_click_pos = None;
+                    canvas.last_comment_click_id = None;
+                    canvas.start_comment_title_editing(comment_id, window, cx);
+                    update_graph_cursor(window, canvas, cp, gp);
+                    return;
+                }
+
+                canvas.last_comment_click_time = Some(now);
+                canvas.last_comment_click_pos = Some(gp);
+                canvas.last_comment_click_id = Some(comment_id.clone());
+                canvas.start_comment_drag(comment_id, gp, cx);
+                update_graph_cursor(window, canvas, cp, gp);
+                cx.notify();
+                return;
+            }
+
             // Priority: comment resize handles → output pin → node → comment header drag
             if let Some((comment_id, handle)) = hit_any_comment_resize(gp, canvas) {
+                canvas.last_comment_click_time = None;
+                canvas.last_comment_click_pos = None;
+                canvas.last_comment_click_id = None;
                 if !event.modifiers.control {
                     canvas.graph.selected_nodes.clear();
                     canvas.graph.selected_comments.clear();
@@ -286,12 +353,18 @@ pub fn on_mouse_down_left(
             }
 
             if let Some((node_id, pin_id)) = hit_output_pin(cp, canvas) {
+                canvas.last_comment_click_time = None;
+                canvas.last_comment_click_pos = None;
+                canvas.last_comment_click_id = None;
                 canvas.start_connection_drag_from_pin(node_id, pin_id, gp, cx);
                 update_graph_cursor(window, canvas, cp, gp);
                 return;
             }
 
             if let Some(node_id) = hit_node(gp, canvas).map(str::to_owned) {
+                canvas.last_comment_click_time = None;
+                canvas.last_comment_click_pos = None;
+                canvas.last_comment_click_id = None;
                 // ── Double-click detection ────────────────────────────────────
                 let now = std::time::Instant::now();
                 let is_double_click = if let (Some(t), Some(p)) =
@@ -352,6 +425,9 @@ pub fn on_mouse_down_left(
             }
 
             if let Some(comment_id) = hit_comment_header(gp, canvas).map(str::to_owned) {
+                canvas.last_comment_click_time = None;
+                canvas.last_comment_click_pos = None;
+                canvas.last_comment_click_id = None;
                 if !event.modifiers.control {
                     canvas.graph.selected_nodes.clear();
                     canvas.graph.selected_comments.clear();
@@ -559,7 +635,7 @@ pub fn on_key_down(
                 if key == "escape" {
                     canvas.editing_comment = None;
                     cx.notify();
-                } else if key == "enter" && event.keystroke.modifiers.control {
+                } else if key == "enter" {
                     canvas.finish_comment_editing(cx);
                 }
                 return;

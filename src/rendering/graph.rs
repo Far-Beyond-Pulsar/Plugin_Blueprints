@@ -41,6 +41,8 @@ const WIRE_THICKNESS: f32 = 2.8;
 const HEADER_FONT: f32 = 12.5;
 const PIN_FONT: f32 = 10.5;
 const HEADER_PAD_X: f32 = 9.0;
+const COMMENT_TITLE_PAD_X: f32 = 12.0;
+const COMMENT_TITLE_PAD_Y: f32 = 6.0;
 
 pub struct NodeGraphRenderer;
 
@@ -490,7 +492,7 @@ impl NodeGraphRenderer {
                 _pad1: 0,
             });
 
-            if zoom >= 0.22 {
+            if zoom >= 0.22 && canvas.editing_comment.as_deref() != Some(comment.id.as_str()) {
                 let scr = Self::graph_to_screen_pos(comment.position, &canvas.graph);
                 comment_text_calls.push((
                     comment.text.clone(),
@@ -921,14 +923,12 @@ impl NodeGraphRenderer {
                     .child(Self::render_breakpoint_badges(canvas, cx))
                     .child(Self::render_debug_hud(canvas, cx))
                     .child(Self::render_macro_pin_editor(canvas, cx))
+                    .child(Self::render_comment_title_editor(canvas, cx))
                     // input
                     .on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(move |canvas, _, window, cx| {
                             canvas.focus_handle().focus(window, cx);
-                            if canvas.editing_comment.is_some() {
-                                canvas.finish_comment_editing(cx);
-                            }
                             if canvas.variable_drop_menu_position.is_some() {
                                 canvas.variable_drop_menu_position = None;
                                 cx.notify();
@@ -1019,6 +1019,49 @@ impl NodeGraphRenderer {
                 ),
         )
         .with_priority(1)
+        .into_any_element()
+    }
+
+    fn render_comment_title_editor(
+        canvas: &GraphCanvasPanel,
+        _cx: &mut Context<GraphCanvasPanel>,
+    ) -> AnyElement {
+        let Some(comment_id) = canvas.editing_comment.as_deref() else {
+            return div().into_any_element();
+        };
+        let Some(comment) = canvas.graph.comments.iter().find(|c| c.id == comment_id) else {
+            return div().into_any_element();
+        };
+
+        let zoom = canvas.graph.zoom_level;
+        let title_h = (30.0 * zoom).clamp(18.0, 44.0);
+        let title_w = (comment.size.width * zoom - COMMENT_TITLE_PAD_X * 2.0 * zoom).max(80.0);
+        let scr = Self::graph_to_screen_pos(comment.position, &canvas.graph);
+        let canvas_origin = *canvas.canvas_origin.borrow();
+        let window_pos = Point::new(
+            px(canvas_origin.x + scr.x + COMMENT_TITLE_PAD_X * zoom),
+            px(canvas_origin.y + scr.y + COMMENT_TITLE_PAD_Y * zoom),
+        );
+
+        deferred(
+            anchored()
+                .position(window_pos)
+                .snap_to_window_with_margin(px(4.0))
+                .anchor(gpui::Corner::TopLeft)
+                .child(
+                    div()
+                        .occlude()
+                        .w(px(title_w))
+                        .h(px(title_h * 0.68))
+                        .child(
+                            ui::input::TextInput::new(&canvas.comment_text_input)
+                                .appearance(false)
+                                .bordered(false)
+                                .focus_bordered(false),
+                        ),
+                ),
+        )
+        .with_priority(2)
         .into_any_element()
     }
 
