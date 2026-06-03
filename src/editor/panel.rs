@@ -100,6 +100,7 @@ pub struct BlueprintEditorPanel {
     // Comment system
     pub dragging_comment: Option<String>,
     pub resizing_comment: Option<(String, ResizeHandle)>,
+    pub resizing_comment_start: Option<(Point<f32>, Size<f32>)>,
     pub editing_comment: Option<String>,
     pub comment_text_input: Entity<InputState>,
     pub comment_color_bindings_dirty: bool,
@@ -233,6 +234,7 @@ pub struct GraphInteractionState {
     pub variable_drop_menu_position: Option<Point<f32>>,
     pub dragging_comment: Option<String>,
     pub resizing_comment: Option<(String, ResizeHandle)>,
+    pub resizing_comment_start: Option<(Point<f32>, Size<f32>)>,
     pub editing_comment: Option<String>,
 }
 
@@ -259,6 +261,7 @@ impl Default for GraphInteractionState {
             variable_drop_menu_position: None,
             dragging_comment: None,
             resizing_comment: None,
+            resizing_comment_start: None,
             editing_comment: None,
         }
     }
@@ -441,6 +444,7 @@ impl BlueprintEditorPanel {
             selected_prefab_component: None,
             dragging_comment: None,
             resizing_comment: None,
+            resizing_comment_start: None,
             editing_comment: None,
             comment_text_input: cx
                 .new(|cx| InputState::new(window, cx).placeholder("Comment text...")),
@@ -859,6 +863,7 @@ impl BlueprintEditorPanel {
             variable_drop_menu_position: self.variable_drop_menu_position,
             dragging_comment: self.dragging_comment.clone(),
             resizing_comment: self.resizing_comment.clone(),
+            resizing_comment_start: self.resizing_comment_start,
             editing_comment: self.editing_comment.clone(),
         }
     }
@@ -882,6 +887,7 @@ impl BlueprintEditorPanel {
         self.variable_drop_menu_position = state.variable_drop_menu_position;
         self.dragging_comment = state.dragging_comment;
         self.resizing_comment = state.resizing_comment;
+        self.resizing_comment_start = state.resizing_comment_start;
         self.editing_comment = state.editing_comment;
     }
 

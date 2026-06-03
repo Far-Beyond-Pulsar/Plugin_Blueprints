@@ -1,7 +1,8 @@
-// BpRenderer — owns six WGPU render pipelines and per-frame GPU state.
+// BpRenderer — owns seven WGPU render pipelines and per-frame GPU state.
 //
 // Pipelines:
 //   grid    — full-screen quad, uniform-only
+//   comments— instanced comment quads (6 verts × comment count)
 //   nodes   — instanced node quads (6 verts × node count)
 //   bezier  — instanced bezier wires (WIRE_SEGS*6 verts × connection count)
 //             GPU evaluates cubic bezier in vertex shader — zero CPU tessellation
@@ -10,7 +11,9 @@
 //   text    — glyph atlas, one quad per visible character
 
 use super::text::{TextAlign, TextRenderer};
-use super::types::{GraphUniforms, NodeInstance, PinInstance, WireInstance, WireVertex};
+use super::types::{
+    CommentInstance, GraphUniforms, NodeInstance, PinInstance, WireInstance, WireVertex,
+};
 
 const WIRE_SEGS: u32 = 32;
 
@@ -23,6 +26,14 @@ struct GridState {
 }
 
 struct NodeState {
+    pipeline: wgpu::RenderPipeline,
+    uni_buf: wgpu::Buffer,
+    uni_bg: wgpu::BindGroup,
+    inst_buf: wgpu::Buffer,
+    inst_cap: u64,
+}
+
+struct CommentState {
     pipeline: wgpu::RenderPipeline,
     uni_buf: wgpu::Buffer,
     uni_bg: wgpu::BindGroup,
@@ -60,6 +71,7 @@ struct PinState {
 
 pub struct BpRenderer {
     grid: Option<GridState>,
+    comments: Option<CommentState>,
     nodes: Option<NodeState>,
     bezier: Option<BezierState>,
     lines: Option<LineState>,
@@ -71,6 +83,7 @@ impl BpRenderer {
     pub fn new() -> Self {
         Self {
             grid: None,
+            comments: None,
             nodes: None,
             bezier: None,
             lines: None,
@@ -81,6 +94,7 @@ impl BpRenderer {
 
     /// Called every frame by `graph.rs`.
     ///
+    /// - `comment_instances`: one per visible comment box
     /// - `wire_instances`: one per bezier connection — GPU evaluates the curve
     /// - `line_verts`:     pre-tessellated straight quads (selection box only)
     /// - `text_calls`:     (text, screen_x, screen_y, size_px, rgba, center)
@@ -93,6 +107,7 @@ impl BpRenderer {
         h: u32,
         fmt: wgpu::TextureFormat,
         uniforms: &GraphUniforms,
+        comment_instances: &[CommentInstance],
         nodes: &[NodeInstance],
         wire_instances: &[WireInstance],
         line_verts: &[WireVertex],
@@ -101,6 +116,7 @@ impl BpRenderer {
     ) {
         if self.grid.is_none() {
             self.grid = Some(Self::create_grid(device, fmt));
+            self.comments = Some(Self::create_comments(device, fmt));
             self.nodes = Some(Self::create_nodes(device, fmt));
             self.bezier = Some(Self::create_bezier(device, fmt));
             self.lines = Some(Self::create_lines(device, fmt));
@@ -144,7 +160,27 @@ impl BpRenderer {
                 pass.draw(0..6, 0..1);
             }
 
-            // ── 2. Bezier wire instances ───────────────────────────────────────
+            // ── 2. Comment boxes ───────────────────────────────────────────────
+            if !comment_instances.is_empty() {
+                if let Some(cs) = &mut self.comments {
+                    queue.write_buffer(&cs.uni_buf, 0, uni_bytes);
+                    let bytes = bytemuck::cast_slice(comment_instances);
+                    Self::ensure_buf(
+                        device,
+                        &mut cs.inst_buf,
+                        &mut cs.inst_cap,
+                        bytes,
+                        wgpu::BufferUsages::VERTEX,
+                    );
+                    queue.write_buffer(&cs.inst_buf, 0, bytes);
+                    pass.set_pipeline(&cs.pipeline);
+                    pass.set_bind_group(0, &cs.uni_bg, &[]);
+                    pass.set_vertex_buffer(0, cs.inst_buf.slice(..));
+                    pass.draw(0..6, 0..comment_instances.len() as u32);
+                }
+            }
+
+            // ── 3. Bezier wire instances ───────────────────────────────────────
             // GPU evaluates cubic bezier in vertex shader — no CPU tessellation.
             if !wire_instances.is_empty() {
                 if let Some(bs) = &mut self.bezier {
@@ -166,7 +202,7 @@ impl BpRenderer {
                 }
             }
 
-            // ── 3. Straight line segments (selection box) ──────────────────────
+            // ── 4. Straight line segments (selection box) ──────────────────────
             if !line_verts.is_empty() {
                 if let Some(ls) = &mut self.lines {
                     queue.write_buffer(&ls.uni_buf, 0, uni_bytes);
@@ -186,7 +222,7 @@ impl BpRenderer {
                 }
             }
 
-            // ── 4. Nodes ───────────────────────────────────────────────────────
+            // ── 5. Nodes ───────────────────────────────────────────────────────
             if !nodes.is_empty() {
                 if let Some(ns) = &mut self.nodes {
                     queue.write_buffer(&ns.uni_buf, 0, uni_bytes);
@@ -206,7 +242,7 @@ impl BpRenderer {
                 }
             }
 
-            // ── 5. Pins ────────────────────────────────────────────────────────
+            // ── 6. Pins ────────────────────────────────────────────────────────
             if !pins.is_empty() {
                 if let Some(ps) = &mut self.pins {
                     queue.write_buffer(&ps.uni_buf, 0, uni_bytes);
@@ -226,7 +262,7 @@ impl BpRenderer {
                 }
             }
 
-            // ── Text ───────────────────────────────────────────────────────────
+            // ── 7. Text ─────────────────────────────────────────────────────────
             // Queue all text calls, then flush into this render pass.
             for (text, sx, sy, size, color, center) in text_calls {
                 let align = if *center {
@@ -317,6 +353,73 @@ impl BpRenderer {
             format: fmt,
             blend: Some(wgpu::BlendState::ALPHA_BLENDING),
             write_mask: wgpu::ColorWrites::ALL,
+        }
+    }
+
+    fn create_comments(device: &wgpu::Device, fmt: wgpu::TextureFormat) -> CommentState {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("comments"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/comments.wgsl").into()),
+        });
+        let bgl = Self::uni_bind_group_layout(device);
+        let (uni_buf, uni_bg) = Self::uni_buf_and_bg(device, &bgl);
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("comments_layout"),
+            bind_group_layouts: &[Some(&bgl)],
+            immediate_size: 0,
+        });
+
+        let comment_attrs = wgpu::vertex_attr_array![
+            0 => Float32x2, // pos
+            1 => Float32x2, // size
+            2 => Float32x4, // fill_color
+            3 => Float32x4, // border_color
+            4 => Float32,   // corner_r
+            5 => Uint32,    // flags
+            6 => Uint32,    // _pad0
+            7 => Uint32,    // _pad1
+        ];
+        let vbl = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<CommentInstance>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &comment_attrs,
+        };
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("comments_pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[vbl],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(Self::alpha_blend_target(fmt))],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        let inst_buf = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("comment_instances"),
+            size: 256,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        CommentState {
+            pipeline,
+            uni_buf,
+            uni_bg,
+            inst_buf,
+            inst_cap: 256,
         }
     }
 

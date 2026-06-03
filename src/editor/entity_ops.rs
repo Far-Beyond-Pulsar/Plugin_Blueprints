@@ -53,20 +53,27 @@ impl GraphCanvasPanel {
                 selections.len()
             );
 
+            let mut comment_ids: HashSet<String> = HashSet::new();
+            let mut node_ids: HashSet<String> = HashSet::new();
             for selection in selections {
                 match selection {
                     EntitySelection::Node(ref id) => {
-                        if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
-                            self.initial_drag_positions
-                                .insert(id.clone(), node.position);
-                        }
+                        node_ids.insert(id.clone());
                     }
                     EntitySelection::Comment(ref id) => {
-                        if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
-                            self.initial_comment_drag_positions
-                                .insert(id.clone(), comment.position);
-                        }
+                        self.collect_comment_drag_group(id, &mut comment_ids, &mut node_ids);
                     }
+                }
+            }
+
+            for id in node_ids {
+                if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
+                    self.initial_drag_positions.insert(id, node.position);
+                }
+            }
+            for id in comment_ids {
+                if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
+                    self.initial_comment_drag_positions.insert(id, comment.position);
                 }
             }
         } else {
@@ -79,10 +86,8 @@ impl GraphCanvasPanel {
                     }
                 }
                 EntitySelection::Comment(id) => {
-                    if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
-                        self.initial_comment_drag_positions
-                            .insert(id.clone(), comment.position);
-                    }
+                    self.start_comment_drag(id.clone(), mouse_pos, _cx);
+                    return;
                 }
             }
         }

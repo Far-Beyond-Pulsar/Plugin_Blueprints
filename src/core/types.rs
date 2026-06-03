@@ -208,6 +208,24 @@ impl BlueprintComment {
             && node_bottom <= comment_bottom
     }
 
+    /// Check if another comment is fully contained within this comment's bounds.
+    pub fn contains_comment(&self, other: &BlueprintComment) -> bool {
+        let other_left = other.position.x;
+        let other_top = other.position.y;
+        let other_right = other.position.x + other.size.width;
+        let other_bottom = other.position.y + other.size.height;
+
+        let comment_left = self.position.x;
+        let comment_top = self.position.y;
+        let comment_right = self.position.x + self.size.width;
+        let comment_bottom = self.position.y + self.size.height;
+
+        other_left >= comment_left
+            && other_right <= comment_right
+            && other_top >= comment_top
+            && other_bottom <= comment_bottom
+    }
+
     /// Update contained nodes based on current bounds
     pub fn update_contained_nodes(&mut self, nodes: &[BlueprintNode]) {
         self.contained_node_ids = nodes

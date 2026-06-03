@@ -81,6 +81,22 @@ pub struct PinInstance {
     pub _pad1: u32,
 }
 
+// ── Comment instances ──────────────────────────────────────────────────────────
+// One per visible comment box. Vertex shader expands to 6 verts covering the rect.
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CommentInstance {
+    pub pos: [f32; 2], // graph space top-left
+    pub size: [f32; 2],
+    pub fill_color: [f32; 4],
+    pub border_color: [f32; 4],
+    pub corner_r: f32,
+    pub flags: u32, // bit 0: selected
+    pub _pad0: u32,
+    pub _pad1: u32,
+}
+
 // ── Selection box ──────────────────────────────────────────────────────────────
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

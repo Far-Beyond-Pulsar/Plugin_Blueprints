@@ -10,11 +10,12 @@
 // constants as the GPU renderer, so click targets exactly match what's drawn.
 
 use crate::core::types::NodeType;
+use crate::editor::panel::ResizeHandle;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::{
     NodeGraphRenderer, BODY_PAD, HEADER_H, PIN_GAP, PIN_ROW_H, PIN_SIZE, SEP_H,
 };
-use gpui::*;
+use gpui::{CursorStyle, *};
 use ui::graph::DataType;
 use ui::PixelsExt;
 
@@ -103,6 +104,85 @@ fn hit_any_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, Str
     None
 }
 
+fn hit_comment<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str> {
+    for comment in canvas.graph.comments.iter().rev() {
+        let left = comment.position.x;
+        let top = comment.position.y;
+        let right = left + comment.size.width;
+        let bottom = top + comment.size.height;
+        if gp.x >= left && gp.x <= right && gp.y >= top && gp.y <= bottom {
+            return Some(&comment.id);
+        }
+    }
+    None
+}
+
+fn hit_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel, comment_id: &str) -> Option<ResizeHandle> {
+    let comment = canvas.graph.comments.iter().find(|c| c.id == comment_id)?;
+    let left = comment.position.x;
+    let top = comment.position.y;
+    let right = left + comment.size.width;
+    let bottom = top + comment.size.height;
+    let edge = (12.0 / canvas.graph.zoom_level.max(0.25)).clamp(6.0, 24.0);
+    let near_left = (gp.x - left).abs() <= edge;
+    let near_right = (gp.x - right).abs() <= edge;
+    let near_top = (gp.y - top).abs() <= edge;
+    let near_bottom = (gp.y - bottom).abs() <= edge;
+
+    match (near_left, near_right, near_top, near_bottom) {
+        (true, _, true, _) => Some(ResizeHandle::TopLeft),
+        (_, true, true, _) => Some(ResizeHandle::TopRight),
+        (true, _, _, true) => Some(ResizeHandle::BottomLeft),
+        (_, true, _, true) => Some(ResizeHandle::BottomRight),
+        (_, _, true, _) => Some(ResizeHandle::Top),
+        (_, _, _, true) => Some(ResizeHandle::Bottom),
+        (true, _, _, _) => Some(ResizeHandle::Left),
+        (_, true, _, _) => Some(ResizeHandle::Right),
+        _ => None,
+    }
+}
+
+fn cursor_for_resize_handle(handle: &ResizeHandle) -> CursorStyle {
+    match handle {
+        ResizeHandle::TopLeft | ResizeHandle::BottomRight => CursorStyle::ResizeUpLeftDownRight,
+        ResizeHandle::TopRight | ResizeHandle::BottomLeft => CursorStyle::ResizeUpRightDownLeft,
+        ResizeHandle::Top | ResizeHandle::Bottom => CursorStyle::ResizeUpDown,
+        ResizeHandle::Left | ResizeHandle::Right => CursorStyle::ResizeLeftRight,
+    }
+}
+
+fn update_graph_cursor(window: &mut Window, canvas: &GraphCanvasPanel, cp: Point<f32>, gp: Point<f32>) {
+    let cursor = if let Some((_, handle)) = &canvas.resizing_comment {
+        cursor_for_resize_handle(handle)
+    } else if canvas.dragging_comment.is_some() || canvas.dragging_node.is_some() || canvas.is_panning() {
+        CursorStyle::ClosedHand
+    } else if canvas.dragging_connection.is_some() {
+        CursorStyle::DragLink
+    } else if let Some(comment_id) = hit_comment(gp, canvas) {
+        if let Some(handle) = hit_comment_resize(gp, canvas, comment_id) {
+            cursor_for_resize_handle(&handle)
+        } else {
+            CursorStyle::OpenHand
+        }
+    } else if hit_any_pin(cp, canvas).is_some() {
+        CursorStyle::PointingHand
+    } else if hit_node(gp, canvas).is_some() {
+        CursorStyle::OpenHand
+    } else if canvas.is_selecting() {
+        CursorStyle::Crosshair
+    } else {
+        CursorStyle::Arrow
+    };
+
+    window.set_window_cursor_style(cursor);
+}
+
+pub fn refresh_graph_cursor(window: &mut Window, canvas: &GraphCanvasPanel) {
+    let cp = to_canvas(window.mouse_position(), canvas);
+    let gp = to_graph(cp, canvas);
+    update_graph_cursor(window, canvas, cp, gp);
+}
+
 // ─── event handlers ───────────────────────────────────────────────────────────
 
 pub fn on_mouse_down_right(
@@ -158,6 +238,7 @@ pub fn on_mouse_down_left(
             // Priority: output pin → node → empty space
             if let Some((node_id, pin_id)) = hit_output_pin(cp, canvas) {
                 canvas.start_connection_drag_from_pin(node_id, pin_id, gp, cx);
+                update_graph_cursor(window, canvas, cp, gp);
                 return;
             }
 
@@ -221,12 +302,33 @@ pub fn on_mouse_down_left(
                 return;
             }
 
+            if let Some(comment_id) = hit_comment(gp, canvas).map(str::to_owned) {
+                if !event.modifiers.control {
+                    canvas.graph.selected_nodes.clear();
+                    canvas.graph.selected_comments.clear();
+                }
+                if !canvas.graph.selected_comments.contains(&comment_id) {
+                    canvas.graph.selected_comments.push(comment_id.clone());
+                }
+
+                if let Some(handle) = hit_comment_resize(gp, canvas, &comment_id) {
+                    canvas.start_comment_resize(comment_id, handle, gp, cx);
+                    update_graph_cursor(window, canvas, cp, gp);
+                } else {
+                    canvas.start_comment_drag(comment_id, gp, cx);
+                    update_graph_cursor(window, canvas, cp, gp);
+                }
+                cx.notify();
+                return;
+            }
+
             // Empty space — start selection drag
             if !event.modifiers.control {
                 canvas.graph.selected_nodes.clear();
                 canvas.graph.selected_comments.clear();
             }
             canvas.start_selection_drag(gp, event.modifiers.control, cx);
+            update_graph_cursor(window, canvas, cp, gp);
         });
     }
 }
@@ -235,7 +337,7 @@ pub fn on_mouse_move(
     cx: &mut Context<GraphCanvasPanel>,
 ) -> impl Fn(&MouseMoveEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
-    move |event: &MouseMoveEvent, _window, cx| {
+    move |event: &MouseMoveEvent, window, cx| {
         entity.update(cx, |canvas, cx| {
             let cp = to_canvas(event.position, canvas);
             let mp = Point::new(cp.x, cp.y);
@@ -277,6 +379,8 @@ pub fn on_mouse_move(
             } else if canvas.is_panning() {
                 canvas.update_pan(mp, cx);
             }
+
+            update_graph_cursor(window, canvas, cp, gp);
         });
     }
 }
@@ -285,7 +389,7 @@ pub fn on_mouse_up_left(
     cx: &mut Context<GraphCanvasPanel>,
 ) -> impl Fn(&MouseUpEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
-    move |event: &MouseUpEvent, _window, cx| {
+    move |event: &MouseUpEvent, window, cx| {
         entity.update(cx, |canvas, cx| {
             let cp = to_canvas(event.position, canvas);
             let gp = to_graph(cp, canvas);
@@ -322,6 +426,8 @@ pub fn on_mouse_up_left(
             } else if canvas.is_panning() {
                 canvas.end_panning(cx);
             }
+
+            update_graph_cursor(window, canvas, cp, gp);
         });
     }
 }

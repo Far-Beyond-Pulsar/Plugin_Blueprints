@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui::{
     dock::{Panel, PanelEvent},
-    h_flex, input::InputState, v_flex, ActiveTheme,
+    h_flex, input::{InputEvent, InputState}, v_flex, ActiveTheme,
 };
 
 use crate::core::graph::BlueprintGraph;
@@ -228,7 +228,9 @@ impl Render for PropertiesPanel {
             div()
                 .size_full()
                 .bg(cx.theme().sidebar)
-                .child(editor.update(cx, |editor, cx| PropertiesRenderer::render(editor, cx)))
+                .child(editor.update(cx, |editor, cx| {
+                    PropertiesRenderer::render(editor, _window, cx)
+                }))
         } else {
             div().child("Editor not available")
         }
@@ -485,6 +487,7 @@ pub struct GraphCanvasPanel {
     // ── Comments ───────────────────────────────────────────────────────────
     pub dragging_comment: Option<String>,
     pub resizing_comment: Option<(String, ResizeHandle)>,
+    pub resizing_comment_start: Option<(Point<f32>, Size<f32>)>,
     pub editing_comment: Option<String>,
     pub comment_text_input: Entity<InputState>,
     pub comment_color_bindings_dirty: bool,
@@ -515,6 +518,29 @@ impl GraphCanvasPanel {
             cx.new(|cx| NodePaletteView::new_for_canvas(canvas_weak, panel.clone(), window, cx));
         let comment_text_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Comment text..."));
+        cx.subscribe_in(
+            &comment_text_input,
+            window,
+            |this, state: &Entity<InputState>, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change | InputEvent::Blur) {
+                    let text = state.read(cx).text().to_string();
+                    if let Some(comment_id) = this
+                        .editing_comment
+                        .clone()
+                        .or_else(|| this.graph.selected_comments.first().cloned())
+                    {
+                        if let Some(comment) =
+                            this.graph.comments.iter_mut().find(|c| c.id == comment_id)
+                        {
+                            comment.text = text;
+                            this.is_dirty = true;
+                            cx.notify();
+                        }
+                    }
+                }
+            },
+        )
+        .detach();
         Self {
             id,
             name,
@@ -570,6 +596,7 @@ impl GraphCanvasPanel {
             last_click_pos: None,
             dragging_comment: None,
             resizing_comment: None,
+            resizing_comment_start: None,
             editing_comment: None,
             comment_text_input,
             comment_color_bindings_dirty: true,
@@ -612,6 +639,7 @@ impl EventEmitter<PanelEvent> for GraphCanvasPanel {}
 impl Render for GraphCanvasPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.refresh_comment_color_bindings(window, cx);
+        crate::rendering::input::refresh_graph_cursor(window, self);
         div()
             .size_full()
             .child(NodeGraphRenderer::render(self, cx))
@@ -670,7 +698,9 @@ impl GraphCanvasPanel {
                     move |this: &mut GraphCanvasPanel, _picker, event: &ui::color_picker::ColorPickerEvent, _window, cx| {
                         if let ui::color_picker::ColorPickerEvent::Change(Some(color)) = event {
                             if let Some(c) = this.graph.comments.iter_mut().find(|c| c.id == comment_id) {
-                                c.color = *color; cx.notify();
+                                c.color = *color;
+                                this.is_dirty = true;
+                                cx.notify();
                             }
                         }
                     });
@@ -681,24 +711,81 @@ impl GraphCanvasPanel {
     }
 
     pub fn start_comment_drag(&mut self, comment_id: String, mouse_pos: Point<f32>, _cx: &mut Context<Self>) {
-        if let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) {
-            self.dragging_comment = Some(comment_id.clone());
-            self.drag_offset = Point::new(mouse_pos.x - comment.position.x, mouse_pos.y - comment.position.y);
-            self.initial_drag_positions.clear();
-            self.initial_comment_drag_positions.clear();
-            if self.graph.selected_comments.contains(&comment_id) {
-                for sid in &self.graph.selected_comments {
-                    if let Some(sc) = self.graph.comments.iter().find(|c| c.id == *sid) {
-                        self.initial_comment_drag_positions.insert(sid.clone(), sc.position);
-                    }
-                }
-                for nid in &self.graph.selected_nodes {
-                    if let Some(n) = self.graph.nodes.iter().find(|n| n.id == *nid) {
-                        self.initial_drag_positions.insert(nid.clone(), n.position);
-                    }
-                }
-            } else {
-                self.initial_comment_drag_positions.insert(comment_id.clone(), comment.position);
+        let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) else {
+            return;
+        };
+
+        self.dragging_comment = Some(comment_id.clone());
+        self.drag_offset = Point::new(mouse_pos.x - comment.position.x, mouse_pos.y - comment.position.y);
+        self.initial_drag_positions.clear();
+        self.initial_comment_drag_positions.clear();
+
+        let mut comment_ids = std::collections::HashSet::new();
+        let mut node_ids = std::collections::HashSet::new();
+
+        if self.graph.selected_comments.contains(&comment_id) {
+            for sid in &self.graph.selected_comments {
+                self.collect_comment_drag_group(sid, &mut comment_ids, &mut node_ids);
+            }
+            for nid in &self.graph.selected_nodes {
+                node_ids.insert(nid.clone());
+            }
+        } else {
+            self.collect_comment_drag_group(&comment_id, &mut comment_ids, &mut node_ids);
+        }
+
+        for nid in node_ids {
+            if let Some(node) = self.graph.nodes.iter().find(|n| n.id == nid) {
+                self.initial_drag_positions.insert(nid, node.position);
+            }
+        }
+        for cid in comment_ids {
+            if let Some(comment) = self.graph.comments.iter().find(|c| c.id == cid) {
+                self.initial_comment_drag_positions
+                    .insert(cid, comment.position);
+            }
+        }
+    }
+
+    pub fn start_comment_resize(
+        &mut self,
+        comment_id: String,
+        handle: ResizeHandle,
+        mouse_pos: Point<f32>,
+        _cx: &mut Context<Self>,
+    ) {
+        let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) else {
+            return;
+        };
+
+        self.resizing_comment = Some((comment_id, handle));
+        self.resizing_comment_start = Some((comment.position, comment.size));
+        self.drag_offset = mouse_pos;
+    }
+
+    pub(crate) fn collect_comment_drag_group(
+        &self,
+        root_id: &str,
+        comment_ids: &mut std::collections::HashSet<String>,
+        node_ids: &mut std::collections::HashSet<String>,
+    ) {
+        let Some(root) = self.graph.comments.iter().find(|c| c.id == root_id) else {
+            return;
+        };
+
+        if !comment_ids.insert(root.id.clone()) {
+            return;
+        }
+
+        for node in &self.graph.nodes {
+            if root.contains_node(node) {
+                node_ids.insert(node.id.clone());
+            }
+        }
+
+        for child in &self.graph.comments {
+            if child.id != root.id && root.contains_comment(child) {
+                self.collect_comment_drag_group(&child.id, comment_ids, node_ids);
             }
         }
     }
@@ -729,39 +816,121 @@ impl GraphCanvasPanel {
     pub fn update_comment_resize(&mut self, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
         use crate::editor::panel::ResizeHandle;
         if let Some((cid, handle)) = &self.resizing_comment.clone() {
+            let Some((start_pos, start_size)) = self.resizing_comment_start else {
+                return;
+            };
+
             if let Some(c) = self.graph.comments.iter_mut().find(|c| c.id == *cid) {
-                let dx = mouse_pos.x - self.drag_offset.x;
-                let dy = mouse_pos.y - self.drag_offset.y;
+                let min_width = 100.0;
+                let min_height = 50.0;
+                let mut left = start_pos.x;
+                let mut top = start_pos.y;
+                let mut right = start_pos.x + start_size.width;
+                let mut bottom = start_pos.y + start_size.height;
+
                 match handle {
-                    ResizeHandle::TopLeft => { c.position.x += dx; c.position.y += dy; c.size.width -= dx; c.size.height -= dy; }
-                    ResizeHandle::TopRight => { c.position.y += dy; c.size.width += dx; c.size.height -= dy; }
-                    ResizeHandle::BottomLeft => { c.position.x += dx; c.size.width -= dx; c.size.height += dy; }
-                    ResizeHandle::BottomRight => { c.size.width += dx; c.size.height += dy; }
-                    ResizeHandle::Top => { c.position.y += dy; c.size.height -= dy; }
-                    ResizeHandle::Bottom => { c.size.height += dy; }
-                    ResizeHandle::Left => { c.position.x += dx; c.size.width -= dx; }
-                    ResizeHandle::Right => { c.size.width += dx; }
+                    ResizeHandle::TopLeft => {
+                        left = mouse_pos.x;
+                        top = mouse_pos.y;
+                    }
+                    ResizeHandle::TopRight => {
+                        right = mouse_pos.x;
+                        top = mouse_pos.y;
+                    }
+                    ResizeHandle::BottomLeft => {
+                        left = mouse_pos.x;
+                        bottom = mouse_pos.y;
+                    }
+                    ResizeHandle::BottomRight => {
+                        right = mouse_pos.x;
+                        bottom = mouse_pos.y;
+                    }
+                    ResizeHandle::Top => {
+                        top = mouse_pos.y;
+                    }
+                    ResizeHandle::Bottom => {
+                        bottom = mouse_pos.y;
+                    }
+                    ResizeHandle::Left => {
+                        left = mouse_pos.x;
+                    }
+                    ResizeHandle::Right => {
+                        right = mouse_pos.x;
+                    }
                 }
-                c.size.width = c.size.width.max(100.0); c.size.height = c.size.height.max(50.0);
+
+                if right - left < min_width {
+                    match handle {
+                        ResizeHandle::Left | ResizeHandle::TopLeft | ResizeHandle::BottomLeft => {
+                            left = right - min_width;
+                        }
+                        _ => {
+                            right = left + min_width;
+                        }
+                    }
+                }
+
+                if bottom - top < min_height {
+                    match handle {
+                        ResizeHandle::Top | ResizeHandle::TopLeft | ResizeHandle::TopRight => {
+                            top = bottom - min_height;
+                        }
+                        _ => {
+                            bottom = top + min_height;
+                        }
+                    }
+                }
+
+                c.position = Point::new(left, top);
+                c.size = Size::new(right - left, bottom - top);
                 Self::snap_comment_bounds(c);
-                self.drag_offset = mouse_pos; cx.notify();
+                self.drag_offset = mouse_pos;
+                cx.notify();
             }
         }
     }
 
     pub fn end_comment_resize(&mut self, cx: &mut Context<Self>) {
-        if let Some((cid, _)) = &self.resizing_comment.clone() {
+        if self.resizing_comment.is_some() {
             let nodes = self.graph.nodes.clone();
-            if let Some(c) = self.graph.comments.iter_mut().find(|c| c.id == *cid) { c.update_contained_nodes(&nodes); }
+            for comment in self.graph.comments.iter_mut() {
+                comment.update_contained_nodes(&nodes);
+            }
         }
-        self.resizing_comment = None; cx.notify();
+        self.resizing_comment = None;
+        self.resizing_comment_start = None;
+        cx.notify();
     }
 
     pub fn finish_comment_editing(&mut self, cx: &mut Context<Self>) {
         if let Some(cid) = &self.editing_comment.clone() {
             let text = self.comment_text_input.read(cx).text().to_string();
-            if let Some(c) = self.graph.comments.iter_mut().find(|c| c.id == *cid) { c.text = text; }
+            if let Some(c) = self.graph.comments.iter_mut().find(|c| c.id == *cid) {
+                c.text = text;
+                self.is_dirty = true;
+            }
             self.editing_comment = None; cx.notify();
+        }
+    }
+
+    pub fn sync_comment_inspector_state(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(comment_id) = self.graph.selected_comments.first().cloned() else {
+            self.editing_comment = None;
+            return;
+        };
+
+        if self.editing_comment.as_deref() == Some(comment_id.as_str()) {
+            return;
+        }
+
+        if let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) {
+            self.editing_comment = Some(comment_id);
+            let current_text = self.comment_text_input.read(cx).text().to_string();
+            if current_text != comment.text {
+                self.comment_text_input.update(cx, |input, cx| {
+                    input.set_value(comment.text.clone(), window, cx);
+                });
+            }
         }
     }
 

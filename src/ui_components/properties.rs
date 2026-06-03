@@ -9,7 +9,7 @@ use ui::{
     button::ButtonVariants as _, h_flex, v_flex, ActiveTheme as _, Colorize, IconName, StyledExt,
 };
 
-use crate::core::types::{BlueprintNode, NodeType, Pin};
+use crate::core::types::{BlueprintComment, BlueprintNode, NodeType, Pin};
 use crate::editor::panel::BlueprintEditorPanel;
 
 /// Renderer for the properties panel
@@ -18,12 +18,17 @@ pub struct PropertiesRenderer;
 impl PropertiesRenderer {
     pub fn render(
         panel: &BlueprintEditorPanel,
+        window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        // Snapshot the active graph for read-only rendering
-        let panel_graph: crate::core::graph::BlueprintGraph = panel.active_canvas()
+        let active_canvas = panel.active_canvas().cloned();
+        let panel_graph: crate::core::graph::BlueprintGraph = active_canvas
+            .as_ref()
             .map(|c| c.read(cx).graph.clone())
             .unwrap_or_default();
+        if let Some(canvas) = active_canvas.as_ref() {
+            canvas.update(cx, |canvas, cx| canvas.sync_comment_inspector_state(window, cx));
+        }
         v_flex()
             .size_full()
             .bg(cx.theme().sidebar)
@@ -123,21 +128,33 @@ impl PropertiesRenderer {
                     .overflow_hidden()
                     .p_3()
                     .scrollable(Axis::Vertical)
-                    .child(Self::render_properties_content(panel, cx)),
+                    .child(Self::render_properties_content(panel, window, cx)),
             )
     }
 
     fn render_properties_content(
         panel: &BlueprintEditorPanel,
+        window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        let panel_graph: crate::core::graph::BlueprintGraph = panel.active_canvas()
+        let panel_graph: crate::core::graph::BlueprintGraph = panel
+            .active_canvas()
             .map(|c| c.read(cx).graph.clone())
             .unwrap_or_default();
-        if let Some(selected_node_id) = panel_graph.selected_nodes.first() {
-            if let Some(selected_node) =
-                panel_graph.nodes.iter().find(|n| n.id == *selected_node_id)
+        if panel_graph.selected_comments.len() == 1 && panel_graph.selected_nodes.is_empty() {
+            let selected_comment_id = &panel_graph.selected_comments[0];
+            if let Some(selected_comment) = panel_graph
+                .comments
+                .iter()
+                .find(|c| c.id == *selected_comment_id)
             {
+                return Self::render_comment_properties(panel, selected_comment, window, cx);
+            }
+        }
+
+        if panel_graph.selected_nodes.len() == 1 && panel_graph.selected_comments.is_empty() {
+            let selected_node_id = &panel_graph.selected_nodes[0];
+            if let Some(selected_node) = panel_graph.nodes.iter().find(|n| n.id == *selected_node_id) {
                 v_flex()
                     .gap_4()
                     .child(
@@ -202,9 +219,188 @@ impl PropertiesRenderer {
             } else {
                 Self::render_empty_state(cx)
             }
+        } else if !panel_graph.selected_nodes.is_empty() || !panel_graph.selected_comments.is_empty()
+        {
+            Self::render_multi_selection_state(
+                panel_graph.selected_nodes.len(),
+                panel_graph.selected_comments.len(),
+                cx,
+            )
         } else {
             Self::render_empty_state(cx)
         }
+    }
+
+    fn render_comment_properties(
+        panel: &BlueprintEditorPanel,
+        comment: &BlueprintComment,
+        _window: &mut Window,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        let active_canvas = panel.active_canvas().cloned();
+        let mut comment_color = comment.color;
+        let mut color_picker = None;
+        let mut comment_text_input = None;
+
+        if let Some(canvas) = active_canvas {
+            let canvas_state = canvas.read(cx);
+            comment_text_input = Some(canvas_state.comment_text_input.clone());
+            if let Some(selected) = canvas_state.graph.comments.iter().find(|c| c.id == comment.id) {
+                comment_color = selected.color;
+                color_picker = selected.color_picker_state.clone();
+            }
+        }
+
+        v_flex()
+            .gap_4()
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_3()
+                            .child(div().text_2xl().child("💬"))
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_bold()
+                                    .text_color(cx.theme().foreground)
+                                    .child(comment.text.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .py_1()
+                            .rounded(px(4.0))
+                            .bg(comment_color.opacity(0.15))
+                            .border_1()
+                            .border_color(comment_color.opacity(0.3))
+                            .text_xs()
+                            .font_semibold()
+                            .text_color(comment_color)
+                            .child("Comment"),
+                    ),
+            )
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header(
+                        "Comment Properties",
+                        IconName::Settings,
+                        cx,
+                    ))
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_semibold()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("Name"),
+                            )
+                            .child(
+                                comment_text_input
+                                    .map(|input| div().w_full().child(input).into_any_element())
+                                    .unwrap_or_else(|| {
+                                        div()
+                                            .w_full()
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("No comment editor available")
+                                            .into_any_element()
+                                    }),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_semibold()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("Color"),
+                            )
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .w(px(24.0))
+                                            .h(px(24.0))
+                                            .rounded(px(4.0))
+                                            .border_1()
+                                            .border_color(cx.theme().border)
+                                            .bg(comment_color)
+                                            .into_any_element(),
+                                    )
+                                    .child(color_picker.map(|picker| {
+                                        div().w_full().child(picker).into_any_element()
+                                    }).unwrap_or_else(|| {
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("Color picker unavailable")
+                                            .into_any_element()
+                                    })),
+                            ),
+                    ),
+            )
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header("Comment Info", IconName::Info, cx))
+                    .child(Self::render_info_row("Comment ID", &comment.id, cx))
+                    .child(Self::render_info_row(
+                        "Position",
+                        &format!("({:.0}, {:.0})", comment.position.x, comment.position.y),
+                        cx,
+                    ))
+                    .child(Self::render_info_row(
+                        "Size",
+                        &format!("{:.0} × {:.0} px", comment.size.width, comment.size.height),
+                        cx,
+                    ))
+                    .child(Self::render_info_row(
+                        "Contained Nodes",
+                        &comment.contained_node_ids.len().to_string(),
+                        cx,
+                    )),
+            )
+            .into_any_element()
+    }
+
+    fn render_multi_selection_state(
+        node_count: usize,
+        comment_count: usize,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        v_flex()
+            .size_full()
+            .items_center()
+            .justify_center()
+            .gap_3()
+            .child(div().text_xl().child("🗂️"))
+            .child(
+                div()
+                    .text_sm()
+                    .font_medium()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Multiple selection"),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground.opacity(0.7))
+                    .child(format!("{} nodes, {} comments selected", node_count, comment_count)),
+            )
+            .into_any_element()
     }
 
     fn render_section_header(

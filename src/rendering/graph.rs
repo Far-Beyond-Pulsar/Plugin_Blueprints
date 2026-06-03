@@ -21,7 +21,7 @@ use ui::ActiveTheme;
 use ui::PixelsExt;
 
 use crate::core::graph::BlueprintGraph;
-use crate::core::types::{BlueprintNode, Connection, NodeType, Pin};
+use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType, Pin};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
 use crate::rendering::gpu::{ GraphUniforms, NodeInstance, PinInstance, WireInstance, WireVertex,
@@ -448,6 +448,61 @@ impl NodeGraphRenderer {
                 || (wire_active_mode && selected_nodes.contains(node_id))
         };
 
+        let mut comment_instances: Vec<crate::rendering::gpu::CommentInstance> = Vec::new();
+        let mut comment_text_calls: Vec<TextCall> = Vec::new();
+        let mut comment_refs: Vec<&BlueprintComment> = canvas
+            .graph
+            .comments
+            .iter()
+            .filter(|comment| {
+                comment.position.x + comment.size.width >= vl
+                    && comment.position.x <= vr
+                    && comment.position.y + comment.size.height >= vt
+                    && comment.position.y <= vb
+            })
+            .collect();
+        comment_refs.sort_by(|a, b| {
+            let area_a = a.size.width * a.size.height;
+            let area_b = b.size.width * b.size.height;
+            area_b.partial_cmp(&area_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        for comment in comment_refs {
+            let selected = canvas.graph.selected_comments.contains(&comment.id);
+            let fill: gpui::Rgba = comment.color.into();
+            let fill_rgba = [fill.r, fill.g, fill.b, fill.a];
+            let border_alpha = if selected { 0.98 } else { 0.78 };
+            let border_rgba = [fill.r * 0.72, fill.g * 0.72, fill.b * 0.72, border_alpha];
+            let luma = fill.r * 0.299 + fill.g * 0.587 + fill.b * 0.114;
+            let text_rgba = if luma < 0.55 {
+                [1.0, 1.0, 1.0, 0.95]
+            } else {
+                [0.07, 0.07, 0.08, 0.98]
+            };
+            comment_instances.push(crate::rendering::gpu::CommentInstance {
+                pos: [comment.position.x, comment.position.y],
+                size: [comment.size.width, comment.size.height],
+                fill_color: fill_rgba,
+                border_color: border_rgba,
+                corner_r: 10.0 / zoom,
+                flags: selected as u32,
+                _pad0: 0,
+                _pad1: 0,
+            });
+
+            if zoom >= 0.22 {
+                let scr = Self::graph_to_screen_pos(comment.position, &canvas.graph);
+                comment_text_calls.push((
+                    comment.text.clone(),
+                    scr.x + 12.0 * zoom,
+                    scr.y + 16.0 * zoom,
+                    12.5 * zoom,
+                    text_rgba,
+                    false,
+                ));
+            }
+        }
+
         let mut node_instances: Vec<NodeInstance> = Vec::new();
         let mut pin_instances: Vec<PinInstance> = Vec::new();
         let mut text_calls: Vec<TextCall> = Vec::new();
@@ -560,9 +615,12 @@ impl NodeGraphRenderer {
                             ));
                         }
                     }
+
                 }
             }
         }
+
+        text_calls.extend(comment_text_calls);
 
         // ── Bezier wire instances — one struct per connection, GPU does all tessellation ──
         // No CPU bezier evaluation: just compute four control points and hand off to GPU.
@@ -788,15 +846,16 @@ impl NodeGraphRenderer {
                             ..uniforms
                         };
                         canvas.renderer.render_frame(
-                            surface.device(),
-                            surface.queue(),
-                            &view,
-                            w,
-                            h,
-                            surface.format(),
-                            &frame_uni,
-                            &node_instances,
-                            &wire_instances, // one struct per bezier connection
+                                            surface.device(),
+                                            surface.queue(),
+                                            &view,
+                                            w,
+                                            h,
+                                            surface.format(),
+                                            &frame_uni,
+                                            &comment_instances,
+                                            &node_instances,
+                                            &wire_instances, // one struct per bezier connection
                             &line_verts,     // selection box straight lines only
                             &pin_instances,
                             &text_calls,
