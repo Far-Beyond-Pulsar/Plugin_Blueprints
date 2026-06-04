@@ -475,14 +475,28 @@ impl PrefabPropertiesRenderer {
                     None
                 };
 
+                let mut widgets: std::collections::HashMap<
+                    std::any::TypeId,
+                    std::sync::Arc<dyn std::any::Any + Send + Sync>,
+                > = std::collections::HashMap::new();
+                if let Some(input) = numeric_input {
+                    widgets.insert(
+                        std::any::TypeId::of::<gpui::Entity<ui::input::InputState>>(),
+                        std::sync::Arc::new(input),
+                    );
+                }
+                if let Some(picker) = color_picker {
+                    widgets.insert(
+                        std::any::TypeId::of::<gpui::Entity<ui::color_picker::ColorPickerState>>(),
+                        std::sync::Arc::new(picker),
+                    );
+                }
                 props_data.push((
                     prop.display_name.to_string(),
                     prop.name.to_string(),
                     prop.type_info,
                     current_value,
-                    numeric_input,
-                    color_picker,
-                    None, // No mesh picker in prefab editor yet
+                    widgets,
                 ));
             }
         } else {
@@ -546,15 +560,7 @@ impl PrefabPropertiesRenderer {
                         v_flex()
                             .gap_2()
                             .children(props_data.into_iter().map(
-                                |(
-                                    display_name,
-                                    prop_name,
-                                    type_info,
-                                    json_value,
-                                    input,
-                                    color_picker,
-                                    mesh_picker,
-                                )| {
+                                |(display_name, prop_name, type_info, json_value, widgets)| {
                                     let prop_bool = prop_name.clone();
                                     let on_bool_toggle_local = on_bool_toggle.clone();
                                     let bool_callback = Arc::new(
@@ -578,9 +584,7 @@ impl PrefabPropertiesRenderer {
                                         &prop_name,
                                         type_info,
                                         &json_value,
-                                        input,
-                                        color_picker,
-                                        mesh_picker,
+                                        widgets,
                                         bool_callback,
                                         enum_callback,
                                         cx,
