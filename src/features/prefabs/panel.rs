@@ -482,7 +482,7 @@ impl PrefabPropertiesRenderer {
                     current_value,
                     numeric_input,
                     color_picker,
-                    None, // No mesh picker in prefab editor yet
+                    None::<Entity<ui_common::MeshAssetPicker>>, // No mesh picker in prefab editor yet
                 ));
             }
         } else {
@@ -563,6 +563,24 @@ impl PrefabPropertiesRenderer {
                                         },
                                     );
 
+                                    let mut widgets = std::collections::HashMap::<
+                                        std::any::TypeId,
+                                        std::sync::Arc<dyn std::any::Any + Send + Sync>,
+                                    >::new();
+                                    if let Some(ref inp) = input {
+                                        widgets.insert(
+                                            std::any::TypeId::of::<Entity<ui::input::InputState>>(),
+                                            std::sync::Arc::new(inp.clone()),
+                                        );
+                                    }
+                                    if let Some(ref cp) = color_picker {
+                                        widgets.insert(
+                                            std::any::TypeId::of::<Entity<ui::color_picker::ColorPickerState>>(),
+                                            std::sync::Arc::new(cp.clone()),
+                                        );
+                                    }
+                                    let _ = mesh_picker;
+
                                     ui_common::render_property_row_runtime(
                                         "prefab",
                                         &class_name,
@@ -570,9 +588,7 @@ impl PrefabPropertiesRenderer {
                                         &prop_name,
                                         type_info,
                                         &json_value,
-                                        input,
-                                        color_picker,
-                                        mesh_picker,
+                                        widgets,
                                         bool_callback,
                                         enum_callback,
                                         cx,
