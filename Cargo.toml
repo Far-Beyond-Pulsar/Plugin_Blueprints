@@ -32,7 +32,7 @@ pulsar_bp_executor = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native
 
 # Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "d18837c13dd3e1cf6076d9a3c64c450971a6d1af" }
-pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "2e627b0d36d764ef6d2002c1c176e83776dbf735" }
+pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "b017364a0de39cf6c4b77c5fa96e8eb20b9c2b8d" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"

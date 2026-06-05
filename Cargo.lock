@@ -704,7 +704,7 @@ dependencies = [
  "graphy",
  "log",
  "parking_lot",
- "pbgc",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=b017364a0de39cf6c4b77c5fa96e8eb20b9c2b8d)",
  "plugin_editor_api",
  "pulsar_bp_executor",
  "pulsar_reflection",
@@ -5912,6 +5912,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pbgc"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=b017364a0de39cf6c4b77c5fa96e8eb20b9c2b8d#b017364a0de39cf6c4b77c5fa96e8eb20b9c2b8d"
+dependencies = [
+ "graphy",
+ "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=4728db2110593fa55534918709dc974a22fd27b7)",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "pem"
 version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6416,7 +6429,7 @@ version = "0.1.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=4728db2110593fa55534918709dc974a22fd27b7#4728db2110593fa55534918709dc974a22fd27b7"
 dependencies = [
  "libloading 0.9.0",
- "pbgc",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=2e627b0d36d764ef6d2002c1c176e83776dbf735)",
  "sha2 0.11.0",
 ]
 
