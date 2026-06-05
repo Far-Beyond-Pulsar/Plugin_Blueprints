@@ -496,6 +496,7 @@ impl BlueprintEditorPanel {
                         ),
                     );
                     cx.notify();
+                    panel.sync_all_canvases_to_tabs(cx);
                     panel.compile_to_class_directory().map(|_| None::<PathBuf>)
                 }
                 CompileMode::BytecodeVm => {
@@ -510,6 +511,7 @@ impl BlueprintEditorPanel {
                         ),
                     );
                     cx.notify();
+                    panel.sync_all_canvases_to_tabs(cx);
                     panel.compile_to_bytecode_files().map(Some)
                 }
             }
