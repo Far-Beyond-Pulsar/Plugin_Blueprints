@@ -116,55 +116,6 @@ impl BlueprintEditorPanel {
         }
     }
 
-    /// Builds a human-readable summary of the current graph for inclusion in
-    /// compilation log entries, so every log line carries graph context.
-    fn graph_compile_summary(&self) -> String {
-        let tab = &self.open_tabs[self.active_tab_index];
-        let graph = &tab.graph;
-
-        let node_count = graph.nodes.len();
-        let conn_count = graph.connections.len();
-
-        let event_nodes: Vec<&str> = graph
-            .nodes
-            .iter()
-            .filter(|n| n.node_type == crate::NodeType::Event)
-            .map(|n| n.definition_id.as_str())
-            .collect();
-
-        let pure_count = graph
-            .nodes
-            .iter()
-            .filter(|n| n.node_type == crate::NodeType::Pure)
-            .count();
-
-        let fn_count = graph
-            .nodes
-            .iter()
-            .filter(|n| n.node_type == crate::NodeType::Function)
-            .count();
-
-        let var_count = self.class_variables.len();
-
-        let events_str = if event_nodes.is_empty() {
-            "none".to_string()
-        } else {
-            event_nodes.join(", ")
-        };
-
-        format!(
-            "Graph: {} nodes ({} event, {} fn, {} pure), {} connections, {} class vars | Events: [{}] | Tab: \"{}\"",
-            node_count,
-            event_nodes.len(),
-            fn_count,
-            pure_count,
-            conn_count,
-            var_count,
-            events_str,
-            tab.name,
-        )
-    }
-
     /// Build a `pbgc::GraphDescription` directly from the current BlueprintGraph.
     /// This is the single source-of-truth conversion; both compile functions use it.
     fn build_graphy_description(&self) -> Result<pbgc::GraphDescription, String> {
@@ -534,24 +485,19 @@ impl BlueprintEditorPanel {
             );
 
             use crate::core::types::CompileMode;
-
-            // Sync canvas → tabs first so graph_summary reflects live state.
-            cx.notify();
-            panel.sync_all_canvases_to_tabs(cx);
-            let graph_detail = panel.graph_compile_summary();
-
             match &compile_mode {
                 CompileMode::DirectRust => {
                     panel.push_compilation_history(
                         CompilationState::Compiling,
                         "build",
                         "Generating Rust event modules",
-                        Some(format!(
-                            "Steps: validate event nodes, compile graph, write events/events.rs, \
-                             write events/mod.rs, refresh vars module\n{}",
-                            graph_detail
-                        )),
+                        Some(
+                            "Steps: validate event nodes, compile graph, write events/events.rs, write events/mod.rs, refresh vars module"
+                                .to_string(),
+                        ),
                     );
+                    cx.notify();
+                    panel.sync_all_canvases_to_tabs(cx);
                     panel.compile_to_class_directory().map(|_| None::<PathBuf>)
                 }
                 CompileMode::BytecodeVm => {
@@ -559,12 +505,14 @@ impl BlueprintEditorPanel {
                         CompilationState::Compiling,
                         "build",
                         "Compiling to PBGC bytecode",
-                        Some(format!(
+                        Some(
                             "Steps: build graph description, compile to bytecode programs, \
-                             write events/.build/bytecode.json\n{}",
-                            graph_detail
-                        )),
+                             write events/.build/bytecode.json"
+                                .to_string(),
+                        ),
                     );
+                    cx.notify();
+                    panel.sync_all_canvases_to_tabs(cx);
                     panel.compile_to_bytecode_files().map(Some)
                 }
             }
