@@ -84,8 +84,8 @@ fn to_graphy_datatype(dt: &ui::graph::DataType) -> pbgc::DataType {
     use pbgc::DataType as GD;
     use ui::graph::DataType as PG;
     match dt {
-        PG::Execution => GD::Execution,
-        PG::Data(ti) => GD::Typed(pbgc::TypeInfo::new(ti.to_string())),
+        PG::Execution => GD::Exec,
+        PG::Data(ti) => GD::typed(ti.to_string()),
     }
 }
 
@@ -156,6 +156,7 @@ impl BlueprintEditorPanel {
                     .iter()
                     .map(|(k, v)| (k.clone(), property_value_from_raw(v)))
                     .collect(),
+                typed_properties: std::collections::HashMap::new(),
             };
 
             for pin in &bp_node.inputs {
