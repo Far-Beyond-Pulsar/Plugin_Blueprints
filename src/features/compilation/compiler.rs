@@ -116,6 +116,83 @@ impl BlueprintEditorPanel {
         }
     }
 
+    /// Dump the active graph (editor view + the `pbgc::GraphDescription` that gets
+    /// sent to the compiler) to `blueprint_graph_debug.json` in the working
+    /// directory, so event-node detection mismatches can be diagnosed by
+    /// comparing the editor's classification against PBGC's metadata lookup.
+    fn dump_graph_debug_info(&self, graph: &pbgc::GraphDescription) {
+        #[derive(serde::Serialize)]
+        struct EditorNodeDebug {
+            id: String,
+            definition_id: String,
+            title: String,
+            editor_node_type: String,
+            definition_is_event: Option<bool>,
+            metadata_found: bool,
+            metadata_node_type: Option<String>,
+        }
+
+        #[derive(serde::Serialize)]
+        struct GraphDescNodeDebug {
+            id: String,
+            node_type: String,
+        }
+
+        #[derive(serde::Serialize)]
+        struct GraphDebugDump {
+            active_tab: String,
+            editor_nodes: Vec<EditorNodeDebug>,
+            graph_description_nodes: Vec<GraphDescNodeDebug>,
+        }
+
+        let node_definitions = crate::core::definitions::NodeDefinitions::load();
+        let metadata = pbgc::extract_node_metadata().unwrap_or_default();
+
+        let editor_nodes = self.open_tabs[self.active_tab_index]
+            .graph
+            .nodes
+            .iter()
+            .map(|n| {
+                let def = node_definitions.get_node_definition(&n.definition_id);
+                let meta = metadata.get(&n.definition_id);
+                EditorNodeDebug {
+                    id: n.id.clone(),
+                    definition_id: n.definition_id.clone(),
+                    title: n.title.clone(),
+                    editor_node_type: format!("{:?}", n.node_type),
+                    definition_is_event: def.map(|d| d.is_event),
+                    metadata_found: meta.is_some(),
+                    metadata_node_type: meta.map(|m| format!("{:?}", m.node_type)),
+                }
+            })
+            .collect();
+
+        let graph_description_nodes = graph
+            .nodes
+            .values()
+            .map(|n| GraphDescNodeDebug {
+                id: n.id.clone(),
+                node_type: n.node_type.clone(),
+            })
+            .collect();
+
+        let dump = GraphDebugDump {
+            active_tab: self.open_tabs[self.active_tab_index].name.clone(),
+            editor_nodes,
+            graph_description_nodes,
+        };
+
+        match serde_json::to_string_pretty(&dump) {
+            Ok(json) => match std::fs::write("blueprint_graph_debug.json", &json) {
+                Ok(()) => tracing::info!(
+                    "[PBGC debug] Wrote graph snapshot to ./blueprint_graph_debug.json"
+                ),
+                Err(e) => tracing::warn!("[PBGC debug] Failed to write graph debug dump: {}", e),
+            },
+            Err(e) => tracing::warn!("[PBGC debug] Failed to serialize graph debug dump: {}", e),
+        }
+    }
+
     /// Build a `pbgc::GraphDescription` directly from the current BlueprintGraph.
     /// This is the single source-of-truth conversion; both compile functions use it.
     fn build_graphy_description(&self) -> Result<pbgc::GraphDescription, String> {
@@ -227,6 +304,8 @@ impl BlueprintEditorPanel {
                 connection_type: conn_type,
             });
         }
+
+        self.dump_graph_debug_info(&graph);
 
         Ok(graph)
     }
