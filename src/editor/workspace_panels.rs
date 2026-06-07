@@ -452,6 +452,7 @@ pub struct GraphCanvasPanel {
     // ── Pin hover tooltip ──────────────────────────────────────────────────
     pub hovered_pin_tooltip: Option<String>,
     pub hovered_pin_tooltip_pos: Option<Point<Pixels>>,
+    pub hovered_connection: Option<String>,
 
     // ── Clipboard ──────────────────────────────────────────────────────────
     pub node_clipboard: Option<BlueprintNode>,
@@ -587,6 +588,7 @@ impl GraphCanvasPanel {
             quick_palette_view,
             hovered_pin_tooltip: None,
             hovered_pin_tooltip_pos: None,
+            hovered_connection: None,
             node_clipboard: None,
             dragging_node: None,
             drag_offset: Point::new(0.0, 0.0),

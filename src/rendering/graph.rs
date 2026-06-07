@@ -271,7 +271,13 @@ fn pin_gpos_id(node: &BlueprintNode, pin_id: &str, is_input: bool) -> Option<(f3
     Some(pin_gpos_row(node, is_input, row))
 }
 
-fn bezier(p0: (f32, f32), p1: (f32, f32), p2: (f32, f32), p3: (f32, f32), t: f32) -> (f32, f32) {
+pub(crate) fn bezier(
+    p0: (f32, f32),
+    p1: (f32, f32),
+    p2: (f32, f32),
+    p3: (f32, f32),
+    t: f32,
+) -> (f32, f32) {
     let u = 1.0 - t;
     let a = u * u * u;
     let b = 3.0 * u * u * t;
@@ -697,6 +703,14 @@ impl NodeGraphRenderer {
                     thick *= 1.05;
                 } else {
                     fc[3] = 0.76;
+                }
+                if canvas
+                    .hovered_connection
+                    .as_deref()
+                    .map_or(false, |hovered_id| hovered_id == conn.id)
+                {
+                    fc = [0.98, 0.84, 0.10, fc[3]];
+                    thick *= 1.12;
                 }
                 if let (Some(fp), Some(tp)) = (
                     pin_gpos_id(fn_, &conn.source_pin, false),
