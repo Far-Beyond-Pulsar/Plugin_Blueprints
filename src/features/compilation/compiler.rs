@@ -89,6 +89,126 @@ fn to_graphy_datatype(dt: &ui::graph::DataType) -> pbgc::DataType {
     }
 }
 
+/// Convert a serialised sub-graph (`ui::graph::GraphDescription`, as stored in
+/// `SubGraphDefinition::graph` for both local and library macros) into the
+/// `pbgc::GraphDescription` shape the compiler and `SubGraphExpander` operate
+/// on.
+///
+/// Mirrors the node/pin/connection filtering used for the main event graph
+/// (skips editor-only `get_component_ref::` wiring helpers and strips the
+/// synthetic `component_ref` pin from `comp_*` nodes), and additionally remaps
+/// the editor's `macro_entry`/`macro_exit` interface nodes to the
+/// `subgraph_entry`/`subgraph_exit` node-type strings that
+/// `graphy::NodeInstance::kind()` recognises as macro interface points — the
+/// expander rewires call-site connections through these during inlining.
+fn convert_ui_graph_description_to_pbgc(ui_graph: &ui::graph::GraphDescription) -> pbgc::GraphDescription {
+    use pbgc::Connection as GConnection;
+    use pbgc::{ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position};
+    use std::collections::HashSet;
+
+    let mut graph = GraphDescription::new("Subgraph");
+    let mut skipped_nodes: HashSet<String> = HashSet::new();
+    let mut valid_input_pins: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut valid_output_pins: HashMap<String, HashSet<String>> = HashMap::new();
+
+    for (node_id, node_instance) in &ui_graph.nodes {
+        if node_instance.node_type.starts_with("get_component_ref::") {
+            skipped_nodes.insert(node_id.clone());
+            continue;
+        }
+
+        let node_type = match node_instance.node_type.as_str() {
+            "macro_entry" => "subgraph_entry".to_string(),
+            "macro_exit" => "subgraph_exit".to_string(),
+            other => other.to_string(),
+        };
+        let is_component_method_node = node_type.starts_with("comp_get_prop::")
+            || node_type.starts_with("comp_set_prop::")
+            || node_type.starts_with("comp_call::");
+
+        let mut node = NodeInstance {
+            id: node_id.clone(),
+            node_type,
+            position: Position {
+                x: node_instance.position.x as f64,
+                y: node_instance.position.y as f64,
+            },
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            properties: node_instance
+                .properties
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            typed_properties: std::collections::HashMap::new(),
+        };
+
+        for pin_inst in &node_instance.inputs {
+            if is_component_method_node && pin_inst.id == "component_ref" {
+                continue;
+            }
+            node.inputs.push(PinInstance {
+                id: pin_inst.id.clone(),
+                pin: Pin {
+                    id: pin_inst.id.clone(),
+                    name: pin_inst.pin.name.clone(),
+                    data_type: to_graphy_datatype(&pin_inst.pin.data_type),
+                    pin_type: PinType::Input,
+                },
+            });
+        }
+        for pin_inst in &node_instance.outputs {
+            node.outputs.push(PinInstance {
+                id: pin_inst.id.clone(),
+                pin: Pin {
+                    id: pin_inst.id.clone(),
+                    name: pin_inst.pin.name.clone(),
+                    data_type: to_graphy_datatype(&pin_inst.pin.data_type),
+                    pin_type: PinType::Output,
+                },
+            });
+        }
+
+        valid_input_pins.insert(
+            node_id.clone(),
+            node.inputs.iter().map(|p| p.id.clone()).collect(),
+        );
+        valid_output_pins.insert(
+            node_id.clone(),
+            node.outputs.iter().map(|p| p.id.clone()).collect(),
+        );
+        graph.nodes.insert(node_id.clone(), node);
+    }
+
+    for conn in &ui_graph.connections {
+        if skipped_nodes.contains(&conn.source_node) || skipped_nodes.contains(&conn.target_node) {
+            continue;
+        }
+        let Some(source_pins) = valid_output_pins.get(&conn.source_node) else {
+            continue;
+        };
+        let Some(target_pins) = valid_input_pins.get(&conn.target_node) else {
+            continue;
+        };
+        if !source_pins.contains(&conn.source_pin) || !target_pins.contains(&conn.target_pin) {
+            continue;
+        }
+        let conn_type = match conn.connection_type {
+            ui::graph::ConnectionType::Execution => ConnectionType::Execution,
+            ui::graph::ConnectionType::Data => ConnectionType::Data,
+        };
+        graph.connections.push(GConnection {
+            source_node: conn.source_node.clone(),
+            source_pin: conn.source_pin.clone(),
+            target_node: conn.target_node.clone(),
+            target_pin: conn.target_pin.clone(),
+            connection_type: conn_type,
+        });
+    }
+
+    graph
+}
+
 // ── BlueprintEditorPanel helpers ──────────────────────────────────────────────
 
 impl BlueprintEditorPanel {
@@ -114,6 +234,17 @@ impl BlueprintEditorPanel {
             let overflow = self.compilation_history.len() - MAX_HISTORY_ENTRIES;
             self.compilation_history.drain(0..overflow);
         }
+    }
+
+    /// The main event-graph tab — compilation always targets this graph, never
+    /// whatever tab the user happens to have focused (e.g. a macro/subgraph
+    /// tab, which legitimately has no event nodes and would otherwise trip the
+    /// "No event nodes found in graph" check).
+    fn main_graph_tab(&self) -> &crate::editor::tabs::GraphTab {
+        self.open_tabs
+            .iter()
+            .find(|t| t.is_main)
+            .unwrap_or(&self.open_tabs[0])
     }
 
     /// Dump the active graph (editor view + the `pbgc::GraphDescription` that gets
@@ -147,8 +278,9 @@ impl BlueprintEditorPanel {
 
         let node_definitions = crate::core::definitions::NodeDefinitions::load();
         let metadata = pbgc::extract_node_metadata().unwrap_or_default();
+        let main_tab = self.main_graph_tab();
 
-        let editor_nodes = self.open_tabs[self.active_tab_index]
+        let editor_nodes = main_tab
             .graph
             .nodes
             .iter()
@@ -177,7 +309,7 @@ impl BlueprintEditorPanel {
             .collect();
 
         let dump = GraphDebugDump {
-            active_tab: self.open_tabs[self.active_tab_index].name.clone(),
+            active_tab: main_tab.name.clone(),
             editor_nodes,
             graph_description_nodes,
         };
@@ -193,22 +325,32 @@ impl BlueprintEditorPanel {
         }
     }
 
-    /// Build a `pbgc::GraphDescription` directly from the current BlueprintGraph.
-    /// This is the single source-of-truth conversion; both compile functions use it.
+    /// Build a `pbgc::GraphDescription` for the whole blueprint file: the main
+    /// event graph with every `MacroInstance`/`SubgraphCall` node
+    /// (`definition_id: "macro:<id>"`) inlined via graphy's
+    /// `SubGraphExpander`, using a library assembled from this file's local
+    /// macros plus any shared library macros they reference.
+    ///
+    /// This is the single source-of-truth conversion; both compile functions
+    /// use it. Compiling only the directly-authored event-graph nodes (the
+    /// previous behaviour) silently dropped macro bodies — PBGC's metadata
+    /// provider doesn't recognise `"macro:<id>"` as a node type, so those
+    /// instances would compile to nothing.
     fn build_graphy_description(&self) -> Result<pbgc::GraphDescription, String> {
         use pbgc::Connection as GConnection;
         use pbgc::{
             ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
         };
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashSet;
 
         let mut graph = GraphDescription::new("Blueprint Graph");
         let mut skipped_nodes: HashSet<String> = HashSet::new();
         let mut valid_input_pins: HashMap<String, HashSet<String>> = HashMap::new();
         let mut valid_output_pins: HashMap<String, HashSet<String>> = HashMap::new();
+        let main_tab = self.main_graph_tab();
 
         // Nodes
-        for bp_node in &self.open_tabs[self.active_tab_index].graph.nodes {
+        for bp_node in &main_tab.graph.nodes {
             // Runtime component reference nodes are editor-only wiring helpers.
             if bp_node.definition_id.starts_with("get_component_ref::") {
                 skipped_nodes.insert(bp_node.id.clone());
@@ -277,7 +419,7 @@ impl BlueprintEditorPanel {
         }
 
         // Connections
-        for conn in &self.open_tabs[self.active_tab_index].graph.connections {
+        for conn in &main_tab.graph.connections {
             if skipped_nodes.contains(&conn.source_node)
                 || skipped_nodes.contains(&conn.target_node)
             {
@@ -305,9 +447,50 @@ impl BlueprintEditorPanel {
             });
         }
 
+        let library = self.collect_macro_library();
+        if !library.is_empty() {
+            graphy::SubGraphExpander::new()
+                .expand_all_flat(&mut graph, &library)
+                .map_err(|e| format!("Sub-graph expansion failed: {}", e))?;
+        }
+
         self.dump_graph_debug_info(&graph);
 
         Ok(graph)
+    }
+
+    /// Assemble a `GraphLibrary` (keyed by macro id) covering every sub-graph
+    /// this blueprint file can reference: local macros — overlaid with any
+    /// open-tab edits not yet flushed back to `local_macros` (mirroring
+    /// `to_blueprint_asset`'s save snapshot) — plus shared library macros.
+    fn collect_macro_library(&self) -> HashMap<String, pbgc::GraphDescription> {
+        let mut macros = self.local_macros.clone();
+        for tab in self
+            .open_tabs
+            .iter()
+            .filter(|tab| !tab.is_main && !tab.is_library_macro)
+        {
+            if let Some(macro_def) = macros.iter_mut().find(|m| m.id == tab.id) {
+                if let Ok(desc) = self.convert_graph_to_description(&tab.graph) {
+                    macro_def.graph = desc;
+                }
+            }
+        }
+
+        let mut library = HashMap::new();
+        for macro_def in &macros {
+            library.insert(
+                macro_def.id.clone(),
+                convert_ui_graph_description_to_pbgc(&macro_def.graph),
+            );
+        }
+        for subgraph in self.library_manager.get_all_subgraphs() {
+            library
+                .entry(subgraph.id.clone())
+                .or_insert_with(|| convert_ui_graph_description_to_pbgc(&subgraph.graph));
+        }
+
+        library
     }
 
     /// Compile current graph → raw PBGC bytecode programs (one per event entry-point).
@@ -416,7 +599,7 @@ impl BlueprintEditorPanel {
             .map_err(|e| format!("Failed to create events directory: {}", e))?;
 
         let has_events = self
-            .open_tabs[self.active_tab_index]
+            .main_graph_tab()
             .graph
             .nodes
             .iter()
