@@ -281,15 +281,21 @@ impl BlueprintNode {
             })
             .collect();
 
-        // Determine node type based on category
+        // Determine node type. Event entry-points are identified by their
+        // underlying Blueprint node type (not by category — events such as
+        // `on_input_key`/`on_input_action` live in the "Input" category).
+        // Everything else falls back to a category-based visual grouping.
         let node_definitions = crate::core::definitions::NodeDefinitions::load();
-        let category = node_definitions.get_category_for_node(&definition.id);
-        let node_type = match category.map(|c| c.name.as_str()) {
-            Some("Events") => NodeType::Event,
-            Some("Logic") => NodeType::Logic,
-            Some("Math") => NodeType::Math,
-            Some("Object") => NodeType::Object,
-            _ => NodeType::Logic,
+        let node_type = if definition.is_event {
+            NodeType::Event
+        } else {
+            let category = node_definitions.get_category_for_node(&definition.id);
+            match category.map(|c| c.name.as_str()) {
+                Some("Logic") => NodeType::Logic,
+                Some("Math") => NodeType::Math,
+                Some("Object") => NodeType::Object,
+                _ => NodeType::Logic,
+            }
         };
 
         Self {

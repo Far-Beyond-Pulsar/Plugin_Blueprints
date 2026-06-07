@@ -42,6 +42,12 @@ pub struct NodeDefinition {
     pub outputs: Vec<PinDefinition>,
     pub properties: HashMap<String, String>,
     pub color: Option<String>,
+    /// True when this node's underlying Blueprint type is `NodeTypes::event`
+    /// (an entry-point such as `begin_play`, `on_tick`, `on_input_key`, …).
+    /// Used to classify the node as `NodeType::Event` regardless of which
+    /// palette category it lives in (e.g. "Input" events).
+    #[serde(default)]
+    pub is_event: bool,
 }
 
 /// Definition of a single pin on a node.
@@ -130,6 +136,7 @@ impl NodeDefinitions {
                     outputs,
                     properties: std::collections::HashMap::new(),
                     color: Some("#9B59B6".to_string()), // Purple for macros
+                    is_event: false,
                 };
 
                 categories_map
@@ -177,6 +184,7 @@ impl NodeDefinitions {
                 outputs: vec![],
                 properties: std::collections::HashMap::new(),
                 color: None,
+                is_event: false,
             });
 
         // Group nodes by category
@@ -231,6 +239,7 @@ impl NodeDefinitions {
 
             let category = node_meta.category.clone();
             let description = format!("{} ({})", node_meta.name, node_meta.category);
+            let is_event = matches!(node_meta.node_type, graphy::NodeTypes::event);
 
             let static_def = NodeDefinition {
                 id: id.clone(),
@@ -242,6 +251,7 @@ impl NodeDefinitions {
                 outputs,
                 properties: std::collections::HashMap::new(),
                 color: None,
+                is_event,
             };
 
             categories_map
@@ -407,6 +417,7 @@ impl NodeDefinitions {
             }],
             properties: HashMap::new(),
             color: Some("#2ECC71".to_string()),
+            is_event: false,
         }
     }
 
@@ -454,6 +465,7 @@ impl NodeDefinitions {
             }],
             properties: HashMap::new(),
             color: Some("#E67E22".to_string()),
+            is_event: false,
         }
     }
 
@@ -518,6 +530,7 @@ impl NodeDefinitions {
             outputs,
             properties: HashMap::new(),
             color: Some("#3498DB".to_string()),
+            is_event: false,
         }
     }
 }

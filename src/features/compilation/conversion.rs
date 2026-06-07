@@ -146,13 +146,19 @@ impl BlueprintEditorPanel {
                     None,
                 )
             } else if let Some(def) = node_def {
-                let category = node_definitions.get_category_for_node(&def.id);
-                let node_type = match category.map(|c| c.name.as_str()) {
-                    Some("Events") => NodeType::Event,
-                    Some("Logic") => NodeType::Logic,
-                    Some("Math") => NodeType::Math,
-                    Some("Object") => NodeType::Object,
-                    _ => NodeType::Logic,
+                // Event entry-points are identified by their underlying Blueprint
+                // node type, not by category — events such as `on_input_key`/
+                // `on_input_action` live in the "Input" category, not "Events".
+                let node_type = if def.is_event {
+                    NodeType::Event
+                } else {
+                    let category = node_definitions.get_category_for_node(&def.id);
+                    match category.map(|c| c.name.as_str()) {
+                        Some("Logic") => NodeType::Logic,
+                        Some("Math") => NodeType::Math,
+                        Some("Object") => NodeType::Object,
+                        _ => NodeType::Logic,
+                    }
                 };
                 (
                     def.name.clone(),

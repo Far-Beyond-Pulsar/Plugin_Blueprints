@@ -192,6 +192,7 @@ fn build_local_macro_palette_items(
                 outputs,
                 properties: std::collections::HashMap::new(),
                 color: Some("#9B59B6".to_string()),
+                is_event: false,
             },
             category_color: "#9B59B6".to_string(),
         });
