@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui::{
-    color_picker::ColorPickerState, input::InputState, resizable::ResizableState,
+    input::InputState, resizable::ResizableState,
     scroll::ScrollbarState, VirtualListScrollHandle,
 };
 
@@ -93,8 +93,9 @@ pub struct BlueprintEditorPanel {
     pub prefab_asset: PrefabAsset,
     pub prefab_add_component_dialog: Entity<AddPrefabComponentDialog>,
     pub show_add_component_dialog: bool,
-    pub prefab_property_inputs: HashMap<String, Entity<InputState>>,
-    pub prefab_color_pickers: HashMap<String, Entity<ColorPickerState>>,
+    pub prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager,
+    pub prefab_collapsed_categories: HashSet<(usize, String)>,
+    pub prefab_expanded_categories: HashSet<(usize, String)>,
     pub selected_prefab_component: Option<usize>,
 
     // Comment system
@@ -439,8 +440,9 @@ impl BlueprintEditorPanel {
             prefab_asset: PrefabAsset::new("Prefab"),
             prefab_add_component_dialog,
             show_add_component_dialog: false,
-            prefab_property_inputs: HashMap::new(),
-            prefab_color_pickers: HashMap::new(),
+            prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager::new(),
+            prefab_collapsed_categories: HashSet::new(),
+            prefab_expanded_categories: HashSet::new(),
             selected_prefab_component: None,
             dragging_comment: None,
             resizing_comment: None,
@@ -513,7 +515,7 @@ impl BlueprintEditorPanel {
     /// Create a sample graph for demonstration - demonstrates all compiler features
     fn create_sample_graph() -> BlueprintGraph {
         use crate::core::types::*;
-        use ui::graph::DataType as GraphDataType;
+        use crate::core::types::PinDataType as GraphDataType;
 
         let mut nodes = Vec::new();
 

@@ -165,7 +165,7 @@ fn build_local_macro_palette_items(
             .map(|p| PinDefinition {
                 id: p.id.clone(),
                 name: p.name.clone(),
-                data_type: p.data_type.clone(),
+                data_type: crate::core::types::PinDataType::from_type_str(p.data_type.to_string()),
                 pin_type: PinType::Input,
             })
             .collect();
@@ -176,7 +176,7 @@ fn build_local_macro_palette_items(
             .map(|p| PinDefinition {
                 id: p.id.clone(),
                 name: p.name.clone(),
-                data_type: p.data_type.clone(),
+                data_type: crate::core::types::PinDataType::from_type_str(p.data_type.to_string()),
                 pin_type: PinType::Output,
             })
             .collect();

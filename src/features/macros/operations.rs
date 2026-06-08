@@ -7,7 +7,7 @@ use crate::editor::GraphTab;
 use crate::rendering::layout;
 use gpui::*;
 use std::collections::HashMap;
-use ui::graph::DataType;
+use crate::core::types::PinDataType as DataType;
 use ui::PixelsExt;
 
 impl BlueprintEditorPanel {
@@ -252,7 +252,7 @@ impl BlueprintEditorPanel {
         let pin = ui::graph::SubGraphPin {
             id: uuid::Uuid::new_v4().to_string(),
             name: pin_name,
-            data_type: DataType::from_type_str(&type_str),
+            data_type: ui::graph::DataType::from_type_str(&type_str),
             description: None,
             default_value: None,
             is_instance_editable: false,
@@ -330,7 +330,7 @@ impl BlueprintEditorPanel {
                 id: p.id.clone(),
                 name: p.name.clone(),
                 pin_type: PinType::Output,
-                data_type: p.data_type.clone(),
+                data_type: DataType::from_type_str(p.data_type.to_string()),
             })
             .collect();
 
@@ -342,7 +342,7 @@ impl BlueprintEditorPanel {
                 id: p.id.clone(),
                 name: p.name.clone(),
                 pin_type: PinType::Input,
-                data_type: p.data_type.clone(),
+                data_type: DataType::from_type_str(p.data_type.to_string()),
             })
             .collect();
 
@@ -518,7 +518,7 @@ impl BlueprintEditorPanel {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: PinType::Input,
-                        data_type: p.data_type.clone(),
+                        data_type: DataType::from_type_str(p.data_type.to_string()),
                     })
                     .collect();
                 node.outputs = macro_def
@@ -529,7 +529,7 @@ impl BlueprintEditorPanel {
                         id: p.id.clone(),
                         name: p.name.clone(),
                         pin_type: PinType::Output,
-                        data_type: p.data_type.clone(),
+                        data_type: DataType::from_type_str(p.data_type.to_string()),
                     })
                     .collect();
                 let rows = node.inputs.len().max(node.outputs.len()).max(1);
@@ -560,13 +560,13 @@ impl BlueprintEditorPanel {
                                 id: p.id.clone(),
                                 name: p.name.clone(),
                                 pin_type: PinType::Input,
-                                data_type: p.data_type.clone(),
+                                data_type: DataType::from_type_str(p.data_type.to_string()),
                             }).collect();
                             node.outputs = macro_def_d.interface.outputs.iter().map(|p| Pin {
                                 id: p.id.clone(),
                                 name: p.name.clone(),
                                 pin_type: PinType::Output,
-                                data_type: p.data_type.clone(),
+                                data_type: DataType::from_type_str(p.data_type.to_string()),
                             }).collect();
                             let rows = node.inputs.len().max(node.outputs.len()).max(1);
                             node.size.height = layout::node_height_for_pin_rows(rows);
@@ -628,7 +628,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
                 id: p.id.clone(),
                 name: p.name.clone(),
                 pin_type: crate::core::types::PinType::Input,
-                data_type: p.data_type.clone(),
+                data_type: DataType::from_type_str(p.data_type.to_string()),
             })
             .collect();
         let outputs: Vec<crate::core::types::Pin> = macro_def
@@ -639,7 +639,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
                 id: p.id.clone(),
                 name: p.name.clone(),
                 pin_type: crate::core::types::PinType::Output,
-                data_type: p.data_type.clone(),
+                data_type: DataType::from_type_str(p.data_type.to_string()),
             })
             .collect();
         let max_rows = inputs.len().max(outputs.len()).max(1);

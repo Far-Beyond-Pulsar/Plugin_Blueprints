@@ -287,7 +287,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
                 let values: Vec<PinValue> = node
                     .inputs
                     .iter()
-                    .filter(|p| !matches!(p.data_type, ui::graph::DataType::Execution))
+                    .filter(|p| !p.data_type.is_execution())
                     .enumerate()
                     .map(|(i, pin)| PinValue {
                         pin_id: pin.id.clone(),

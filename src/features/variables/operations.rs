@@ -12,7 +12,7 @@ use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
-use ui::graph::DataType;
+use crate::core::types::PinDataType as DataType;
 
 impl BlueprintEditorPanel {
     /// Start creating a new variable

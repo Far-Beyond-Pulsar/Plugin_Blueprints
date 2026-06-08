@@ -2,7 +2,7 @@
 
 use crate::core::graph::BlueprintGraph;
 use crate::core::types::{Connection, NodeType};
-use ui::graph::DataType as GraphDataType;
+use crate::core::types::PinDataType as GraphDataType;
 
 /// Check if two data types are compatible for connection
 pub fn are_types_compatible(from_type: &GraphDataType, to_type: &GraphDataType) -> bool {

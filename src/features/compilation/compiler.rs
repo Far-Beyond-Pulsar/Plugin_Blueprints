@@ -89,6 +89,17 @@ fn to_graphy_datatype(dt: &ui::graph::DataType) -> pbgc::DataType {
     }
 }
 
+// Convert a blueprint pin's reflection-backed `PinDataType` into the PBGC
+// `DataType` the compiler expects — `type_name` is already the canonical
+// string identity (matches `RuntimeTypeInfo::type_name`).
+fn pin_data_type_to_graphy(dt: &crate::core::types::PinDataType) -> pbgc::DataType {
+    if dt.is_execution() {
+        pbgc::DataType::Exec
+    } else {
+        pbgc::DataType::typed(dt.type_name.clone())
+    }
+}
+
 /// Convert a serialised sub-graph (`ui::graph::GraphDescription`, as stored in
 /// `SubGraphDefinition::graph` for both local and library macros) into the
 /// `pbgc::GraphDescription` shape the compiler and `SubGraphExpander` operate
@@ -390,7 +401,7 @@ impl BlueprintEditorPanel {
                     pin: Pin {
                         id: pin.id.clone(),
                         name: pin.name.clone(),
-                        data_type: to_graphy_datatype(&pin.data_type),
+                        data_type: pin_data_type_to_graphy(&pin.data_type),
                         pin_type: PinType::Input,
                     },
                 });
@@ -401,7 +412,7 @@ impl BlueprintEditorPanel {
                     pin: Pin {
                         id: pin.id.clone(),
                         name: pin.name.clone(),
-                        data_type: to_graphy_datatype(&pin.data_type),
+                        data_type: pin_data_type_to_graphy(&pin.data_type),
                         pin_type: PinType::Output,
                     },
                 });

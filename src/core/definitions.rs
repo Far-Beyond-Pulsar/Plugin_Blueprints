@@ -5,12 +5,11 @@
 //! metadata into UI-ready node definitions. It uses a global singleton pattern
 //! for efficient access to node metadata throughout the application.
 
-use super::types::PinType;
+use super::types::{PinDataType, PinType};
 use crate::features::prefabs::PrefabAsset;
-use pulsar_reflection::{RuntimeTypeInfo, TypeStructure, WrapperType, REGISTRY};
+use pulsar_reflection::{RuntimeTypeInfo, REGISTRY};
 use serde::Deserialize;
 use std::collections::HashMap;
-use ui::graph::DataType;
 
 // ============================================================================
 // Node Definition Types
@@ -55,7 +54,7 @@ pub struct NodeDefinition {
 pub struct PinDefinition {
     pub id: String,
     pub name: String,
-    pub data_type: DataType,
+    pub data_type: PinDataType,
     pub pin_type: PinType,
 }
 
@@ -108,7 +107,7 @@ impl NodeDefinitions {
                     .map(|pin| PinDefinition {
                         id: pin.id.clone(),
                         name: pin.name.clone(),
-                        data_type: pin.data_type.clone(),
+                        data_type: PinDataType::from_type_str(pin.data_type.to_string()),
                         pin_type: PinType::Input,
                     })
                     .collect();
@@ -121,7 +120,7 @@ impl NodeDefinitions {
                     .map(|pin| PinDefinition {
                         id: pin.id.clone(),
                         name: pin.name.clone(),
-                        data_type: pin.data_type.clone(),
+                        data_type: PinDataType::from_type_str(pin.data_type.to_string()),
                         pin_type: PinType::Output,
                     })
                     .collect();
@@ -200,7 +199,7 @@ impl NodeDefinitions {
                 inputs.push(PinDefinition {
                     id: "exec".to_string(),
                     name: "exec".to_string(),
-                    data_type: DataType::from_type_str("execution"),
+                    data_type: PinDataType::from_type_str("execution"),
                     pin_type: PinType::Input,
                 });
             }
@@ -210,7 +209,7 @@ impl NodeDefinitions {
                 inputs.push(PinDefinition {
                     id: param.name.to_string(),
                     name: param.name.to_string(),
-                    data_type: DataType::from_type_str(&param.param_type),
+                    data_type: PinDataType::from_type_str(&param.param_type),
                     pin_type: PinType::Input,
                 });
             }
@@ -220,7 +219,7 @@ impl NodeDefinitions {
                 outputs.push(PinDefinition {
                     id: exec_pin.to_string(),
                     name: exec_pin.to_string(),
-                    data_type: DataType::from_type_str("execution"),
+                    data_type: PinDataType::from_type_str("execution"),
                     pin_type: PinType::Output,
                 });
             }
@@ -231,7 +230,7 @@ impl NodeDefinitions {
                     outputs.push(PinDefinition {
                         id: "result".to_string(),
                         name: "result".to_string(),
-                        data_type: DataType::from_type_str(&return_type.type_string),
+                        data_type: PinDataType::from_type_str(&return_type.type_string),
                         pin_type: PinType::Output,
                     });
                 }
@@ -275,11 +274,6 @@ impl NodeDefinitions {
             .collect();
 
         NodeDefinitions { categories }
-    }
-
-    fn convert_data_type(data_type: &str) -> DataType {
-        // Use the new DataType system that supports TypeInfo
-        DataType::from_type_str(data_type)
     }
 
     fn get_category_color(category: &str) -> String {
@@ -406,13 +400,13 @@ impl NodeDefinitions {
             inputs: vec![PinDefinition {
                 id: "component_ref".to_string(),
                 name: "component".to_string(),
-                data_type: DataType::from_type_str(class_name),
+                data_type: PinDataType::from_type_str(class_name),
                 pin_type: PinType::Input,
             }],
             outputs: vec![PinDefinition {
                 id: "value".to_string(),
                 name: "value".to_string(),
-                data_type: runtime_type_to_data_type(type_info),
+                data_type: pin_data_type_for(type_info),
                 pin_type: PinType::Output,
             }],
             properties: HashMap::new(),
@@ -441,26 +435,26 @@ impl NodeDefinitions {
                 PinDefinition {
                     id: "exec".to_string(),
                     name: "exec".to_string(),
-                    data_type: DataType::from_type_str("execution"),
+                    data_type: PinDataType::from_type_str("execution"),
                     pin_type: PinType::Input,
                 },
                 PinDefinition {
                     id: "component_ref".to_string(),
                     name: "component".to_string(),
-                    data_type: DataType::from_type_str(class_name),
+                    data_type: PinDataType::from_type_str(class_name),
                     pin_type: PinType::Input,
                 },
                 PinDefinition {
                     id: "value".to_string(),
                     name: "value".to_string(),
-                    data_type: runtime_type_to_data_type(type_info),
+                    data_type: pin_data_type_for(type_info),
                     pin_type: PinType::Input,
                 },
             ],
             outputs: vec![PinDefinition {
                 id: "exec_out".to_string(),
                 name: "exec".to_string(),
-                data_type: DataType::from_type_str("execution"),
+                data_type: PinDataType::from_type_str("execution"),
                 pin_type: PinType::Output,
             }],
             properties: HashMap::new(),
@@ -478,13 +472,13 @@ impl NodeDefinitions {
             PinDefinition {
                 id: "exec".to_string(),
                 name: "exec".to_string(),
-                data_type: DataType::from_type_str("execution"),
+                data_type: PinDataType::from_type_str("execution"),
                 pin_type: PinType::Input,
             },
             PinDefinition {
                 id: "component_ref".to_string(),
                 name: "component".to_string(),
-                data_type: DataType::from_type_str(class_name),
+                data_type: PinDataType::from_type_str(class_name),
                 pin_type: PinType::Input,
             },
         ];
@@ -493,7 +487,7 @@ impl NodeDefinitions {
             inputs.push(PinDefinition {
                 id: param.name.to_string(),
                 name: param.name.to_string(),
-                data_type: runtime_type_to_data_type(param.type_info),
+                data_type: pin_data_type_for(param.type_info),
                 pin_type: PinType::Input,
             });
         }
@@ -501,7 +495,7 @@ impl NodeDefinitions {
         let mut outputs = vec![PinDefinition {
             id: "exec_out".to_string(),
             name: "exec".to_string(),
-            data_type: DataType::from_type_str("execution"),
+            data_type: PinDataType::from_type_str("execution"),
             pin_type: PinType::Output,
         }];
 
@@ -509,7 +503,7 @@ impl NodeDefinitions {
             outputs.push(PinDefinition {
                 id: "return_value".to_string(),
                 name: "return value".to_string(),
-                data_type: runtime_type_to_data_type(ret.type_info),
+                data_type: pin_data_type_for(ret.type_info),
                 pin_type: PinType::Output,
             });
         }
@@ -535,23 +529,10 @@ impl NodeDefinitions {
     }
 }
 
-fn runtime_type_to_data_type(type_info: &RuntimeTypeInfo) -> DataType {
-    match &type_info.structure {
-        TypeStructure::Primitive => match type_info.base_name() {
-            "f32" => DataType::from_type_str("f32"),
-            "i32" => DataType::from_type_str("i32"),
-            "bool" => DataType::from_type_str("bool"),
-            "[f32; 3]" => DataType::from_type_str("[f32; 3]"),
-            "[f32; 4]" => DataType::from_type_str("[f32; 4]"),
-            other => DataType::from_type_str(other),
-        },
-        TypeStructure::String => DataType::from_type_str("String"),
-        TypeStructure::Enum { .. } => DataType::from_type_str("i32"),
-        TypeStructure::Wrapper {
-            wrapper_kind: WrapperType::Vec,
-            inner,
-        } => DataType::from_type_str(&format!("Vec<{}>", inner.base_name())),
-        TypeStructure::Wrapper { .. } => DataType::from_type_str(type_info.base_name()),
-        TypeStructure::Struct { .. } => DataType::from_type_str(type_info.base_name()),
-    }
+/// Build a pin's canonical data type directly from its registered reflection
+/// type info — `type_name` is already the registry-stable identity, so no
+/// string-parsing/conversion layer is needed (the registry resolves it back
+/// to this exact `RuntimeTypeInfo` on demand).
+fn pin_data_type_for(type_info: &RuntimeTypeInfo) -> PinDataType {
+    PinDataType::from_type_str(type_info.type_name)
 }
