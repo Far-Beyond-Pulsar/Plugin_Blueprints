@@ -4,6 +4,7 @@
 //! type information, and connection details. Also provides macro interface
 //! editing when inside sub-graphs.
 
+use gpui::prelude::FluentBuilder;
 use gpui::*;
 use ui::{
     button::ButtonVariants as _, h_flex, v_flex, ActiveTheme as _, Colorize, IconName, StyledExt,
@@ -11,6 +12,10 @@ use ui::{
 
 use crate::core::types::{BlueprintComment, BlueprintNode, NodeType, Pin};
 use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::workspace_panels::GraphCanvasPanel;
+use crate::features::connections::compatibility::is_pin_connected;
+use ui_common::reflected_properties_panel::rgba_to_hsla;
+use std::sync::Arc;
 
 /// Renderer for the properties panel
 pub struct PropertiesRenderer;
@@ -136,11 +141,12 @@ impl PropertiesRenderer {
         panel: &BlueprintEditorPanel,
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
-    ) -> impl IntoElement {
+    ) -> AnyElement {
         let panel_graph: crate::core::graph::BlueprintGraph = panel
             .active_canvas()
             .map(|c| c.read(cx).graph.clone())
             .unwrap_or_default();
+        let active_canvas = panel.active_canvas().cloned();
         if panel_graph.selected_comments.len() == 1 && panel_graph.selected_nodes.is_empty() {
             let selected_comment_id = &panel_graph.selected_comments[0];
             if let Some(selected_comment) = panel_graph
@@ -153,82 +159,191 @@ impl PropertiesRenderer {
         }
 
         if panel_graph.selected_nodes.len() == 1 && panel_graph.selected_comments.is_empty() {
+            if let Some(canvas) = active_canvas {
+                return canvas.update(cx, |canvas, cx| {
+                    Self::render_selected_node_properties(canvas, window, cx)
+                });
+            }
+
             let selected_node_id = &panel_graph.selected_nodes[0];
-            if let Some(selected_node) = panel_graph.nodes.iter().find(|n| n.id == *selected_node_id) {
-                v_flex()
-                    .gap_4()
-                    .child(
-                        // Node header with icon and type badge
-                        v_flex()
-                            .gap_2()
-                            .child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_3()
-                                    .child(div().text_2xl().child(selected_node.icon.clone()))
-                                    .child(
-                                        div()
-                                            .text_lg()
-                                            .font_bold()
-                                            .text_color(cx.theme().foreground)
-                                            .child(selected_node.title.clone()),
-                                    ),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(px(4.0))
-                                    .bg(Self::get_node_type_color(&selected_node.node_type, cx)
-                                        .opacity(0.15))
-                                    .border_1()
-                                    .border_color(
-                                        Self::get_node_type_color(&selected_node.node_type, cx)
-                                            .opacity(0.3),
-                                    )
-                                    .text_xs()
-                                    .font_semibold()
-                                    .text_color(Self::get_node_type_color(
-                                        &selected_node.node_type,
-                                        cx,
-                                    ))
-                                    .child(format!("{:?} Node", selected_node.node_type)),
-                            ),
-                    )
-                    .child(Self::render_separator(cx))
-                    .child(
-                        // Properties section
-                        v_flex()
-                            .gap_3()
-                            .child(Self::render_section_header(
-                                "Properties",
-                                IconName::Settings,
-                                cx,
-                            ))
-                            .child(Self::render_node_properties(selected_node, cx)),
-                    )
-                    .child(Self::render_separator(cx))
-                    .child(
-                        // Node info section
-                        v_flex()
-                            .gap_3()
-                            .child(Self::render_section_header("Node Info", IconName::Info, cx))
-                            .child(Self::render_node_info(selected_node, cx)),
-                    )
-                    .into_any_element()
+            if let Some(selected_node) = panel_graph.nodes.iter().find(|n| n.id == *selected_node_id)
+            {
+                return Self::render_selected_node_readonly(selected_node, cx);
             } else {
-                Self::render_empty_state(cx)
+                return Self::render_empty_state(cx);
             }
         } else if !panel_graph.selected_nodes.is_empty() || !panel_graph.selected_comments.is_empty()
         {
-            Self::render_multi_selection_state(
+            return Self::render_multi_selection_state(
                 panel_graph.selected_nodes.len(),
                 panel_graph.selected_comments.len(),
                 cx,
-            )
+            );
         } else {
             Self::render_empty_state(cx)
         }
+    }
+
+    fn render_selected_node_readonly<T>(
+        selected_node: &BlueprintNode,
+        cx: &mut Context<T>,
+    ) -> AnyElement {
+        v_flex()
+            .gap_4()
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_3()
+                            .child(div().text_2xl().child(selected_node.icon.clone()))
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_bold()
+                                    .text_color(cx.theme().foreground)
+                                    .child(selected_node.title.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .py_1()
+                            .rounded(px(4.0))
+                            .bg(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.15))
+                            .border_1()
+                            .border_color(
+                                Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.3),
+                            )
+                            .text_xs()
+                            .font_semibold()
+                            .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
+                            .child(format!("{:?} Node", selected_node.node_type)),
+                    ),
+            )
+            .when(!selected_node.inputs.is_empty(), |el| {
+                el.child(Self::render_separator(cx)).child(
+                    v_flex()
+                        .gap_3()
+                        .child(Self::render_section_header("Inputs", IconName::ArrowRight, cx))
+                        .child(Self::render_pin_list(&selected_node.inputs, cx)),
+                )
+            })
+            .when(!selected_node.outputs.is_empty(), |el| {
+                el.child(Self::render_separator(cx)).child(
+                    v_flex()
+                        .gap_3()
+                        .child(Self::render_section_header("Outputs", IconName::ArrowRight, cx))
+                        .child(Self::render_pin_list(&selected_node.outputs, cx)),
+                )
+            })
+            .when(!selected_node.properties.is_empty(), |el| {
+                el.child(Self::render_separator(cx)).child(
+                    v_flex()
+                        .gap_3()
+                        .child(Self::render_section_header("Properties", IconName::Settings, cx))
+                        .child(Self::render_node_properties(selected_node, cx)),
+                )
+            })
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header("Node Info", IconName::Info, cx))
+                    .child(Self::render_node_info(selected_node, cx)),
+            )
+            .into_any_element()
+    }
+
+    fn render_selected_node_properties(
+        canvas: &mut GraphCanvasPanel,
+        window: &mut Window,
+        cx: &mut Context<GraphCanvasPanel>,
+    ) -> AnyElement {
+        let selected_node_id = canvas.graph.selected_nodes.first().cloned();
+        let Some(selected_node_id) = selected_node_id else {
+            return Self::render_empty_state(cx);
+        };
+        let Some(selected_node) = canvas.graph.nodes.iter().find(|n| n.id == selected_node_id).cloned()
+        else {
+            return Self::render_empty_state(cx);
+        };
+
+        let canvas_entity = cx.entity().clone();
+
+        v_flex()
+            .gap_4()
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_3()
+                            .child(div().text_2xl().child(selected_node.icon.clone()))
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_bold()
+                                    .text_color(cx.theme().foreground)
+                                    .child(selected_node.title.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .py_1()
+                            .rounded(px(4.0))
+                            .bg(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.15))
+                            .border_1()
+                            .border_color(
+                                Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.3),
+                            )
+                            .text_xs()
+                            .font_semibold()
+                            .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
+                            .child(format!("{:?} Node", selected_node.node_type)),
+                    ),
+            )
+            .when(!selected_node.inputs.is_empty(), |el| {
+                el.child(Self::render_separator(cx)).child(
+                    v_flex()
+                        .gap_3()
+                        .child(Self::render_section_header("Inputs", IconName::ArrowRight, cx))
+                        .child(Self::render_pin_editors(
+                            canvas,
+                            &canvas_entity,
+                            &selected_node,
+                            window,
+                            cx,
+                        )),
+                )
+            })
+            .when(!selected_node.outputs.is_empty(), |el| {
+                el.child(Self::render_separator(cx)).child(
+                    v_flex()
+                        .gap_3()
+                        .child(Self::render_section_header("Outputs", IconName::ArrowRight, cx))
+                        .child(Self::render_pin_list(&selected_node.outputs, cx)),
+                )
+            })
+            .when(!selected_node.properties.is_empty(), |el| {
+                el.child(Self::render_separator(cx)).child(
+                    v_flex()
+                        .gap_3()
+                        .child(Self::render_section_header("Properties", IconName::Settings, cx))
+                        .child(Self::render_node_properties(&selected_node, cx)),
+                )
+            })
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header("Node Info", IconName::Info, cx))
+                    .child(Self::render_node_info(&selected_node, cx)),
+            )
+            .into_any_element()
     }
 
     fn render_comment_properties(
@@ -376,10 +491,10 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
-    fn render_multi_selection_state(
+    fn render_multi_selection_state<T>(
         node_count: usize,
         comment_count: usize,
-        cx: &mut Context<BlueprintEditorPanel>,
+        cx: &mut Context<T>,
     ) -> AnyElement {
         v_flex()
             .size_full()
@@ -403,10 +518,10 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
-    fn render_section_header(
+    fn render_section_header<T>(
         title: &str,
         _icon: IconName,
-        cx: &mut Context<BlueprintEditorPanel>,
+        cx: &mut Context<T>,
     ) -> impl IntoElement {
         h_flex().items_center().gap_2().child(
             div()
@@ -417,13 +532,13 @@ impl PropertiesRenderer {
         )
     }
 
-    fn render_separator(cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    fn render_separator<T>(cx: &mut Context<T>) -> impl IntoElement {
         div().w_full().h_px().bg(cx.theme().border.opacity(0.3))
     }
 
-    fn get_node_type_color(
+    fn get_node_type_color<T>(
         node_type: &NodeType,
-        cx: &mut Context<BlueprintEditorPanel>,
+        cx: &mut Context<T>,
     ) -> gpui::Hsla {
         match node_type {
             NodeType::Event => cx.theme().danger,
@@ -452,7 +567,7 @@ impl PropertiesRenderer {
         }
     }
 
-    fn render_empty_state(cx: &mut Context<BlueprintEditorPanel>) -> AnyElement {
+    fn render_empty_state<T>(cx: &mut Context<T>) -> AnyElement {
         v_flex()
             .size_full()
             .items_center()
@@ -475,9 +590,168 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
-    fn render_node_properties(
+    /// Render a pin list section — type display (badge color, resolved name)
+    /// is sourced entirely from `PinDataType`/`RuntimeTypeInfo`, the same
+    /// canonical reflection-backed lookup the graph view uses for pin colors,
+    /// so the panel and graph always agree visually.
+    fn render_pin_list<T>(
+        pins: &[Pin],
+        cx: &mut Context<T>,
+    ) -> impl IntoElement {
+        v_flex()
+            .gap_1p5()
+            .children(pins.iter().map(|pin| Self::render_pin_row(pin, cx)))
+    }
+
+    fn render_pin_editors(
+        canvas: &mut GraphCanvasPanel,
+        canvas_entity: &Entity<GraphCanvasPanel>,
         node: &BlueprintNode,
-        cx: &mut Context<BlueprintEditorPanel>,
+        window: &mut Window,
+        cx: &mut Context<GraphCanvasPanel>,
+    ) -> impl IntoElement {
+        v_flex()
+            .gap_1p5()
+            .children(node.inputs.iter().map(|pin| {
+                Self::render_input_pin_row(canvas, canvas_entity, node, pin, window, cx)
+            }))
+    }
+
+    fn render_input_pin_row(
+        canvas: &mut GraphCanvasPanel,
+        canvas_entity: &Entity<GraphCanvasPanel>,
+        node: &BlueprintNode,
+        pin: &Pin,
+        window: &mut Window,
+        cx: &mut Context<GraphCanvasPanel>,
+    ) -> AnyElement {
+        let row = Self::render_pin_row(pin, cx);
+        if is_pin_connected(&node.id, &pin.id, true, &canvas.graph) {
+            return row.into_any_element();
+        }
+
+        let Some(type_info) = pin.data_type.runtime_type() else {
+            return row.into_any_element();
+        };
+
+        let state_key = format!("{}#{}", node.id, pin.id);
+        let widgets = canvas.pin_property_state.widget_map_for(&state_key, &pin.id);
+        let current_value = Self::read_pin_property_value(node, &pin.id);
+        let node_id = node.id.clone();
+        let pin_id = pin.id.clone();
+        let canvas_for_bool = canvas_entity.clone();
+        let on_bool_toggle = Arc::new(
+            move |checked: bool, _window: &mut Window, cx: &mut App| {
+                canvas_for_bool.update(cx, |canvas, cx| {
+                    canvas.update_node_input_property(&node_id, &pin_id, serde_json::Value::Bool(checked), cx);
+                });
+            },
+        );
+
+        let canvas_for_enum = canvas_entity.clone();
+        let node_id_for_enum = node.id.clone();
+        let pin_id_for_enum = pin.id.clone();
+        let on_enum_select = Arc::new(
+            move |ix: usize, _window: &mut Window, cx: &mut App| {
+                canvas_for_enum.update(cx, |canvas, cx| {
+                    canvas.update_node_input_property(
+                        &node_id_for_enum,
+                        &pin_id_for_enum,
+                        serde_json::Value::from(ix as u64),
+                        cx,
+                    );
+                });
+            },
+        );
+
+        let editor = ui_common::render_property_row_runtime(
+            "node-input",
+            &state_key,
+            &Self::format_property_name(&pin.name),
+            &pin.id,
+            type_info,
+            &current_value,
+            widgets,
+            on_bool_toggle,
+            on_enum_select,
+            cx,
+        );
+
+        v_flex()
+            .gap_1p5()
+            .child(row)
+            .child(editor)
+            .into_any_element()
+    }
+
+    fn read_pin_property_value(node: &BlueprintNode, pin_id: &str) -> serde_json::Value {
+        let Some(raw_value) = node.properties.get(pin_id) else {
+            return serde_json::Value::Null;
+        };
+
+        serde_json::from_str(raw_value)
+            .unwrap_or_else(|_| serde_json::Value::String(raw_value.clone()))
+    }
+
+    fn render_pin_row<T>(pin: &Pin, cx: &mut Context<T>) -> impl IntoElement {
+        let badge_color: gpui::Hsla = rgba_to_hsla(pin.data_type.display_color()).into();
+
+        let type_label = if pin.data_type.is_execution() {
+            "Execution".to_string()
+        } else if pin.data_type.is_wildcard() {
+            "Wildcard".to_string()
+        } else {
+            pin.data_type.type_name.clone()
+        };
+
+        h_flex()
+            .w_full()
+            .justify_between()
+            .items_center()
+            .px_3()
+            .py_2()
+            .rounded(px(4.0))
+            .hover(|style| style.bg(cx.theme().muted.opacity(0.1)))
+            .child(
+                h_flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .size(px(8.0))
+                            .rounded_full()
+                            .bg(badge_color),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_medium()
+                            .text_color(cx.theme().foreground)
+                            .child(if pin.name.is_empty() {
+                                "(unnamed)".to_string()
+                            } else {
+                                pin.name.clone()
+                            }),
+                    ),
+            )
+            .child(
+                div()
+                    .px_2()
+                    .py_1()
+                    .rounded(px(4.0))
+                    .bg(badge_color.opacity(0.15))
+                    .border_1()
+                    .border_color(badge_color.opacity(0.4))
+                    .text_xs()
+                    .font_family("JetBrainsMono-Regular")
+                    .text_color(badge_color)
+                    .child(type_label),
+            )
+    }
+
+    fn render_node_properties<T>(
+        node: &BlueprintNode,
+        cx: &mut Context<T>,
     ) -> impl IntoElement {
         v_flex().gap_3().children(
             node.properties
@@ -486,10 +760,10 @@ impl PropertiesRenderer {
         )
     }
 
-    fn render_property_field(
+    fn render_property_field<T>(
         key: &str,
         value: &str,
-        cx: &mut Context<BlueprintEditorPanel>,
+        cx: &mut Context<T>,
     ) -> impl IntoElement {
         v_flex()
             .gap_2()
@@ -521,9 +795,9 @@ impl PropertiesRenderer {
             )
     }
 
-    fn render_node_info(
+    fn render_node_info<T>(
         node: &BlueprintNode,
-        cx: &mut Context<BlueprintEditorPanel>,
+        cx: &mut Context<T>,
     ) -> impl IntoElement {
         v_flex()
             .gap_2p5()
@@ -538,23 +812,12 @@ impl PropertiesRenderer {
                 &format!("{:.0} × {:.0} px", node.size.width, node.size.height),
                 cx,
             ))
-            .child(Self::render_separator(cx))
-            .child(Self::render_info_row(
-                "Input Pins",
-                &node.inputs.len().to_string(),
-                cx,
-            ))
-            .child(Self::render_info_row(
-                "Output Pins",
-                &node.outputs.len().to_string(),
-                cx,
-            ))
     }
 
-    fn render_info_row(
+    fn render_info_row<T>(
         label: &str,
         value: &str,
-        cx: &mut Context<BlueprintEditorPanel>,
+        cx: &mut Context<T>,
     ) -> impl IntoElement {
         h_flex()
             .w_full()

@@ -22,6 +22,7 @@ use crate::features::variables::rendering::VariablesRenderer;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::palette_view::NodePaletteView;
 use crate::ui_components::properties::PropertiesRenderer;
+use ui_common::reflected_properties_panel::PropertyStateManager;
 
 /// Variables Panel
 pub struct VariablesPanel {
@@ -495,6 +496,7 @@ pub struct GraphCanvasPanel {
     pub last_comment_click_id: Option<String>,
     pub comment_text_input: Entity<InputState>,
     pub comment_color_bindings_dirty: bool,
+    pub pin_property_state: PropertyStateManager,
 
     // ── Variable drag ──────────────────────────────────────────────────────
     pub dragging_variable: Option<crate::features::variables::VariableDrag>,
@@ -617,6 +619,7 @@ impl GraphCanvasPanel {
             last_comment_click_id: None,
             comment_text_input,
             comment_color_bindings_dirty: true,
+            pin_property_state: PropertyStateManager::new(),
             dragging_variable: None,
             variable_drop_menu_position: None,
             dragging_macro: None,
@@ -647,6 +650,32 @@ impl GraphCanvasPanel {
         for id in node_ids {
             self.running_nodes.insert(id.as_ref().to_string());
         }
+        cx.notify();
+    }
+
+    pub fn update_node_input_property(
+        &mut self,
+        node_id: impl AsRef<str>,
+        pin_id: impl AsRef<str>,
+        value: serde_json::Value,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == node_id.as_ref()) else {
+            return;
+        };
+
+        if value.is_null() {
+            node.properties.remove(pin_id.as_ref());
+        } else {
+            let stored_value = match value {
+                serde_json::Value::String(text) => text,
+                other => other.to_string(),
+            };
+            node.properties
+                .insert(pin_id.as_ref().to_string(), stored_value);
+        }
+
+        self.is_dirty = true;
         cx.notify();
     }
 }

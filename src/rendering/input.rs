@@ -16,7 +16,7 @@ use crate::rendering::graph::{
     NodeGraphRenderer, BODY_PAD, HEADER_H, PIN_GAP, PIN_ROW_H, PIN_SIZE, SEP_H,
 };
 use gpui::{CursorStyle, *};
-use ui::graph::DataType;
+use crate::core::types::PinDataType as DataType;
 use ui::PixelsExt;
 
 // ─── coordinate conversion ────────────────────────────────────────────────────

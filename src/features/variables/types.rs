@@ -44,8 +44,7 @@ impl DropdownItem for TypeItem {
 
     fn display_title(&self) -> Option<AnyElement> {
         // Get the color for this type
-        let type_info = ui::graph::TypeInfo::parse(&self.type_str);
-        let pin_color = type_info.generate_color();
+        let pin_color = crate::core::types::PinDataType::from_type_str(self.type_str.clone()).display_color();
 
         Some(
             ui::h_flex()
@@ -58,10 +57,10 @@ impl DropdownItem for TypeItem {
                         .h(px(10.))
                         .rounded_full()
                         .bg(gpui::Rgba {
-                            r: pin_color.r,
-                            g: pin_color.g,
-                            b: pin_color.b,
-                            a: pin_color.a,
+                            r: pin_color[0],
+                            g: pin_color[1],
+                            b: pin_color[2],
+                            a: pin_color[3],
                         })
                         .border_1()
                         .border_color(gpui::Rgba {

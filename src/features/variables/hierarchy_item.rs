@@ -52,8 +52,7 @@ impl HierarchyItem for VariableHierarchyItem {
         V: Render,
     {
         // Get the type color
-        let type_info = ui::graph::TypeInfo::parse(&self.variable.var_type);
-        let pin_color = type_info.generate_color();
+        let pin_color = crate::core::types::PinDataType::from_type_str(self.variable.var_type.clone()).display_color();
 
         Some(
             Hsla {
@@ -63,10 +62,10 @@ impl HierarchyItem for VariableHierarchyItem {
                 a: 1.0,
             }
             .blend(Hsla {
-                h: pin_color.r as f32 * 360.0,
-                s: pin_color.g as f32,
-                l: pin_color.b as f32,
-                a: pin_color.a as f32,
+                h: pin_color[0] as f32 * 360.0,
+                s: pin_color[1] as f32,
+                l: pin_color[2] as f32,
+                a: pin_color[3] as f32,
             }),
         )
     }
@@ -96,8 +95,7 @@ impl HierarchyItem for VariableHierarchyItem {
         V: Render,
     {
         // Type badge
-        let type_info = ui::graph::TypeInfo::parse(&self.variable.var_type);
-        let pin_color = type_info.generate_color();
+        let pin_color = crate::core::types::PinDataType::from_type_str(self.variable.var_type.clone()).display_color();
 
         Some(
             // Type badge only - delete handled via context menu
@@ -106,18 +104,18 @@ impl HierarchyItem for VariableHierarchyItem {
                 .py_0p5()
                 .rounded(px(3.0))
                 .bg(gpui::Rgba {
-                    r: pin_color.r,
-                    g: pin_color.g,
-                    b: pin_color.b,
+                    r: pin_color[0],
+                    g: pin_color[1],
+                    b: pin_color[2],
                     a: 0.15,
                 })
                 .child(
                     div()
                         .text_xs()
                         .text_color(gpui::Rgba {
-                            r: pin_color.r,
-                            g: pin_color.g,
-                            b: pin_color.b,
+                            r: pin_color[0],
+                            g: pin_color[1],
+                            b: pin_color[2],
                             a: 1.0,
                         })
                         .child(self.variable.var_type.clone()),

@@ -42,7 +42,7 @@ impl BlueprintEditorPanel {
                     pin: graph_types::Pin {
                         name: pin.name.clone(),
                         pin_type: graph_types::PinType::Input,
-                        data_type: pin.data_type.clone(),
+                        data_type: graph_types::DataType::from_type_str(&pin.data_type.type_name),
                         connected_to: Vec::new(),
                     },
                 });
@@ -53,7 +53,7 @@ impl BlueprintEditorPanel {
                     pin: graph_types::Pin {
                         name: pin.name.clone(),
                         pin_type: graph_types::PinType::Output,
-                        data_type: pin.data_type.clone(),
+                        data_type: graph_types::DataType::from_type_str(&pin.data_type.type_name),
                         connected_to: Vec::new(),
                     },
                 });
@@ -81,9 +81,12 @@ impl BlueprintEditorPanel {
                 .iter()
                 .find(|n| n.id == connection.source_node)
                 .and_then(|node| node.outputs.iter().find(|p| p.id == connection.source_pin))
-                .map(|pin| match &pin.data_type {
-                    graph_types::DataType::Execution => graph_types::ConnectionType::Execution,
-                    _ => graph_types::ConnectionType::Data,
+                .map(|pin| {
+                    if pin.data_type.is_execution() {
+                        graph_types::ConnectionType::Execution
+                    } else {
+                        graph_types::ConnectionType::Data
+                    }
                 })
                 .unwrap_or(graph_types::ConnectionType::Data);
 
@@ -194,6 +197,7 @@ impl BlueprintEditorPanel {
                     .iter()
                     .map(|pin_inst| {
                         let pin = &pin_inst.pin;
+                        let canonical = graph_types::DataType::from_type_str(&pin.data_type.to_string());
                         Pin {
                             id: pin_inst.id.clone(),
                             name: pin.name.clone(),
@@ -201,7 +205,7 @@ impl BlueprintEditorPanel {
                                 graph_types::PinType::Input => PinType::Input,
                                 graph_types::PinType::Output => PinType::Output,
                             },
-                            data_type: pin.data_type.clone(),
+                            data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
                         }
                     })
                     .collect(),
@@ -210,6 +214,7 @@ impl BlueprintEditorPanel {
                     .iter()
                     .map(|pin_inst| {
                         let pin = &pin_inst.pin;
+                        let canonical = graph_types::DataType::from_type_str(&pin.data_type.to_string());
                         Pin {
                             id: pin_inst.id.clone(),
                             name: pin.name.clone(),
@@ -217,7 +222,7 @@ impl BlueprintEditorPanel {
                                 graph_types::PinType::Input => PinType::Input,
                                 graph_types::PinType::Output => PinType::Output,
                             },
-                            data_type: pin.data_type.clone(),
+                            data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
                         }
                     })
                     .collect(),

@@ -8,10 +8,122 @@ use gpui::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ui::color_picker::ColorPickerState;
-use ui::graph::DataType;
 
 use crate::core::graph_entity::GraphEntity;
 use crate::rendering::layout;
+
+// ============================================================================
+// Pin Data Type — canonical reflection-backed type representation
+// ============================================================================
+
+/// Canonical representation of a pin's data type.
+///
+/// Stores only the registry-stable `type_name` (e.g. `"f32"`, `"Vec<Entity>"`,
+/// `"execution"`, `"?"`). All display (color/icon) and compatibility logic
+/// resolves through `pulsar_reflection::RUNTIME_TYPE_REGISTRY` from this name —
+/// `RuntimeTypeInfo`/`TypeId` is the single canonical type system; this struct
+/// is just the serialization-stable handle into it.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct PinDataType {
+    pub type_name: String,
+}
+
+impl PinDataType {
+    /// Construct from a type name string (e.g. from `NodeParameter::ty` or a
+    /// saved blueprint file). Stored verbatim; resolution happens on demand.
+    pub fn from_type_str(type_name: impl Into<String>) -> Self {
+        Self {
+            type_name: type_name.into(),
+        }
+    }
+
+    /// The execution-flow pseudo-type (white triangle pins, not data-bearing).
+    pub fn execution() -> Self {
+        Self::from_type_str("execution")
+    }
+
+    /// A typeless wildcard pin (e.g. a freshly-placed reroute node) whose type
+    /// will be inferred from the first connection made to it.
+    pub fn wildcard() -> Self {
+        Self::from_type_str("?")
+    }
+
+    pub fn is_execution(&self) -> bool {
+        self.type_name == "execution"
+    }
+
+    /// Whether this pin matches any type — either a literal wildcard marker
+    /// (`?`/`_`/single uppercase letter, used by reroutes/generics before
+    /// inference) or a type that resolves to `RuntimeTypeInfo::wildcard()`.
+    pub fn is_wildcard(&self) -> bool {
+        if self.is_execution() {
+            return false;
+        }
+        if matches!(self.type_name.as_str(), "?" | "_") {
+            return true;
+        }
+        if self.type_name.len() == 1 && self.type_name.chars().next().unwrap().is_uppercase() {
+            return true;
+        }
+        self.runtime_type().map_or(false, |info| info.is_wildcard())
+    }
+
+    /// Resolve to the canonical reflection type info, if registered.
+    pub fn runtime_type(&self) -> Option<&'static pulsar_reflection::RuntimeTypeInfo> {
+        if self.is_execution() {
+            return None;
+        }
+        pulsar_reflection::RUNTIME_TYPE_REGISTRY.get_by_name(&self.type_name)
+    }
+
+    /// Resolve to the reflection `TypeId`, if registered — the key used to
+    /// look up registered property editors and check structural compatibility.
+    pub fn type_id(&self) -> Option<std::any::TypeId> {
+        self.runtime_type().map(|info| info.type_id)
+    }
+
+    /// Resolve this type's display color as RGBA in `[0.0, 1.0]`.
+    ///
+    /// The single source of truth for pin/badge color: execution pins are
+    /// red, everything else defers to `RuntimeTypeInfo::resolve_color()`
+    /// (declared `#[reflect(color = "...")]` value, or a deterministic
+    /// hash-based fallback) — never computed by a UI framework crate.
+    pub fn display_color(&self) -> [f32; 4] {
+        if self.is_execution() {
+            return [1.0, 0.0, 0.0, 1.0];
+        }
+        match self.runtime_type() {
+            Some(info) => info.resolve_color(),
+            None => [1.0, 1.0, 1.0, 1.0],
+        }
+    }
+
+    /// Whether a connection between pins of these two types is allowed.
+    ///
+    /// Rules (preserved from the legacy string-based `DataType` system):
+    /// - Execution pins only connect to execution pins.
+    /// - Wildcards (typeless reroutes/generics) connect to anything.
+    /// - Otherwise types must resolve to the exact same registered `TypeId`
+    ///   (no implicit numeric/string conversions).
+    pub fn is_compatible_with(&self, other: &PinDataType) -> bool {
+        if self.is_execution() || other.is_execution() {
+            return self.is_execution() && other.is_execution();
+        }
+        if self.is_wildcard() || other.is_wildcard() {
+            return true;
+        }
+        match (self.type_id(), other.type_id()) {
+            (Some(a), Some(b)) => a == b,
+            _ => self.type_name == other.type_name,
+        }
+    }
+}
+
+impl std::fmt::Display for PinDataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.type_name)
+    }
+}
 
 // ============================================================================
 // Compilation Status
@@ -119,7 +231,7 @@ pub struct Pin {
     pub id: String,
     pub name: String,
     pub pin_type: PinType,
-    pub data_type: DataType,
+    pub data_type: PinDataType,
 }
 
 /// Direction of data flow for a pin.
@@ -336,13 +448,13 @@ impl BlueprintNode {
                 id: "input".to_string(),
                 name: "".to_string(),
                 pin_type: PinType::Input,
-                data_type: DataType::from_type_str("?"), // Start as typeless
+                data_type: PinDataType::wildcard(), // Start as typeless
             }],
             outputs: vec![Pin {
                 id: "output".to_string(),
                 name: "".to_string(),
                 pin_type: PinType::Output,
-                data_type: DataType::from_type_str("?"), // Start as typeless
+                data_type: PinDataType::wildcard(), // Start as typeless
             }],
             properties: HashMap::new(),
             is_selected: false,

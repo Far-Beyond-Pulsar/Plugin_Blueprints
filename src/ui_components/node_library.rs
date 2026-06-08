@@ -118,7 +118,7 @@ pub fn filter_palette_items(all_items: &[PaletteItem], query: &str) -> Vec<Palet
 /// for the given source pin type.
 pub fn build_compatible_palette_items(
     defs: &NodeDefinitions,
-    source_type: &ui::graph::DataType,
+    source_type: &crate::core::types::PinDataType,
 ) -> Vec<PaletteItem> {
     let mut items = Vec::new();
     for category in &defs.categories {
@@ -163,7 +163,7 @@ pub fn build_compatible_palette_items(
 /// local macros) that are already present in `all_items`.
 pub fn filter_compatible_palette_items(
     all_items: &[PaletteItem],
-    source_type: &ui::graph::DataType,
+    source_type: &crate::core::types::PinDataType,
 ) -> Vec<PaletteItem> {
     let mut result = Vec::new();
     let mut current_header: Option<(String, String)> = None;

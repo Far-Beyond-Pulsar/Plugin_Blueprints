@@ -16,7 +16,7 @@ use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::*;
-use ui::graph::DataType;
+use crate::core::types::PinDataType as DataType;
 use ui::ActiveTheme;
 use ui::PixelsExt;
 
@@ -214,8 +214,7 @@ fn category_color(node: &BlueprintNode) -> [f32; 4] {
 }
 
 fn pin_color(dt: &DataType) -> [f32; 4] {
-    let ps = dt.generate_pin_style();
-    [ps.color.r, ps.color.g, ps.color.b, ps.color.a]
+    dt.display_color()
 }
 
 fn wire_phase(conn: &Connection) -> f32 {
@@ -589,7 +588,7 @@ impl NodeGraphRenderer {
                     for (i, pin) in pins.iter().enumerate() {
                         let (cgx, cgy) = pin_gpos_row(node, is_input, i);
                         let pc = pin_color(&pin.data_type);
-                        let exe = pin.data_type == DataType::Execution;
+                        let exe = pin.data_type == DataType::execution();
                         let compat = dragging_conn.as_ref().map_or(false, |d| {
                             is_input
                                 && node.id != d.source_node

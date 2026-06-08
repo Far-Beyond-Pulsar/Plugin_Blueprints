@@ -6,7 +6,7 @@ use crate::core::types::{BlueprintNode, Connection, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
-use ui::graph::DataType as GraphDataType;
+use crate::core::types::PinDataType as GraphDataType;
 
 impl GraphCanvasPanel {
     /// Add a node to the graph
@@ -53,16 +53,16 @@ impl GraphCanvasPanel {
                 .iter()
                 .any(|n| n.id == new_node.id && n.node_type == NodeType::Reroute);
 
-            if source.source_pin_type == GraphDataType::Execution || source_is_reroute {
+            if source.source_pin_type == GraphDataType::execution() || source_is_reroute {
                 self.graph.connections.retain(|conn| {
                     !(conn.source_node == source.source_node
                         && conn.source_pin == source.source_pin)
                 });
             }
 
-            if source.source_pin_type == GraphDataType::Execution
+            if source.source_pin_type == GraphDataType::execution()
                 || target_is_reroute
-                || pin_data_type != GraphDataType::Execution
+                || pin_data_type != GraphDataType::execution()
             {
                 self.graph.connections.retain(|conn| {
                     !(conn.target_node == new_node.id && conn.target_pin == target_pin_id)
@@ -74,7 +74,7 @@ impl GraphCanvasPanel {
                 source.source_node, source.source_pin, new_node.id, target_pin_id
             );
 
-            let connection_type = if pin_data_type == GraphDataType::Execution {
+            let connection_type = if pin_data_type == GraphDataType::execution() {
                 ui::graph::ConnectionType::Execution
             } else {
                 ui::graph::ConnectionType::Data

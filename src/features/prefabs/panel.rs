@@ -5,8 +5,10 @@ use gpui::*;
 use pulsar_reflection::{TypeStructure, REGISTRY};
 use std::sync::Arc;
 use ui::{
-    button::Button, h_flex, scroll::ScrollbarAxis, v_flex, ActiveTheme, CollapsibleSection,
-    HierarchicalTreeView, HierarchyConfig, HierarchyLayout, IconName, Sizable, StyledExt,
+    button::Button, color_picker::{ColorPickerEvent, ColorPickerState}, h_flex,
+    input::{InputEvent, InputState}, scroll::ScrollbarAxis, v_flex, ActiveTheme,
+    CollapsibleSection, HierarchicalTreeView, HierarchyConfig, HierarchyLayout, IconName, Sizable,
+    StyledExt,
 };
 use ui_common::properties_inspector;
 pub struct PrefabHierarchyRenderer;
@@ -404,6 +406,114 @@ impl PrefabPropertiesRenderer {
         )
     }
 
+    /// Synthetic key passed to `PropertyStateManager`/`render_property_row_runtime`
+    /// so widget state and element ids stay distinct across multiple components
+    /// of the same reflected class on one prefab.
+    fn state_key(component_index: usize, class_name: &str) -> String {
+        format!("{}#{}", component_index, class_name)
+    }
+
+    /// Ensure a numeric (`f32`/`i32`) input widget exists for `prop_name`,
+    /// stored in `panel.prefab_property_state.numeric_inputs`. Built directly
+    /// (rather than via `PropertyStateManager::ensure_f32_input`) because
+    /// committing an edit needs `&mut BlueprintEditorPanel`
+    /// (`update_prefab_component_property`) — see the note at the call site.
+    fn ensure_numeric_input(
+        panel: &mut BlueprintEditorPanel,
+        state_key: &str,
+        prop_name: &str,
+        component_index: usize,
+        initial: f32,
+        is_integer: bool,
+        window: &mut Window,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) {
+        let key = (state_key.to_string(), prop_name.to_string());
+        if panel.prefab_property_state.numeric_inputs.contains_key(&key) {
+            return;
+        }
+
+        let text = if is_integer {
+            format!("{}", initial as i64)
+        } else {
+            format!("{:.3}", initial)
+        };
+        let input = cx.new(|cx| InputState::new(window, cx));
+        input.update(cx, |state, cx| {
+            state.set_value(&text, window, cx);
+        });
+
+        let pn = prop_name.to_string();
+        cx.subscribe_in(
+            &input,
+            window,
+            move |this: &mut BlueprintEditorPanel, state, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change | InputEvent::Blur) {
+                    let text = state.read(cx).text().to_string();
+                    let parsed = if is_integer {
+                        text.trim().parse::<i32>().ok().map(serde_json::Value::from)
+                    } else {
+                        text.trim().parse::<f32>().ok().map(serde_json::Value::from)
+                    };
+                    if let Some(value) = parsed {
+                        this.update_prefab_component_property(component_index, &pn, value);
+                        cx.notify();
+                    }
+                }
+            },
+        )
+        .detach();
+
+        panel.prefab_property_state.numeric_inputs.insert(key, input);
+    }
+
+    /// Ensure a colour-picker widget exists for `prop_name`, stored in
+    /// `panel.prefab_property_state.color_pickers` — see `ensure_numeric_input`
+    /// for why this is built directly rather than via `ensure_color_picker`.
+    fn ensure_color_picker(
+        panel: &mut BlueprintEditorPanel,
+        state_key: &str,
+        prop_name: &str,
+        component_index: usize,
+        rgba: [f32; 4],
+        window: &mut Window,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) {
+        let key = (state_key.to_string(), prop_name.to_string());
+        if panel.prefab_property_state.color_pickers.contains_key(&key) {
+            return;
+        }
+
+        let picker = cx.new(|cx| {
+            let mut state = ColorPickerState::new(window, cx);
+            state.set_value(
+                ui_common::reflected_properties_panel::rgba_to_hsla(rgba),
+                window,
+                cx,
+            );
+            state
+        });
+
+        let pn = prop_name.to_string();
+        cx.subscribe_in(
+            &picker,
+            window,
+            move |this: &mut BlueprintEditorPanel, _state, event: &ColorPickerEvent, _window, cx| {
+                if let ColorPickerEvent::Change(Some(hsla)) = event {
+                    this.update_prefab_component_property(
+                        component_index,
+                        &pn,
+                        serde_json::json!(ui_common::reflected_properties_panel::hsla_to_rgba(*hsla)),
+                    );
+                    cx.notify();
+                }
+            },
+        )
+        .detach();
+
+        panel.prefab_property_state.color_pickers.insert(key, picker);
+    }
+
     fn render_component_properties(
         panel: &mut BlueprintEditorPanel,
         index: usize,
@@ -419,12 +529,41 @@ impl PrefabPropertiesRenderer {
         };
 
         let class_name = component.class_name.clone();
-        let mut props_data = Vec::new();
+        let state_key = Self::state_key(index, &class_name);
         let mut missing_in_registry = false;
+        let mut row_data: Vec<(AnyElement, Option<String>, Option<String>, bool, Option<usize>)> =
+            Vec::new();
 
         if let Some(instance) = REGISTRY.create_instance(&class_name) {
+            let panel_entity = cx.entity().clone();
+            let on_bool_toggle = Arc::new(
+                move |prop_name: &str, checked: bool, _window: &mut Window, cx: &mut App| {
+                    panel_entity.update(cx, |panel, cx| {
+                        panel.update_prefab_component_property(
+                            index,
+                            prop_name,
+                            serde_json::Value::Bool(checked),
+                        );
+                        cx.notify();
+                    });
+                },
+            );
+
+            let panel_entity = cx.entity().clone();
+            let on_enum_select = Arc::new(
+                move |prop_name: &str, ix: usize, _window: &mut Window, cx: &mut App| {
+                    panel_entity.update(cx, |panel, cx| {
+                        panel.update_prefab_component_property(
+                            index,
+                            prop_name,
+                            serde_json::Value::from(ix as u64),
+                        );
+                        cx.notify();
+                    });
+                },
+            );
+
             for prop in instance.get_properties() {
-                // Get current JSON value from component data, or serialize default
                 let current_value = component
                     .data
                     .as_object()
@@ -437,52 +576,72 @@ impl PrefabPropertiesRenderer {
                             .unwrap_or(serde_json::json!(null))
                     });
 
-                // Determine if we need numeric input based on RuntimeTypeInfo
-                let numeric_input = match &prop.type_info.structure {
-                    TypeStructure::Primitive
-                        if matches!(prop.type_info.base_name(), "f32" | "i32") =>
-                    {
-                        Some(panel.ensure_prefab_property_input(
-                            index,
-                            &class_name,
-                            prop.name,
-                            prop.type_info,
-                            &current_value,
-                            window,
-                            cx,
-                        ))
+                // Numeric inputs — stored in the shared `PropertyStateManager`
+                // (consolidating the old per-feature HashMaps), but constructed
+                // here directly via `cx.subscribe_in` because committing an
+                // edit needs `&mut BlueprintEditorPanel`
+                // (`update_prefab_component_property`) — unlike the level
+                // editor's `scene_db`, the prefab asset lives on the panel
+                // entity itself, so the `Fn(T) + Send + Sync` callback shape
+                // `ensure_f32_input`/`ensure_color_picker` expect can't reach it.
+                match &prop.type_info.structure {
+                    TypeStructure::Primitive if prop.type_info.base_name() == "f32" => {
+                        let v = current_value.as_f64().unwrap_or(0.0) as f32;
+                        Self::ensure_numeric_input(panel, &state_key, prop.name, index, v, false, window, cx);
                     }
-                    _ => None,
-                };
+                    TypeStructure::Primitive if prop.type_info.base_name() == "i32" => {
+                        let v = current_value.as_i64().unwrap_or(0) as f32;
+                        Self::ensure_numeric_input(panel, &state_key, prop.name, index, v, true, window, cx);
+                    }
+                    _ => {}
+                }
 
-                // Determine if we need color picker based on RuntimeTypeInfo
-                let is_color_type = matches!(
+                // Colour picker (`[f32; 4]` primitive or colour-named field)
+                let is_color = matches!(
                     &prop.type_info.structure,
                     TypeStructure::Primitive if prop.type_info.base_name() == "[f32; 4]"
+                ) || ui_common::reflected_properties_panel::is_color_field_name(prop.name);
+
+                if is_color {
+                    let rgba = ui_common::reflected_properties_panel::json_to_rgba_fallback(&current_value);
+                    Self::ensure_color_picker(panel, &state_key, prop.name, index, rgba, window, cx);
+                }
+
+                let widgets = panel.prefab_property_state.widget_map_for(&state_key, prop.name);
+
+                let prop_bool = prop.name.to_string();
+                let on_bool = on_bool_toggle.clone();
+                let bool_callback = Arc::new(
+                    move |checked: bool, window: &mut Window, cx: &mut App| {
+                        (on_bool)(&prop_bool, checked, window, cx);
+                    },
                 );
-                let should_create_picker = is_color_type || Self::is_color_field_name(prop.name);
 
-                let color_picker = if should_create_picker {
-                    Some(panel.ensure_prefab_color_picker(
-                        index,
-                        &class_name,
-                        prop.name,
-                        &current_value,
-                        window,
-                        cx,
-                    ))
-                } else {
-                    None
-                };
+                let prop_enum = prop.name.to_string();
+                let on_enum = on_enum_select.clone();
+                let enum_callback = Arc::new(move |ix: usize, window: &mut Window, cx: &mut App| {
+                    (on_enum)(&prop_enum, ix, window, cx);
+                });
 
-                props_data.push((
-                    prop.display_name.to_string(),
-                    prop.name.to_string(),
+                let row = ui_common::render_property_row_runtime(
+                    "prefab",
+                    &state_key,
+                    &prop.display_name,
+                    prop.name,
                     prop.type_info,
-                    current_value,
-                    numeric_input,
-                    color_picker,
-                    None::<Entity<ui_common::MeshAssetPicker>>, // No mesh picker in prefab editor yet
+                    &current_value,
+                    widgets,
+                    bool_callback,
+                    enum_callback,
+                    cx,
+                );
+
+                row_data.push((
+                    row,
+                    prop.category.map(str::to_string),
+                    prop.category_color.map(str::to_string),
+                    prop.category_default_collapsed,
+                    prop.category_order,
                 ));
             }
         } else {
@@ -507,103 +666,163 @@ impl PrefabPropertiesRenderer {
                             )
                             .into_any_element()
                     } else {
-                        // Use shared component section renderer - capture panel entity first
-                        let panel_entity = cx.entity().clone();
-
-                        let on_bool_toggle = Arc::new(
-                            move |prop_name: &str,
-                                  checked: bool,
-                                  _window: &mut Window,
-                                  cx: &mut App| {
-                                panel_entity.update(cx, |panel, cx| {
-                                    panel.update_prefab_component_property(
-                                        index,
-                                        prop_name,
-                                        serde_json::Value::Bool(checked),
-                                    );
-                                    cx.notify();
-                                });
-                            },
-                        );
-
-                        let panel_entity = cx.entity().clone();
-                        let on_enum_select = Arc::new(
-                            move |prop_name: &str,
-                                  ix: usize,
-                                  _window: &mut Window,
-                                  cx: &mut App| {
-                                panel_entity.update(cx, |panel, cx| {
-                                    panel.update_prefab_component_property(
-                                        index,
-                                        prop_name,
-                                        serde_json::Value::from(ix as u64),
-                                    );
-                                    cx.notify();
-                                });
-                            },
-                        );
+                        let (mut uncategorized, categorized) = group_rows_by_category(row_data);
+                        let category_elements =
+                            Self::render_categorized_rows(panel, index, categorized, cx);
+                        uncategorized.extend(category_elements);
 
                         v_flex()
                             .gap_2()
-                            .children(props_data.into_iter().map(
-                                |(display_name, prop_name, type_info, json_value, input, color_picker, mesh_picker)| {
-                                    let prop_bool = prop_name.clone();
-                                    let on_bool_toggle_local = on_bool_toggle.clone();
-                                    let bool_callback = Arc::new(
-                                        move |checked: bool, window: &mut Window, cx: &mut App| {
-                                            (on_bool_toggle_local)(&prop_bool, checked, window, cx);
-                                        },
-                                    );
-
-                                    let prop_enum = prop_name.clone();
-                                    let on_enum_select_local = on_enum_select.clone();
-                                    let enum_callback = Arc::new(
-                                        move |ix: usize, window: &mut Window, cx: &mut App| {
-                                            (on_enum_select_local)(&prop_enum, ix, window, cx);
-                                        },
-                                    );
-
-                                    let mut widgets = std::collections::HashMap::<
-                                        std::any::TypeId,
-                                        std::sync::Arc<dyn std::any::Any + Send + Sync>,
-                                    >::new();
-                                    if let Some(ref inp) = input {
-                                        widgets.insert(
-                                            std::any::TypeId::of::<Entity<ui::input::InputState>>(),
-                                            std::sync::Arc::new(inp.clone()),
-                                        );
-                                    }
-                                    if let Some(ref cp) = color_picker {
-                                        widgets.insert(
-                                            std::any::TypeId::of::<Entity<ui::color_picker::ColorPickerState>>(),
-                                            std::sync::Arc::new(cp.clone()),
-                                        );
-                                    }
-                                    let _ = mesh_picker;
-
-                                    ui_common::render_property_row_runtime(
-                                        "prefab",
-                                        &class_name,
-                                        &display_name,
-                                        &prop_name,
-                                        type_info,
-                                        &json_value,
-                                        widgets,
-                                        bool_callback,
-                                        enum_callback,
-                                        cx,
-                                    )
-                                },
-                            ))
+                            .children(uncategorized)
                             .into_any_element()
                     }),
             )
             .into_any_element()
     }
+
+    /// Render grouped, collapsible category sections for one component's rows —
+    /// mirrors the level editor's `category_section` widget. Collapse state is
+    /// tracked per `(component_index, category_name)` on the panel so each
+    /// component instance keeps its own section open/closed state.
+    fn render_categorized_rows(
+        panel: &BlueprintEditorPanel,
+        component_index: usize,
+        mut categorized_rows: Vec<(String, Vec<AnyElement>, Option<String>, bool, usize)>,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> Vec<AnyElement> {
+        categorized_rows.sort_by_key(|(_, _, _, _, order)| *order);
+
+        categorized_rows
+            .into_iter()
+            .map(|(category_name, category_rows, category_color_hex, default_collapsed, _)| {
+                let category_key = (component_index, category_name.clone());
+
+                let is_collapsed = if panel.prefab_collapsed_categories.contains(&category_key) {
+                    true
+                } else if panel.prefab_expanded_categories.contains(&category_key) {
+                    false
+                } else {
+                    default_collapsed
+                };
+
+                let toggle_key = category_key.clone();
+                let was_collapsed = is_collapsed;
+                let accent = category_color_hex
+                    .as_deref()
+                    .and_then(crate::features::viewport::coordinates::parse_hex_color);
+
+                v_flex()
+                    .w_full()
+                    .gap_1()
+                    .p_2()
+                    .rounded(px(6.0))
+                    .border_1()
+                    .when_some(accent, |el, color| {
+                        el.border_color(color.opacity(0.7)).bg(color.opacity(0.08))
+                    })
+                    .when(accent.is_none(), |el| {
+                        el.border_color(cx.theme().border)
+                            .bg(cx.theme().border.opacity(0.08))
+                    })
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .items_center()
+                            .justify_between()
+                            .cursor_pointer()
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _event, _window, cx| {
+                                    if was_collapsed {
+                                        this.prefab_collapsed_categories.remove(&toggle_key);
+                                        this.prefab_expanded_categories
+                                            .insert(toggle_key.clone());
+                                    } else {
+                                        this.prefab_expanded_categories.remove(&toggle_key);
+                                        this.prefab_collapsed_categories
+                                            .insert(toggle_key.clone());
+                                    }
+                                    cx.notify();
+                                }),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .when_some(accent, |el, color| el.text_color(color))
+                                    .when(accent.is_none(), |el| {
+                                        el.text_color(cx.theme().muted_foreground)
+                                    })
+                                    .child(category_name),
+                            )
+                            .child(
+                                ui::Icon::new(if is_collapsed {
+                                    IconName::ChevronRight
+                                } else {
+                                    IconName::ChevronDown
+                                })
+                                .xsmall()
+                                .when_some(accent, |el, color| el.text_color(color))
+                                .when(accent.is_none(), |el| {
+                                    el.text_color(cx.theme().muted_foreground)
+                                }),
+                            ),
+                    )
+                    .when(!is_collapsed, |el| el.children(category_rows))
+                    .into_any_element()
+            })
+            .collect()
+    }
 }
 
-impl PrefabPropertiesRenderer {
-    fn is_color_field_name(prop_name: &str) -> bool {
-        prop_name == "color" || prop_name == "base_color"
+/// Collects a flat list of `(row, category?, color?, default_collapsed, order)`
+/// rows into uncategorised + categorised buckets — direct port of the level
+/// editor's `category_section::group_rows_by_category` so both panels group
+/// reflected properties identically.
+fn group_rows_by_category(
+    rows: Vec<(
+        AnyElement,
+        Option<String>,
+        Option<String>,
+        bool,
+        Option<usize>,
+    )>,
+) -> (
+    Vec<AnyElement>,
+    Vec<(String, Vec<AnyElement>, Option<String>, bool, usize)>,
+) {
+    let mut uncategorized: Vec<AnyElement> = Vec::new();
+    let mut categorized: Vec<(String, Vec<AnyElement>, Option<String>, bool, usize)> = Vec::new();
+    let mut category_index: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+
+    for (row, category, category_color, default_collapsed, category_order) in rows {
+        if let Some(cat) = category.filter(|c| !c.trim().is_empty()) {
+            if let Some(&ix) = category_index.get(&cat) {
+                let entry = &mut categorized[ix];
+                entry.1.push(row);
+                if entry.2.is_none() {
+                    entry.2 = category_color;
+                }
+                entry.3 = entry.3 || default_collapsed;
+                if category_order.unwrap_or(usize::MAX) < entry.4 {
+                    entry.4 = category_order.unwrap_or(usize::MAX);
+                }
+            } else {
+                let ix = categorized.len();
+                category_index.insert(cat.clone(), ix);
+                categorized.push((
+                    cat,
+                    vec![row],
+                    category_color,
+                    default_collapsed,
+                    category_order.unwrap_or(usize::MAX),
+                ));
+            }
+        } else {
+            uncategorized.push(row);
+        }
     }
+
+    (uncategorized, categorized)
 }

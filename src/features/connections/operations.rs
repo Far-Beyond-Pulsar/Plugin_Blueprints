@@ -3,7 +3,7 @@
 use crate::core::types::{BlueprintNode, Connection, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
-use ui::graph::DataType as GraphDataType;
+use crate::core::types::PinDataType as GraphDataType;
 
 /// Connection drag state
 #[derive(Clone, Debug)]
@@ -105,7 +105,7 @@ impl GraphCanvasPanel {
                             .any(|n| n.id == node_id && n.node_type == NodeType::Reroute);
 
                         // Remove old connections based on pin types
-                        if drag.source_pin_type == GraphDataType::Execution || source_is_reroute {
+                        if drag.source_pin_type == GraphDataType::execution() || source_is_reroute {
                             // Execution pins and reroute outputs: single connection from source
                             tracing::info!(
                                 "Removing old connection from source {}:{}",
@@ -118,9 +118,9 @@ impl GraphCanvasPanel {
                             });
                         }
 
-                        if drag.source_pin_type == GraphDataType::Execution
+                        if drag.source_pin_type == GraphDataType::execution()
                             || target_is_reroute
-                            || pin_data_type != GraphDataType::Execution
+                            || pin_data_type != GraphDataType::execution()
                         {
                             // Execution targets, reroute inputs, or data inputs: single connection to target
                             tracing::info!(
@@ -146,7 +146,7 @@ impl GraphCanvasPanel {
                         );
 
                         // Create new connection
-                        let connection_type = if pin_data_type == GraphDataType::Execution {
+                        let connection_type = if pin_data_type == GraphDataType::execution() {
                             ui::graph::ConnectionType::Execution
                         } else {
                             ui::graph::ConnectionType::Data

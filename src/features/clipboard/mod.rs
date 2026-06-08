@@ -186,7 +186,7 @@ impl ClipboardData {
         window: &mut Window,
         cx: &mut Context<E>,
     ) -> (Vec<BlueprintNode>, Vec<BlueprintComment>, Vec<Connection>) {
-        use ui::graph::DataType;
+        use crate::core::types::PinDataType as DataType;
 
         // Generate ID mapping (old ID -> new ID)
         let mut id_map: HashMap<String, String> = HashMap::new();
