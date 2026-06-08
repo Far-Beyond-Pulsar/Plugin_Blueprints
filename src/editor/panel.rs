@@ -293,7 +293,20 @@ impl BlueprintEditorPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        tracing::info!(
+            ">>> new_with_path: file_path={:?}, graph_file={:?}",
+            file_path,
+            file_path.join("graph_save.json"),
+        );
+
         let mut panel = Self::new_internal(Some(file_path.clone()), window, cx);
+        tracing::info!(
+            ">>> new_with_path: after new_internal: open_tabs={}, self.graph.nodes={}, graph_panels={}, current_class_path={:?}",
+            panel.open_tabs.len(),
+            panel.graph.nodes.len(),
+            panel.graph_panels.len(),
+            panel.current_class_path,
+        );
 
         // Blueprint classes are folders containing graph_save.json
         let graph_file = file_path.join("graph_save.json");
@@ -307,6 +320,14 @@ impl BlueprintEditorPanel {
         if let Err(e) = panel.load_prefab_sidecar() {
             log::warn!("Failed to load prefab sidecar: {}", e);
         }
+
+        tracing::info!(
+            ">>> new_with_path: loaded. open_tabs={}, self.graph.nodes={}, graph_panels={}, current_class_path={:?}",
+            panel.open_tabs.len(),
+            panel.graph.nodes.len(),
+            panel.graph_panels.len(),
+            panel.current_class_path,
+        );
 
         log::info!("Loaded blueprint from {:?}", file_path);
         Ok(panel)
@@ -951,8 +972,17 @@ impl BlueprintEditorPanel {
         }
 
         let Some(workspace_entity) = self.workspace.clone() else {
+            tracing::info!(
+                ">>> refresh_graph_workspace_tabs: workspace is None (initial load before render) — deferring panel creation to render()",
+            );
             return;
         };
+
+        tracing::info!(
+            ">>> refresh_graph_workspace_tabs: desired tabs={}, current graph_panels={}",
+            self.open_tabs.len(),
+            self.graph_panels.len(),
+        );
 
         let desired_ids: Vec<String> = self.open_tabs.iter().map(|tab| tab.id.clone()).collect();
 
@@ -1047,11 +1077,25 @@ impl BlueprintEditorPanel {
     /// Switch to a different tab, flushing the current canvas first.
     pub fn switch_to_tab(&mut self, tab_index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if tab_index < self.open_tabs.len() && tab_index != self.active_tab_index {
+            tracing::info!(
+                ">>> switch_to_tab: from {} ({} nodes) to {} ({} nodes), graph_panels={}",
+                self.active_tab_index,
+                self.graph.nodes.len(),
+                tab_index,
+                self.open_tabs.get(tab_index).map(|t| t.graph.nodes.len()).unwrap_or(0),
+                self.graph_panels.len(),
+            );
+
             // Flush the current active canvas into its tab snapshot before leaving.
             let active_tab_id = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone());
             if let Some(tab_id) = active_tab_id {
                 if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
                     let live = canvas.read(cx).graph.clone();
+                    tracing::info!(
+                        ">>> switch_to_tab: flushing canvas {} ({} nodes) to tab",
+                        tab_id,
+                        live.nodes.len(),
+                    );
                     self.graph = live.clone();
                     if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
                         tab.graph = live;
@@ -1061,6 +1105,11 @@ impl BlueprintEditorPanel {
             self.active_tab_index = tab_index;
             // Update self.graph shadow from the new active tab.
             if let Some(tab) = self.open_tabs.get(tab_index) {
+                tracing::info!(
+                    ">>> switch_to_tab: loading tab {} ({} nodes) into self.graph",
+                    tab.id,
+                    tab.graph.nodes.len(),
+                );
                 self.graph = tab.graph.clone();
                 self.comment_color_bindings_dirty = true;
             }
@@ -1071,8 +1120,16 @@ impl BlueprintEditorPanel {
 
     /// Open a macro tab by macro ID, or switch to it if already open
     pub fn open_macro_tab(&mut self, macro_id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        tracing::info!(
+            ">>> open_macro_tab: macro_id={}, active_tab_index={}, open_tabs={}",
+            macro_id,
+            self.active_tab_index,
+            self.open_tabs.len(),
+        );
+
         // Check if tab is already open
         if let Some(tab_index) = self.open_tabs.iter().position(|tab| tab.id == macro_id) {
+            tracing::info!(">>> open_macro_tab: tab already open at index {}, switching", tab_index);
             self.switch_to_tab(tab_index, window, cx);
             return;
         }
@@ -1093,6 +1150,11 @@ impl BlueprintEditorPanel {
                 if let Some(tab_id) = active_tab_id {
                     if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
                         let live = canvas.read(cx).graph.clone();
+                        tracing::info!(
+                            ">>> open_macro_tab: flushing canvas {} ({} nodes) to tab",
+                            tab_id,
+                            live.nodes.len(),
+                        );
                         self.graph = live.clone();
                         if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
                             tab.graph = live;
@@ -1101,6 +1163,11 @@ impl BlueprintEditorPanel {
                 }
 
                 // Create new tab seeded from the saved macro graph.
+                tracing::info!(
+                    ">>> open_macro_tab: creating new tab for macro {}, blueprint has {} nodes",
+                    macro_id,
+                    blueprint_graph.nodes.len(),
+                );
                 self.open_tabs.push(GraphTab {
                     id: macro_id.to_string(),
                     name: macro_name,
@@ -1114,6 +1181,12 @@ impl BlueprintEditorPanel {
                 let new_tab_index = self.open_tabs.len() - 1;
                 self.active_tab_index = new_tab_index;
                 self.graph = blueprint_graph;
+                tracing::info!(
+                    ">>> open_macro_tab: switched to new tab {} at index {}, self.graph.nodes={}",
+                    macro_id,
+                    new_tab_index,
+                    self.graph.nodes.len(),
+                );
                 self.graph_workspace_tabs_dirty = true;
                 cx.notify();
             }
@@ -1135,15 +1208,50 @@ impl BlueprintEditorPanel {
     /// This is the **only** correct sync direction: canvas → tab.
     /// All serialisation paths must call this before reading `open_tabs`.
     pub fn sync_all_canvases_to_tabs(&mut self, cx: &App) {
+        let canvas_count = self.graph_panels.len();
+        tracing::info!(
+            ">>> sync_all_canvases_to_tabs: {} canvas panels, {} open tabs",
+            canvas_count,
+            self.open_tabs.len(),
+        );
+
         let snapshots: Vec<(String, crate::core::graph::BlueprintGraph)> = self
             .graph_panels
             .iter()
-            .map(|(tab_id, canvas)| (tab_id.clone(), canvas.read(cx).graph.clone()))
+            .map(|(tab_id, canvas)| {
+                let g = canvas.read(cx);
+                tracing::info!(
+                    ">>> sync_all_canvases_to_tabs: reading canvas tab={} nodes={} connections={}",
+                    tab_id,
+                    g.graph.nodes.len(),
+                    g.graph.connections.len(),
+                );
+                (tab_id.clone(), g.graph.clone())
+            })
             .collect();
-        for (tab_id, live_graph) in snapshots {
-            if let Some(tab) = self.open_tabs.iter_mut().find(|t| t.id == tab_id) {
-                tab.graph = live_graph;
+
+        for (tab_id, live_graph) in &snapshots {
+            if let Some(tab) = self.open_tabs.iter_mut().find(|t| t.id == *tab_id) {
+                tracing::info!(
+                    ">>> sync_all_canvases_to_tabs: writing to tab={} nodes={} connections={} (was nodes={})",
+                    tab_id,
+                    live_graph.nodes.len(),
+                    live_graph.connections.len(),
+                    tab.graph.nodes.len(),
+                );
+                tab.graph = live_graph.clone();
+            } else {
+                tracing::warn!(
+                    ">>> sync_all_canvases_to_tabs: no matching tab for canvas tab_id={}",
+                    tab_id,
+                );
             }
+        }
+
+        if canvas_count == 0 {
+            tracing::info!(
+                ">>> sync_all_canvases_to_tabs: NO canvas panels exist — tabs retain their current graph data"
+            );
         }
     }
 
@@ -1186,7 +1294,17 @@ impl BlueprintEditorPanel {
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
         let path = std::path::PathBuf::from(file_path);
+        tracing::info!(
+            ">>> load_blueprint: file_path={:?}, current_class_path={:?}, open_tabs={}, graph_panels={}",
+            file_path, self.current_class_path, self.open_tabs.len(), self.graph_panels.len(),
+        );
+
         self.load_from_path(&path, window, cx)?;
+
+        tracing::info!(
+            ">>> load_blueprint: after load_from_path: open_tabs={}, self.graph.nodes={}, graph_panels={}, current_class_path={:?}",
+            self.open_tabs.len(), self.graph.nodes.len(), self.graph_panels.len(), self.current_class_path,
+        );
 
         // Reload library manager so any library macros are available.
         self.library_manager = ui::graph::LibraryManager::default();

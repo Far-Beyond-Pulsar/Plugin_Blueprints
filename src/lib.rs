@@ -151,17 +151,33 @@ impl EditorPlugin for BlueprintEditorPlugin {
             // Create a view context for the panel
             let panel = cx.new(|cx| {
                 match BlueprintEditorPanel::new_with_path(file_path_clone.clone(), window, cx) {
-                    Ok(p) => p,
+                    Ok(p) => {
+                        tracing::info!(
+                            ">>> create_editor: new_with_path succeeded, graph has {} nodes, current_class_path={:?}",
+                            p.graph.nodes.len(),
+                            p.current_class_path,
+                        );
+                        p
+                    }
                     Err(e) => {
-                        log::error!("Failed to create blueprint panel: {}", e);
+                        tracing::error!(">>> create_editor: new_with_path FAILED: {}", e);
                         // Return a default panel on error
-                        BlueprintEditorPanel::new(window, cx)
+                        let p = BlueprintEditorPanel::new(window, cx);
+                        tracing::warn!(
+                            ">>> create_editor: fell back to empty panel, graph has {} nodes",
+                            p.graph.nodes.len(),
+                        );
+                        p
                     }
                 }
             });
 
             // Register/refresh AI session state from the live editor graph.
             let graph_snapshot = panel.read(cx).graph.clone();
+            tracing::info!(
+                ">>> create_editor: AI session snapshot has {} nodes",
+                graph_snapshot.nodes.len(),
+            );
             ai_tools::upsert_session(file_path.clone(), graph_snapshot);
 
             // Wrap the panel in Arc - will be shared with main app

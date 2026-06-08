@@ -20,6 +20,23 @@ impl BlueprintEditorPanel {
             return;
         }
 
+        tracing::info!(
+            ">>> initialize_workspace: open_tabs={}, self.graph.nodes={}, graph_panels before={}",
+            self.open_tabs.len(),
+            self.graph.nodes.len(),
+            self.graph_panels.len(),
+        );
+
+        for tab in &self.open_tabs {
+            tracing::info!(
+                ">>> initialize_workspace: tab id={} is_main={} nodes={} connections={}",
+                tab.id,
+                tab.is_main,
+                tab.graph.nodes.len(),
+                tab.graph.connections.len(),
+            );
+        }
+
         let editor_weak = cx.entity().downgrade();
 
         let workspace = cx.new(|cx| {
@@ -51,6 +68,13 @@ impl BlueprintEditorPanel {
                     let tname = tab.name.clone();
                     let tis_main = tab.is_main;
                     let tgraph = tab.graph.clone();
+                    let tracing_id = tid.clone();
+                    let tracing_nodes = tgraph.nodes.len();
+                    tracing::info!(
+                        ">>> initialize_workspace: creating canvas for tab {} with {} nodes",
+                        tracing_id,
+                        tracing_nodes,
+                    );
                     let ew = editor_weak.clone();
                     let panel = cx.new(|cx| {
                         GraphCanvasPanel::new(ew, tid.clone(), tname, tis_main, tgraph, window, cx)
@@ -60,6 +84,11 @@ impl BlueprintEditorPanel {
                 .collect();
 
             self.graph_panels = center_panels.clone();
+
+            tracing::info!(
+                ">>> initialize_workspace: graph_panels now has {} entries",
+                self.graph_panels.len(),
+            );
 
             let center = DockItem::tabs(
                 center_panels
