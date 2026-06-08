@@ -109,5 +109,6 @@ impl BlueprintEditorPanel {
 
         self.workspace = Some(workspace);
         self.graph_workspace_tabs_dirty = false;
+        self.sync_active_canvas_entity();
     }
 }
