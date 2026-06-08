@@ -142,12 +142,107 @@ impl PropertiesRenderer {
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
-        let panel_graph: crate::core::graph::BlueprintGraph = panel
-            .active_canvas()
+        // ── Diagnostics: log the full selection state so we can debug
+        //    why the panel sometimes fails to show selected node details.
+        let active_canvas_opt = panel.active_canvas().cloned();
+        let canvas_debug = active_canvas_opt.as_ref().map(|c| {
+            let g = c.read(cx);
+            format!(
+                "canvas_tab_id={} graph_nodes={} sel_nodes={:?}",
+                g.id,
+                g.graph.nodes.len(),
+                g.graph.selected_nodes,
+            )
+        });
+        let panel_graph: crate::core::graph::BlueprintGraph = active_canvas_opt
+            .as_ref()
             .map(|c| c.read(cx).graph.clone())
             .unwrap_or_default();
-        let active_canvas = panel.active_canvas().cloned();
-        if panel_graph.selected_comments.len() == 1 && panel_graph.selected_nodes.is_empty() {
+
+        let sel_count = panel_graph.selected_nodes.len();
+        let com_count = panel_graph.selected_comments.len();
+        let total_nodes = panel_graph.nodes.len();
+        tracing::info!(
+            ">>> render_properties_content: canvas_debug={:?}, sel_nodes={}, sel_comments={}, graph_nodes={}, open_tabs={}, active_tab={}",
+            canvas_debug,
+            sel_count,
+            com_count,
+            total_nodes,
+            panel.open_tabs.len(),
+            panel.active_tab_index,
+        );
+
+        // ── Error message helpers ────────────────────────────────────────
+        fn render_diagnostic(
+            icon: ui::IconName,
+            heading: String,
+            detail: String,
+            cx: &mut Context<BlueprintEditorPanel>,
+        ) -> AnyElement {
+            v_flex()
+                .size_full()
+                .p_4()
+                .gap_2()
+                .items_center()
+                .justify_center()
+                .child(
+                    ui::Icon::new(icon)
+                        .size(px(20.0))
+                        .text_color(cx.theme().warning),
+                )
+                .child(
+                    div()
+                        .text_sm()
+                        .font_semibold()
+                        .text_color(cx.theme().foreground)
+                        .child(heading),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .text_center()
+                        .child(detail),
+                )
+                .into_any_element()
+        }
+
+        // ── Check: active canvas exists ──────────────────────────────────
+        if active_canvas_opt.is_none() {
+            return render_diagnostic(
+                IconName::Close,
+                "No Active Canvas".to_string(),
+                format!(
+                    "No graph canvas found for active tab (index={}, open_tabs={}). \
+                     The workspace panels may not be initialised yet.",
+                    panel.active_tab_index,
+                    panel.open_tabs.len(),
+                ),
+                cx,
+            );
+        }
+
+        let active_canvas = active_canvas_opt.unwrap();
+
+        // ── Check: user says a node is selected but the canvas disagrees ─
+        if panel_graph.selected_nodes.is_empty() && panel_graph.selected_comments.is_empty() {
+            return render_diagnostic(
+                IconName::Close,
+                "No Selection".to_string(),
+                format!(
+                    "No node or comment is selected on canvas. \
+                     graph.nodes={}, graph_panels={}, open_tabs={}, active_tab={}",
+                    total_nodes,
+                    panel.graph_panels.len(),
+                    panel.open_tabs.len(),
+                    panel.active_tab_index,
+                ),
+                cx,
+            );
+        }
+
+        // ── Normal single-comment path ──────────────────────────────────
+        if com_count == 1 && sel_count == 0 {
             let selected_comment_id = &panel_graph.selected_comments[0];
             if let Some(selected_comment) = panel_graph
                 .comments
@@ -158,30 +253,44 @@ impl PropertiesRenderer {
             }
         }
 
-        if panel_graph.selected_nodes.len() == 1 && panel_graph.selected_comments.is_empty() {
-            if let Some(canvas) = active_canvas {
-                return canvas.update(cx, |canvas, cx| {
-                    Self::render_selected_node_properties(canvas, window, cx)
-                });
+        // ── Normal single-node path ─────────────────────────────────────
+        if sel_count == 1 && com_count == 0 {
+            let selected_node_id = panel_graph.selected_nodes[0].clone();
+            let node_found = panel_graph.nodes.iter().any(|n| n.id == selected_node_id);
+            if !node_found {
+                return render_diagnostic(
+                    IconName::Close,
+                    "Orphaned Selection".to_string(),
+                    format!(
+                        "Node \"{}\" is in selected_nodes but does NOT exist in \
+                         canvas.graph.nodes (which has {} nodes). \
+                         This means the graph was rebuilt without clearing stale selections.",
+                        selected_node_id,
+                        total_nodes,
+                    ),
+                    cx,
+                );
             }
-
-            let selected_node_id = &panel_graph.selected_nodes[0];
-            if let Some(selected_node) = panel_graph.nodes.iter().find(|n| n.id == *selected_node_id)
-            {
-                return Self::render_selected_node_readonly(selected_node, cx);
-            } else {
-                return Self::render_empty_state(cx);
-            }
-        } else if !panel_graph.selected_nodes.is_empty() || !panel_graph.selected_comments.is_empty()
-        {
-            return Self::render_multi_selection_state(
-                panel_graph.selected_nodes.len(),
-                panel_graph.selected_comments.len(),
-                cx,
-            );
-        } else {
-            Self::render_empty_state(cx)
+            return active_canvas.update(cx, |canvas, cx| {
+                Self::render_selected_node_properties(canvas, window, cx)
+            });
         }
+
+        // ── Multi-selection ─────────────────────────────────────────────
+        if sel_count > 1 || com_count > 0 {
+            return Self::render_multi_selection_state(sel_count, com_count, cx);
+        }
+
+        // ── Unknown state ───────────────────────────────────────────────
+        render_diagnostic(
+            IconName::Close,
+            "Unknown State".to_string(),
+            format!(
+                "sel_nodes={}, sel_comments={}, graph_nodes={}",
+                sel_count, com_count, total_nodes,
+            ),
+            cx,
+        )
     }
 
     fn render_selected_node_readonly<T>(
