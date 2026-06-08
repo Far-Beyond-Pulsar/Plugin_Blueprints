@@ -142,11 +142,11 @@ impl PropertiesRenderer {
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
-        let panel_graph: crate::core::graph::BlueprintGraph = panel
-            .active_canvas()
+        let active_canvas = panel.active_canvas().cloned();
+        let panel_graph: crate::core::graph::BlueprintGraph = active_canvas
+            .as_ref()
             .map(|c| c.read(cx).graph.clone())
             .unwrap_or_default();
-        let active_canvas = panel.active_canvas().cloned();
         if panel_graph.selected_comments.len() == 1 && panel_graph.selected_nodes.is_empty() {
             let selected_comment_id = &panel_graph.selected_comments[0];
             if let Some(selected_comment) = panel_graph
