@@ -257,42 +257,6 @@ impl ToolbarRenderer {
                             btn
                         }
                     })
-                    .child({
-                        let btn = Button::new("toolbar-wire-active-test")
-                            .icon(IconName::Flash)
-                            .label("Pulse")
-                            .tooltip("Test Pulse State using currently selected nodes")
-                            .on_click(cx.listener(|panel, _, _, cx| {
-                                panel.wire_active_test_mode = !panel.wire_active_test_mode;
-                                if panel.wire_active_test_mode {
-                                    panel.wire_hidden_test_mode = false;
-                                }
-                                cx.notify();
-                            }));
-                        if wire_active_mode {
-                            btn.primary()
-                        } else {
-                            btn
-                        }
-                    })
-                    .child({
-                        let btn = Button::new("toolbar-wire-hidden-test")
-                            .icon(IconName::X)
-                            .label("Hidden")
-                            .tooltip("Test Wire Hidden State (dim / translucent)")
-                            .on_click(cx.listener(|panel, _, _, cx| {
-                                panel.wire_hidden_test_mode = !panel.wire_hidden_test_mode;
-                                if panel.wire_hidden_test_mode {
-                                    panel.wire_active_test_mode = false;
-                                }
-                                cx.notify();
-                            }));
-                        if wire_hidden_mode {
-                            btn.primary()
-                        } else {
-                            btn
-                        }
-                    }),
             )
             // ── Group 6 · Debugger controls ──────────────────────────────────
             .when(debug_session_active || bp_count > 0, |el| {
