@@ -704,7 +704,7 @@ dependencies = [
  "graphy",
  "log",
  "parking_lot",
- "pbgc",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=0dfe4f9df71b9f41bb737e88ef00dfabcb8f2ef8)",
  "plugin_editor_api",
  "pulsar_bp_executor",
  "pulsar_reflection 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=f413a294c1360d0e14c9c28e9d86b2f83596bc40)",
@@ -5933,6 +5933,19 @@ dependencies = [
 [[package]]
 name = "pbgc"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=0dfe4f9df71b9f41bb737e88ef00dfabcb8f2ef8#0dfe4f9df71b9f41bb737e88ef00dfabcb8f2ef8"
+dependencies = [
+ "graphy",
+ "pulsar_std 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=b13fddc1ea8bf88439680dc5f2ce3bf3ae261d48)",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "pbgc"
+version = "0.1.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=e5b76205e91c3b6968fc8b115515636a0ba7d6ef#e5b76205e91c3b6968fc8b115515636a0ba7d6ef"
 dependencies = [
  "graphy",
@@ -6462,7 +6475,7 @@ version = "0.1.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=f413a294c1360d0e14c9c28e9d86b2f83596bc40#f413a294c1360d0e14c9c28e9d86b2f83596bc40"
 dependencies = [
  "libloading 0.9.0",
- "pbgc",
+ "pbgc 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=e5b76205e91c3b6968fc8b115515636a0ba7d6ef)",
  "sha2 0.11.0",
 ]
 
