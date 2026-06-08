@@ -175,10 +175,10 @@ impl BlueprintEditorPanel {
             workspace.initialize(center, Some(left), Some(right), None, window, cx);
 
             // `Workspace::initialize` doesn't expose a custom size for the bottom
-            // dock — set it directly afterwards so we can shrink it 10% below the
+            // dock — set it directly afterwards so we can shrink it 20% below the
             // default 400px height.
             workspace.dock_area().update(cx, |dock_area, cx| {
-                dock_area.set_bottom_dock(bottom, Some(px(360.0)), true, window, cx);
+                dock_area.set_bottom_dock(bottom, Some(px(320.0)), true, window, cx);
             });
         });
 
