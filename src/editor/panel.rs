@@ -1042,24 +1042,50 @@ impl BlueprintEditorPanel {
             return;
         };
 
+        // `tab_index` is a position in `self.open_tabs` / `self.graph_panels` (matched by
+        // tab id). The dock's `TabPanel` keeps its own internal panel order, which can
+        // diverge from that (e.g. panels are appended to the dock in creation order, not
+        // necessarily `open_tabs` order). Resolve the entity for this tab id first, then
+        // ask the `TabPanel` for ITS index of that entity — otherwise `set_active_tab`
+        // activates whatever panel happens to sit at the same position, leaving the user
+        // looking at (and clicking into) a different canvas than `active_canvas()` returns.
+        let Some(tab_id) = self.open_tabs.get(tab_index).map(|t| t.id.clone()) else {
+            return;
+        };
+        let Some(panel_entity_id) = self
+            .graph_panels
+            .iter()
+            .find(|(id, _)| id == &tab_id)
+            .map(|(_, panel)| panel.entity_id())
+        else {
+            return;
+        };
+
         workspace_entity.update(cx, |workspace, cx| {
             workspace.dock_area().update(cx, |dock_area, cx| {
                 fn activate_tab_item(
                     item: &mut DockItem,
-                    tab_index: usize,
+                    panel_entity_id: EntityId,
                     window: &mut Window,
                     cx: &mut App,
                 ) -> bool {
                     match item {
                         DockItem::Tabs { view, .. } => {
-                            view.update(cx, |tab_panel, cx| {
-                                tab_panel.set_active_tab(tab_index, window, cx);
+                            let found = view.update(cx, |tab_panel, cx| {
+                                if let Some(ix) =
+                                    tab_panel.index_of_panel_by_entity_id(panel_entity_id)
+                                {
+                                    tab_panel.set_active_tab(ix, window, cx);
+                                    true
+                                } else {
+                                    false
+                                }
                             });
-                            true
+                            found
                         }
                         DockItem::Split { items, .. } => {
                             for child in items.iter_mut() {
-                                if activate_tab_item(child, tab_index, window, cx) {
+                                if activate_tab_item(child, panel_entity_id, window, cx) {
                                     return true;
                                 }
                             }
@@ -1069,7 +1095,7 @@ impl BlueprintEditorPanel {
                     }
                 }
 
-                let _ = activate_tab_item(dock_area.items_mut(), tab_index, window, cx);
+                let _ = activate_tab_item(dock_area.items_mut(), panel_entity_id, window, cx);
             });
         });
     }
