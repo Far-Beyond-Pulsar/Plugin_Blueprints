@@ -128,6 +128,15 @@ pub struct BlueprintEditorPanel {
     pub active_tab_index: usize,
     pub graph_panels: Vec<(String, Entity<GraphCanvasPanel>)>,
     pub graph_workspace_tabs_dirty: bool,
+    /// Live in-memory handle to the currently active graph canvas.
+    ///
+    /// Cached directly whenever the active tab changes rather than re-derived
+    /// at render time by matching `open_tabs[active_tab_index].id` against
+    /// `graph_panels` — that lookup is sourced from the save/load tab
+    /// bookkeeping and can momentarily desync from what's actually on screen
+    /// (e.g. right after loading a class from disk), which made panels like
+    /// the node Properties view permanently show "no selection".
+    pub active_canvas_entity: Option<Entity<GraphCanvasPanel>>,
 
     // Overlay toggles
     pub show_debug_overlay: bool,
@@ -480,6 +489,7 @@ impl BlueprintEditorPanel {
             active_tab_index: 0,
             graph_panels: Vec::new(),
             graph_workspace_tabs_dirty: true,
+            active_canvas_entity: None,
             show_debug_overlay: true,
             show_minimap: true,
             show_graph_controls: true,
@@ -835,12 +845,25 @@ impl BlueprintEditorPanel {
     }
 
     /// Return the active graph canvas entity, if one exists.
+    ///
+    /// This returns the cached `active_canvas_entity` handle rather than
+    /// re-deriving it from `open_tabs`/`graph_panels` on every call — see the
+    /// field doc comment for why that lookup is unreliable.
     pub fn active_canvas(&self) -> Option<&Entity<crate::editor::workspace_panels::GraphCanvasPanel>> {
-        let tab_id = self.open_tabs.get(self.active_tab_index)?.id.as_str();
-        self.graph_panels
-            .iter()
-            .find(|(id, _)| id == tab_id)
-            .map(|(_, entity)| entity)
+        self.active_canvas_entity.as_ref()
+    }
+
+    /// Re-resolve and cache the live canvas entity for the current active tab.
+    ///
+    /// Call this any time `active_tab_index` changes or `graph_panels` is
+    /// rebuilt, so `active_canvas()` always reflects in-memory reality instead
+    /// of depending on the save/load tab bookkeeping staying in lockstep.
+    pub(crate) fn sync_active_canvas_entity(&mut self) {
+        self.active_canvas_entity = self
+            .open_tabs
+            .get(self.active_tab_index)
+            .and_then(|tab| self.graph_panels.iter().find(|(id, _)| id == &tab.id))
+            .map(|(_, entity)| entity.clone());
     }
 
     fn capture_interaction_state(&self) -> GraphInteractionState {
@@ -937,6 +960,7 @@ impl BlueprintEditorPanel {
                 self.sync_graph_to_active_tab();
                 self.active_tab_index = tab_index;
                 self.load_active_tab_graph();
+                self.sync_active_canvas_entity();
             }
         }
     }
@@ -1000,6 +1024,7 @@ impl BlueprintEditorPanel {
 
         self.activate_graph_workspace_tab(self.active_tab_index, window, cx);
         self.graph_workspace_tabs_dirty = false;
+        self.sync_active_canvas_entity();
     }
 
     pub(crate) fn activate_graph_workspace_tab(
@@ -1065,6 +1090,7 @@ impl BlueprintEditorPanel {
                 self.comment_color_bindings_dirty = true;
             }
             self.activate_graph_workspace_tab(tab_index, window, cx);
+            self.sync_active_canvas_entity();
             cx.notify();
         }
     }
@@ -1115,6 +1141,7 @@ impl BlueprintEditorPanel {
                 self.active_tab_index = new_tab_index;
                 self.graph = blueprint_graph;
                 self.graph_workspace_tabs_dirty = true;
+                self.refresh_graph_workspace_tabs(window, cx);
                 cx.notify();
             }
         }
