@@ -26,14 +26,14 @@ impl PropertiesRenderer {
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        if let Some(canvas) = panel.active_canvas().as_ref() {
+        let active_canvas = panel.active_canvas().cloned();
+        let panel_graph: crate::core::graph::BlueprintGraph = active_canvas
+            .as_ref()
+            .map(|c| c.read(cx).graph.clone())
+            .unwrap_or_default();
+        if let Some(canvas) = active_canvas.as_ref() {
             canvas.update(cx, |canvas, cx| canvas.sync_comment_inspector_state(window, cx));
         }
-
-        let panel_graph = panel.active_canvas()
-            .map(|c| c.read(cx).graph.clone())
-            .unwrap_or_else(|| panel.graph.clone());
-
         v_flex()
             .size_full()
             .bg(cx.theme().sidebar)
@@ -142,11 +142,11 @@ impl PropertiesRenderer {
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
-        let active_canvas = panel.active_canvas().cloned();
-        let panel_graph: crate::core::graph::BlueprintGraph = active_canvas
-            .as_ref()
+        let panel_graph: crate::core::graph::BlueprintGraph = panel
+            .active_canvas()
             .map(|c| c.read(cx).graph.clone())
-            .unwrap_or_else(|| panel.graph.clone());
+            .unwrap_or_default();
+        let active_canvas = panel.active_canvas().cloned();
         if panel_graph.selected_comments.len() == 1 && panel_graph.selected_nodes.is_empty() {
             let selected_comment_id = &panel_graph.selected_comments[0];
             if let Some(selected_comment) = panel_graph
