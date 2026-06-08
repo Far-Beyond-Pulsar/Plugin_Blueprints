@@ -39,6 +39,8 @@ impl BlueprintEditorPanel {
 
         let editor_weak = cx.entity().downgrade();
 
+        let mut center_tab_panel: Option<Entity<ui::dock::TabPanel>> = None;
+
         let workspace = cx.new(|cx| {
             Workspace::new_with_channel(
                 "blueprint-editor-workspace",
@@ -101,6 +103,10 @@ impl BlueprintEditorPanel {
                 cx,
             );
 
+            if let ui::dock::DockItem::Tabs { view, .. } = &center {
+                center_tab_panel = Some(view.clone());
+            }
+
             let left = DockItem::tabs(
                 vec![
                     Arc::new(prefab_hierarchy_panel),
@@ -138,5 +144,51 @@ impl BlueprintEditorPanel {
 
         self.workspace = Some(workspace);
         self.graph_workspace_tabs_dirty = false;
+
+        // The dock's tab strip switches tabs entirely on its own (the user clicks a tab
+        // header directly in the `TabPanel`), without ever calling our `switch_to_tab`.
+        // That left `self.active_tab_index` stuck at whatever it was last set to
+        // programmatically, so `active_canvas()` (and therefore the properties panel)
+        // kept reading a different canvas than the one the user was actually looking at
+        // and clicking in — breaking selection display for every graph as soon as a
+        // second tab (e.g. a macro) existed. Mirror the dock's active tab back onto
+        // `self.active_tab_index` by matching entity ids, so the two stay in sync
+        // regardless of how the switch happened.
+        if let Some(tab_panel) = center_tab_panel {
+            let sub = cx.subscribe(
+                &tab_panel,
+                |this: &mut Self, tab_panel, event: &ui::dock::PanelEvent, cx| {
+                    if !matches!(event, ui::dock::PanelEvent::TabChanged { .. }) {
+                        return;
+                    }
+                    let Some(active_panel) = tab_panel.read(cx).active_panel(cx) else {
+                        return;
+                    };
+                    let active_entity_id = active_panel.panel_id(cx);
+                    let Some(tab_id) = this
+                        .graph_panels
+                        .iter()
+                        .find(|(_, panel)| panel.entity_id() == active_entity_id)
+                        .map(|(id, _)| id.clone())
+                    else {
+                        return;
+                    };
+                    let Some(new_index) = this.open_tabs.iter().position(|tab| tab.id == tab_id)
+                    else {
+                        return;
+                    };
+                    if new_index != this.active_tab_index {
+                        this.active_tab_index = new_index;
+                        if let Some((_, canvas)) =
+                            this.graph_panels.iter().find(|(id, _)| id == &tab_id)
+                        {
+                            this.graph = canvas.read(cx).graph.clone();
+                        }
+                        cx.notify();
+                    }
+                },
+            );
+            self.subscriptions.push(sub);
+        }
     }
 }
