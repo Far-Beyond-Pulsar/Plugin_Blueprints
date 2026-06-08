@@ -210,6 +210,8 @@ impl Panel for FindPanel {
 pub struct PropertiesPanel {
     editor: WeakEntity<BlueprintEditorPanel>,
     focus_handle: FocusHandle,
+    observed_canvas_id: Option<EntityId>,
+    active_canvas_subscription: Option<Subscription>,
 }
 
 impl PropertiesPanel {
@@ -217,6 +219,8 @@ impl PropertiesPanel {
         Self {
             editor,
             focus_handle: cx.focus_handle(),
+            observed_canvas_id: None,
+            active_canvas_subscription: None,
         }
     }
 }
@@ -226,6 +230,19 @@ impl EventEmitter<PanelEvent> for PropertiesPanel {}
 impl Render for PropertiesPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if let Some(editor) = self.editor.upgrade() {
+            let active_canvas = editor.read(cx).active_canvas().cloned();
+            let active_canvas_id = active_canvas.as_ref().map(|canvas| canvas.entity_id());
+            if active_canvas_id != self.observed_canvas_id {
+                self.active_canvas_subscription = None;
+                self.observed_canvas_id = active_canvas_id;
+
+                if let Some(canvas) = active_canvas {
+                    self.active_canvas_subscription = Some(cx.observe(&canvas, |_, _, cx| {
+                        cx.notify();
+                    }));
+                }
+            }
+
             div()
                 .size_full()
                 .bg(cx.theme().sidebar)
@@ -233,6 +250,8 @@ impl Render for PropertiesPanel {
                     PropertiesRenderer::render(editor, _window, cx)
                 }))
         } else {
+            self.active_canvas_subscription = None;
+            self.observed_canvas_id = None;
             div().child("Editor not available")
         }
     }
