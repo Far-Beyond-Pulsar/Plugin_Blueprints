@@ -142,41 +142,72 @@ impl PropertiesRenderer {
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
-        // ── Diagnostics: log the full selection state so we can debug
-        //    why the panel sometimes fails to show selected node details.
-        let active_canvas_opt = panel.active_canvas().cloned();
-        let canvas_debug = active_canvas_opt.as_ref().map(|c| {
-            let g = c.read(cx);
-            format!(
-                "canvas_tab_id={} graph_nodes={} sel_nodes={:?}",
-                g.id,
-                g.graph.nodes.len(),
-                g.graph.selected_nodes,
-            )
-        });
-        let panel_graph: crate::core::graph::BlueprintGraph = active_canvas_opt
-            .as_ref()
-            .map(|c| c.read(cx).graph.clone())
-            .unwrap_or_default();
+        // ── Snapshot all diagnostic state upfront ───────────────────────
+        let active_tab_index = panel.active_tab_index;
+        let open_tab_ids: Vec<String> = panel.open_tabs.iter().map(|t| t.id.clone()).collect();
+        let graph_panel_tab_ids: Vec<String> =
+            panel.graph_panels.iter().map(|(id, _)| id.clone()).collect();
+        let graph_panel_count = panel.graph_panels.len();
+        let open_tab_count = panel.open_tabs.len();
 
-        let sel_count = panel_graph.selected_nodes.len();
-        let com_count = panel_graph.selected_comments.len();
-        let total_nodes = panel_graph.nodes.len();
+        // Check for duplicate tab IDs in graph_panels.
+        let mut seen = std::collections::HashSet::new();
+        let mut dupes = Vec::new();
+        for id in &graph_panel_tab_ids {
+            if !seen.insert(id) {
+                dupes.push(id.clone());
+            }
+        }
+
+        let active_tab_id: Option<String> =
+            panel.open_tabs.get(active_tab_index).map(|t| t.id.clone());
+        let canvas_found_in_panels = active_tab_id
+            .as_ref()
+            .is_some_and(|id| graph_panel_tab_ids.contains(id));
+        let first_matching_canvas_idx = active_tab_id.as_ref().and_then(|id| {
+            graph_panel_tab_ids.iter().position(|pid| pid == id)
+        });
+        let duplicate_count_for_tab = active_tab_id
+            .as_ref()
+            .map(|id| graph_panel_tab_ids.iter().filter(|pid| *pid == id).count())
+            .unwrap_or(0);
+
+        let active_canvas_opt = panel.active_canvas().cloned();
+        let canvas_ref = active_canvas_opt.as_ref().map(|c| c.read(cx));
+        let total_nodes = canvas_ref.map(|g| g.graph.nodes.len()).unwrap_or(0);
+        let sel_nodes: Vec<String> = canvas_ref
+            .map(|g| g.graph.selected_nodes.clone())
+            .unwrap_or_default();
+        let sel_comments: Vec<String> = canvas_ref
+            .map(|g| g.graph.selected_comments.clone())
+            .unwrap_or_default();
+        let canvas_id = canvas_ref.map(|g| g.id.clone());
+        let sel_count = sel_nodes.len();
+        let com_count = sel_comments.len();
+
         tracing::info!(
-            ">>> render_properties_content: canvas_debug={:?}, sel_nodes={}, sel_comments={}, graph_nodes={}, open_tabs={}, active_tab={}",
-            canvas_debug,
-            sel_count,
-            com_count,
+            ">>> render_properties_content: tab_id={:?} canvas_id={:?} active_idx={} \
+             open_tabs={:?} graph_panels={:?} gp_count={} dupes={:?} dup_for_tab={} \
+             canvas_found={} sel_nodes={:?} sel_coms={:?} graph_nodes={}",
+            active_tab_id,
+            canvas_id,
+            active_tab_index,
+            open_tab_ids,
+            graph_panel_tab_ids,
+            graph_panel_count,
+            dupes,
+            duplicate_count_for_tab,
+            canvas_found_in_panels,
+            sel_nodes,
+            sel_comments,
             total_nodes,
-            panel.open_tabs.len(),
-            panel.active_tab_index,
         );
 
-        // ── Error message helpers ────────────────────────────────────────
-        fn render_diagnostic(
+        // ── Diagnostic rendering helper ─────────────────────────────────
+        fn diag(
             icon: ui::IconName,
             heading: String,
-            detail: String,
+            body: String,
             cx: &mut Context<BlueprintEditorPanel>,
         ) -> AnyElement {
             v_flex()
@@ -202,40 +233,140 @@ impl PropertiesRenderer {
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
                         .text_center()
-                        .child(detail),
+                        .child(body),
                 )
                 .into_any_element()
         }
 
-        // ── Check: active canvas exists ──────────────────────────────────
-        if active_canvas_opt.is_none() {
-            return render_diagnostic(
+        // ── Canvas lookup diagnostics ────────────────────────────────────
+        // Case 1: active_tab_index is out of bounds.
+        if active_tab_index >= open_tab_count {
+            return diag(
                 IconName::Close,
-                "No Active Canvas".to_string(),
+                "Tab Index Out Of Bounds".into(),
                 format!(
-                    "No graph canvas found for active tab (index={}, open_tabs={}). \
-                     The workspace panels may not be initialised yet.",
-                    panel.active_tab_index,
-                    panel.open_tabs.len(),
+                    "active_tab_index={} but open_tabs has {} entries. \
+                     Tab IDs in open_tabs: {:?}. \
+                     graph_panels has {} entries with IDs: {:?}.",
+                    active_tab_index,
+                    open_tab_count,
+                    open_tab_ids,
+                    graph_panel_count,
+                    graph_panel_tab_ids,
                 ),
                 cx,
             );
         }
 
-        let active_canvas = active_canvas_opt.unwrap();
-
-        // ── Check: user says a node is selected but the canvas disagrees ─
-        if panel_graph.selected_nodes.is_empty() && panel_graph.selected_comments.is_empty() {
-            return render_diagnostic(
+        // Case 2: graph_panels is completely empty.
+        if graph_panel_count == 0 {
+            return diag(
                 IconName::Close,
-                "No Selection".to_string(),
+                "No Canvas Panels Registered".into(),
                 format!(
-                    "No node or comment is selected on canvas. \
-                     graph.nodes={}, graph_panels={}, open_tabs={}, active_tab={}",
+                    "graph_panels is empty but open_tabs has {} tabs: {:?}. \
+                     active_tab_index={}. \
+                     The workspace may not have been initialised yet, or \
+                     sync_all_canvases_to_tabs never ran.",
+                    open_tab_count,
+                    open_tab_ids,
+                    active_tab_index,
+                ),
+                cx,
+            );
+        }
+
+        // Case 3: active tab ID doesn't match any graph_panel entry.
+        if !canvas_found_in_panels {
+            return diag(
+                IconName::Close,
+                "Tab ID Not Found In Canvas Panels".into(),
+                format!(
+                    "Active tab is {:?} (index {}) but graph_panels only has \
+                     these IDs: {:?}. This means initialize_workspace or \
+                     refresh_graph_workspace_tabs created canvases for \
+                     different tab IDs than what open_tabs contains.",
+                    active_tab_id,
+                    active_tab_index,
+                    graph_panel_tab_ids,
+                ),
+                cx,
+            );
+        }
+
+        // Case 4: duplicate graph_panel entries for the active tab.
+        if duplicate_count_for_tab > 1 {
+            return diag(
+                IconName::TriangleAlert,
+                "Duplicate Canvas Entities".into(),
+                format!(
+                    "graph_panels has {} entries for tab \"{:?}\", but \
+                     active_canvas() uses .find() which returns the FIRST \
+                     one. If that is a stale entity (e.g. from an old \
+                     initialize_workspace call), the properties panel \
+                     will read dead state while the user interacts with \
+                     a newer canvas.\n\
+                     All graph_panel IDs: {:?}\n\
+                     First match index: {:?}",
+                    duplicate_count_for_tab,
+                    active_tab_id,
+                    graph_panel_tab_ids,
+                    first_matching_canvas_idx,
+                ),
+                cx,
+            );
+        }
+
+        // ── Canvas found: check selection state ─────────────────────────
+        // Case 5: canvas has zero nodes at all.
+        if total_nodes == 0 {
+            return diag(
+                IconName::Close,
+                "Empty Canvas — No Nodes in Graph".into(),
+                format!(
+                    "The active canvas exists (id={:?}) but graph.nodes is \
+                     empty. The properties panel requires at least one node \
+                     to inspect.\n\
+                     open_tabs={:?}  graph_panels={:?}",
+                    canvas_id,
+                    open_tab_ids,
+                    graph_panel_tab_ids,
+                ),
+                cx,
+            );
+        }
+
+        // Case 6: canvas has nodes, but selected_nodes is empty.
+        if sel_count == 0 && com_count == 0 {
+            return diag(
+                IconName::Close,
+                "Active Canvas — Selection Unpopulated".into(),
+                format!(
+                    "Canvas id={:?} has {} node(s) in its graph but \
+                     selected_nodes is empty (selected_comments also empty).\n\
+                     This means the click handler IS processing clicks on a \
+                     canvas, but that canvas may be a DIFFERENT entity than \
+                     the one active_canvas() returns.\n\n\
+                     Diagnostics:\n\
+                     \u{2022} graph_panel entries: {}\n\
+                     \u{2022} graph_panel IDs: {:?}\n\
+                     \u{2022} duplicate entries for tab \"{:?}\": {}\n\
+                     \u{2022} first match index: {:?}\n\
+                     \u{2022} open_tabs: {:?}\n\
+                     \u{2022} active_tab_index: {}\n\
+                     \u{2022} sel_nodes (from read): {:?}\n\
+                     \u{2022} sel_comments (from read): {:?}",
+                    canvas_id,
                     total_nodes,
-                    panel.graph_panels.len(),
-                    panel.open_tabs.len(),
-                    panel.active_tab_index,
+                    graph_panel_count,
+                    graph_panel_tab_ids,
+                    active_tab_id,
+                    duplicate_count_for_tab,
+                    first_matching_canvas_idx,
+                    open_tab_ids,
+                    active_tab_index,
+                    sel_nodes,
+                    sel_comments,
                 ),
                 cx,
             );
@@ -243,37 +374,41 @@ impl PropertiesRenderer {
 
         // ── Normal single-comment path ──────────────────────────────────
         if com_count == 1 && sel_count == 0 {
-            let selected_comment_id = &panel_graph.selected_comments[0];
-            if let Some(selected_comment) = panel_graph
-                .comments
-                .iter()
-                .find(|c| c.id == *selected_comment_id)
-            {
-                return Self::render_comment_properties(panel, selected_comment, window, cx);
+            let comment_id = sel_comments[0].clone();
+            let selected_comment =
+                canvas_ref.and_then(|g| g.graph.comments.iter().find(|c| c.id == comment_id).cloned());
+            drop(canvas_ref);
+            if let Some(comment) = selected_comment {
+                return Self::render_comment_properties(panel, &comment, window, cx);
             }
         }
 
         // ── Normal single-node path ─────────────────────────────────────
         if sel_count == 1 && com_count == 0 {
-            let selected_node_id = panel_graph.selected_nodes[0].clone();
-            let node_found = panel_graph.nodes.iter().any(|n| n.id == selected_node_id);
+            let selected_node_id = sel_nodes[0].clone();
+            let node_found = canvas_ref.is_some_and(|g| {
+                g.graph.nodes.iter().any(|n| n.id == selected_node_id)
+            });
             if !node_found {
-                return render_diagnostic(
+                drop(canvas_ref);
+                return diag(
                     IconName::Close,
-                    "Orphaned Selection".to_string(),
+                    "Orphaned Selection".into(),
                     format!(
-                        "Node \"{}\" is in selected_nodes but does NOT exist in \
-                         canvas.graph.nodes (which has {} nodes). \
-                         This means the graph was rebuilt without clearing stale selections.",
-                        selected_node_id,
-                        total_nodes,
+                        "Node \"{}\" is in selected_nodes but does NOT exist \
+                         in canvas.graph.nodes (which has {} nodes). \
+                         The graph was rebuilt without clearing stale selections.",
+                        selected_node_id, total_nodes,
                     ),
                     cx,
                 );
             }
-            return active_canvas.update(cx, |canvas, cx| {
-                Self::render_selected_node_properties(canvas, window, cx)
-            });
+            drop(canvas_ref);
+            if let Some(active_canvas) = active_canvas_opt {
+                return active_canvas.update(cx, |canvas, cx| {
+                    Self::render_selected_node_properties(canvas, window, cx)
+                });
+            }
         }
 
         // ── Multi-selection ─────────────────────────────────────────────
@@ -281,10 +416,10 @@ impl PropertiesRenderer {
             return Self::render_multi_selection_state(sel_count, com_count, cx);
         }
 
-        // ── Unknown state ───────────────────────────────────────────────
-        render_diagnostic(
+        // ── Unreachable (covers all combinations) ───────────────────────
+        diag(
             IconName::Close,
-            "Unknown State".to_string(),
+            "Unreachable State".into(),
             format!(
                 "sel_nodes={}, sel_comments={}, graph_nodes={}",
                 sel_count, com_count, total_nodes,
