@@ -66,15 +66,32 @@ pub struct PinDefinition {
 use std::sync::OnceLock;
 static NODE_DEFINITIONS: OnceLock<NodeDefinitions> = OnceLock::new();
 
+pub(crate) fn extract_canonical_node_metadata() -> std::collections::HashMap<String, graphy::NodeMetadata> {
+    let mut metadata = pbgc::extract_node_metadata().unwrap_or_else(|e| {
+        eprintln!("Failed to load node metadata: {}", e);
+        std::collections::HashMap::new()
+    });
+
+    for node_meta in metadata.values_mut() {
+        for param in node_meta.params.iter_mut() {
+            param.param_type = ui::graph::DataType::from_type_str(&param.param_type).to_string();
+        }
+
+        if let Some(return_type) = node_meta.return_type.as_mut() {
+            return_type.type_string =
+                ui::graph::DataType::from_type_str(&return_type.type_string).to_string();
+        }
+    }
+
+    metadata
+}
+
 impl NodeDefinitions {
     /// Get the global node definitions, loading them if necessary.
     pub fn load() -> &'static NodeDefinitions {
         NODE_DEFINITIONS.get_or_init(|| {
-            // Load dynamic node definitions from pulsar_std
-            let metadata = pbgc::extract_node_metadata().unwrap_or_else(|e| {
-                eprintln!("Failed to load node metadata: {}", e);
-                std::collections::HashMap::new()
-            });
+            // Load dynamic node definitions from PBGC metadata, then canonicalize type names.
+            let metadata = extract_canonical_node_metadata();
 
             // Load sub-graph libraries
             let mut lib_manager = ui::graph::LibraryManager::default();
@@ -104,11 +121,15 @@ impl NodeDefinitions {
                     .interface
                     .inputs
                     .iter()
-                    .map(|pin| PinDefinition {
-                        id: pin.id.clone(),
-                        name: pin.name.clone(),
-                        data_type: PinDataType::from_type_str(pin.data_type.to_string()),
-                        pin_type: PinType::Input,
+                    .map(|pin| {
+                        let canonical =
+                            ui::graph::DataType::from_type_str(&pin.data_type.to_string());
+                        PinDefinition {
+                            id: pin.id.clone(),
+                            name: pin.name.clone(),
+                            data_type: PinDataType::from_type_str(canonical.to_string()),
+                            pin_type: PinType::Input,
+                        }
                     })
                     .collect();
 
@@ -117,11 +138,15 @@ impl NodeDefinitions {
                     .interface
                     .outputs
                     .iter()
-                    .map(|pin| PinDefinition {
-                        id: pin.id.clone(),
-                        name: pin.name.clone(),
-                        data_type: PinDataType::from_type_str(pin.data_type.to_string()),
-                        pin_type: PinType::Output,
+                    .map(|pin| {
+                        let canonical =
+                            ui::graph::DataType::from_type_str(&pin.data_type.to_string());
+                        PinDefinition {
+                            id: pin.id.clone(),
+                            name: pin.name.clone(),
+                            data_type: PinDataType::from_type_str(canonical.to_string()),
+                            pin_type: PinType::Output,
+                        }
                     })
                     .collect();
 
@@ -206,10 +231,11 @@ impl NodeDefinitions {
 
             // Add regular inputs
             for param in node_meta.params.iter() {
+                let canonical = ui::graph::DataType::from_type_str(&param.param_type).to_string();
                 inputs.push(PinDefinition {
                     id: param.name.to_string(),
                     name: param.name.to_string(),
-                    data_type: PinDataType::from_type_str(&param.param_type),
+                    data_type: PinDataType::from_type_str(canonical),
                     pin_type: PinType::Input,
                 });
             }
@@ -226,11 +252,13 @@ impl NodeDefinitions {
 
             // Add regular outputs (return type, skip void)
             if let Some(return_type) = &node_meta.return_type {
-                if return_type.type_string != "()" {
+                let canonical =
+                    ui::graph::DataType::from_type_str(&return_type.type_string).to_string();
+                if canonical != "()" && canonical != "execution" {
                     outputs.push(PinDefinition {
                         id: "result".to_string(),
                         name: "result".to_string(),
-                        data_type: PinDataType::from_type_str(&return_type.type_string),
+                        data_type: PinDataType::from_type_str(canonical),
                         pin_type: PinType::Output,
                     });
                 }

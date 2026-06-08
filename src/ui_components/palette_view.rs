@@ -162,22 +162,28 @@ fn build_local_macro_palette_items(
             .interface
             .inputs
             .iter()
-            .map(|p| PinDefinition {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                data_type: crate::core::types::PinDataType::from_type_str(p.data_type.to_string()),
-                pin_type: PinType::Input,
+            .map(|p| {
+                let canonical = ui::graph::DataType::from_type_str(&p.data_type.to_string());
+                PinDefinition {
+                    id: p.id.clone(),
+                    name: p.name.clone(),
+                    data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
+                    pin_type: PinType::Input,
+                }
             })
             .collect();
         let outputs = m
             .interface
             .outputs
             .iter()
-            .map(|p| PinDefinition {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                data_type: crate::core::types::PinDataType::from_type_str(p.data_type.to_string()),
-                pin_type: PinType::Output,
+            .map(|p| {
+                let canonical = ui::graph::DataType::from_type_str(&p.data_type.to_string());
+                PinDefinition {
+                    id: p.id.clone(),
+                    name: p.name.clone(),
+                    data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
+                    pin_type: PinType::Output,
+                }
             })
             .collect();
 

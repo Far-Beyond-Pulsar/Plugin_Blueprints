@@ -87,14 +87,15 @@ impl BlueprintEditorPanel {
 
     /// Get available types from the blueprint metadata provider
     pub fn get_available_types(&self) -> Vec<String> {
-        use graphy::NodeMetadataProvider;
-        let provider = pbgc::BlueprintMetadataProvider::new();
         let mut types: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for node in provider.get_all_nodes() {
-            for param in &node.params {
-                let t = &param.param_type;
-                if !t.is_empty() && t != "()" {
-                    types.insert(t.clone());
+        let definitions = crate::core::definitions::NodeDefinitions::load();
+        for category in &definitions.categories {
+            for node in &category.nodes {
+                for pin in &node.inputs {
+                    let t = pin.data_type.type_name.as_str();
+                    if !t.is_empty() && t != "()" && t != "execution" {
+                        types.insert(t.to_string());
+                    }
                 }
             }
         }

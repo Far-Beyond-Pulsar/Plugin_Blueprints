@@ -288,7 +288,7 @@ impl BlueprintEditorPanel {
         }
 
         let node_definitions = crate::core::definitions::NodeDefinitions::load();
-        let metadata = pbgc::extract_node_metadata().unwrap_or_default();
+        let metadata = crate::core::definitions::extract_canonical_node_metadata();
         let main_tab = self.main_graph_tab();
 
         let editor_nodes = main_tab

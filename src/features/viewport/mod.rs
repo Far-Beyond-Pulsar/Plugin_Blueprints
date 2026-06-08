@@ -16,5 +16,4 @@ pub mod operations;
 // Re-export commonly used coordinate conversion functions
 pub use coordinates::{
     graph_to_screen_pos, parse_hex_color, screen_to_graph_pos, snap_to_grid,
-    window_to_graph_element_pos, window_to_panel_pos,
 };

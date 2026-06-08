@@ -6,7 +6,6 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use pulsar_reflection::{RuntimeTypeInfo, RUNTIME_TYPE_REGISTRY};
 use ui::{
     button::ButtonVariants as _, h_flex, v_flex, ActiveTheme as _, Colorize, IconName, StyledExt,
 };
@@ -631,7 +630,7 @@ impl PropertiesRenderer {
             return row.into_any_element();
         }
 
-        let Some(type_info) = Self::resolve_input_type_info(pin) else {
+        let Some(type_info) = pin.data_type.runtime_type() else {
             return row.into_any_element();
         };
 
@@ -685,49 +684,12 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
-    fn resolve_input_type_info(pin: &Pin) -> Option<&'static RuntimeTypeInfo> {
-        if let Some(type_info) = pin.data_type.runtime_type() {
-            return Some(type_info);
-        }
-
-        let raw = pin.data_type.type_name.trim();
-        if raw.is_empty() {
-            return None;
-        }
-
-        let normalized = match raw.to_ascii_lowercase().as_str() {
-            "datatype::number" | "number" => Some("f64"),
-            "datatype::float" | "float" => Some("f32"),
-            "datatype::integer" | "integer" | "int" => Some("i32"),
-            "datatype::boolean" | "boolean" => Some("bool"),
-            "datatype::string" | "string" | "str" => Some("String"),
-            _ => None,
-        };
-
-        if let Some(type_name) = normalized {
-            return RUNTIME_TYPE_REGISTRY.get_by_name(type_name);
-        }
-
-        if raw.contains("TypeInfo") || raw.starts_with("Typed(") || raw.contains("base_type") {
-            return RUNTIME_TYPE_REGISTRY.get_by_name("String");
-        }
-
-        None
-    }
-
     fn read_pin_property_value(node: &BlueprintNode, pin_id: &str) -> serde_json::Value {
         let Some(raw_value) = node.properties.get(pin_id) else {
             return serde_json::Value::Null;
         };
 
         serde_json::from_str(raw_value)
-            .or_else(|_| {
-                raw_value
-                    .parse::<bool>()
-                    .map(serde_json::Value::from)
-                    .or_else(|_| raw_value.parse::<i64>().map(serde_json::Value::from))
-                    .or_else(|_| raw_value.parse::<f64>().map(serde_json::Value::from))
-            })
             .unwrap_or_else(|_| serde_json::Value::String(raw_value.clone()))
     }
 

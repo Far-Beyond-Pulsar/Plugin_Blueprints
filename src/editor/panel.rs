@@ -649,7 +649,7 @@ impl BlueprintEditorPanel {
                     id: "message".to_string(),
                     name: "Message".to_string(),
                     pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("string"),
+                    data_type: GraphDataType::from_type_str("String"),
                 },
             ],
             outputs: vec![Pin {
@@ -687,7 +687,7 @@ impl BlueprintEditorPanel {
                     id: "message".to_string(),
                     name: "Message".to_string(),
                     pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("string"),
+                    data_type: GraphDataType::from_type_str("String"),
                 },
             ],
             outputs: vec![Pin {
