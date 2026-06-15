@@ -34,6 +34,35 @@ fn to_graph(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Point<f32> {
     )
 }
 
+fn point_distance(a: Point<f32>, b: Point<f32>) -> f32 {
+    ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
+}
+
+fn pin_hit_radius(canvas: &GraphCanvasPanel, scale: f32, min_distance: f32) -> f32 {
+    (PIN_SIZE * canvas.graph.zoom_level * scale).max(min_distance)
+}
+
+fn delete_hovered_connection(
+    canvas: &mut GraphCanvasPanel,
+    gp: Point<f32>,
+    cx: &mut Context<GraphCanvasPanel>,
+) {
+    if hit_node(gp, canvas).is_some() {
+        return;
+    }
+
+    if let Some(conn_id) = canvas.hovered_connection.clone() {
+        if let Some(conn) = canvas.graph.connections.iter().find(|c| c.id == conn_id).cloned() {
+            let mut cmd = crate::features::undo::DeleteConnectionCommand::new(conn);
+            cmd.execute(canvas, cx);
+            canvas.push_undo_command(crate::features::undo::Command::DeleteConnection(cmd));
+            canvas.hovered_connection = None;
+            cx.notify();
+            return;
+        }
+    }
+}
+
 // ─── hit testing ─────────────────────────────────────────────────────────────
 
 fn hit_node<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str> {
@@ -50,12 +79,11 @@ fn hit_node<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str>
 }
 
 fn hit_output_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, String)> {
-    let r = (PIN_SIZE * canvas.graph.zoom_level * 0.9).max(6.0);
+    let r = pin_hit_radius(canvas, 0.9, 6.0);
     for node in &canvas.graph.nodes {
         for (i, pin) in node.outputs.iter().enumerate() {
             let c = NodeGraphRenderer::pin_canvas_pos(node, false, i, &canvas.graph);
-            let d = ((cp.x - c.x).powi(2) + (cp.y - c.y).powi(2)).sqrt();
-            if d <= r {
+            if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
         }
@@ -69,7 +97,7 @@ fn hit_input_pin(
     skip_node: &str,
     src_type: &DataType,
 ) -> Option<(String, String)> {
-    let r = (PIN_SIZE * canvas.graph.zoom_level * 1.3).max(8.0);
+    let r = pin_hit_radius(canvas, 1.3, 8.0);
     for node in &canvas.graph.nodes {
         if node.id == skip_node {
             continue;
@@ -79,8 +107,7 @@ fn hit_input_pin(
                 continue;
             }
             let c = NodeGraphRenderer::pin_canvas_pos(node, true, i, &canvas.graph);
-            let d = ((cp.x - c.x).powi(2) + (cp.y - c.y).powi(2)).sqrt();
-            if d <= r {
+            if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
         }
@@ -89,13 +116,12 @@ fn hit_input_pin(
 }
 
 fn hit_any_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, String)> {
-    let r = (PIN_SIZE * canvas.graph.zoom_level * 1.2).max(8.0);
+    let r = pin_hit_radius(canvas, 1.2, 8.0);
     for node in &canvas.graph.nodes {
         for (is_input, pins) in [(true, &node.inputs), (false, &node.outputs)] {
             for (i, pin) in pins.iter().enumerate() {
                 let c = NodeGraphRenderer::pin_canvas_pos(node, is_input, i, &canvas.graph);
-                let d = ((cp.x - c.x).powi(2) + (cp.y - c.y).powi(2)).sqrt();
-                if d <= r {
+                if point_distance(cp, c) <= r {
                     return Some((node.id.clone(), pin.id.clone()));
                 }
             }
@@ -498,6 +524,18 @@ pub fn on_mouse_move(
 
             let gp = to_graph(cp, canvas);
 
+            // If the pointer is over a node or a pin, prefer node/pin hover and do not
+            // highlight wires under the cursor.
+            canvas.hovered_connection = if canvas.is_panning()
+                || canvas.dragging_connection.is_some()
+                || hit_any_pin(cp, canvas).is_some()
+                || hit_node(gp, canvas).is_some()
+            {
+                None
+            } else {
+                canvas.find_connection_near_point_precise(gp).map(|conn| conn.id)
+            };
+
             if canvas.dragging_comment.is_some() {
                 canvas.update_comment_drag(gp, cx);
             } else if canvas.resizing_comment.is_some() {
@@ -525,6 +563,10 @@ pub fn on_mouse_up_left(
         entity.update(cx, |canvas, cx| {
             let cp = to_canvas(event.position, canvas);
             let gp = to_graph(cp, canvas);
+
+            if event.modifiers.alt {
+                delete_hovered_connection(canvas, gp, cx);
+            }
 
             if canvas.pending_drag_node.is_some() {
                 canvas.pending_drag_node = None;
