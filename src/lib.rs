@@ -231,4 +231,4 @@ impl EditorPlugin for BlueprintEditorPlugin {
 }
 
 // Export the plugin using the provided macro
-//export_plugin!(BlueprintEditorPlugin);
+export_plugin!(BlueprintEditorPlugin);
