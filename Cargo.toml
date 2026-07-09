@@ -18,8 +18,8 @@ path = "examples/standalone_stress.rs"
 
 [dependencies]
 # UI dependencies — revs MUST match workspace Cargo.toml exactly
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "313b82eb92887e6c9c2e92a9ff266ffdcd3ae1d5" }
-ui      = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI-Component", rev = "b43b1cca194b591f079d1b2a9b50bb68b55d67a3" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "98e312efa8601b1244215c79aac88acb5e169e03" }
+ui      = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI-Component", rev = "ccbab31e4e2364ef52efcb61c98c37a5d8cc79e1", features = ["tree-sitter-languages"] }
 
 
 plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f91bbba2b90ebad0afa6b9940ecd52da0430e326" }
