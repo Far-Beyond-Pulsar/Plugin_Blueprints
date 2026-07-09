@@ -133,6 +133,83 @@ impl EditorPlugin for BlueprintEditorPlugin {
         }]
     }
 
+    fn on_load(&mut self) {
+        log::info!("Blueprint Editor Plugin loaded");
+    }
+}
+
+impl BlueprintEditorPlugin {
+    fn create_blueprint_editor(
+        &'static self,
+        file_path: PathBuf,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Result<Arc<dyn PanelView>, PluginError> {
+        log::info!("Creating blueprint editor for {:?}", file_path);
+
+        let file_path_clone = file_path.clone();
+
+        let panel = cx.new(|cx| {
+            match BlueprintEditorPanel::new_with_path(file_path_clone.clone(), window, cx) {
+                Ok(p) => {
+                    tracing::info!(
+                        "create_blueprint_editor: new_with_path succeeded, graph has {} nodes, current_class_path={:?}",
+                        p.graph.nodes.len(),
+                        p.current_class_path,
+                    );
+                    p
+                }
+                Err(e) => {
+                    tracing::error!("create_blueprint_editor: new_with_path FAILED: {}", e);
+                    let p = BlueprintEditorPanel::new(window, cx);
+                    tracing::warn!(
+                        "create_blueprint_editor: fell back to empty panel, graph has {} nodes",
+                        p.graph.nodes.len(),
+                    );
+                    p
+                }
+            }
+        });
+
+        let graph_snapshot = panel.read(cx).graph.clone();
+        ai_tools::upsert_session(file_path.clone(), graph_snapshot);
+
+        let panel_arc: Arc<dyn ui::dock::PanelView> = Arc::new(panel.clone());
+
+        let id = {
+            let mut next_id = self.next_editor_id.lock().unwrap();
+            let id = *next_id;
+            *next_id += 1;
+            id
+        };
+
+        self.editors.lock().unwrap().insert(
+            id,
+            EditorStorage {
+                panel: panel_arc.clone(),
+            },
+        );
+
+        log::info!(
+            "Created blueprint editor instance {} for {:?}",
+            id,
+            file_path
+        );
+
+        Ok(panel_arc)
+    }
+}
+
+impl EditorPluginEditor for BlueprintEditorPlugin {
+    fn register_editors(&'static self, registry: &mut EditorFactoryRegistry) {
+        registry.register_fn(EditorId::new("blueprint-editor"), |file_path, window, cx| {
+            self.create_blueprint_editor(file_path, window, cx)
+        });
+    }
+}
+
+impl EditorPluginStatusbar for BlueprintEditorPlugin {}
+impl EditorPluginAi for BlueprintEditorPlugin {
     fn ai_tools(&self) -> Vec<AiToolDefinition> {
         ai_tools::ai_tools()
     }
@@ -149,84 +226,15 @@ impl EditorPlugin for BlueprintEditorPlugin {
     ) -> Result<serde_json::Value, PluginError> {
         ai_tools::execute_ai_tool(file_path, tool_name, tool_args)
     }
-
-    fn create_editor(
-        &self,
-        editor_id: EditorId,
-        file_path: PathBuf,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Result<Arc<dyn PanelView>, PluginError> {
-        log::info!("Creating blueprint editor with ID: {}", editor_id.as_str());
-
-        if editor_id.as_str() == "blueprint-editor" {
-            let file_path_clone = file_path.clone();
-
-            // Create a view context for the panel
-            let panel = cx.new(|cx| {
-                match BlueprintEditorPanel::new_with_path(file_path_clone.clone(), window, cx) {
-                    Ok(p) => {
-                        tracing::info!(
-                            ">>> create_editor: new_with_path succeeded, graph has {} nodes, current_class_path={:?}",
-                            p.graph.nodes.len(),
-                            p.current_class_path,
-                        );
-                        p
-                    }
-                    Err(e) => {
-                        tracing::error!(">>> create_editor: new_with_path FAILED: {}", e);
-                        // Return a default panel on error
-                        let p = BlueprintEditorPanel::new(window, cx);
-                        tracing::warn!(
-                            ">>> create_editor: fell back to empty panel, graph has {} nodes",
-                            p.graph.nodes.len(),
-                        );
-                        p
-                    }
-                }
-            });
-
-            // Register/refresh AI session state from the live editor graph.
-            let graph_snapshot = panel.read(cx).graph.clone();
-            tracing::info!(
-                ">>> create_editor: AI session snapshot has {} nodes",
-                graph_snapshot.nodes.len(),
-            );
-            ai_tools::upsert_session(file_path.clone(), graph_snapshot);
-
-            // Wrap the panel in Arc - will be shared with main app
-            let panel_arc: Arc<dyn ui::dock::PanelView> = Arc::new(panel.clone());
-
-            // Generate unique ID for this editor
-            let id = {
-                let mut next_id = self.next_editor_id.lock().unwrap();
-                let id = *next_id;
-                *next_id += 1;
-                id
-            };
-
-            // CRITICAL: Store Arc in plugin's HashMap to keep it alive!
-            self.editors.lock().unwrap().insert(
-                id,
-                EditorStorage {
-                    panel: panel_arc.clone(),
-                },
-            );
-
-            log::info!(
-                "Created blueprint editor instance {} for {:?}",
-                id,
-                file_path
-            );
-
-            Ok(panel_arc)
-        } else {
-            Err(PluginError::EditorNotFound { editor_id })
-        }
+}
+impl EditorPluginComponents for BlueprintEditorPlugin {
+    fn component_definitions(&self) -> Vec<ComponentDefinition> {
+        Vec::new()
     }
-
-    fn on_load(&mut self) {
-        log::info!("Blueprint Editor Plugin loaded");
+}
+impl EditorPluginSubsystems for BlueprintEditorPlugin {
+    fn subsystems(&self) -> Vec<Box<dyn Subsystem>> {
+        Vec::new()
     }
 }
 
