@@ -856,10 +856,6 @@ impl NodeGraphRenderer {
                             return;
                         };
 
-                        let frame_uni = GraphUniforms {
-                            viewport: [w as f32, h as f32],
-                            ..uniforms
-                        };
                         canvas.renderer.render_frame(
                                             surface.device(),
                                             surface.queue(),
@@ -867,7 +863,7 @@ impl NodeGraphRenderer {
                                             w,
                                             h,
                                             surface.format(),
-                                            &frame_uni,
+                                            &uniforms,
                                             &comment_instances,
                                             &node_instances,
                                             &wire_instances, // one struct per bezier connection
