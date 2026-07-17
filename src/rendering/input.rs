@@ -79,10 +79,15 @@ fn hit_node<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str>
 }
 
 fn hit_output_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, String)> {
-    let r = pin_hit_radius(canvas, 0.9, 6.0);
     for node in &canvas.graph.nodes {
         for (i, pin) in node.outputs.iter().enumerate() {
             let c = NodeGraphRenderer::pin_canvas_pos(node, false, i, &canvas.graph);
+            let r = if node.node_type == NodeType::Reroute {
+                // Inner 40% of the reroute circle — small pin grab area.
+                (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+            } else {
+                pin_hit_radius(canvas, 0.9, 6.0)
+            };
             if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
@@ -97,7 +102,6 @@ fn hit_input_pin(
     skip_node: &str,
     src_type: &DataType,
 ) -> Option<(String, String)> {
-    let r = pin_hit_radius(canvas, 1.3, 8.0);
     for node in &canvas.graph.nodes {
         if node.id == skip_node {
             continue;
@@ -107,6 +111,12 @@ fn hit_input_pin(
                 continue;
             }
             let c = NodeGraphRenderer::pin_canvas_pos(node, true, i, &canvas.graph);
+            let r = if node.node_type == NodeType::Reroute {
+                // Inner 40% of the reroute circle — small pin grab area.
+                (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+            } else {
+                pin_hit_radius(canvas, 1.3, 8.0)
+            };
             if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
@@ -480,6 +490,11 @@ pub fn on_mouse_down_left(
                 return;
             }
 
+            // Empty space — check for double-click on connection (reroute)
+            if canvas.handle_empty_space_click(gp, cx) {
+                update_graph_cursor(window, canvas, cp, gp);
+                return;
+            }
             // Empty space — start selection drag
             if !event.modifiers.control {
                 canvas.graph.selected_nodes.clear();

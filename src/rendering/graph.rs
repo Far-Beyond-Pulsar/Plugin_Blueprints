@@ -92,6 +92,9 @@ impl NodeGraphRenderer {
         row: usize,
         graph: &BlueprintGraph,
     ) -> Point<f32> {
+        if node.node_type == NodeType::Reroute {
+            return Self::graph_to_screen_pos(node.position, graph);
+        }
         let zoom = graph.zoom_level;
         let scr = Self::graph_to_screen_pos(node.position, graph);
         let py = scr.y
