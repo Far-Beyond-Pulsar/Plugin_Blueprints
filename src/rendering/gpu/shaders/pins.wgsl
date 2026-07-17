@@ -23,9 +23,9 @@ struct VOut {
     @builtin(position) pos:        vec4<f32>,
     @location(0)       uv:         vec2<f32>,
     @location(1)       color:      vec4<f32>,
-    @location(2)       kind:       u32,
-    @location(3)       is_input:   u32,
-    @location(4)       compatible: u32,
+    @location(2) @interpolate(flat) kind:       u32,
+    @location(3) @interpolate(flat) is_input:   u32,
+    @location(4) @interpolate(flat) compatible: u32,
 }
 
 fn graph_to_screen(p: vec2<f32>) -> vec2<f32> {

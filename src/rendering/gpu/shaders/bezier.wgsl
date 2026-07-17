@@ -26,7 +26,7 @@ struct VOut {
     @builtin(position) pos:   vec4<f32>,
     @location(0)       uv:    vec2<f32>,
     @location(1)       color: vec4<f32>,
-    @location(2)       flags: u32,
+    @location(2) @interpolate(flat) flags: u32,
     @location(3)       phase: f32,
 }
 
