@@ -368,7 +368,16 @@ impl BlueprintEditorPanel {
                 continue;
             }
 
-            let node_type = bp_node.definition_id.clone();
+            // Custom event On nodes → treat as event entry points named after the uid.
+            // Custom event Dispatch nodes → emit_custom_event with an event_uid property.
+            let node_type = if bp_node.definition_id.starts_with("custom_event:") {
+                let uid = bp_node.definition_id.trim_start_matches("custom_event:");
+                format!("on_{}", uid.replace('-', "_"))
+            } else if bp_node.definition_id.starts_with("custom_event_dispatch:") {
+                "emit_custom_event".to_string()
+            } else {
+                bp_node.definition_id.clone()
+            };
             let is_component_method_node = node_type.starts_with("comp_get_prop::")
                 || node_type.starts_with("comp_set_prop::")
                 || node_type.starts_with("comp_call::");

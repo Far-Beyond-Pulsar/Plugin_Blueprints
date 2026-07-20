@@ -16,6 +16,7 @@ use super::tabs::GraphTab;
 use crate::core::{events::*, graph::*, types::*};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
+use ui::dropdown::{DropdownItem, DropdownState, SearchableVec};
 use crate::features::prefabs::add_component_dialog::AddPrefabComponentDialog;
 use crate::features::prefabs::PrefabAsset;
 use crate::features::variables::ClassVariable;
@@ -192,6 +193,14 @@ pub struct BlueprintEditorPanel {
     // ── Macro pin editor state ────────────────────────────────────────────────
     /// When Some: true = adding an input, false = adding an output.
     pub macro_pin_add_mode: Option<bool>,
+
+    // ── Custom Event Configurator ─────────────────────────────────────────────
+    /// The event configurator overlay state (None = closed).
+    pub event_configurator: Option<EventConfiguratorState>,
+
+    /// Cache: maps custom event uid → node id of the On node (used by palette
+    /// to find Dispatch candidates).
+    pub custom_event_registry: HashMap<String, String>,
 }
 
 /// Information about a tab being dragged
@@ -201,6 +210,44 @@ pub struct TabDragInfo {
     pub tab_index: usize, // Which tab is being dragged
     pub label: String,
     pub icon: ui::IconName,
+}
+
+/// State for the custom event configurator overlay.
+#[derive(Clone)]
+pub struct EventConfiguratorState {
+    pub uid: String,
+    pub on_node_id: Option<String>,
+    pub dispatch_node_ids: Vec<String>,
+    pub name_input: Entity<InputState>,
+    pub fields: Vec<EventConfigField>,
+    pub field_name_inputs: Vec<Entity<InputState>>,
+    pub field_type_dropdowns: Vec<Entity<DropdownState<SearchableVec<EventFieldType>>>>,
+}
+
+/// A single field in the event configurator.
+#[derive(Clone, Debug)]
+pub struct EventConfigField {
+    pub name: String,
+    pub type_name: String,
+}
+
+/// A type option in the field-type dropdown.
+#[derive(Clone, Debug)]
+pub struct EventFieldType {
+    pub name: String,
+}
+
+impl DropdownItem for EventFieldType {
+    type Value = String;
+    fn title(&self) -> SharedString {
+        self.name.clone().into()
+    }
+    fn value(&self) -> &Self::Value {
+        &self.name
+    }
+    fn matches(&self, query: &str) -> bool {
+        self.name.to_lowercase().contains(&query.to_lowercase())
+    }
 }
 
 /// Compilation history entry
@@ -530,6 +577,8 @@ impl BlueprintEditorPanel {
             debug_session: None,
             dragging_macro: None,
             macro_pin_add_mode: None,
+            event_configurator: None,
+            custom_event_registry: HashMap::new(),
         }
     }
 

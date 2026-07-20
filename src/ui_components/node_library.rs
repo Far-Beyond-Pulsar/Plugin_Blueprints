@@ -56,7 +56,9 @@ impl PaletteItem {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Build the complete flat list from the global node definitions.
+/// Build the complete flat list from the global node definitions,
+/// optionally augmented with custom event dispatch entries and the
+/// "Add Custom Event" sentinel.
 ///
 /// The list is ordered: category header, then all nodes in that category,
 /// then the next category header, and so on.
@@ -71,6 +73,25 @@ pub fn build_palette_items(defs: &NodeDefinitions) -> Vec<PaletteItem> {
         for def in &category.nodes {
             items.push(PaletteItem::NodeEntry {
                 def: def.clone(),
+                category_color: category.color.clone(),
+            });
+        }
+
+        // Inject "Add Custom Event" sentinel into the Events category.
+        if category.name == "Events" {
+            items.push(PaletteItem::NodeEntry {
+                def: NodeDefinition {
+                    id: "__add_custom_event__".to_string(),
+                    name: "Add Custom Event".to_string(),
+                    icon: "📡".to_string(),
+                    description: "Create a new custom event definition".to_string(),
+                    documentation: String::new(),
+                    inputs: Vec::new(),
+                    outputs: Vec::new(),
+                    properties: std::collections::HashMap::new(),
+                    color: Some("#E67E22".to_string()),
+                    is_event: false,
+                },
                 category_color: category.color.clone(),
             });
         }

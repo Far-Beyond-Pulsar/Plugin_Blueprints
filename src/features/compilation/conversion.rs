@@ -148,6 +148,48 @@ impl BlueprintEditorPanel {
                     NodeType::Reroute,
                     None,
                 )
+            } else if definition_id.starts_with("custom_event:") {
+                let uid = definition_id.trim_start_matches("custom_event:");
+                let name = uid.replace('-', " ");
+                let name = name
+                    .split_whitespace()
+                    .map(|w| {
+                        let mut c = w.chars();
+                        match c.next() {
+                            None => String::new(),
+                            Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                (
+                    format!("On {}", name),
+                    "📡".to_string(),
+                    format!("Custom event listener for '{}'", uid),
+                    NodeType::CustomEvent,
+                    None,
+                )
+            } else if definition_id.starts_with("custom_event_dispatch:") {
+                let uid = definition_id.trim_start_matches("custom_event_dispatch:");
+                let name = uid.replace('-', " ");
+                let name = name
+                    .split_whitespace()
+                    .map(|w| {
+                        let mut c = w.chars();
+                        match c.next() {
+                            None => String::new(),
+                            Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                (
+                    format!("Dispatch {}", name),
+                    "📡".to_string(),
+                    format!("Dispatch the '{}' custom event", uid),
+                    NodeType::CustomEventDispatch,
+                    None,
+                )
             } else if let Some(def) = node_def {
                 // Event entry-points are identified by their underlying Blueprint
                 // node type, not by category — events such as `on_input_key`/

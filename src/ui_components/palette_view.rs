@@ -527,6 +527,22 @@ fn palette_node_row(
             MouseButton::Left,
             cx.listener(move |view, _event, _window, cx| {
                 let def_now = def_for_click.clone();
+
+                // Sentinel: "Add Custom Event" → open configurator
+                if def_now.id == "__add_custom_event__" {
+                    if let Some(canvas_entity) = view.resolve_canvas(cx) {
+                        canvas_entity.update(cx, |canvas, cx| {
+                            canvas.open_event_configurator(None, _window, cx);
+                            canvas.popup_palette_graph_pos = None;
+                            canvas.quick_palette_connection_source = None;
+                            canvas.quick_palette_open = false;
+                            canvas.quick_palette_focus_pending = false;
+                            cx.notify();
+                        });
+                    }
+                    return;
+                }
+
                 // Route node placement through the resolved canvas entity.
                 if let Some(canvas_entity) = view.resolve_canvas(cx) {
                     canvas_entity.update(cx, |canvas, cx| {

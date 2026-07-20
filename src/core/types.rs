@@ -219,6 +219,8 @@ pub enum NodeType {
     MacroEntry,    // Entry point for macro graphs (replaces generic subgraph_input)
     MacroExit,     // Exit point for macro graphs (replaces generic subgraph_output)
     MacroInstance, // Instance of a macro in parent graph
+    CustomEvent,   // On-node for a custom event definition (definition_id: "custom_event:<uid>")
+    CustomEventDispatch, // Dispatch node for a custom event (definition_id: "custom_event_dispatch:<uid>")
 }
 
 // ============================================================================

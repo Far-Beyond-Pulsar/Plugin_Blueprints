@@ -580,6 +580,18 @@ impl PropertiesRenderer {
                 l: 0.5,
                 a: 1.0,
             },
+            NodeType::CustomEvent => gpui::Hsla {
+                h: 0.08,
+                s: 0.8,
+                l: 0.5,
+                a: 1.0,
+            },
+            NodeType::CustomEventDispatch => gpui::Hsla {
+                h: 0.55,
+                s: 0.8,
+                l: 0.5,
+                a: 1.0,
+            },
         }
     }
 

@@ -428,6 +428,16 @@ pub fn on_mouse_down_left(
                                 return;
                             }
                         }
+                        // Double-click on custom event node opens configurator
+                        if node.node_type == NodeType::CustomEvent
+                            || node.node_type == NodeType::CustomEventDispatch
+                        {
+                            canvas.last_click_time = None;
+                            canvas.last_click_pos = None;
+                            let nid = node.id.clone();
+                            canvas.open_event_configurator(Some(nid), window, cx);
+                            return;
+                        }
                     }
                     canvas.last_click_time = None;
                     canvas.last_click_pos = None;

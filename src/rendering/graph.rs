@@ -210,6 +210,8 @@ fn category_color(node: &BlueprintNode) -> [f32; 4] {
         NodeType::Reroute => [0.40, 0.40, 0.42, 1.0],
         NodeType::MacroEntry | NodeType::MacroExit => [0.44, 0.18, 0.72, 1.0],
         NodeType::MacroInstance => [0.32, 0.12, 0.52, 1.0],
+        NodeType::CustomEvent => [0.90, 0.50, 0.10, 1.0],       // orange
+        NodeType::CustomEventDispatch => [0.10, 0.60, 0.85, 1.0], // cyan
     }
 }
 
@@ -937,6 +939,8 @@ impl NodeGraphRenderer {
                     .child(Self::render_debug_hud(canvas, cx))
                     .child(Self::render_macro_pin_editor(canvas, cx))
                     .child(Self::render_comment_title_editor(canvas, cx))
+                    .child(Self::render_custom_event_pencil_icons(canvas, cx))
+                    .child(Self::render_event_configurator_overlay(canvas, cx))
                     // input
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -1072,6 +1076,314 @@ impl NodeGraphRenderer {
                                 .bordered(false)
                                 .focus_bordered(false),
                         ),
+                ),
+        )
+        .with_priority(2)
+        .into_any_element()
+    }
+
+    // ── Custom Event Pencil Icons ──────────────────────────────────────────────
+    //
+    // Render a small pencil icon at the top-right of every custom event node
+    // (both On and Dispatch) so the user can click to edit the event definition.
+
+    fn render_custom_event_pencil_icons(
+        canvas: &GraphCanvasPanel,
+        cx: &mut Context<GraphCanvasPanel>,
+    ) -> AnyElement {
+        let origin = *canvas.canvas_origin.borrow();
+        let canvas_entity = cx.entity().clone();
+
+        let custom_nodes: Vec<(Point<Pixels>, String)> = canvas
+            .graph
+            .nodes
+            .iter()
+            .filter(|n| {
+                n.node_type == NodeType::CustomEvent
+                    || n.node_type == NodeType::CustomEventDispatch
+            })
+            .map(|n| {
+                let scr = Self::graph_to_screen_pos(n.position, &canvas.graph);
+                let win = Point::new(
+                    px(scr.x + origin.x + n.size.width * canvas.graph.zoom_level - 24.0),
+                    px(scr.y + origin.y + 4.0),
+                );
+                (win, n.id.clone())
+            })
+            .collect();
+
+        if custom_nodes.is_empty() {
+            return div().into_any_element();
+        }
+
+        let mut container = div();
+        for (pos, node_id) in custom_nodes {
+            let pe = canvas_entity.clone();
+            let nid = node_id.clone();
+            let icon = deferred(
+                anchored()
+                    .position(pos)
+                    .anchor(gpui::Corner::TopLeft)
+                    .child(
+                        div()
+                            .w(px(18.0))
+                            .h(px(18.0))
+                            .rounded(px(3.0))
+                            .bg(gpui::rgba(0x00000044))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .hover(|s| s.bg(gpui::rgba(0x00000088)))
+                            .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+                                pe.update(cx, |canvas, cx| {
+                                    canvas.open_event_configurator(
+                                        Some(nid.clone()),
+                                        window,
+                                        cx,
+                                    );
+                                });
+                            })
+                            .child(
+                                div()
+                                    .text_size(px(11.0))
+                                    .text_color(gpui::rgba(0xFFFFFFFF))
+                                    .child("✎"),
+                            ),
+                    ),
+            )
+            .with_priority(4)
+            .into_any_element();
+            container = container.child(icon);
+        }
+
+        container.into_any_element()
+    }
+
+    // ── Event Configurator Overlay ─────────────────────────────────────────────
+    //
+    // Shown as a centered anchored overlay when the user creates or edits a custom
+    // event.  Contains event name input, field list with type dropdowns, and
+    // Save / Cancel buttons.
+
+    fn render_event_configurator_overlay(
+        canvas: &GraphCanvasPanel,
+        cx: &mut Context<GraphCanvasPanel>,
+    ) -> AnyElement {
+        use ui::{h_flex, v_flex, ActiveTheme};
+
+        if !canvas.event_configurator_open {
+            return div().into_any_element();
+        }
+
+        let canvas_entity = cx.entity().clone();
+
+        // Compute center screen position
+        let origin = *canvas.canvas_origin.borrow();
+        let center_x = px(origin.x + 600.0);
+        let center_y = px(origin.y + 400.0);
+
+        // Build field rows
+        let mut field_rows = Vec::new();
+        for (i, field) in canvas.event_fields.iter().enumerate() {
+            let pe = canvas_entity.clone();
+            let pi = i;
+            let name_input = canvas.field_name_inputs.get(i).cloned();
+            let type_dd = canvas.field_type_dropdowns.get(i).cloned();
+
+            let mut row = h_flex()
+                .gap(px(6.0))
+                .items_center()
+                .w_full();
+
+            if let Some(ref inp) = name_input {
+                row = row.child(
+                    div().w(px(150.0)).h(px(28.0)).child(
+                        ui::input::TextInput::new(inp),
+                    ),
+                );
+            }
+
+            if let Some(ref dd) = type_dd {
+                row = row.child(
+                    div().w(px(120.0)).h(px(28.0)).child(
+                        ui::dropdown::Dropdown::new(dd),
+                    ),
+                );
+            }
+
+            row = row.child(
+                div()
+                    .w(px(22.0))
+                    .h(px(22.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .text_color(cx.theme().muted_foreground)
+                    .hover(|s| s.text_color(gpui::rgba(0xFF6666FF)))
+                    .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
+                        pe.update(cx, |canvas, cx| {
+                            canvas.remove_event_field(pi, cx);
+                        });
+                    })
+                    .child("✕"),
+            );
+
+            field_rows.push(row.into_any_element());
+        }
+
+        let pe = canvas_entity.clone();
+        let pe_save = canvas_entity.clone();
+        let pe_cancel = canvas_entity.clone();
+
+        deferred(
+            anchored()
+                .position(Point::new(center_x, center_y))
+                .snap_to_window_with_margin(px(8.0))
+                .anchor(gpui::Corner::TopLeft)
+                .child(
+                    div()
+                        .occlude()
+                        .w(px(420.0))
+                        .bg(cx.theme().background)
+                        .rounded_md()
+                        .shadow_lg()
+                        .p_4()
+                        .child(
+                            v_flex()
+                                .gap_3()
+                                // Header
+                                .child(
+                                    h_flex()
+                                        .w_full()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_sm()
+                                                .font_weight(gpui::FontWeight::BOLD)
+                                                .child("Custom Event"),
+                                        ),
+                                )
+                                // Name input
+                                .child(
+                                    v_flex()
+                                        .gap_1()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child("Event Name"),
+                                        )
+                                        .child(
+                                            ui::input::TextInput::new(&canvas.event_name_input)
+                                                .w_full(),
+                                        ),
+                                )
+                                // Separator
+                                .child(
+                                    div()
+                                        .w_full()
+                                        .h(px(1.0))
+                                        .bg(cx.theme().border),
+                                )
+                                // Fields label + add button
+                                .child(
+                                    h_flex()
+                                        .w_full()
+                                        .justify_between()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child("Fields"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .cursor_pointer()
+                                                .text_color(cx.theme().accent)
+                                                .on_mouse_down(
+                                                    gpui::MouseButton::Left,
+                                                    cx.listener(|canvas, _, window, cx| {
+                                                        canvas.add_event_field(window, cx);
+                                                    }),
+                                                )
+                                                .child("+ Add Field"),
+                                        ),
+                                )
+                                // Field rows
+                                .children(field_rows)
+                                // Separator
+                                .child(
+                                    div()
+                                        .w_full()
+                                        .h(px(1.0))
+                                        .bg(cx.theme().border),
+                                )
+                                // Buttons
+                                .child(
+                                    h_flex()
+                                        .w_full()
+                                        .justify_end()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .px(px(12.0))
+                                                .py(px(6.0))
+                                                .text_sm()
+                                                .rounded_md()
+                                                .border_1()
+                                                .border_color(cx.theme().border)
+                                                .cursor_pointer()
+                                                .hover(|s| s.bg(cx.theme().muted))
+                                                .on_mouse_down(
+                                                    gpui::MouseButton::Left,
+                                                    move |_, window, cx| {
+                                                        pe_cancel.update(cx, |canvas, cx| {
+                                                            canvas.cancel_event_configurator(
+                                                                window, cx,
+                                                            );
+                                                        });
+                                                    },
+                                                )
+                                                .child("Cancel"),
+                                        )
+                                        .child(
+                                            div()
+                                                .px(px(12.0))
+                                                .py(px(6.0))
+                                                .text_sm()
+                                                .rounded_md()
+                                                .bg(gpui::rgba(0x3B82F6FF))
+                                                .text_color(gpui::rgba(0xFFFFFFFF))
+                                                .cursor_pointer()
+                                                .hover(|s| s.bg(gpui::rgba(0x2563EBFF)))
+                                                .on_mouse_down(
+                                                    gpui::MouseButton::Left,
+                                                    move |_, window, cx| {
+                                                        pe_save.update(cx, |canvas, cx| {
+                                                            canvas.save_event_configurator(
+                                                                window, cx,
+                                                            );
+                                                        });
+                                                    },
+                                                )
+                                                .child("Save"),
+                                        ),
+                                ),
+                        )
+                        .on_mouse_down_out({
+                            let pe2 = pe.clone();
+                            move |_, _window, cx| {
+                                pe2.update(cx, |canvas, cx| {
+                                    canvas.event_configurator_open = false;
+                                    canvas.editing_event_node = None;
+                                    canvas.event_fields.clear();
+                                    cx.notify();
+                                });
+                            }
+                        }),
                 ),
         )
         .with_priority(2)
