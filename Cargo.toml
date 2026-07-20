@@ -49,7 +49,7 @@ schemars = "1.0"
 futures = "0.3"
 arboard = "3.4"
 anyhow = "1.0"
-wgpu = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", rev = "fce5b80e8017304449124b12637ec324417e40c8", default-features = false, features = ["dx12", "vulkan", "wgsl", "metal"] }
+wgpu = { version = "30", default-features = false, features = ["dx12", "vulkan", "wgsl", "metal"] }
 parking_lot = "0.12"
 fontdue = "0.9"
 bytemuck = { version = "1", features = ["derive"] }
