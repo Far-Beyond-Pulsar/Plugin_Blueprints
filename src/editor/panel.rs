@@ -440,6 +440,7 @@ impl BlueprintEditorPanel {
                 zoom_level: 1.0,
                 pan_offset: Point::new(0.0, 0.0),
                 virtualization_stats: VirtualizationStats::default(),
+                custom_event_defs: HashMap::new(),
             }
         } else {
             // No file to load - create sample graph
@@ -867,6 +868,7 @@ impl BlueprintEditorPanel {
             zoom_level: 1.0,
             pan_offset: Point::new(0.0, 0.0),
             virtualization_stats: VirtualizationStats::default(),
+            custom_event_defs: HashMap::new(),
         }
     }
 

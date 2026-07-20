@@ -130,8 +130,11 @@ impl NodePaletteView {
 
             // Custom event Dispatch nodes — from the active canvas's live graph
             if let Some(canvas) = editor_ref.active_canvas() {
-                let graph = canvas.read(cx).graph.nodes.clone();
-                let dispatch_items = build_custom_event_dispatch_palette_items(&graph);
+                let graph = canvas.read(cx);
+                let nodes = graph.graph.nodes.clone();
+                let defs = graph.graph.custom_event_defs.clone();
+                drop(graph);
+                let dispatch_items = build_custom_event_dispatch_palette_items(&nodes, &defs);
                 all_items.extend(dispatch_items);
             }
         }
@@ -218,24 +221,47 @@ fn build_local_macro_palette_items(
 /// active canvas's graph.
 fn build_custom_event_dispatch_palette_items(
     nodes: &[BlueprintNode],
+    defs: &std::collections::HashMap<String, crate::core::graph::CustomEventDef>,
 ) -> Vec<PaletteItem> {
     let mut items = Vec::new();
     let mut dispatch_entries: Vec<(String, String, Vec<PinDefinition>)> = Vec::new();
 
+    // Deduplicate by uid — only one dispatch entry per event definition
+    let mut seen = std::collections::HashSet::new();
     for node in nodes {
         if let Some(uid) = node.definition_id.strip_prefix("custom_event:") {
-            let input_pins: Vec<PinDefinition> = node
-                .outputs
-                .iter()
-                .filter(|p| !p.data_type.is_execution())
-                .map(|p| PinDefinition {
-                    id: p.id.clone(),
-                    name: p.name.clone(),
-                    data_type: p.data_type.clone(),
-                    pin_type: PinType::Input,
-                })
-                .collect();
-            dispatch_entries.push((uid.to_string(), node.title.clone(), input_pins));
+            if !seen.insert(uid.to_string()) {
+                continue;
+            }
+            let (pins, event_name) = if let Some(def) = defs.get(uid) {
+                let input_pins: Vec<PinDefinition> = def
+                    .fields
+                    .iter()
+                    .map(|f| PinDefinition {
+                        id: f.name.clone(),
+                        name: f.name.clone(),
+                        data_type: crate::core::types::PinDataType::from_type_str(&f.type_name),
+                        pin_type: PinType::Input,
+                    })
+                    .collect();
+                (input_pins, def.name.clone())
+            } else {
+                // Fallback: read from node outputs
+                let input_pins: Vec<PinDefinition> = node
+                    .outputs
+                    .iter()
+                    .filter(|p| !p.data_type.is_execution())
+                    .map(|p| PinDefinition {
+                        id: p.id.clone(),
+                        name: p.name.clone(),
+                        data_type: p.data_type.clone(),
+                        pin_type: PinType::Input,
+                    })
+                    .collect();
+                let en = node.title.strip_prefix("On ").unwrap_or(&node.title).to_string();
+                (input_pins, en)
+            };
+            dispatch_entries.push((uid.to_string(), event_name, pins));
         }
     }
 
@@ -249,9 +275,7 @@ fn build_custom_event_dispatch_palette_items(
         node_count: dispatch_entries.len(),
     });
 
-    for (uid, title, input_pins) in dispatch_entries {
-        // The title is "On <EventName>" — derive Dispatch name
-        let event_name = title.strip_prefix("On ").unwrap_or(&title);
+    for (uid, event_name, input_pins) in dispatch_entries {
         let mut dispatch_inputs = vec![PinDefinition {
             id: "exec".to_string(),
             name: String::new(),

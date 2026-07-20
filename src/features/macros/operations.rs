@@ -69,6 +69,7 @@ impl BlueprintEditorPanel {
                 zoom_level: 1.0,
                 pan_offset: Point::new(0.0, 0.0),
                 virtualization_stats: crate::VirtualizationStats::default(),
+                custom_event_defs: std::collections::HashMap::new(),
             },
             is_main: false,
             is_dirty: false,

@@ -1127,30 +1127,30 @@ impl GraphCanvasPanel {
         self.editing_event_node = node_id.clone();
 
         if let Some(ref nid) = node_id {
-            // Load existing event data from node
-            if let Some(node) = self.graph.nodes.iter().find(|n| n.id == *nid) {
-                self.event_name_input.update(cx, |input, cx| {
-                    input.set_value(
-                        node.title.trim_start_matches("On ").to_string(),
-                        window,
-                        cx,
-                    );
-                });
+            // Load event data from the shared graph-level definition
+            let event_uid = self
+                .graph
+                .nodes
+                .iter()
+                .find(|n| n.id == *nid)
+                .and_then(|n| n.properties.get("event_uid"));
+            let def = event_uid
+                .and_then(|uid| self.graph.custom_event_defs.get(uid));
 
-                // Reconstruct fields from output pins
-                for pin in &node.outputs {
-                    if pin.data_type.is_execution() {
-                        continue;
-                    }
+            if let Some(def) = def {
+                self.event_name_input.update(cx, |input, cx| {
+                    input.set_value(def.name.clone(), window, cx);
+                });
+                for field in &def.fields {
                     self.event_fields.push(EventConfigField {
-                        name: pin.name.clone(),
-                        type_name: pin.data_type.type_name.clone(),
+                        name: field.name.clone(),
+                        type_name: field.type_name.clone(),
                     });
                     let inp = cx.new(|cx| {
                         InputState::new(window, cx).placeholder("Field name...")
                     });
                     inp.update(cx, |input, cx| {
-                        input.set_value(pin.name.clone(), window, cx);
+                        input.set_value(field.name.clone(), window, cx);
                     });
                     self.field_name_inputs.push(inp);
 
@@ -1165,7 +1165,7 @@ impl GraphCanvasPanel {
                         DropdownState::new(SearchableVec::new(type_items), None, window, cx)
                     });
                     dd.update(cx, |state, cx| {
-                        state.set_selected_value(&pin.data_type.type_name, window, cx);
+                        state.set_selected_value(&field.type_name, window, cx);
                     });
                     self.field_type_dropdowns.push(dd);
                 }
@@ -1182,13 +1182,14 @@ impl GraphCanvasPanel {
         cx.notify();
     }
 
-    /// Save the event configurator — create or update the On node and all
-    /// Dispatch nodes.
+    /// Save the event configurator — store the shared definition and sync all
+    /// On / Dispatch nodes that reference this event.
     pub fn save_event_configurator(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        use crate::core::graph::CustomEventField;
         use crate::core::types::PinDataType as DataType;
         use crate::core::types::*;
 
@@ -1215,25 +1216,49 @@ impl GraphCanvasPanel {
         let on_def_id = format!("custom_event:{}", uid);
         let dispatch_def_id = format!("custom_event_dispatch:{}", uid);
 
+        // Capture old uid from the node being edited
+        let old_uid = self.editing_event_node.as_ref().and_then(|nid| {
+            self.graph.nodes.iter().find(|n| n.id == *nid)
+                .and_then(|n| n.properties.get("event_uid").cloned())
+        });
+
+        // Build the shared definition
+        let fields: Vec<CustomEventField> = self
+            .event_fields
+            .iter()
+            .map(|f| CustomEventField {
+                name: f.name.clone(),
+                type_name: f.type_name.clone(),
+            })
+            .collect();
+        let def = crate::core::graph::CustomEventDef {
+            name: event_name.clone(),
+            uid: uid.clone(),
+            fields: fields.clone(),
+        };
+
+        // Remove old uid entry if renamed
+        if let Some(ref old) = old_uid {
+            if old != &uid {
+                self.graph.custom_event_defs.remove(old);
+            }
+        }
+        self.graph.custom_event_defs.insert(uid.clone(), def);
+
         // Build pins from fields
-        let mut exec_output = Pin {
+        let mut output_pins = vec![Pin {
             id: "Body".to_string(),
             name: "Body".to_string(),
             pin_type: PinType::Output,
             data_type: DataType::execution(),
-        };
-        let mut output_pins = vec![exec_output];
-        let mut dispatch_input_pins: Vec<Pin> = Vec::new();
-
-        // Add an execution input for the dispatch node
-        dispatch_input_pins.push(Pin {
+        }];
+        let mut dispatch_input_pins = vec![Pin {
             id: "exec".to_string(),
             name: String::new(),
             pin_type: PinType::Input,
             data_type: DataType::execution(),
-        });
-
-        for field in self.event_fields.iter() {
+        }];
+        for field in &fields {
             let pin_id = field.name.clone();
             let data_type = DataType::from_type_str(&field.type_name);
             output_pins.push(Pin {
@@ -1242,7 +1267,6 @@ impl GraphCanvasPanel {
                 pin_type: PinType::Output,
                 data_type: data_type.clone(),
             });
-            // Dispatch node gets corresponding input pins
             dispatch_input_pins.push(Pin {
                 id: pin_id.clone(),
                 name: field.name.clone(),
@@ -1251,30 +1275,22 @@ impl GraphCanvasPanel {
             });
         }
 
-        // Capture old uid before any mutations
-        let initial_old_uid = self.editing_event_node.as_ref().and_then(|nid| {
-            self.graph.nodes.iter().find(|n| n.id == *nid)
-                .and_then(|n| n.properties.get("event_uid").cloned())
-        });
-
-        // Update the node being edited
+        // Update or create the node being edited
         if let Some(ref nid) = self.editing_event_node {
             if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *nid) {
                 node.title = format!("On {}", event_name);
                 node.outputs = output_pins.clone();
-                node.definition_id = on_def_id.clone();
+                node.definition_id = on_def_id;
                 node.properties.insert("event_uid".to_string(), uid.clone());
             }
         } else {
-            // Create new On node
-            let base_pos = Point::new(200.0, 200.0);
-            let new_node = BlueprintNode {
+            self.graph.nodes.push(BlueprintNode {
                 id: uuid::Uuid::new_v4().to_string(),
-                definition_id: on_def_id.clone(),
+                definition_id: on_def_id,
                 title: format!("On {}", event_name),
                 icon: "📡".to_string(),
                 node_type: NodeType::CustomEvent,
-                position: base_pos,
+                position: Point::new(200.0, 200.0),
                 size: Size::new(240.0, 60.0),
                 inputs: Vec::new(),
                 outputs: output_pins.clone(),
@@ -1286,72 +1302,37 @@ impl GraphCanvasPanel {
                 is_selected: false,
                 description: format!("Custom event listener for '{}'", uid),
                 color: None,
-            };
-            self.graph.nodes.push(new_node);
+            });
         }
 
-        // Update all nodes (On + Dispatch) sharing this event uid
+        // Sync all nodes with matching event_uid (handles rename + duplicates)
         let match_uids: Vec<String> = {
             let mut mu = vec![uid.clone()];
-            if let Some(ref old) = initial_old_uid {
+            if let Some(ref old) = old_uid {
                 if old != &uid {
                     mu.push(old.clone());
                 }
             }
             mu
         };
-
-        let update_target_ids: Vec<String> = self
-            .graph
-            .nodes
-            .iter()
-            .filter(|n| {
-                n.properties.get("event_uid")
-                    .map_or(false, |eu| match_uids.contains(eu))
-            })
-            .map(|n| n.id.clone())
-            .collect();
-
-        if update_target_ids.is_empty() && self.editing_event_node.is_none() {
-            // Auto-create a dispatch node for a brand-new event
-            let dispatch_pos = Point::new(500.0, 200.0);
-            let dispatch_node = BlueprintNode {
-                id: uuid::Uuid::new_v4().to_string(),
-                definition_id: dispatch_def_id,
-                title: format!("Dispatch {}", event_name),
-                icon: "📡".to_string(),
-                node_type: NodeType::CustomEventDispatch,
-                position: dispatch_pos,
-                size: Size::new(240.0, 60.0),
-                inputs: dispatch_input_pins,
-                outputs: Vec::new(),
-                properties: {
-                    let mut m = std::collections::HashMap::new();
-                    m.insert("event_uid".to_string(), uid.clone());
-                    m
-                },
-                is_selected: false,
-                description: format!("Dispatch the '{}' custom event", uid),
-                color: None,
+        for node in self.graph.nodes.iter_mut() {
+            let eu = match node.properties.get("event_uid") {
+                Some(eu) if match_uids.contains(eu) => eu.clone(),
+                _ => continue,
             };
-            self.graph.nodes.push(dispatch_node);
-        } else {
-            for id in &update_target_ids {
-                if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *id) {
-                    match node.node_type {
-                        NodeType::CustomEvent => {
-                            node.title = format!("On {}", event_name);
-                            node.outputs = output_pins.clone();
-                            node.definition_id = on_def_id.clone();
-                        }
-                        NodeType::CustomEventDispatch => {
-                            node.inputs = dispatch_input_pins.clone();
-                            node.definition_id = dispatch_def_id.clone();
-                        }
-                        _ => continue,
-                    }
-                    node.properties.insert("event_uid".to_string(), uid.clone());
+            node.properties.insert("event_uid".to_string(), uid.clone());
+            match node.node_type {
+                NodeType::CustomEvent => {
+                    node.outputs = output_pins.clone();
+                    node.definition_id = format!("custom_event:{}", uid);
+                    node.title = format!("On {}", event_name);
                 }
+                NodeType::CustomEventDispatch => {
+                    node.inputs = dispatch_input_pins.clone();
+                    node.definition_id = format!("custom_event_dispatch:{}", uid);
+                    node.title = format!("Dispatch {}", event_name);
+                }
+                _ => {}
             }
         }
 

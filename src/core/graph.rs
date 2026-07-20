@@ -5,6 +5,22 @@
 
 use super::types::{BlueprintComment, BlueprintNode, Connection, VirtualizationStats};
 use gpui::*;
+use std::collections::HashMap;
+
+/// A single field in a custom event definition.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CustomEventField {
+    pub name: String,
+    pub type_name: String,
+}
+
+/// Shared definition for a custom event, stored at the graph level.
+#[derive(Clone, Debug, Default)]
+pub struct CustomEventDef {
+    pub name: String,
+    pub uid: String,
+    pub fields: Vec<CustomEventField>,
+}
 
 /// The main container for a blueprint graph, including all nodes, connections,
 /// comments, selection state, and viewport information.
@@ -18,4 +34,6 @@ pub struct BlueprintGraph {
     pub zoom_level: f32,
     pub pan_offset: Point<f32>,
     pub virtualization_stats: VirtualizationStats,
+    /// Shared definitions for custom events, keyed by uid.
+    pub custom_event_defs: HashMap<String, CustomEventDef>,
 }
