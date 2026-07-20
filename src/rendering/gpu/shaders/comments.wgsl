@@ -26,7 +26,7 @@ struct VOut {
     @location(2)       fill_color: vec4<f32>,
     @location(3)       border_color: vec4<f32>,
     @location(4)       corner_r_px: f32,
-    @location(5)       flags: u32,
+    @location(5) @interpolate(flat) flags: u32,
 }
 
 fn graph_to_screen(p: vec2<f32>) -> vec2<f32> {
