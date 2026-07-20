@@ -1340,6 +1340,13 @@ impl GraphCanvasPanel {
         self.is_dirty = true;
         self.event_configurator_open = false;
         self.editing_event_node = None;
+
+        // Refresh palette so new/updated Dispatch entries appear
+        let palette = self.quick_palette_view.clone();
+        cx.defer(move |cx| {
+            palette.update(cx, |view, cx| view.rebuild_items(cx));
+        });
+
         cx.notify();
     }
 

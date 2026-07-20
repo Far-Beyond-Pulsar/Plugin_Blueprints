@@ -128,10 +128,12 @@ impl NodePaletteView {
                 build_local_macro_palette_items(&editor_ref.local_macros, editing_macro_id.as_deref());
             all_items.extend(local_macro_items);
 
-            // Custom event Dispatch nodes — one per On node in the graph
-            let dispatch_items =
-                build_custom_event_dispatch_palette_items(&editor_ref, cx);
-            all_items.extend(dispatch_items);
+            // Custom event Dispatch nodes — from the active canvas's live graph
+            if let Some(canvas) = editor_ref.active_canvas() {
+                let graph = canvas.read(cx).graph.nodes.clone();
+                let dispatch_items = build_custom_event_dispatch_palette_items(&graph);
+                all_items.extend(dispatch_items);
+            }
         }
 
         self.all_items = all_items;
@@ -212,32 +214,28 @@ fn build_local_macro_palette_items(
     items
 }
 
-/// Build palette items for custom event Dispatch nodes from On nodes in the graph.
+/// Build palette items for custom event Dispatch nodes from On nodes in the
+/// active canvas's graph.
 fn build_custom_event_dispatch_palette_items(
-    editor: &BlueprintEditorPanel,
-    cx: &App,
+    nodes: &[BlueprintNode],
 ) -> Vec<PaletteItem> {
     let mut items = Vec::new();
     let mut dispatch_entries: Vec<(String, String, Vec<PinDefinition>)> = Vec::new();
 
-    // Walk all open tabs' graphs for custom event On nodes
-    for tab in &editor.open_tabs {
-        for node in &tab.graph.nodes {
-            if let Some(uid) = node.definition_id.strip_prefix("custom_event:") {
-                // Build input pin definitions from the On node's output pins (skip exec)
-                let input_pins: Vec<PinDefinition> = node
-                    .outputs
-                    .iter()
-                    .filter(|p| !p.data_type.is_execution())
-                    .map(|p| PinDefinition {
-                        id: p.id.clone(),
-                        name: p.name.clone(),
-                        data_type: p.data_type.clone(),
-                        pin_type: PinType::Input,
-                    })
-                    .collect();
-                dispatch_entries.push((uid.to_string(), node.title.clone(), input_pins));
-            }
+    for node in nodes {
+        if let Some(uid) = node.definition_id.strip_prefix("custom_event:") {
+            let input_pins: Vec<PinDefinition> = node
+                .outputs
+                .iter()
+                .filter(|p| !p.data_type.is_execution())
+                .map(|p| PinDefinition {
+                    id: p.id.clone(),
+                    name: p.name.clone(),
+                    data_type: p.data_type.clone(),
+                    pin_type: PinType::Input,
+                })
+                .collect();
+            dispatch_entries.push((uid.to_string(), node.title.clone(), input_pins));
         }
     }
 
