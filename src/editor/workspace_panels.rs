@@ -1046,6 +1046,68 @@ impl GraphCanvasPanel {
         self.comment_color_bindings_dirty = true; cx.notify();
     }
 
+    /// Create a Dispatch node for a custom event from its On node's uid.
+    pub fn create_custom_event_dispatch_node(
+        &mut self,
+        uid: String,
+        position: Point<f32>,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::core::types::*;
+
+        let on_def_id = format!("custom_event:{}", uid);
+        let dispatch_def_id = format!("custom_event_dispatch:{}", uid);
+
+        // Find the On node to copy its output pins
+        let on_node = self.graph.nodes.iter().find(|n| n.definition_id == on_def_id);
+
+        let mut dispatch_inputs: Vec<Pin> = vec![Pin {
+            id: "exec".to_string(),
+            name: String::new(),
+            pin_type: PinType::Input,
+            data_type: PinDataType::execution(),
+        }];
+
+        if let Some(on) = on_node {
+            for pin in &on.outputs {
+                if pin.data_type.is_execution() {
+                    continue;
+                }
+                dispatch_inputs.push(Pin {
+                    id: pin.id.clone(),
+                    name: pin.name.clone(),
+                    pin_type: PinType::Input,
+                    data_type: pin.data_type.clone(),
+                });
+            }
+        }
+
+        let event_name = on_node
+            .map(|n| n.title.strip_prefix("On ").unwrap_or(&n.title).to_string())
+            .unwrap_or_else(|| uid.clone());
+
+        let node = BlueprintNode {
+            id: uuid::Uuid::new_v4().to_string(),
+            definition_id: dispatch_def_id,
+            title: format!("Dispatch {}", event_name),
+            icon: "📡".to_string(),
+            node_type: NodeType::CustomEventDispatch,
+            position,
+            size: Size::new(240.0, 60.0),
+            inputs: dispatch_inputs,
+            outputs: Vec::new(),
+            properties: {
+                let mut m = std::collections::HashMap::new();
+                m.insert("event_uid".to_string(), uid);
+                m
+            },
+            is_selected: false,
+            description: format!("Dispatches the '{}' custom event", event_name),
+            color: None,
+        };
+        self.add_node(node, cx);
+    }
+
     // ── Event Configurator ────────────────────────────────────────────────────
 
     /// Open the event configurator. If `node_id` is Some, load existing event data
@@ -1189,13 +1251,17 @@ impl GraphCanvasPanel {
             });
         }
 
-        if let Some(ref nid) = self.editing_event_node {
+        let old_uid = if let Some(ref nid) = self.editing_event_node {
             // Update existing On node
             if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *nid) {
+                let old = node.properties.get("event_uid").cloned();
                 node.title = format!("On {}", event_name);
                 node.outputs = output_pins;
                 node.definition_id = on_def_id;
                 node.properties.insert("event_uid".to_string(), uid.clone());
+                old
+            } else {
+                None
             }
         } else {
             // Create new On node at a default position
@@ -1220,14 +1286,20 @@ impl GraphCanvasPanel {
                 color: None,
             };
             self.graph.nodes.push(new_node);
-        }
+            None
+        };
 
-        // Update all Dispatch nodes with the same uid
+        // Update all Dispatch nodes — match by new uid, and old uid if renamed
         let dispatch_ids: Vec<String> = self
             .graph
             .nodes
             .iter()
-            .filter(|n| n.definition_id == dispatch_def_id)
+            .filter(|n| {
+                n.definition_id == dispatch_def_id
+                    || old_uid.as_ref().map_or(false, |old| {
+                        n.definition_id == format!("custom_event_dispatch:{}", old)
+                    })
+            })
             .map(|n| n.id.clone())
             .collect();
 
@@ -1259,6 +1331,8 @@ impl GraphCanvasPanel {
                 if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *id) {
                     node.inputs = dispatch_input_pins.clone();
                     node.title = format!("Dispatch {}", event_name);
+                    node.definition_id = dispatch_def_id.clone();
+                    node.properties.insert("event_uid".to_string(), uid.clone());
                 }
             }
         }

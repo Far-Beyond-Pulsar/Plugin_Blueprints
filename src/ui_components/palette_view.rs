@@ -20,7 +20,8 @@ use ui::{
 };
 
 use crate::core::definitions::{NodeDefinition, NodeDefinitions};
-use crate::core::types::BlueprintNode;
+use crate::core::types::{BlueprintNode, PinType};
+use crate::core::definitions::PinDefinition;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
@@ -126,6 +127,11 @@ impl NodePaletteView {
             let local_macro_items =
                 build_local_macro_palette_items(&editor_ref.local_macros, editing_macro_id.as_deref());
             all_items.extend(local_macro_items);
+
+            // Custom event Dispatch nodes — one per On node in the graph
+            let dispatch_items =
+                build_custom_event_dispatch_palette_items(&editor_ref, cx);
+            all_items.extend(dispatch_items);
         }
 
         self.all_items = all_items;
@@ -201,6 +207,84 @@ fn build_local_macro_palette_items(
                 is_event: false,
             },
             category_color: "#9B59B6".to_string(),
+        });
+    }
+    items
+}
+
+/// Build palette items for custom event Dispatch nodes from On nodes in the graph.
+fn build_custom_event_dispatch_palette_items(
+    editor: &BlueprintEditorPanel,
+    cx: &App,
+) -> Vec<PaletteItem> {
+    let mut items = Vec::new();
+    let mut dispatch_entries: Vec<(String, String, Vec<PinDefinition>)> = Vec::new();
+
+    // Walk all open tabs' graphs for custom event On nodes
+    for tab in &editor.open_tabs {
+        for node in &tab.graph.nodes {
+            if let Some(uid) = node.definition_id.strip_prefix("custom_event:") {
+                // Build input pin definitions from the On node's output pins (skip exec)
+                let input_pins: Vec<PinDefinition> = node
+                    .outputs
+                    .iter()
+                    .filter(|p| !p.data_type.is_execution())
+                    .map(|p| PinDefinition {
+                        id: p.id.clone(),
+                        name: p.name.clone(),
+                        data_type: p.data_type.clone(),
+                        pin_type: PinType::Input,
+                    })
+                    .collect();
+                dispatch_entries.push((uid.to_string(), node.title.clone(), input_pins));
+            }
+        }
+    }
+
+    if dispatch_entries.is_empty() {
+        return items;
+    }
+
+    items.push(PaletteItem::CategoryHeader {
+        name: "Custom Events".to_string(),
+        color: "#E67E22".to_string(),
+        node_count: dispatch_entries.len(),
+    });
+
+    for (uid, title, input_pins) in dispatch_entries {
+        // The title is "On <EventName>" — derive Dispatch name
+        let event_name = title.strip_prefix("On ").unwrap_or(&title);
+        let mut dispatch_inputs = vec![PinDefinition {
+            id: "exec".to_string(),
+            name: String::new(),
+            data_type: crate::core::types::PinDataType::execution(),
+            pin_type: PinType::Input,
+        }];
+        dispatch_inputs.extend(input_pins);
+
+        items.push(PaletteItem::NodeEntry {
+            def: NodeDefinition {
+                id: format!("custom_event_dispatch:{}", uid),
+                name: format!("Dispatch {}", event_name),
+                icon: "📡".to_string(),
+                description: format!("Dispatches the '{}' custom event", event_name),
+                documentation: String::new(),
+                inputs: dispatch_inputs,
+                outputs: vec![PinDefinition {
+                    id: "exec".to_string(),
+                    name: "Then".to_string(),
+                    data_type: crate::core::types::PinDataType::execution(),
+                    pin_type: PinType::Output,
+                }],
+                properties: {
+                    let mut m = std::collections::HashMap::new();
+                    m.insert("event_uid".to_string(), uid);
+                    m
+                },
+                color: Some("#00A8E8".to_string()),
+                is_event: false,
+            },
+            category_color: "#E67E22".to_string(),
         });
     }
     items
@@ -559,15 +643,20 @@ fn palette_node_row(
                         let stagger = (canvas.graph.nodes.len() % 8) as f32 * 18.0;
                         let place_pos = Point::new(base.x + stagger, base.y + stagger);
 
-                        let node_clone = if let Some(macro_id) = def_now.id.strip_prefix("macro:") {
-                            canvas.create_macro_instance_node(macro_id.to_string(), place_pos, cx);
-                            canvas.graph.nodes.last().cloned()
-                        } else {
-                            let node = crate::core::types::BlueprintNode::from_definition(&def_now, place_pos);
-                            let clone = node.clone();
-                            canvas.add_node(node, cx);
-                            Some(clone)
-                        };
+                        let node_clone =
+                            if let Some(macro_id) = def_now.id.strip_prefix("macro:") {
+                                canvas.create_macro_instance_node(macro_id.to_string(), place_pos, cx);
+                                canvas.graph.nodes.last().cloned()
+                            } else if let Some(uid) = def_now.id.strip_prefix("custom_event_dispatch:") {
+                                canvas.create_custom_event_dispatch_node(uid.to_string(), place_pos, cx);
+                                canvas.graph.nodes.last().cloned()
+                            } else {
+                                let node =
+                                    crate::core::types::BlueprintNode::from_definition(&def_now, place_pos);
+                                let clone = node.clone();
+                                canvas.add_node(node, cx);
+                                Some(clone)
+                            };
 
                         if let (Some(source), Some(ref new_node)) =
                             (canvas.quick_palette_connection_source.take(), node_clone.as_ref())
