@@ -603,9 +603,10 @@ pub fn on_mouse_up_left(
             } else if canvas.dragging_variable.is_some() {
                 canvas.finish_dragging_variable(gp, cx);
             } else if let Some(drag) = canvas.dragging_connection.clone() {
-                if let Some((nid, pid)) =
-                    hit_input_pin(cp, canvas, &drag.source_node, &drag.source_pin_type)
-                {
+                // Try dropping on any pin (input or output) before falling through to palette
+                let drop_target = hit_input_pin(cp, canvas, &drag.source_node, &drag.source_pin_type)
+                    .or_else(|| hit_any_pin(cp, canvas));
+                if let Some((nid, pid)) = drop_target {
                     canvas.complete_connection_on_pin(nid, pid, cx);
                 } else {
                     canvas.popup_palette_graph_pos = Some(gp);

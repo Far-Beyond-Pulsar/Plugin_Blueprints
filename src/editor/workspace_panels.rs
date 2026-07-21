@@ -1327,7 +1327,7 @@ impl GraphCanvasPanel {
             id: "__return__".to_string(),
             name: String::new(),
             pin_type: PinType::Input,
-            data_type: DataType::from_type_str("fn_ptr"),
+            data_type: DataType::from_type_str("?"),
         }];
 
         // Update or create the node being edited

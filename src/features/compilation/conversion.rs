@@ -267,7 +267,7 @@ impl BlueprintEditorPanel {
                         id: "__return__".to_string(),
                         name: String::new(),
                         pin_type: PinType::Input,
-                        data_type: crate::core::types::PinDataType::from_type_str("fn_ptr"),
+                        data_type: crate::core::types::PinDataType::from_type_str("?"),
                     });
                 }
                 let bp_node = BlueprintNode {
