@@ -1120,11 +1120,9 @@ impl NodeGraphRenderer {
             .iter()
             .filter(|n| n.node_type == NodeType::CustomEvent)
             .map(|n| {
-                let has_return = n.inputs.iter().any(|p| p.id == "__return__");
-                let x_off = if has_return { 46.0 } else { 24.0 };
                 let scr = Self::graph_to_screen_pos(n.position, &canvas.graph);
                 let win = Point::new(
-                    px(scr.x + origin.x + n.size.width * canvas.graph.zoom_level - x_off),
+                    px(scr.x + origin.x + n.size.width * canvas.graph.zoom_level - 46.0),
                     px(scr.y + origin.y + 4.0),
                 );
                 (win, n.id.clone())
@@ -1140,38 +1138,24 @@ impl NodeGraphRenderer {
             let pe = canvas_entity.clone();
             let nid = node_id.clone();
 
-            // Check if this node has a return pin
-            let has_return = canvas.graph.nodes.iter()
-                .find(|n| n.id == nid)
-                .map_or(false, |n| n.inputs.iter().any(|p| p.id == "__return__"));
-
-            // Return pin overlay (red square, right of pencil)
-            if has_return {
-                let rp = pe.clone();
-                let ret_pos = Point::new(
-                    pos.x + px(20.0),
-                    pos.y,
-                );
-                container = container.child(
-                    deferred(
-                        anchored()
-                            .position(ret_pos)
-                            .anchor(gpui::Corner::TopLeft)
-                            .child(
-                                div()
-                                    .w(px(12.0))
-                                    .h(px(12.0))
-                                    .bg(gpui::rgba(0xFF3333FF))
-                                    .cursor_pointer()
-                                    .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
-                                        // Could initiate connection drag here
-                                    }),
-                            ),
-                    )
-                    .with_priority(4)
-                    .into_any_element(),
-                );
-            }
+            // Header pin: always rendered on custom event nodes (red square)
+            let hp = Point::new(pos.x + px(20.0), pos.y);
+            container = container.child(
+                deferred(
+                    anchored()
+                        .position(hp)
+                        .anchor(gpui::Corner::TopLeft)
+                        .child(
+                            div()
+                                .w(px(14.0))
+                                .h(px(14.0))
+                                .bg(gpui::rgba(0xFF2222FF))
+                                .rounded(px(2.0)),
+                        ),
+                )
+                .with_priority(4)
+                .into_any_element(),
+            );
 
             let icon = deferred(
                 anchored()
