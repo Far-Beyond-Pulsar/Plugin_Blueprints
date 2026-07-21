@@ -278,6 +278,16 @@ impl BlueprintEditorPanel {
         let panel_entity = cx.entity().clone();
         let scroll_handle = self.find_output_scroll_handle.clone();
         let scrollbar_state = self.find_output_scrollbar_state.clone();
+        let active_canvas_entity: Option<gpui::Entity<crate::editor::workspace_panels::GraphCanvasPanel>> = self
+            .graph_panels
+            .iter()
+            .find(|(id, _)| {
+                self.open_tabs
+                    .get(self.active_tab_index)
+                    .map(|t| &t.id)
+                    == Some(id)
+            })
+            .map(|(_, c)| c.clone());
 
         v_flex()
             .size_full()
@@ -342,6 +352,7 @@ impl BlueprintEditorPanel {
                                             let node_id = node.id.clone();
                                             let node_title = node.title.clone();
                                             let is_selected = selected_nodes.contains(&node_id);
+                                            let canvas_for_click = active_canvas_entity.clone();
 
                                             h_flex()
                                                 .w_full()
@@ -366,6 +377,11 @@ impl BlueprintEditorPanel {
                                                             .graph
                                                             .selected_nodes
                                                             .push(node_id.clone());
+                                                        if let Some(ref canvas) = canvas_for_click {
+                                                            canvas.update(cx, |canvas, _cx| {
+                                                                canvas.animate_pan_to_node(&node_id);
+                                                            });
+                                                        }
                                                         cx.notify();
                                                     }),
                                                 )

@@ -440,6 +440,19 @@ pub fn on_mouse_down_left(
                                 return;
                             }
                         }
+                        // Double-click on dispatch node → pan to the event handler
+                        if node.node_type == NodeType::CustomEventDispatch {
+                            if let Some(uid) = node.properties.get("event_uid") {
+                                let handler_def_id = format!("custom_event:{}", uid);
+                                if canvas.graph.nodes.iter().any(|n| n.definition_id == handler_def_id) {
+                                    canvas.animate_pan_to_node_by_def_id(&handler_def_id);
+                                }
+                            }
+                            canvas.last_click_time = None;
+                            canvas.last_click_pos = None;
+                            return;
+                        }
+
                         // Double-click on custom event node – select in events sidebar
                         if node.node_type == NodeType::CustomEvent
                         {

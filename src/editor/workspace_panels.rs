@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui::{
     dock::{Panel, PanelEvent},
-    h_flex, input::{InputEvent, InputState}, v_flex, ActiveTheme,
+    h_flex, input::{InputEvent, InputState}, v_flex, ActiveTheme, PixelsExt,
 };
 
 use crate::core::graph::BlueprintGraph;
@@ -553,6 +553,10 @@ pub struct GraphCanvasPanel {
     pub dragging_macro: Option<crate::features::macros::MacroDrag>,
     pub macro_pin_add_mode: Option<bool>,
 
+    // ── Animated pan to node ──────────────────────────────────────────────
+    pub pan_anim_target: Option<Point<f32>>,
+    pub pan_anim_start: Option<(Point<f32>, std::time::Instant)>,
+
     pub subscriptions: Vec<Subscription>,
 }
 
@@ -671,6 +675,8 @@ impl GraphCanvasPanel {
             variable_drop_menu_position: None,
             dragging_macro: None,
             macro_pin_add_mode: None,
+            pan_anim_target: None,
+            pan_anim_start: None,
             subscriptions: Vec::new(),
         }
     }
@@ -724,6 +730,50 @@ impl GraphCanvasPanel {
 
         self.is_dirty = true;
         cx.notify();
+    }
+
+    // ── Animated pan to node ──────────────────────────────────────────────────
+
+    /// Smoothly pan the viewport to `target_pan` (graph-space offset).
+    pub fn animate_pan_to(&mut self, target_pan: Point<f32>) {
+        self.pan_anim_start = Some((self.graph.pan_offset, std::time::Instant::now()));
+        self.pan_anim_target = Some(target_pan);
+    }
+
+    /// Compute the pan offset that would center `node_id` in the viewport
+    /// and start an animated transition.
+    pub fn animate_pan_to_node(&mut self, node_id: &str) {
+        let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id) else {
+            return;
+        };
+        self.animate_pan_to_node_inner(node.position, node.size);
+    }
+
+    /// Compute the pan offset that would center the node with `definition_id`
+    /// in the viewport and start an animated transition.
+    pub fn animate_pan_to_node_by_def_id(&mut self, definition_id: &str) {
+        let Some(node) = self.graph.nodes.iter().find(|n| n.definition_id == definition_id) else {
+            return;
+        };
+        self.animate_pan_to_node_inner(node.position, node.size);
+    }
+
+    fn animate_pan_to_node_inner(&mut self, position: Point<f32>, size: gpui::Size<f32>) {
+        let bounds = self.element_bounds.unwrap_or(
+            gpui::Bounds::from_corners(Default::default(), gpui::Point::new(px(1920.0), px(1080.0))),
+        );
+        let vw = bounds.size.width.as_f32();
+        let vh = bounds.size.height.as_f32();
+        let zoom = self.graph.zoom_level;
+        let center = Point::new(
+            position.x + size.width / 2.0,
+            position.y + size.height / 2.0,
+        );
+        let target = Point::new(
+            (vw / 2.0) / zoom - center.x,
+            (vh / 2.0) / zoom - center.y,
+        );
+        self.animate_pan_to(target);
     }
 }
 

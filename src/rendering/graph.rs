@@ -425,6 +425,23 @@ impl NodeGraphRenderer {
         canvas: &mut GraphCanvasPanel,
         cx: &mut Context<GraphCanvasPanel>,
     ) -> impl IntoElement {
+        // Animated pan interpolation (500ms cubic ease-out)
+        if let Some(target) = canvas.pan_anim_target {
+            if let Some((start, start_time)) = &canvas.pan_anim_start {
+                let elapsed = start_time.elapsed().as_secs_f32();
+                let t = (elapsed / 0.5).min(1.0);
+                let eased = 1.0 - (1.0 - t).powi(3);
+                canvas.graph.pan_offset.x = start.x + (target.x - start.x) * eased;
+                canvas.graph.pan_offset.y = start.y + (target.y - start.y) * eased;
+                if t >= 1.0 {
+                    canvas.pan_anim_target = None;
+                    canvas.pan_anim_start = None;
+                } else {
+                    cx.notify();
+                }
+            }
+        }
+
         let canvas_entity = cx.entity().clone();
         let zoom = canvas.graph.zoom_level;
         let pan_x = canvas.graph.pan_offset.x;
