@@ -14,7 +14,7 @@ use ui::{
     color_picker::{ColorPickerEvent, ColorPickerState},
     input::{InputEvent, InputState},
     scroll::ScrollbarAxis,
-    CollapsibleSection, IconName,
+    IconName,
 };
 use ui::{
     button::ButtonVariants as _, h_flex, v_flex, ActiveTheme as _, Colorize, PixelsExt, Sizable,
@@ -325,35 +325,54 @@ impl PropertiesRenderer {
             missing_in_registry = true;
         }
 
-        v_flex()
-            .w_full()
-            .gap_4()
-            .min_w_full()
-            .child(
-                CollapsibleSection::new(class_name.clone())
-                    .icon(IconName::Settings)
-                    .open(true)
-                    .child(if missing_in_registry {
+        Self::render_card(
+            [
+                h_flex()
+                    .w_full()
+                    .p_3()
+                    .gap_2()
+                    .items_center()
+                    .child(
+                        ui::Icon::new(IconName::Component)
+                            .size(px(16.0))
+                            .text_color(cx.theme().accent),
+                    )
+                    .child(
                         div()
                             .text_sm()
-                            .text_color(cx.theme().warning)
-                            .child(
-                                "This component class is not available in the reflection registry.",
-                            )
-                            .into_any_element()
-                    } else {
-                        let (mut uncategorized, categorized) = group_rows_by_category(row_data);
-                        let category_elements =
-                            Self::render_categorized_rows(panel, index, categorized, cx);
-                        uncategorized.extend(category_elements);
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(cx.theme().foreground)
+                            .child(class_name.clone()),
+                    )
+                    .into_any_element(),
+                if missing_in_registry {
+                    div()
+                        .w_full()
+                        .px_3()
+                        .pb_3()
+                        .text_sm()
+                        .text_color(cx.theme().warning)
+                        .child(
+                            "This component class is not available in the reflection registry.",
+                        )
+                        .into_any_element()
+                } else {
+                    let (mut uncategorized, categorized) = group_rows_by_category(row_data);
+                    let category_elements =
+                        Self::render_categorized_rows(panel, index, categorized, cx);
+                    uncategorized.extend(category_elements);
 
-                        v_flex()
-                            .gap_2()
-                            .children(uncategorized)
-                            .into_any_element()
-                    }),
-            )
-            .into_any_element()
+                    v_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_2()
+                        .children(uncategorized)
+                        .into_any_element()
+                },
+            ],
+            cx,
+        )
+        .into_any_element()
     }
 
     fn ensure_numeric_input(
@@ -476,64 +495,75 @@ impl PropertiesRenderer {
                     .as_deref()
                     .and_then(crate::features::viewport::coordinates::parse_hex_color);
 
-                v_flex()
+                div()
                     .w_full()
-                    .gap_1()
-                    .p_2()
-                    .rounded(px(6.0))
-                    .border_1()
-                    .when_some(accent, |el, color| {
-                        el.border_color(color.opacity(0.7)).bg(color.opacity(0.08))
-                    })
-                    .when(accent.is_none(), |el| {
-                        el.border_color(cx.theme().border)
-                            .bg(cx.theme().border.opacity(0.08))
-                    })
+                    .pb(px(8.0))
                     .child(
                         h_flex()
                             .w_full()
-                            .items_center()
-                            .justify_between()
-                            .cursor_pointer()
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |this, _event, _window, cx| {
-                                    if was_collapsed {
-                                        this.prefab_collapsed_categories.remove(&toggle_key);
-                                        this.prefab_expanded_categories
-                                            .insert(toggle_key.clone());
-                                    } else {
-                                        this.prefab_expanded_categories.remove(&toggle_key);
-                                        this.prefab_collapsed_categories
-                                            .insert(toggle_key.clone());
-                                    }
-                                    cx.notify();
-                                }),
-                            )
+                            .items_stretch()
+                            .gap_1p5()
                             .child(
                                 div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .when_some(accent, |el, color| el.text_color(color))
+                                    .w(px(3.0))
+                                    .rounded_full()
+                                    .flex_shrink_0()
+                                    .when_some(accent, |el, color| el.bg(color.opacity(0.85)))
                                     .when(accent.is_none(), |el| {
-                                        el.text_color(cx.theme().muted_foreground)
-                                    })
-                                    .child(category_name),
+                                        el.bg(cx.theme().muted.opacity(0.35))
+                                    }),
                             )
                             .child(
-                                ui::Icon::new(if is_collapsed {
-                                    IconName::ChevronRight
-                                } else {
-                                    IconName::ChevronDown
-                                })
-                                .xsmall()
-                                .when_some(accent, |el, color| el.text_color(color))
-                                .when(accent.is_none(), |el| {
-                                    el.text_color(cx.theme().muted_foreground)
-                                }),
+                                v_flex()
+                                    .flex_1()
+                                    .gap_1()
+                                    .child(
+                                        h_flex()
+                                            .w_full()
+                                            .items_center()
+                                            .justify_between()
+                                            .cursor_pointer()
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(move |this, _event, _window, cx| {
+                                                    if was_collapsed {
+                                                        this.prefab_collapsed_categories.remove(&toggle_key);
+                                                        this.prefab_expanded_categories
+                                                            .insert(toggle_key.clone());
+                                                    } else {
+                                                        this.prefab_expanded_categories.remove(&toggle_key);
+                                                        this.prefab_collapsed_categories
+                                                            .insert(toggle_key.clone());
+                                                    }
+                                                    cx.notify();
+                                                }),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .font_weight(FontWeight::SEMIBOLD)
+                                                    .when_some(accent, |el, color| el.text_color(color))
+                                                    .when(accent.is_none(), |el| {
+                                                        el.text_color(cx.theme().muted_foreground)
+                                                    })
+                                                    .child(category_name),
+                                            )
+                                            .child(
+                                                ui::Icon::new(if is_collapsed {
+                                                    IconName::ChevronRight
+                                                } else {
+                                                    IconName::ChevronDown
+                                                })
+                                                .xsmall()
+                                                .when_some(accent, |el, color| el.text_color(color))
+                                                .when(accent.is_none(), |el| {
+                                                    el.text_color(cx.theme().muted_foreground)
+                                                }),
+                                            ),
+                                    )
+                                    .when(!is_collapsed, |el| el.children(category_rows)),
                             ),
                     )
-                    .when(!is_collapsed, |el| el.children(category_rows))
                     .into_any_element()
             })
             .collect()
@@ -551,47 +581,62 @@ impl PropertiesRenderer {
         };
 
         v_flex()
-            .gap_4()
-            .child(
-                v_flex()
-                    .gap_2()
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_3()
-                            .child(
-                                ui::Icon::new(IconName::GitBranch)
-                                    .size(px(18.0))
-                                    .text_color(cx.theme().accent),
-                            )
+            .gap_3()
+            // Title card
+            .child(Self::render_card(
+                std::iter::once::<AnyElement>(
+                    h_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_3()
+                        .items_center()
+                        .child(
+                            ui::Icon::new(IconName::GitBranch)
+                                .size(px(18.0))
+                                .text_color(cx.theme().accent),
+                        )
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_bold()
+                                .text_color(cx.theme().foreground)
+                                .child(macro_def.name.clone()),
+                        )
+                        .into_any_element(),
+                )
+                .chain(if !macro_def.description.is_empty() {
+                    Some(
+                        div()
+                            .w_full()
+                            .px_3()
+                            .pb_3()
                             .child(
                                 div()
-                                    .text_lg()
-                                    .font_bold()
-                                    .text_color(cx.theme().foreground)
-                                    .child(macro_def.name.clone()),
-                            ),
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(macro_def.description.clone()),
+                            )
+                            .into_any_element(),
                     )
-                    .when(!macro_def.description.is_empty(), |el| {
-                        el.child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(macro_def.description.clone()),
-                        )
-                    }),
-            )
-            .child(Self::render_separator(cx))
+                } else {
+                    None
+                }),
+                cx,
+            ))
+            // Inputs card
             .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header("Inputs", IconName::ArrowRight, cx))
-                    .child(
+                Self::render_card(
+                    [
+                        Self::render_section_header("Inputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
                         v_flex()
+                            .w_full()
+                            .p_3()
                             .gap_1p5()
-                            .children(macro_def.interface.inputs.iter().map(|pin| {
-                                Self::render_info_row(&pin.name, &pin.data_type.to_string(), cx)
-                            }))
+                            .children(
+                                macro_def.interface.inputs.iter().map(|pin| {
+                                    Self::render_info_row(&pin.name, &pin.data_type.to_string(), cx)
+                                })
+                            )
                             .when(macro_def.interface.inputs.is_empty(), |el| {
                                 el.child(
                                     div()
@@ -599,20 +644,26 @@ impl PropertiesRenderer {
                                         .text_color(cx.theme().muted_foreground)
                                         .child("No inputs"),
                                 )
-                            }),
-                    ),
+                            })
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
-            .child(Self::render_separator(cx))
+            // Outputs card
             .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header("Outputs", IconName::ArrowRight, cx))
-                    .child(
+                Self::render_card(
+                    [
+                        Self::render_section_header("Outputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
                         v_flex()
+                            .w_full()
+                            .p_3()
                             .gap_1p5()
-                            .children(macro_def.interface.outputs.iter().map(|pin| {
-                                Self::render_info_row(&pin.name, &pin.data_type.to_string(), cx)
-                            }))
+                            .children(
+                                macro_def.interface.outputs.iter().map(|pin| {
+                                    Self::render_info_row(&pin.name, &pin.data_type.to_string(), cx)
+                                })
+                            )
                             .when(macro_def.interface.outputs.is_empty(), |el| {
                                 el.child(
                                     div()
@@ -620,20 +671,31 @@ impl PropertiesRenderer {
                                         .text_color(cx.theme().muted_foreground)
                                         .child("No outputs"),
                                 )
-                            }),
-                    ),
+                            })
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
-            .child(Self::render_separator(cx))
+            // Macro Info card
             .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header("Macro Info", IconName::Info, cx))
-                    .child(Self::render_info_row("ID", &macro_def.id, cx))
-                    .child(Self::render_info_row(
-                        "Nodes",
-                        &macro_def.graph.nodes.len().to_string(),
-                        cx,
-                    )),
+                Self::render_card(
+                    [
+                        Self::render_section_header("Macro Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_2p5()
+                            .child(Self::render_info_row("ID", &macro_def.id, cx))
+                            .child(Self::render_info_row(
+                                "Nodes",
+                                &macro_def.graph.nodes.len().to_string(),
+                                cx,
+                            ))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
             .into_any_element()
     }
@@ -650,48 +712,58 @@ impl PropertiesRenderer {
         };
 
         v_flex()
-            .gap_4()
+            .gap_3()
+            // Title card
+            .child(Self::render_card(
+                [
+                    h_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_3()
+                        .items_center()
+                        .child(
+                            ui::Icon::new(IconName::Flash)
+                                .size(px(18.0))
+                                .text_color(cx.theme().warning),
+                        )
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_bold()
+                                .text_color(cx.theme().foreground)
+                                .child(event_def.name.clone()),
+                        )
+                        .into_any_element(),
+                    div()
+                        .w_full()
+                        .px_3()
+                        .pb_3()
+                        .child(
+                            div()
+                                .px_2()
+                                .py_1()
+                                .rounded(px(4.0))
+                                
+                                .bg(cx.theme().warning.opacity(0.15))
+                                .border_1()
+                                .border_color(cx.theme().warning.opacity(0.3))
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(cx.theme().warning)
+                                .child("Custom Event"),
+                        )
+                        .into_any_element(),
+                ],
+                cx,
+            ))
+            // Fields card
             .child(
-                v_flex()
-                    .gap_2()
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_3()
-                            .child(
-                                ui::Icon::new(IconName::Flash)
-                    .size(px(18.0))
-                    .text_color(cx.theme().warning),
-                            )
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_bold()
-                                    .text_color(cx.theme().foreground)
-                                    .child(event_def.name.clone()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .px_2()
-                            .py_1()
-                            .rounded(px(4.0))
-                            .bg(cx.theme().warning.opacity(0.15))
-                            .border_1()
-                            .border_color(cx.theme().warning.opacity(0.3))
-                            .text_xs()
-                            .font_semibold()
-                            .text_color(cx.theme().warning)
-                            .child("Custom Event"),
-                    ),
-            )
-            .child(Self::render_separator(cx))
-            .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header("Fields", IconName::List, cx))
-                    .child(
+                Self::render_card(
+                    [
+                        Self::render_section_header("Fields", IconName::List, cx).px_3().pt_3().into_any_element(),
                         v_flex()
+                            .w_full()
+                            .p_3()
                             .gap_1p5()
                             .children(event_def.fields.iter().map(|field| {
                                 Self::render_info_row(&field.name, &field.type_name, cx)
@@ -703,28 +775,44 @@ impl PropertiesRenderer {
                                         .text_color(cx.theme().muted_foreground)
                                         .child("No fields"),
                                 )
-                            }),
-                    ),
+                            })
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
+            // Return type card (when present)
             .when(!event_def.return_type.is_empty(), |el| {
-                el.child(Self::render_separator(cx)).child(
-                    v_flex()
-                        .gap_3()
-                        .child(Self::render_section_header("Return Type", IconName::ArrowRight, cx))
-                        .child(
+                el.child(
+                    Self::render_card(
+                        [
+                            Self::render_section_header("Return Type", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
                             div()
+                                .w_full()
+                                .p_3()
                                 .text_sm()
                                 .text_color(cx.theme().foreground)
-                                .child(event_def.return_type.clone()),
-                        ),
+                                .child(event_def.return_type.clone())
+                                .into_any_element(),
+                        ],
+                        cx,
+                    ),
                 )
             })
-            .child(Self::render_separator(cx))
+            // Event Info card
             .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header("Event Info", IconName::Info, cx))
-                    .child(Self::render_info_row("UID", &event_def.uid, cx))
+                Self::render_card(
+                    [
+                        Self::render_section_header("Event Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_2p5()
+                            .child(Self::render_info_row("UID", &event_def.uid, cx))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
             .into_any_element()
     }
@@ -741,54 +829,71 @@ impl PropertiesRenderer {
         };
 
         v_flex()
-            .gap_4()
+            .gap_3()
+            // Title card
+            .child(Self::render_card(
+                [
+                    h_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_3()
+                        .items_center()
+                        .child(
+                            ui::Icon::new(IconName::Component)
+                                .size(px(18.0))
+                                .text_color(cx.theme().info),
+                        )
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_bold()
+                                .text_color(cx.theme().foreground)
+                                .child(var.name.clone()),
+                        )
+                        .into_any_element(),
+                    div()
+                        .w_full()
+                        .px_3()
+                        .pb_3()
+                        .child(
+                            div()
+                                .px_2()
+                                .py_1()
+                                .rounded(px(4.0))
+                                
+                                .bg(cx.theme().info.opacity(0.15))
+                                .border_1()
+                                .border_color(cx.theme().info.opacity(0.3))
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(cx.theme().info)
+                                .child("Variable"),
+                        )
+                        .into_any_element(),
+                ],
+                cx,
+            ))
+            // Variable Info card
             .child(
-                v_flex()
-                    .gap_2()
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_3()
+                Self::render_card(
+                    [
+                        Self::render_section_header("Variable Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_2p5()
+                            .child(Self::render_info_row("Type", &var.var_type, cx))
                             .child(
-                                ui::Icon::new(IconName::Component)
-                                    .size(px(18.0))
-                                    .text_color(cx.theme().info),
+                                Self::render_info_row(
+                                    "Default Value",
+                                    &var.default_value.clone().unwrap_or_else(|| "—".to_string()),
+                                    cx,
+                                ),
                             )
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_bold()
-                                    .text_color(cx.theme().foreground)
-                                    .child(var.name.clone()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .px_2()
-                            .py_1()
-                            .rounded(px(4.0))
-                            .bg(cx.theme().info.opacity(0.15))
-                            .border_1()
-                            .border_color(cx.theme().info.opacity(0.3))
-                            .text_xs()
-                            .font_semibold()
-                            .text_color(cx.theme().info)
-                            .child("Variable"),
-                    ),
-            )
-            .child(Self::render_separator(cx))
-            .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header("Variable Info", IconName::Info, cx))
-                    .child(Self::render_info_row("Type", &var.var_type, cx))
-                    .child(
-                        Self::render_info_row(
-                            "Default Value",
-                            &var.default_value.clone().unwrap_or_else(|| "—".to_string()),
-                            cx,
-                        ),
-                    ),
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
             .into_any_element()
     }
@@ -798,14 +903,16 @@ impl PropertiesRenderer {
         cx: &mut Context<T>,
     ) -> AnyElement {
         v_flex()
-            .gap_4()
+            .gap_3()
+            // Title card
             .child(
-                v_flex()
-                    .gap_2()
-                    .child(
+                Self::render_card(
+                    [
                         h_flex()
-                            .items_center()
+                            .w_full()
+                            .p_3()
                             .gap_3()
+                            .items_center()
                             .child(div().text_2xl().child(selected_node.icon.clone()))
                             .child(
                                 div()
@@ -813,54 +920,92 @@ impl PropertiesRenderer {
                                     .font_bold()
                                     .text_color(cx.theme().foreground)
                                     .child(selected_node.title.clone()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .px_2()
-                            .py_1()
-                            .rounded(px(4.0))
-                            .bg(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.15))
-                            .border_1()
-                            .border_color(
-                                Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.3),
                             )
-                            .text_xs()
-                            .font_semibold()
-                            .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
-                            .child(format!("{:?} Node", selected_node.node_type)),
-                    ),
+                            .into_any_element(),
+                        div()
+                            .w_full()
+                            .px_3()
+                            .pb_3()
+                            .child(
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded(px(4.0))
+                                    
+                                    .bg(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.15))
+                                    .border_1()
+                                    .border_color(
+                                        Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.3),
+                                    )
+                                    .text_xs()
+                                    .font_semibold()
+                                    .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
+                                    .child(format!("{:?} Node", selected_node.node_type)),
+                            )
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
+            // Inputs card
             .when(!selected_node.inputs.is_empty(), |el| {
-                el.child(Self::render_separator(cx)).child(
-                    v_flex()
-                        .gap_3()
-                        .child(Self::render_section_header("Inputs", IconName::ArrowRight, cx))
-                        .child(Self::render_pin_list(&selected_node.inputs, cx)),
-                )
+                el.child(Self::render_card(
+                    [
+                        Self::render_section_header("Inputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_1p5()
+                            .child(Self::render_pin_list(&selected_node.inputs, cx))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ))
             })
+            // Outputs card
             .when(!selected_node.outputs.is_empty(), |el| {
-                el.child(Self::render_separator(cx)).child(
-                    v_flex()
-                        .gap_3()
-                        .child(Self::render_section_header("Outputs", IconName::ArrowRight, cx))
-                        .child(Self::render_pin_list(&selected_node.outputs, cx)),
-                )
+                el.child(Self::render_card(
+                    [
+                        Self::render_section_header("Outputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_1p5()
+                            .child(Self::render_pin_list(&selected_node.outputs, cx))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ))
             })
+            // Properties card
             .when(!selected_node.properties.is_empty(), |el| {
-                el.child(Self::render_separator(cx)).child(
-                    v_flex()
-                        .gap_3()
-                        .child(Self::render_section_header("Properties", IconName::Settings, cx))
-                        .child(Self::render_node_properties(selected_node, cx)),
-                )
+                el.child(Self::render_card(
+                    [
+                        Self::render_section_header("Properties", IconName::Settings, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_2()
+                            .child(Self::render_node_properties(selected_node, cx))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ))
             })
-            .child(Self::render_separator(cx))
+            // Node Info card
             .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header("Node Info", IconName::Info, cx))
-                    .child(Self::render_node_info(selected_node, cx)),
+                Self::render_card(
+                    [
+                        Self::render_section_header("Node Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_2p5()
+                            .child(Self::render_node_info(selected_node, cx))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
             .into_any_element()
     }
@@ -882,14 +1027,16 @@ impl PropertiesRenderer {
         let canvas_entity = cx.entity().clone();
 
         v_flex()
-            .gap_4()
+            .gap_3()
+            // Title card
             .child(
-                v_flex()
-                    .gap_2()
-                    .child(
+                Self::render_card(
+                    [
                         h_flex()
-                            .items_center()
+                            .w_full()
+                            .p_3()
                             .gap_3()
+                            .items_center()
                             .child(div().text_2xl().child(selected_node.icon.clone()))
                             .child(
                                 div()
@@ -897,60 +1044,94 @@ impl PropertiesRenderer {
                                     .font_bold()
                                     .text_color(cx.theme().foreground)
                                     .child(selected_node.title.clone()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .px_2()
-                            .py_1()
-                            .rounded(px(4.0))
-                            .bg(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.15))
-                            .border_1()
-                            .border_color(
-                                Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.3),
                             )
-                            .text_xs()
-                            .font_semibold()
-                            .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
-                            .child(format!("{:?} Node", selected_node.node_type)),
-                    ),
+                            .into_any_element(),
+                        div()
+                            .w_full()
+                            .px_3()
+                            .pb_3()
+                            .child(
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded(px(4.0))
+                                    
+                                    .bg(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.15))
+                                    .border_1()
+                                    .border_color(
+                                        Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.3),
+                                    )
+                                    .text_xs()
+                                    .font_semibold()
+                                    .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
+                                    .child(format!("{:?} Node", selected_node.node_type)),
+                            )
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
+            // Inputs card
             .when(!selected_node.inputs.is_empty(), |el| {
-                el.child(Self::render_separator(cx)).child(
-                    v_flex()
-                        .gap_3()
-                        .child(Self::render_section_header("Inputs", IconName::ArrowRight, cx))
-                        .child(Self::render_pin_editors(
-                            canvas,
-                            &canvas_entity,
-                            &selected_node,
-                            window,
-                            cx,
-                        )),
-                )
+                el.child(Self::render_card(
+                    [
+                        Self::render_section_header("Inputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_1p5()
+                            .child(Self::render_pin_editors(
+                                canvas, &canvas_entity, &selected_node, window, cx,
+                            ))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ))
             })
+            // Outputs card
             .when(!selected_node.outputs.is_empty(), |el| {
-                el.child(Self::render_separator(cx)).child(
-                    v_flex()
-                        .gap_3()
-                        .child(Self::render_section_header("Outputs", IconName::ArrowRight, cx))
-                        .child(Self::render_pin_list(&selected_node.outputs, cx)),
-                )
+                el.child(Self::render_card(
+                    [
+                        Self::render_section_header("Outputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_1p5()
+                            .child(Self::render_pin_list(&selected_node.outputs, cx))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ))
             })
+            // Properties card
             .when(!selected_node.properties.is_empty(), |el| {
-                el.child(Self::render_separator(cx)).child(
-                    v_flex()
-                        .gap_3()
-                        .child(Self::render_section_header("Properties", IconName::Settings, cx))
-                        .child(Self::render_node_properties(&selected_node, cx)),
-                )
+                el.child(Self::render_card(
+                    [
+                        Self::render_section_header("Properties", IconName::Settings, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_2()
+                            .child(Self::render_node_properties(&selected_node, cx))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ))
             })
-            .child(Self::render_separator(cx))
+            // Node Info card
             .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header("Node Info", IconName::Info, cx))
-                    .child(Self::render_node_info(&selected_node, cx)),
+                Self::render_card(
+                    [
+                        Self::render_section_header("Node Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_2p5()
+                            .child(Self::render_node_info(&selected_node, cx))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
             .into_any_element()
     }
@@ -976,14 +1157,16 @@ impl PropertiesRenderer {
         }
 
         v_flex()
-            .gap_4()
+            .gap_3()
+            // Title card
             .child(
-                v_flex()
-                    .gap_2()
-                    .child(
+                Self::render_card(
+                    [
                         h_flex()
-                            .items_center()
+                            .w_full()
+                            .p_3()
                             .gap_3()
+                            .items_center()
                             .child(
                                 ui::Icon::new(IconName::Info)
                                     .size(px(18.0))
@@ -995,111 +1178,132 @@ impl PropertiesRenderer {
                                     .font_bold()
                                     .text_color(cx.theme().foreground)
                                     .child(comment.text.clone()),
-                            ),
-                    )
-                    .child(
+                            )
+                            .into_any_element(),
                         div()
-                            .px_2()
-                            .py_1()
-                            .rounded(px(4.0))
-                            .bg(comment_color.opacity(0.15))
-                            .border_1()
-                            .border_color(comment_color.opacity(0.3))
-                            .text_xs()
-                            .font_semibold()
-                            .text_color(comment_color)
-                            .child("Comment"),
-                    ),
+                            .w_full()
+                            .px_3()
+                            .pb_3()
+                            .child(
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded(px(4.0))
+                                    
+                                    .bg(comment_color.opacity(0.15))
+                                    .border_1()
+                                    .border_color(comment_color.opacity(0.3))
+                                    .text_xs()
+                                    .font_semibold()
+                                    .text_color(comment_color)
+                                    .child("Comment"),
+                            )
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
-            .child(Self::render_separator(cx))
+            // Comment Properties card
             .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header(
-                        "Comment Properties",
-                        IconName::Settings,
-                        cx,
-                    ))
-                    .child(
+                Self::render_card(
+                    [
+                        Self::render_section_header("Comment Properties", IconName::Settings, cx).px_3().pt_3().into_any_element(),
                         v_flex()
-                            .gap_2()
+                            .w_full()
+                            .p_3()
+                            .gap_3()
                             .child(
-                                div()
-                                    .text_xs()
-                                    .font_semibold()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("Name"),
-                            )
-                            .child(
-                                comment_text_input
-                                    .map(|input| div().w_full().child(input).into_any_element())
-                                    .unwrap_or_else(|| {
-                                        div()
-                                            .w_full()
-                                            .text_sm()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child("No comment editor available")
-                                            .into_any_element()
-                                    }),
-                            ),
-                    )
-                    .child(
-                        v_flex()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_semibold()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child("Color"),
-                            )
-                            .child(
-                                h_flex()
-                                    .items_center()
+                                v_flex()
                                     .gap_2()
                                     .child(
                                         div()
-                                            .w(px(24.0))
-                                            .h(px(24.0))
-                                            .rounded(px(4.0))
-                                            .border_1()
-                                            .border_color(cx.theme().border)
-                                            .bg(comment_color)
-                                            .into_any_element(),
+                                            .text_xs()
+                                            .font_semibold()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("Name"),
                                     )
-                                    .child(color_picker.map(|picker| {
-                                        div().w_full().child(picker).into_any_element()
-                                    }).unwrap_or_else(|| {
+                                    .child(
+                                        comment_text_input
+                                            .map(|input| div().w_full().child(input).into_any_element())
+                                            .unwrap_or_else(|| {
+                                                div()
+                                                    .w_full()
+                                                    .text_sm()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child("No comment editor available")
+                                                    .into_any_element()
+                                            }),
+                                    ),
+                            )
+                            .child(
+                                v_flex()
+                                    .gap_2()
+                                    .child(
                                         div()
                                             .text_xs()
+                                            .font_semibold()
                                             .text_color(cx.theme().muted_foreground)
-                                            .child("Color picker unavailable")
-                                            .into_any_element()
-                                    })),
-                            ),
-                    ),
+                                            .child("Color"),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .child(
+                                                div()
+                                                    .w(px(24.0))
+                                                    .h(px(24.0))
+                                                    .rounded(px(4.0))
+                                                    .border_1()
+                                                    .border_color(cx.theme().border)
+                                                    .bg(comment_color)
+                                                    .into_any_element(),
+                                            )
+                                            .child(color_picker.map(|picker| {
+                                                div().w_full().child(picker).into_any_element()
+                                            }).unwrap_or_else(|| {
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child("Color picker unavailable")
+                                                    .into_any_element()
+                                            })),
+                                    ),
+                            )
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
-            .child(Self::render_separator(cx))
+            // Comment Info card
             .child(
-                v_flex()
-                    .gap_3()
-                    .child(Self::render_section_header("Comment Info", IconName::Info, cx))
-                    .child(Self::render_info_row("Comment ID", &comment.id, cx))
-                    .child(Self::render_info_row(
-                        "Position",
-                        &format!("({:.0}, {:.0})", comment.position.x, comment.position.y),
-                        cx,
-                    ))
-                    .child(Self::render_info_row(
-                        "Size",
-                        &format!("{:.0} × {:.0} px", comment.size.width, comment.size.height),
-                        cx,
-                    ))
-                    .child(Self::render_info_row(
-                        "Contained Nodes",
-                        &comment.contained_node_ids.len().to_string(),
-                        cx,
-                    )),
+                Self::render_card(
+                    [
+                        Self::render_section_header("Comment Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
+                        v_flex()
+                            .w_full()
+                            .p_3()
+                            .gap_2p5()
+                            .child(Self::render_info_row("Comment ID", &comment.id, cx))
+                            .child(Self::render_info_row(
+                                "Position",
+                                &format!("({:.0}, {:.0})", comment.position.x, comment.position.y),
+                                cx,
+                            ))
+                            .child(Self::render_info_row(
+                                "Size",
+                                &format!("{:.0} × {:.0} px", comment.size.width, comment.size.height),
+                                cx,
+                            ))
+                            .child(Self::render_info_row(
+                                "Contained Nodes",
+                                &comment.contained_node_ids.len().to_string(),
+                                cx,
+                            ))
+                            .into_any_element(),
+                    ],
+                    cx,
+                ),
             )
             .into_any_element()
     }
@@ -1133,16 +1337,28 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
+    /// Card container matching the level-editor properties panel style.
+    fn render_card<T>(children: impl IntoIterator<Item: IntoElement>, cx: &mut Context<T>) -> impl IntoElement {
+        v_flex()
+            .w_full()
+            .bg(cx.theme().sidebar)
+            .rounded(px(8.0))
+            .border_1()
+            .border_color(cx.theme().border)
+            .overflow_hidden()
+            .children(children)
+    }
+
     fn render_section_header<T>(
         title: &str,
         _icon: IconName,
         cx: &mut Context<T>,
-    ) -> impl IntoElement {
+    ) -> Div {
         h_flex().items_center().gap_2().child(
             div()
                 .text_xs()
                 .font_bold()
-                .text_color(cx.theme().accent)
+                .text_color(cx.theme().muted_foreground)
                 .child(title.to_uppercase()),
         )
     }
@@ -1391,32 +1607,34 @@ impl PropertiesRenderer {
         value: &str,
         cx: &mut Context<T>,
     ) -> impl IntoElement {
-        v_flex()
+        h_flex()
+            .w_full()
             .gap_2()
+            .items_center()
             .child(
                 div()
+                    .w(px(80.0))
+                    .flex_shrink_0()
                     .text_xs()
-                    .font_semibold()
+                    .font_medium()
                     .text_color(cx.theme().muted_foreground)
                     .child(Self::format_property_name(key)),
             )
             .child(
                 div()
-                    .w_full()
-                    .px_3()
-                    .py_2p5()
+                    .flex_1()
+                    .px_2()
+                    .py_1p5()
                     .bg(cx.theme().input)
                     .border_1()
                     .border_color(cx.theme().border.opacity(0.6))
-                    .rounded(px(6.0))
-                    .text_sm()
+                    .rounded(px(4.0))
+                    .text_xs()
                     .text_color(cx.theme().foreground)
                     .child(value.to_string())
                     .cursor_pointer()
                     .hover(|style| {
-                        style
-                            .border_color(cx.theme().accent.opacity(0.8))
-                            .bg(cx.theme().input.lighten(0.02))
+                        style.border_color(cx.theme().accent.opacity(0.5))
                     }),
             )
     }
@@ -1447,14 +1665,12 @@ impl PropertiesRenderer {
     ) -> impl IntoElement {
         h_flex()
             .w_full()
-            .justify_between()
+            .gap_2()
             .items_center()
-            .px_3()
-            .py_2()
-            .rounded(px(4.0))
-            .hover(|style| style.bg(cx.theme().muted.opacity(0.1)))
             .child(
                 div()
+                    .w(px(80.0))
+                    .flex_shrink_0()
                     .text_xs()
                     .font_medium()
                     .text_color(cx.theme().muted_foreground)
@@ -1462,10 +1678,13 @@ impl PropertiesRenderer {
             )
             .child(
                 div()
+                    .flex_1()
                     .px_2()
-                    .py_1()
+                    .py_1p5()
+                    .bg(cx.theme().input)
+                    .border_1()
+                    .border_color(cx.theme().border.opacity(0.6))
                     .rounded(px(4.0))
-                    .bg(cx.theme().muted.opacity(0.2))
                     .text_xs()
                     .font_family("JetBrainsMono-Regular")
                     .text_color(cx.theme().foreground)
