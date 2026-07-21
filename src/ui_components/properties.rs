@@ -70,7 +70,7 @@ impl PropertiesRenderer {
                     .flex_1()
                     .overflow_hidden()
                     .child(
-                        div().size_full().scrollable(ScrollbarAxis::Vertical).child(
+                        div().size_full().p_3().scrollable(ScrollbarAxis::Vertical).child(
                             Self::render_properties_content(panel, window, cx),
                         ),
                     ),
@@ -327,7 +327,6 @@ impl PropertiesRenderer {
 
         v_flex()
             .w_full()
-            .p_3()
             .gap_4()
             .min_w_full()
             .child(
@@ -553,7 +552,6 @@ impl PropertiesRenderer {
 
         v_flex()
             .gap_4()
-            .p_3()
             .child(
                 v_flex()
                     .gap_2()
@@ -653,7 +651,6 @@ impl PropertiesRenderer {
 
         v_flex()
             .gap_4()
-            .p_3()
             .child(
                 v_flex()
                     .gap_2()
@@ -662,7 +659,7 @@ impl PropertiesRenderer {
                             .items_center()
                             .gap_3()
                             .child(
-                ui::Icon::new(IconName::Flash)
+                                ui::Icon::new(IconName::Flash)
                     .size(px(18.0))
                     .text_color(cx.theme().warning),
                             )
@@ -745,7 +742,6 @@ impl PropertiesRenderer {
 
         v_flex()
             .gap_4()
-            .p_3()
             .child(
                 v_flex()
                     .gap_2()
