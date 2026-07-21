@@ -9,25 +9,13 @@ use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 impl BlueprintEditorPanel {
     // ─── CRUD ──────────────────────────────────────────────────────────────────
 
     pub fn create_event_def(&mut self, name: String, return_type: String) -> String {
-        let uid: String = name
-            .chars()
-            .map(|c| {
-                if c.is_uppercase() {
-                    format!("-{}", c.to_ascii_lowercase())
-                } else if c == ' ' {
-                    "-".to_string()
-                } else {
-                    c.to_string()
-                }
-            })
-            .collect::<String>()
-            .trim_start_matches('-')
-            .to_string();
+        let uid = Uuid::new_v4().to_string();
 
         let def = EventDefinition {
             uid: uid.clone(),
