@@ -12,7 +12,7 @@ use ui::{
     IconName, StyledExt,
 };
 
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::panel::{BlueprintEditorPanel, RenameTarget};
 
 pub struct EventsRenderer;
 
@@ -45,11 +45,23 @@ impl EventsRenderer {
             .local_event_defs
             .iter()
             .enumerate()
-            .map(|(index, def)| EventHierarchyItem {
-                def: def.clone(),
-                index,
-                is_selected: panel.selected_event == Some(index),
-                panel: cx.entity().downgrade(),
+            .map(|(index, def)| {
+                let is_renaming = panel
+                    .renaming_target
+                    .as_ref()
+                    .map_or(false, |t| matches!(t, RenameTarget::Event(uid) if *uid == def.uid));
+                EventHierarchyItem {
+                    def: def.clone(),
+                    index,
+                    is_selected: panel.selected_event == Some(index),
+                    panel: cx.entity().downgrade(),
+                    is_renaming,
+                    rename_input: if is_renaming {
+                        Some(panel.rename_input.clone())
+                    } else {
+                        None
+                    },
+                }
             })
             .collect();
 

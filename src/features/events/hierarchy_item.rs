@@ -2,10 +2,11 @@
 //!
 //! Mirrors MacroHierarchyItem — lets events display in HierarchicalTreeView.
 
+use crate::editor::panel::RenameTarget;
 use crate::core::graph::EventDefinition;
 use gpui::*;
 use std::sync::Arc;
-use ui::{menu::popup_menu::PopupMenu, HierarchyItem, IconName};
+use ui::{input::InputState, menu::popup_menu::PopupMenu, HierarchyItem, IconName};
 
 #[derive(Clone)]
 pub struct EventDrag {
@@ -20,6 +21,8 @@ pub struct EventHierarchyItem {
     pub index: usize,
     pub is_selected: bool,
     pub panel: gpui::WeakEntity<crate::editor::panel::BlueprintEditorPanel>,
+    pub is_renaming: bool,
+    pub rename_input: Option<Entity<InputState>>,
 }
 
 impl HierarchyItem for EventHierarchyItem {
@@ -58,6 +61,14 @@ impl HierarchyItem for EventHierarchyItem {
         self.is_selected
     }
 
+    fn is_renaming(&self) -> bool {
+        self.is_renaming
+    }
+
+    fn rename_input(&self) -> Option<Entity<InputState>> {
+        self.rename_input.clone()
+    }
+
     fn create_drag_payload(&self) -> Self::DragPayload {
         EventDrag {
             event_index: self.index,
@@ -75,6 +86,10 @@ impl HierarchyItem for EventHierarchyItem {
         V: Render,
     {
         use ui::{h_flex, ActiveTheme, StyledExt};
+
+        if self.is_renaming {
+            return None;
+        }
 
         Some(
             h_flex()
@@ -115,8 +130,11 @@ impl HierarchyItem for EventHierarchyItem {
                         .find(|d| d.uid == uid)
                         .map(|d| d.name.clone())
                         .unwrap_or_default();
-                    let new_name = format!("{} (copy)", current);
-                    panel.rename_event_def(&uid, new_name);
+                    panel.renaming_target = Some(RenameTarget::Event(uid.clone()));
+                    panel.rename_input.update(cx, |input, cx| {
+                        input.set_value(current, _window, cx);
+                        input.focus(_window, cx);
+                    });
                     cx.notify();
                 });
             }

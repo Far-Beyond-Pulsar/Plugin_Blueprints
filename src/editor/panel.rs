@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui::{
-    input::InputState, resizable::ResizableState,
+    input::{InputEvent, InputState}, resizable::ResizableState,
     scroll::ScrollbarState, VirtualListScrollHandle,
 };
 
@@ -23,6 +23,13 @@ use crate::features::variables::ClassVariable;
 use crate::ui_components::palette_view::NodePaletteView;
 use ui::dock::{DockItem, DockPlacement};
 use ui::graph::{LibraryManager, SubGraphDefinition};
+
+/// Which item is being renamed inline in a hierarchy panel.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RenameTarget {
+    Event(String),
+    Macro(String),
+}
 
 /// Main Blueprint Editor Panel struct
 pub struct BlueprintEditorPanel {
@@ -126,6 +133,10 @@ pub struct BlueprintEditorPanel {
     // Event system (mirrors macro storage pattern)
     pub local_event_defs: Vec<crate::core::graph::EventDefinition>,
     pub selected_event: Option<usize>,
+
+    // Rename state — shared across event/macro/variable panels
+    pub renaming_target: Option<RenameTarget>,
+    pub rename_input: Entity<InputState>,
 
     // Tab system
     pub open_tabs: Vec<GraphTab>,
@@ -423,6 +434,30 @@ impl BlueprintEditorPanel {
         )
         .detach();
 
+        let rename_input: Entity<InputState> =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Rename..."));
+        // Commit rename on blur or Enter
+        let sub_input = rename_input.clone();
+        cx.subscribe_in(&rename_input, window, move |this, input, event: &InputEvent, window, cx| {
+            if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
+                if let Some(target) = this.renaming_target.take() {
+                    let new_name = input.read(cx).text().to_string().trim().to_string();
+                    if !new_name.is_empty() {
+                        match target {
+                            RenameTarget::Event(uid) => {
+                                this.rename_event_def(&uid, new_name);
+                            }
+                            RenameTarget::Macro(id) => {
+                                this.rename_local_macro(&id, new_name, cx);
+                            }
+                        }
+                    }
+                    cx.notify();
+                }
+            }
+        })
+        .detach();
+
         Self {
             focus_handle: cx.focus_handle(),
             graph: main_graph.clone(),
@@ -495,6 +530,8 @@ impl BlueprintEditorPanel {
             selected_macro: None,
             local_event_defs: Vec::new(),
             selected_event: None,
+            renaming_target: None,
+            rename_input,
             open_tabs: vec![GraphTab {
                 id: "main".to_string(),
                 name: "EventGraph".to_string(),

@@ -2,9 +2,10 @@
 //!
 //! This allows macros to be displayed in the HierarchicalTreeView component
 
+use crate::editor::panel::RenameTarget;
 use gpui::*;
 use std::sync::Arc;
-use ui::{menu::popup_menu::PopupMenu, HierarchyItem, IconName};
+use ui::{input::InputState, menu::popup_menu::PopupMenu, HierarchyItem, IconName};
 
 /// Drag payload for macros
 #[derive(Clone)]
@@ -22,6 +23,8 @@ pub struct MacroHierarchyItem {
     pub is_selected: bool,
     /// Weak back-ref so context-menu actions can reach the panel.
     pub panel: gpui::WeakEntity<crate::editor::panel::BlueprintEditorPanel>,
+    pub is_renaming: bool,
+    pub rename_input: Option<Entity<InputState>>,
 }
 
 impl HierarchyItem for MacroHierarchyItem {
@@ -61,6 +64,14 @@ impl HierarchyItem for MacroHierarchyItem {
         self.is_selected
     }
 
+    fn is_renaming(&self) -> bool {
+        self.is_renaming
+    }
+
+    fn rename_input(&self) -> Option<Entity<InputState>> {
+        self.rename_input.clone()
+    }
+
     fn create_drag_payload(&self) -> Self::DragPayload {
         MacroDrag {
             macro_index: self.index,
@@ -78,6 +89,10 @@ impl HierarchyItem for MacroHierarchyItem {
         V: Render,
     {
         use ui::{h_flex, ActiveTheme, StyledExt};
+
+        if self.is_renaming {
+            return None;
+        }
 
         Some(
             h_flex()
@@ -124,8 +139,6 @@ impl HierarchyItem for MacroHierarchyItem {
         let mid2 = macro_id.clone();
 
         menu.menu_handler("Rename Macro", move |_window, cx| {
-            // TODO: open inline rename — for now use a sensible default name cycle.
-            // A proper rename input would use the variable_name_input field.
             if let Some(p) = panel.upgrade() {
                 p.update(cx, |panel, cx| {
                     let current = panel
@@ -134,8 +147,12 @@ impl HierarchyItem for MacroHierarchyItem {
                         .find(|m| m.id == macro_id)
                         .map(|m| m.name.clone())
                         .unwrap_or_default();
-                    let new_name = format!("{} (copy)", current);
-                    panel.rename_local_macro(&macro_id, new_name, cx);
+                    panel.renaming_target = Some(RenameTarget::Macro(macro_id.clone()));
+                    panel.rename_input.update(cx, |input, cx| {
+                        input.set_value(current, _window, cx);
+                        input.focus(_window, cx);
+                    });
+                    cx.notify();
                 });
             }
         })
