@@ -446,6 +446,7 @@ impl BlueprintEditorPanel {
                         match target {
                             RenameTarget::Event(uid) => {
                                 this.rename_event_def(&uid, new_name);
+                                this.sync_all_events(window, cx);
                             }
                             RenameTarget::Macro(id) => {
                                 this.rename_local_macro(&id, new_name, cx);

@@ -141,9 +141,20 @@ impl HierarchyItem for EventHierarchyItem {
         })
         .menu_handler("Delete Event", move |_window, cx| {
             if let Some(p) = panel2.upgrade() {
+                let win_handle = _window.window_handle();
                 p.update(cx, |panel, cx| {
                     panel.delete_event_def(&uid2);
                     cx.notify();
+                });
+                let p2 = panel2.clone();
+                cx.defer(move |cx| {
+                    let _ = cx.update_window(win_handle, |_, window, cx| {
+                        if let Some(p) = p2.upgrade() {
+                            p.update(cx, |panel, cx| {
+                                panel.sync_all_events(window, cx);
+                            });
+                        }
+                    });
                 });
             }
         })
