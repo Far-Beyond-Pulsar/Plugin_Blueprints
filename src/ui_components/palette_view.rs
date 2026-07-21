@@ -362,8 +362,7 @@ impl Render for NodePaletteView {
                                     .items_center()
                                     .child(
                                         Icon::new(IconName::Search)
-                                            .size(px(14.0))
-                                            .text_color(cx.theme().accent),
+                                            .size(px(14.0)),
                                     )
                                     .child(
                                         div()

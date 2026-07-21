@@ -334,8 +334,7 @@ impl PropertiesRenderer {
                     .items_center()
                     .child(
                         ui::Icon::new(IconName::Component)
-                            .size(px(16.0))
-                            .text_color(cx.theme().accent),
+                            .size(px(16.0)),
                     )
                     .child(
                         div()
@@ -592,8 +591,7 @@ impl PropertiesRenderer {
                         .items_center()
                         .child(
                             ui::Icon::new(IconName::GitBranch)
-                                .size(px(18.0))
-                                .text_color(cx.theme().accent),
+                                .size(px(18.0)),
                         )
                         .child(
                             div()

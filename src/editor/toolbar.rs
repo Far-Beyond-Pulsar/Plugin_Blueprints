@@ -370,8 +370,7 @@ impl ToolbarRenderer {
                             .border_color(cx.theme().border.opacity(0.5))
                             .child(
                                 Icon::new(IconName::Component)
-                                    .size(px(14.0))
-                                    .text_color(cx.theme().accent),
+                                    .size(px(14.0)),
                             )
                             .child(
                                 div()
