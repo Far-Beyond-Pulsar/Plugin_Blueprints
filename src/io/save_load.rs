@@ -322,20 +322,19 @@ impl BlueprintEditorPanel {
             asset.variables.len(),
         );
 
-        let main_graph = self.convert_graph_description_to_blueprint(&asset.main_graph, window, cx)?;
-        tracing::info!(
-            ">>> load_blueprint_asset: converted main graph: {} nodes, {} connections, {} comments",
-            main_graph.nodes.len(),
-            main_graph.connections.len(),
-            main_graph.comments.len(),
-        );
+        let formats::BlueprintAsset {
+            main_graph: graph_desc,
+            local_macros,
+            variables,
+            editor_state,
+            format_version: _,
+            blueprint_metadata: _,
+        } = asset;
 
-        self.comment_color_bindings_dirty = true;
-        self.local_macros = asset.local_macros;
+        self.local_macros = local_macros;
 
         // Convert ui::ClassVariable to local ClassVariable
-        self.class_variables = asset
-            .variables
+        self.class_variables = variables
             .iter()
             .map(|v| crate::features::variables::ClassVariable {
                 name: v.name.clone(),
@@ -344,10 +343,20 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
+        let main_graph = self.convert_graph_description_to_blueprint(&graph_desc, window, cx)?;
+        tracing::info!(
+            ">>> load_blueprint_asset: converted main graph: {} nodes, {} connections, {} comments",
+            main_graph.nodes.len(),
+            main_graph.connections.len(),
+            main_graph.comments.len(),
+        );
+
+        self.comment_color_bindings_dirty = true;
+
         self.open_tabs = vec![GraphTab::new_main(main_graph)];
         self.active_tab_index = 0;
 
-        if let Some(editor_state) = asset.editor_state {
+        if let Some(editor_state) = editor_state {
             for tab_id in &editor_state.open_tab_ids {
                 if tab_id == "main" {
                     continue;

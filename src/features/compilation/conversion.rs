@@ -210,6 +210,33 @@ impl BlueprintEditorPanel {
                     NodeType::CustomEventDispatch,
                     None,
                 )
+            } else if let Some(macro_id) = definition_id.strip_prefix("macro:") {
+                let macro_name = self
+                    .local_macros
+                    .iter()
+                    .find(|m| m.id == macro_id)
+                    .or_else(|| self.library_manager.get_subgraph(macro_id))
+                    .map(|m| m.name.clone())
+                    .unwrap_or_else(|| {
+                        let name = macro_id.replace('-', " ");
+                        name.split_whitespace()
+                            .map(|w| {
+                                let mut c = w.chars();
+                                match c.next() {
+                                    None => String::new(),
+                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    });
+                (
+                    macro_name,
+                    "📦".to_string(),
+                    format!("Instance of macro '{}'", macro_id),
+                    NodeType::MacroInstance,
+                    Some("#9B59B6".to_string()),
+                )
             } else if let Some(def) = node_def {
                 // Event entry-points are identified by their underlying Blueprint
                 // node type, not by category — events such as `on_input_key`/
