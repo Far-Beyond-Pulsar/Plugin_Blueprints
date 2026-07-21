@@ -209,6 +209,16 @@ pub struct BlueprintEditorPanel {
     // ── Macro pin editor state ────────────────────────────────────────────────
     /// When Some: true = adding an input, false = adding an output.
     pub macro_pin_add_mode: Option<bool>,
+
+    // ── Properties panel inline editors ──────────────────────────────────────
+    /// Name inputs for macro pins: (macro_id, pin_index, is_input) → Entity
+    pub macro_pin_name_inputs: HashMap<(String, usize, bool), Entity<InputState>>,
+    /// Type inputs for macro pins: (macro_id, pin_index, is_input) → Entity
+    pub macro_pin_type_inputs: HashMap<(String, usize, bool), Entity<InputState>>,
+    /// Name inputs for event fields: (event_uid, field_index) → Entity
+    pub event_field_name_inputs: HashMap<(String, usize), Entity<InputState>>,
+    /// Type inputs for event fields: (event_uid, field_index) → Entity
+    pub event_field_type_inputs: HashMap<(String, usize), Entity<InputState>>,
 }
 
 /// Information about a tab being dragged
@@ -587,6 +597,10 @@ impl BlueprintEditorPanel {
             debug_session: None,
             dragging_macro: None,
             macro_pin_add_mode: None,
+            macro_pin_name_inputs: HashMap::new(),
+            macro_pin_type_inputs: HashMap::new(),
+            event_field_name_inputs: HashMap::new(),
+            event_field_type_inputs: HashMap::new(),
         }
     }
 
