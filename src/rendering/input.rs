@@ -430,7 +430,6 @@ pub fn on_mouse_down_left(
                         }
                         // Double-click on custom event node opens configurator
                         if node.node_type == NodeType::CustomEvent
-                            || node.node_type == NodeType::CustomEventDispatch
                         {
                             canvas.last_click_time = None;
                             canvas.last_click_pos = None;
