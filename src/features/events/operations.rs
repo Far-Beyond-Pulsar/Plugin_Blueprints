@@ -301,11 +301,15 @@ impl GraphCanvasPanel {
         };
 
         let dispatch_def_id = format!("custom_event_dispatch:{}", uid);
+        let event_name = self.panel.upgrade()
+            .and_then(|p| p.read(cx).find_event_def(&uid))
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| uid.clone());
 
         let node = BlueprintNode {
             id: uuid::Uuid::new_v4().to_string(),
             definition_id: dispatch_def_id,
-            title: format!("Dispatch {}", uid),
+            title: format!("Dispatch {}", event_name),
             icon: "📡".to_string(),
             node_type: NodeType::CustomEventDispatch,
             position,
