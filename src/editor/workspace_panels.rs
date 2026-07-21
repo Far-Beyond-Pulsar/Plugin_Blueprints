@@ -1322,10 +1322,19 @@ impl GraphCanvasPanel {
             });
         }
 
+        // On nodes always get the header pin (red square in header)
+        let on_inputs = vec![Pin {
+            id: "__return__".to_string(),
+            name: String::new(),
+            pin_type: PinType::Input,
+            data_type: DataType::from_type_str("fn_ptr"),
+        }];
+
         // Update or create the node being edited
         if let Some(ref nid) = self.editing_event_node {
             if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *nid) {
                 node.title = format!("On {}", event_name);
+                node.inputs = on_inputs;
                 node.outputs = output_pins.clone();
                 node.definition_id = on_def_id;
                 node.properties.insert("event_uid".to_string(), uid.clone());
@@ -1339,7 +1348,7 @@ impl GraphCanvasPanel {
                 node_type: NodeType::CustomEvent,
                 position: Point::new(200.0, 200.0),
                 size: Size::new(240.0, 60.0),
-                inputs: Vec::new(),
+                inputs: on_inputs,
                 outputs: output_pins.clone(),
                 properties: {
                     let mut m = std::collections::HashMap::new();

@@ -90,8 +90,16 @@ impl NodeGraphRenderer {
         node: &BlueprintNode,
         is_input: bool,
         row: usize,
+        pin_id: Option<&str>,
         graph: &BlueprintGraph,
     ) -> Point<f32> {
+        // Special case: __return__ pin renders in the header (right side)
+        if pin_id == Some("__return__") {
+            let scr = Self::graph_to_screen_pos(node.position, graph);
+            let px_ = scr.x + (node.size.width - 24.0) * graph.zoom_level;
+            let py = scr.y + HEADER_H * 0.5 * graph.zoom_level;
+            return Point::new(px_, py);
+        }
         let zoom = graph.zoom_level;
         let scr = Self::graph_to_screen_pos(node.position, graph);
         let py = scr.y
@@ -120,7 +128,7 @@ impl NodeGraphRenderer {
         } else {
             node.outputs.iter().position(|p| p.id == pin_id)?
         };
-        Some(Self::pin_canvas_pos(node, is_input, row, graph))
+        Some(Self::pin_canvas_pos(node, is_input, row, Some(pin_id), graph))
     }
 
     pub fn calculate_pin_position_graph_space(
@@ -1137,26 +1145,6 @@ impl NodeGraphRenderer {
         for (pos, node_id) in custom_nodes {
             let pe = canvas_entity.clone();
             let nid = node_id.clone();
-
-            // Header pin: always rendered on custom event nodes (red square)
-            let hp = Point::new(pos.x + px(20.0), pos.y);
-            container = container.child(
-                deferred(
-                    anchored()
-                        .position(hp)
-                        .anchor(gpui::Corner::TopLeft)
-                        .child(
-                            div()
-                                .w(px(14.0))
-                                .h(px(14.0))
-                                .bg(gpui::rgba(0xFF2222FF))
-                                .rounded(px(2.0)),
-                        ),
-                )
-                .with_priority(4)
-                .into_any_element(),
-            );
-
             let icon = deferred(
                 anchored()
                     .position(pos)

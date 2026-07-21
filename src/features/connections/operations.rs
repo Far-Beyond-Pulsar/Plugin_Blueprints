@@ -25,7 +25,12 @@ impl GraphCanvasPanel {
         cx: &mut Context<Self>,
     ) {
         if let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id) {
-            if let Some(pin) = node.outputs.iter().find(|p| p.id == pin_id) {
+            if let Some(pin) = node
+                .outputs
+                .iter()
+                .chain(node.inputs.iter())
+                .find(|p| p.id == pin_id)
+            {
                 tracing::info!(
                     "Starting connection drag from pin {} on node {}",
                     pin_id,

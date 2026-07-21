@@ -82,7 +82,7 @@ fn hit_output_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, 
     let r = pin_hit_radius(canvas, 0.9, 6.0);
     for node in &canvas.graph.nodes {
         for (i, pin) in node.outputs.iter().enumerate() {
-            let c = NodeGraphRenderer::pin_canvas_pos(node, false, i, &canvas.graph);
+            let c = NodeGraphRenderer::pin_canvas_pos(node, false, i, Some(pin.id.as_str()), &canvas.graph);
             if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
@@ -106,7 +106,7 @@ fn hit_input_pin(
             if !src_type.is_compatible_with(&pin.data_type) {
                 continue;
             }
-            let c = NodeGraphRenderer::pin_canvas_pos(node, true, i, &canvas.graph);
+            let c = NodeGraphRenderer::pin_canvas_pos(node, true, i, Some(pin.id.as_str()), &canvas.graph);
             if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
@@ -120,7 +120,9 @@ fn hit_any_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, Str
     for node in &canvas.graph.nodes {
         for (is_input, pins) in [(true, &node.inputs), (false, &node.outputs)] {
             for (i, pin) in pins.iter().enumerate() {
-                let c = NodeGraphRenderer::pin_canvas_pos(node, is_input, i, &canvas.graph);
+                let c = NodeGraphRenderer::pin_canvas_pos(
+                    node, is_input, i, Some(pin.id.as_str()), &canvas.graph,
+                );
                 if point_distance(cp, c) <= r {
                     return Some((node.id.clone(), pin.id.clone()));
                 }
@@ -379,6 +381,16 @@ pub fn on_mouse_down_left(
             }
 
             if let Some((node_id, pin_id)) = hit_output_pin(cp, canvas) {
+                canvas.last_comment_click_time = None;
+                canvas.last_comment_click_pos = None;
+                canvas.last_comment_click_id = None;
+                canvas.start_connection_drag_from_pin(node_id, pin_id, gp, cx);
+                update_graph_cursor(window, canvas, cp, gp);
+                return;
+            }
+
+            // Also check input pins (like __return__ header pin) before falling through to node drag
+            if let Some((node_id, pin_id)) = hit_any_pin(cp, canvas) {
                 canvas.last_comment_click_time = None;
                 canvas.last_comment_click_pos = None;
                 canvas.last_comment_click_id = None;

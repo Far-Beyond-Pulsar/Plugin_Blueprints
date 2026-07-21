@@ -242,19 +242,8 @@ impl BlueprintEditorPanel {
                 )
             };
 
-            let bp_node = BlueprintNode {
-                id: node_id.clone(),
-                definition_id,
-                title,
-                icon,
-                node_type,
-                position: Point::new(node_instance.position.x, node_instance.position.y),
-                size: {
-                    let max_pins = node_instance.inputs.len().max(node_instance.outputs.len());
-                    let height = layout::node_height_for_pin_rows(max_pins);
-                    crate::Size::new(240.0, height)
-                },
-                inputs: node_instance
+                // Ensure custom event On nodes always have the __return__ header pin
+                let mut node_inputs: Vec<Pin> = node_instance
                     .inputs
                     .iter()
                     .map(|pin_inst| {
@@ -270,7 +259,30 @@ impl BlueprintEditorPanel {
                             data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
                         }
                     })
-                    .collect(),
+                    .collect();
+                if node_type == NodeType::CustomEvent
+                    && !node_inputs.iter().any(|p| p.id == "__return__")
+                {
+                    node_inputs.insert(0, Pin {
+                        id: "__return__".to_string(),
+                        name: String::new(),
+                        pin_type: PinType::Input,
+                        data_type: crate::core::types::PinDataType::from_type_str("fn_ptr"),
+                    });
+                }
+                let bp_node = BlueprintNode {
+                id: node_id.clone(),
+                definition_id,
+                title,
+                icon,
+                node_type,
+                position: Point::new(node_instance.position.x, node_instance.position.y),
+                size: {
+                    let max_pins = node_instance.inputs.len().max(node_instance.outputs.len());
+                    let height = layout::node_height_for_pin_rows(max_pins);
+                    crate::Size::new(240.0, height)
+                },
+                inputs: node_inputs,
                 outputs: node_instance
                     .outputs
                     .iter()
