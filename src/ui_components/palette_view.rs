@@ -598,16 +598,27 @@ fn palette_node_row(
                 if def_now.id == "__add_custom_event__" {
                     if let Some(canvas_entity) = view.resolve_canvas(cx) {
                         let panel = canvas_entity.read(cx).panel.clone();
+                        let canvas_id = canvas_entity.read(cx).id.clone();
                         let win_handle = _window.window_handle();
                         cx.defer(move |cx| {
                             let _ = cx.update_window(win_handle, |_, window, cx| {
                                 if let Some(panel) = panel.upgrade() {
                                     panel.update(cx, |panel, cx| {
                                         let uid = panel.create_event_def("NewEvent".to_string(), String::new());
-                                        if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid).cloned() {
-                                            crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(&def, &uid, &mut panel.graph);
+                                        // Sync to the active tab matching this canvas
+                                        if let Some(tab) = panel.open_tabs.iter_mut().find(|t| t.id == canvas_id) {
+                                            if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid) {
+                                                crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(def, &uid, &mut tab.graph);
+                                            }
                                         }
-                                        panel.sync_all_events(window, cx);
+                                        // Also sync the live canvas
+                                        if let Some((_, canvas)) = panel.graph_panels.iter().find(|(id, _)| *id == canvas_id) {
+                                            canvas.update(cx, |canvas_panel, _cx| {
+                                                if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid) {
+                                                    crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(def, &uid, &mut canvas_panel.graph);
+                                                }
+                                            });
+                                        }
                                         cx.notify();
                                     });
                                 }

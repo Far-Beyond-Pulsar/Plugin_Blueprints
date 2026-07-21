@@ -28,7 +28,32 @@ impl EventsRenderer {
             .tooltip("Create New Event")
             .on_click(cx.listener(|panel, _, window, cx| {
                 let uid = panel.create_event_def("NewEvent".to_string(), String::new());
-                panel.sync_all_events(window, cx);
+                // Sync only the active graph tab — not all tabs
+                if let Some(tab) = panel.open_tabs.get_mut(panel.active_tab_index) {
+                    if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid) {
+                        crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(def, &uid, &mut tab.graph);
+                    }
+                }
+                // Also sync the active live canvas if open
+                let win_handle = window.window_handle();
+                let panel_entity = cx.entity().clone();
+                cx.defer(move |cx| {
+                    let _ = cx.update_window(win_handle, |_, window, cx| {
+                        panel_entity.update(cx, |panel, cx| {
+                            if let Some((_, canvas)) = panel.graph_panels.iter().find(|(id, _)| {
+                                panel.open_tabs.get(panel.active_tab_index).map(|t| &t.id) == Some(id)
+                            }) {
+                                canvas.update(cx, |canvas_panel, _cx| {
+                                    if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid) {
+                                        crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(def, &uid, &mut canvas_panel.graph);
+                                    }
+                                });
+                            }
+                            cx.notify();
+                        });
+                    });
+                });
+                cx.notify();
             }))
             .into_any_element();
 
