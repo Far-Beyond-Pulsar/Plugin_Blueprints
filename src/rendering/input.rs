@@ -513,6 +513,12 @@ pub fn on_mouse_down_left(
             }
 
             if let Some(comment_id) = hit_comment(gp, canvas).map(str::to_owned) {
+                // Check for double-click on connection line first (reroute)
+                if canvas.handle_empty_space_click(gp, cx) {
+                    update_graph_cursor(window, canvas, cp, gp);
+                    return;
+                }
+
                 if !event.modifiers.control {
                     canvas.graph.selected_nodes.clear();
                     canvas.graph.selected_comments.clear();
