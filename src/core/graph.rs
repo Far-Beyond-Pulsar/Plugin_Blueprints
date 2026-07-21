@@ -20,6 +20,7 @@ pub struct CustomEventDef {
     pub name: String,
     pub uid: String,
     pub fields: Vec<CustomEventField>,
+    pub return_type: String,
 }
 
 /// The main container for a blueprint graph, including all nodes, connections,

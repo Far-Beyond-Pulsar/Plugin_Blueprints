@@ -510,6 +510,7 @@ pub struct GraphCanvasPanel {
     pub event_configurator_open: bool,
     pub editing_event_node: Option<String>,
     pub event_name_input: Entity<InputState>,
+    pub event_return_type_input: Entity<InputState>,
     pub event_fields: Vec<crate::editor::panel::EventConfigField>,
     pub field_name_inputs: Vec<Entity<InputState>>,
     pub field_type_dropdowns: Vec<Entity<ui::dropdown::DropdownState<ui::dropdown::SearchableVec<crate::editor::panel::EventFieldType>>>>,
@@ -635,6 +636,7 @@ impl GraphCanvasPanel {
             event_configurator_open: false,
             editing_event_node: None,
             event_name_input: cx.new(|cx| InputState::new(window, cx).placeholder("Event name...")),
+            event_return_type_input: cx.new(|cx| InputState::new(window, cx).placeholder("Return type (e.g. f32)...")),
             event_fields: Vec::new(),
             field_name_inputs: Vec::new(),
             field_type_dropdowns: Vec::new(),
@@ -1141,6 +1143,9 @@ impl GraphCanvasPanel {
                 self.event_name_input.update(cx, |input, cx| {
                     input.set_value(def.name.clone(), window, cx);
                 });
+                self.event_return_type_input.update(cx, |input, cx| {
+                    input.set_value(def.return_type.clone(), window, cx);
+                });
                 for field in &def.fields {
                     self.event_fields.push(EventConfigField {
                         name: field.name.clone(),
@@ -1237,6 +1242,7 @@ impl GraphCanvasPanel {
         if event_name.is_empty() {
             return;
         }
+        let return_type = self.event_return_type_input.read(cx).text().to_string();
 
         // Compute uid from event name (kebab-case)
         let uid: String = event_name
@@ -1274,6 +1280,7 @@ impl GraphCanvasPanel {
         let def = crate::core::graph::CustomEventDef {
             name: event_name.clone(),
             uid: uid.clone(),
+            return_type: return_type.clone(),
             fields: fields.clone(),
         };
 
@@ -1298,6 +1305,17 @@ impl GraphCanvasPanel {
             pin_type: PinType::Input,
             data_type: DataType::execution(),
         }];
+        // Build the return input pin if return_type is set
+        let return_input_pin = if !return_type.is_empty() {
+            Some(Pin {
+                id: "__return__".to_string(),
+                name: return_type.clone(),
+                pin_type: PinType::Input,
+                data_type: DataType::from_type_str(&return_type),
+            })
+        } else {
+            None
+        };
         for field in &fields {
             let pin_id = field.name.clone();
             let data_type = DataType::from_type_str(&field.type_name);
@@ -1316,9 +1334,15 @@ impl GraphCanvasPanel {
         }
 
         // Update or create the node being edited
+        let on_inputs = if let Some(ref p) = return_input_pin {
+            vec![p.clone()]
+        } else {
+            Vec::new()
+        };
         if let Some(ref nid) = self.editing_event_node {
             if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *nid) {
                 node.title = format!("On {}", event_name);
+                node.inputs = on_inputs;
                 node.outputs = output_pins.clone();
                 node.definition_id = on_def_id;
                 node.properties.insert("event_uid".to_string(), uid.clone());
@@ -1332,7 +1356,7 @@ impl GraphCanvasPanel {
                 node_type: NodeType::CustomEvent,
                 position: Point::new(200.0, 200.0),
                 size: Size::new(240.0, 60.0),
-                inputs: Vec::new(),
+                inputs: on_inputs,
                 outputs: output_pins.clone(),
                 properties: {
                     let mut m = std::collections::HashMap::new();

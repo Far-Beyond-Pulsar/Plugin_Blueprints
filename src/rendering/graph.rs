@@ -264,6 +264,12 @@ fn pin_gpos_id(node: &BlueprintNode, pin_id: &str, is_input: bool) -> Option<(f3
     if node.node_type == NodeType::Reroute {
         return Some((node.position.x, node.position.y));
     }
+    if pin_id == "__return__" {
+        return Some((
+            node.position.x + node.size.width - 24.0,
+            node.position.y + HEADER_H * 0.5,
+        ));
+    }
     let row = if is_input {
         node.inputs.iter().position(|p| p.id == pin_id)?
     } else {
@@ -588,7 +594,17 @@ impl NodeGraphRenderer {
                     (false, node.outputs.as_slice()),
                 ] {
                     for (i, pin) in pins.iter().enumerate() {
-                        let (cgx, cgy) = pin_gpos_row(node, is_input, i);
+                        let is_return = pin.id == "__return__";
+                        let is_fn_ptr = pin.id == "__fn_ptr__";
+                        let is_special = is_return || is_fn_ptr;
+                        let (cgx, cgy) = if is_return {
+                            // Header position: right side, middle of header
+                            let hx = node.position.x + node.size.width - 24.0;
+                            let hy = node.position.y + HEADER_H * 0.5;
+                            (hx, hy)
+                        } else {
+                            pin_gpos_row(node, is_input, i)
+                        };
                         let pc = pin_color(&pin.data_type);
                         let exe = pin.data_type == DataType::execution();
                         let compat = dragging_conn.as_ref().map_or(false, |d| {
@@ -600,8 +616,12 @@ impl NodeGraphRenderer {
                             center: [cgx, cgy],
                             size: PIN_SIZE,
                             _pad0: 0.0,
-                            color: pc,
-                            kind: exe as u32,
+                            color: if is_special {
+                                [1.0, 0.2, 0.2, 1.0]
+                            } else {
+                                pc
+                            },
+                            kind: if is_special { 2 } else { exe as u32 },
                             is_input: is_input as u32,
                             compatible: compat as u32,
                             _pad1: 0,
@@ -1100,9 +1120,11 @@ impl NodeGraphRenderer {
             .iter()
             .filter(|n| n.node_type == NodeType::CustomEvent)
             .map(|n| {
+                let has_return = n.inputs.iter().any(|p| p.id == "__return__");
+                let x_off = if has_return { 46.0 } else { 24.0 };
                 let scr = Self::graph_to_screen_pos(n.position, &canvas.graph);
                 let win = Point::new(
-                    px(scr.x + origin.x + n.size.width * canvas.graph.zoom_level - 24.0),
+                    px(scr.x + origin.x + n.size.width * canvas.graph.zoom_level - x_off),
                     px(scr.y + origin.y + 4.0),
                 );
                 (win, n.id.clone())
@@ -1117,6 +1139,40 @@ impl NodeGraphRenderer {
         for (pos, node_id) in custom_nodes {
             let pe = canvas_entity.clone();
             let nid = node_id.clone();
+
+            // Check if this node has a return pin
+            let has_return = canvas.graph.nodes.iter()
+                .find(|n| n.id == nid)
+                .map_or(false, |n| n.inputs.iter().any(|p| p.id == "__return__"));
+
+            // Return pin overlay (red square, right of pencil)
+            if has_return {
+                let rp = pe.clone();
+                let ret_pos = Point::new(
+                    pos.x + px(20.0),
+                    pos.y,
+                );
+                container = container.child(
+                    deferred(
+                        anchored()
+                            .position(ret_pos)
+                            .anchor(gpui::Corner::TopLeft)
+                            .child(
+                                div()
+                                    .w(px(12.0))
+                                    .h(px(12.0))
+                                    .bg(gpui::rgba(0xFF3333FF))
+                                    .cursor_pointer()
+                                    .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+                                        // Could initiate connection drag here
+                                    }),
+                            ),
+                    )
+                    .with_priority(4)
+                    .into_any_element(),
+                );
+            }
+
             let icon = deferred(
                 anchored()
                     .position(pos)
@@ -1274,6 +1330,21 @@ impl NodeGraphRenderer {
                                         )
                                         .child(
                                             ui::input::TextInput::new(&canvas.event_name_input)
+                                                .w_full(),
+                                        ),
+                                )
+                                // Return type input
+                                .child(
+                                    v_flex()
+                                        .gap_1()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child("Return Type (fn pointer)"),
+                                        )
+                                        .child(
+                                            ui::input::TextInput::new(&canvas.event_return_type_input)
                                                 .w_full(),
                                         ),
                                 )

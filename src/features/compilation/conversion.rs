@@ -122,6 +122,7 @@ impl BlueprintEditorPanel {
                 graph_types::CustomEventDefDescription {
                     name: def.name.clone(),
                     uid: def.uid.clone(),
+                    return_type: def.return_type.clone(),
                     fields: def
                         .fields
                         .iter()
@@ -358,6 +359,7 @@ impl BlueprintEditorPanel {
                 let graph_def = crate::core::graph::CustomEventDef {
                     name: def.name.clone(),
                     uid: def.uid.clone(),
+                    return_type: def.return_type.clone(),
                     fields: def
                         .fields
                         .iter()
