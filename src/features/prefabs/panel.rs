@@ -152,6 +152,8 @@ impl PrefabHierarchyRenderer {
                 let panel = panel_entity.clone();
                 cx.defer(move |cx| {
                     panel.update(cx, |panel, cx| {
+                        panel.clear_sidebar_selections(false, false, false, true);
+                        panel.clear_graph_selections(cx);
                         panel.selected_prefab_component = Some(selected_id);
                         cx.notify();
                     });
@@ -779,7 +781,7 @@ impl PrefabPropertiesRenderer {
 /// rows into uncategorised + categorised buckets — direct port of the level
 /// editor's `category_section::group_rows_by_category` so both panels group
 /// reflected properties identically.
-fn group_rows_by_category(
+pub fn group_rows_by_category(
     rows: Vec<(
         AnyElement,
         Option<String>,

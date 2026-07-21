@@ -92,13 +92,12 @@ impl MacrosRenderer {
             on_select: Arc::new(move |id: &usize, window, cx| {
                 let selected_id = *id;
                 let panel = panel_entity.clone();
-                // Capture the window handle before deferring so we can pass &mut Window
-                // to open_local_macro inside the deferred callback.
                 let window_handle = window.window_handle();
-                // Defer so the entity borrow from cx.listener is released first.
                 cx.defer(move |cx| {
                     let _ = cx.update_window(window_handle, |_, window, cx| {
                         panel.update(cx, |panel, cx| {
+                            panel.clear_sidebar_selections(false, true, false, false);
+                            panel.clear_graph_selections(cx);
                             panel.selected_macro = Some(selected_id);
                             cx.notify();
 

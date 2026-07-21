@@ -118,6 +118,8 @@ impl EventsRenderer {
                 cx.defer(move |cx| {
                     let _ = cx.update_window(window_handle, |_, _window, cx| {
                         panel.update(cx, |panel, cx| {
+                            panel.clear_sidebar_selections(false, false, true, false);
+                            panel.clear_graph_selections(cx);
                             panel.selected_event = Some(selected_id);
                             cx.notify();
                         });

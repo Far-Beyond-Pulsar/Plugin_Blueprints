@@ -1,150 +1,160 @@
-//! Properties panel renderer for displaying node and graph properties.
+//! Unified multi-mode Properties panel.
 //!
-//! Shows detailed information about selected nodes, including properties,
-//! type information, and connection details. Also provides macro interface
-//! editing when inside sub-graphs.
+//! Dispatches to the appropriate detail renderer based on the current
+//! selection type (prefab component, macro, event, variable, graph node,
+//! or comment).  Mutual exclusivity of selection types is enforced by the
+//! sidebar / graph click handlers — the renderer simply reads whichever
+//! selection field is populated.
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
+use pulsar_reflection::{TypeStructure, REGISTRY};
 use ui::{
-    button::ButtonVariants as _, h_flex, v_flex, ActiveTheme as _, Colorize, IconName, StyledExt,
+    button::Button,
+    color_picker::{ColorPickerEvent, ColorPickerState},
+    input::{InputEvent, InputState},
+    scroll::ScrollbarAxis,
+    CollapsibleSection, IconName,
+};
+use ui::{
+    button::ButtonVariants as _, h_flex, v_flex, ActiveTheme as _, Colorize, PixelsExt, Sizable,
+    StyledExt,
 };
 
 use crate::core::types::{BlueprintComment, BlueprintNode, NodeType, Pin};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::compatibility::is_pin_connected;
+use crate::features::prefabs::panel::group_rows_by_category;
+use ui_common::properties_inspector;
 use ui_common::reflected_properties_panel::rgba_to_hsla;
 use std::sync::Arc;
 
-/// Renderer for the properties panel
+/// Unified multi-mode Properties panel renderer.
+///
+/// Dispatches to the appropriate sub-renderer based on selection priority:
+/// prefab component → macro → event → variable → graph node → comment → empty.
 pub struct PropertiesRenderer;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum SelectionKind {
+    PrefabComponent,
+    Macro,
+    Event,
+    Variable,
+    GraphNode(usize),
+    Comment(usize),
+    Multi,
+    None,
+}
 
 impl PropertiesRenderer {
     pub fn render(
-        panel: &BlueprintEditorPanel,
+        panel: &mut BlueprintEditorPanel,
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         let active_canvas = panel.active_canvas().cloned();
-        let panel_graph: crate::core::graph::BlueprintGraph = active_canvas
-            .as_ref()
-            .map(|c| c.read(cx).graph.clone())
-            .unwrap_or_default();
         if let Some(canvas) = active_canvas.as_ref() {
             canvas.update(cx, |canvas, cx| canvas.sync_comment_inspector_state(window, cx));
         }
+
+        let selection_kind = Self::active_selection_kind(panel, &active_canvas, cx);
+
         v_flex()
             .size_full()
             .bg(cx.theme().sidebar)
+            .child(Self::render_header(selection_kind, cx))
             .child(
-                // STUDIO-QUALITY HEADER (Unreal Details panel style)
-                v_flex()
-                    .w_full()
-                    .child(
-                        // Main header with professional styling
-                        h_flex()
-                            .w_full()
-                            .px_2()
-                            .py_1p5()
-                            .bg(cx.theme().secondary)
-                            .border_b_1()
-                            .border_color(cx.theme().border)
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                ui::Icon::new(IconName::Settings)
-                                    .size(px(16.0))
-                                    .text_color(cx.theme().info),
-                            )
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .font_semibold()
-                                    .text_color(cx.theme().foreground)
-                                    .child("Details"),
-                            )
-                            .child(
-                                div().flex_1().text_right().child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(if panel_graph.selected_nodes.len() > 1 {
-                                            format!("{} items", panel_graph.selected_nodes.len())
-                                        } else if panel_graph.selected_nodes.len() == 1 {
-                                            "1 item".to_string()
-                                        } else {
-                                            "None".to_string()
-                                        }),
-                                ),
-                            ),
-                    )
-                    .child(
-                        // Compact selection type indicator
-                        h_flex()
-                            .w_full()
-                            .px_2()
-                            .py_1()
-                            .bg(cx.theme().sidebar.darken(0.02))
-                            .border_b_1()
-                            .border_color(cx.theme().border.opacity(0.2))
-                            .items_center()
-                            .gap_1p5()
-                            .child(
-                                ui::Icon::new(if panel_graph.selected_nodes.len() > 1 {
-                                    IconName::Copy
-                                } else {
-                                    IconName::Component
-                                })
-                                .size(px(12.0))
-                                .text_color(cx.theme().info.opacity(0.8)),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(if panel_graph.selected_nodes.len() > 1 {
-                                        "Multiple"
-                                    } else if panel_graph.selected_nodes.len() == 1 {
-                                        "Properties"
-                                    } else {
-                                        "NO SELECTION"
-                                    }),
-                            )
-                            .child(if !panel_graph.selected_nodes.is_empty() {
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(px(4.0))
-                                    .bg(cx.theme().info.opacity(0.15))
-                                    .text_xs()
-                                    .font_family("JetBrainsMono-Regular")
-                                    .text_color(cx.theme().info)
-                                    .child(format!("{}", panel_graph.selected_nodes.len()))
-                            } else {
-                                div() // Empty div when no selection
-                            }),
-                    ),
-            )
-            .child(
-                // CONTENT AREA - clean scrollable content
                 v_flex()
                     .flex_1()
                     .overflow_hidden()
-                    .p_3()
-                    .scrollable(Axis::Vertical)
-                    .child(Self::render_properties_content(panel, window, cx)),
+                    .child(
+                        div().size_full().scrollable(ScrollbarAxis::Vertical).child(
+                            Self::render_properties_content(panel, window, cx),
+                        ),
+                    ),
             )
     }
 
-    fn render_properties_content(
+    fn active_selection_kind(
         panel: &BlueprintEditorPanel,
+        active_canvas: &Option<Entity<GraphCanvasPanel>>,
+        cx: &Context<BlueprintEditorPanel>,
+    ) -> SelectionKind {
+        if panel.selected_prefab_component.is_some() {
+            return SelectionKind::PrefabComponent;
+        }
+        if panel.selected_macro.is_some() {
+            return SelectionKind::Macro;
+        }
+        if panel.selected_event.is_some() {
+            return SelectionKind::Event;
+        }
+        if panel.selected_variable.is_some() {
+            return SelectionKind::Variable;
+        }
+        if let Some(canvas) = active_canvas {
+            let graph = &canvas.read(cx).graph;
+            let n = graph.selected_nodes.len();
+            let c = graph.selected_comments.len();
+            if n > 1 || (n > 0 && c > 0) || c > 1 {
+                return SelectionKind::Multi;
+            }
+            if n == 1 {
+                return SelectionKind::GraphNode(1);
+            }
+            if c == 1 {
+                return SelectionKind::Comment(1);
+            }
+        }
+        SelectionKind::None
+    }
+
+    fn render_header(selection_kind: SelectionKind, cx: &Context<BlueprintEditorPanel>) -> impl IntoElement {
+        let (title, icon, badge) = match &selection_kind {
+            SelectionKind::PrefabComponent => ("Properties", IconName::Component, "Component"),
+            SelectionKind::Macro => ("Properties", IconName::GitBranch, "Macro"),
+            SelectionKind::Event => ("Properties", IconName::Flash, "Event"),
+            SelectionKind::Variable => ("Properties", IconName::Component, "Variable"),
+            SelectionKind::GraphNode(_) => ("Properties", IconName::Component, "Node"),
+            SelectionKind::Comment(_) => ("Properties", IconName::Info, "Comment"),
+            SelectionKind::Multi => ("Properties", IconName::Copy, "Multiple"),
+            SelectionKind::None => ("Properties", IconName::Settings, "None"),
+        };
+
+        let has_selection = !matches!(selection_kind, SelectionKind::None);
+
+        properties_inspector::render_header(title, has_selection, badge, "properties-more", cx)
+    }
+
+    fn render_properties_content(
+        panel: &mut BlueprintEditorPanel,
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
+        // ── Prefab component selected ──────────────────────────────────────
+        if let Some(index) = panel.selected_prefab_component {
+            return Self::render_prefab_component_properties(panel, index, window, cx);
+        }
+
+        // ── Macro selected ─────────────────────────────────────────────────
+        if let Some(index) = panel.selected_macro {
+            return Self::render_macro_details(panel, index, cx);
+        }
+
+        // ── Event selected ─────────────────────────────────────────────────
+        if let Some(index) = panel.selected_event {
+            return Self::render_event_details(panel, index, cx);
+        }
+
+        // ── Variable selected ──────────────────────────────────────────────
+        if let Some(index) = panel.selected_variable {
+            return Self::render_variable_details(panel, index, cx);
+        }
+
         let active_canvas_opt = panel.active_canvas().cloned();
         let canvas_ref = active_canvas_opt.as_ref().map(|c| c.read(cx));
-
         let Some(canvas) = canvas_ref else {
             return Self::render_empty_state(cx);
         };
@@ -174,8 +184,6 @@ impl PropertiesRenderer {
             let selected_node_id = &sel_nodes[0];
             let node_found = canvas.graph.nodes.iter().any(|n| &n.id == selected_node_id);
             if !node_found {
-                // Stale selection pointing at a node that no longer exists —
-                // show the same placeholder as "nothing selected".
                 return Self::render_empty_state(cx);
             }
             if let Some(active_canvas) = active_canvas_opt {
@@ -192,6 +200,601 @@ impl PropertiesRenderer {
 
         // ── Nothing selected ──────────────────────────────────────────────
         Self::render_empty_state(cx)
+    }
+
+    // ── Prefab component properties ──────────────────────────────────────────
+
+    fn render_prefab_component_properties(
+        panel: &mut BlueprintEditorPanel,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        let Some(component) = panel.prefab_asset.components.get(index).cloned() else {
+            return Self::render_empty_state(cx);
+        };
+
+        let class_name = component.class_name.clone();
+        let state_key = format!("{}#{}", index, class_name);
+        let mut missing_in_registry = false;
+        let mut row_data: Vec<(AnyElement, Option<String>, Option<String>, bool, Option<usize>)> =
+            Vec::new();
+
+        if let Some(instance) = REGISTRY.create_instance(&class_name) {
+            let panel_entity = cx.entity().clone();
+            let on_bool_toggle = Arc::new(
+                move |prop_name: &str, checked: bool, _window: &mut Window, cx: &mut App| {
+                    panel_entity.update(cx, |panel, cx| {
+                        panel.update_prefab_component_property(
+                            index,
+                            prop_name,
+                            serde_json::Value::Bool(checked),
+                        );
+                        cx.notify();
+                    });
+                },
+            );
+
+            let panel_entity = cx.entity().clone();
+            let on_enum_select = Arc::new(
+                move |prop_name: &str, ix: usize, _window: &mut Window, cx: &mut App| {
+                    panel_entity.update(cx, |panel, cx| {
+                        panel.update_prefab_component_property(
+                            index,
+                            prop_name,
+                            serde_json::Value::from(ix as u64),
+                        );
+                        cx.notify();
+                    });
+                },
+            );
+
+            for prop in instance.get_properties() {
+                let current_value = component
+                    .data
+                    .as_object()
+                    .and_then(|obj| obj.get(prop.name))
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        let default_value = (prop.getter)(instance.as_ref());
+                        pulsar_reflection::RUNTIME_TYPE_REGISTRY
+                            .serialize_json_for_any(default_value.as_ref())
+                            .unwrap_or(serde_json::json!(null))
+                    });
+
+                match &prop.type_info.structure {
+                    TypeStructure::Primitive if prop.type_info.base_name() == "f32" => {
+                        let v = current_value.as_f64().unwrap_or(0.0) as f32;
+                        Self::ensure_numeric_input(panel, &state_key, prop.name, index, v, false, window, cx);
+                    }
+                    TypeStructure::Primitive if prop.type_info.base_name() == "i32" => {
+                        let v = current_value.as_i64().unwrap_or(0) as f32;
+                        Self::ensure_numeric_input(panel, &state_key, prop.name, index, v, true, window, cx);
+                    }
+                    _ => {}
+                }
+
+                let is_color = matches!(
+                    &prop.type_info.structure,
+                    TypeStructure::Primitive if prop.type_info.base_name() == "[f32; 4]"
+                ) || ui_common::reflected_properties_panel::is_color_field_name(prop.name);
+
+                if is_color {
+                    let rgba = ui_common::reflected_properties_panel::json_to_rgba_fallback(&current_value);
+                    Self::ensure_color_picker(panel, &state_key, prop.name, index, rgba, window, cx);
+                }
+
+                let widgets = panel.prefab_property_state.widget_map_for(&state_key, prop.name);
+
+                let prop_bool = prop.name.to_string();
+                let on_bool = on_bool_toggle.clone();
+                let bool_callback = Arc::new(
+                    move |checked: bool, window: &mut Window, cx: &mut App| {
+                        (on_bool)(&prop_bool, checked, window, cx);
+                    },
+                );
+
+                let prop_enum = prop.name.to_string();
+                let on_enum = on_enum_select.clone();
+                let enum_callback = Arc::new(move |ix: usize, window: &mut Window, cx: &mut App| {
+                    (on_enum)(&prop_enum, ix, window, cx);
+                });
+
+                let row = ui_common::render_property_row_runtime(
+                    "prefab",
+                    &state_key,
+                    &prop.display_name,
+                    prop.name,
+                    prop.type_info,
+                    &current_value,
+                    widgets,
+                    bool_callback,
+                    enum_callback,
+                    cx,
+                );
+
+                row_data.push((
+                    row,
+                    prop.category.map(str::to_string),
+                    prop.category_color.map(str::to_string),
+                    prop.category_default_collapsed,
+                    prop.category_order,
+                ));
+            }
+        } else {
+            missing_in_registry = true;
+        }
+
+        v_flex()
+            .w_full()
+            .p_3()
+            .gap_4()
+            .min_w_full()
+            .child(
+                CollapsibleSection::new(class_name.clone())
+                    .icon(IconName::Settings)
+                    .open(true)
+                    .child(if missing_in_registry {
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().warning)
+                            .child(
+                                "This component class is not available in the reflection registry.",
+                            )
+                            .into_any_element()
+                    } else {
+                        let (mut uncategorized, categorized) = group_rows_by_category(row_data);
+                        let category_elements =
+                            Self::render_categorized_rows(panel, index, categorized, cx);
+                        uncategorized.extend(category_elements);
+
+                        v_flex()
+                            .gap_2()
+                            .children(uncategorized)
+                            .into_any_element()
+                    }),
+            )
+            .into_any_element()
+    }
+
+    fn ensure_numeric_input(
+        panel: &mut BlueprintEditorPanel,
+        state_key: &str,
+        prop_name: &str,
+        component_index: usize,
+        initial: f32,
+        is_integer: bool,
+        window: &mut Window,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) {
+        let key = (state_key.to_string(), prop_name.to_string());
+        if panel.prefab_property_state.numeric_inputs.contains_key(&key) {
+            return;
+        }
+
+        let text = if is_integer {
+            format!("{}", initial as i64)
+        } else {
+            format!("{:.3}", initial)
+        };
+        let input = cx.new(|cx| InputState::new(window, cx));
+        input.update(cx, |state, cx| {
+            state.set_value(&text, window, cx);
+        });
+
+        let pn = prop_name.to_string();
+        cx.subscribe_in(
+            &input,
+            window,
+            move |this: &mut BlueprintEditorPanel, state, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change | InputEvent::Blur) {
+                    let text = state.read(cx).text().to_string();
+                    let parsed = if is_integer {
+                        text.trim().parse::<i32>().ok().map(serde_json::Value::from)
+                    } else {
+                        text.trim().parse::<f32>().ok().map(serde_json::Value::from)
+                    };
+                    if let Some(value) = parsed {
+                        this.update_prefab_component_property(component_index, &pn, value);
+                        cx.notify();
+                    }
+                }
+            },
+        )
+        .detach();
+
+        panel.prefab_property_state.numeric_inputs.insert(key, input);
+    }
+
+    fn ensure_color_picker(
+        panel: &mut BlueprintEditorPanel,
+        state_key: &str,
+        prop_name: &str,
+        component_index: usize,
+        rgba: [f32; 4],
+        window: &mut Window,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) {
+        let key = (state_key.to_string(), prop_name.to_string());
+        if panel.prefab_property_state.color_pickers.contains_key(&key) {
+            return;
+        }
+
+        let picker = cx.new(|cx| {
+            let mut state = ColorPickerState::new(window, cx);
+            state.set_value(
+                ui_common::reflected_properties_panel::rgba_to_hsla(rgba),
+                window,
+                cx,
+            );
+            state
+        });
+
+        let pn = prop_name.to_string();
+        cx.subscribe_in(
+            &picker,
+            window,
+            move |this: &mut BlueprintEditorPanel, _state, event: &ColorPickerEvent, _window, cx| {
+                if let ColorPickerEvent::Change(Some(hsla)) = event {
+                    this.update_prefab_component_property(
+                        component_index,
+                        &pn,
+                        serde_json::json!(ui_common::reflected_properties_panel::hsla_to_rgba(*hsla)),
+                    );
+                    cx.notify();
+                }
+            },
+        )
+        .detach();
+
+        panel.prefab_property_state.color_pickers.insert(key, picker);
+    }
+
+    fn render_categorized_rows(
+        panel: &BlueprintEditorPanel,
+        component_index: usize,
+        mut categorized_rows: Vec<(String, Vec<AnyElement>, Option<String>, bool, usize)>,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> Vec<AnyElement> {
+        categorized_rows.sort_by_key(|(_, _, _, _, order)| *order);
+
+        categorized_rows
+            .into_iter()
+            .map(|(category_name, category_rows, category_color_hex, default_collapsed, _)| {
+                let category_key = (component_index, category_name.clone());
+
+                let is_collapsed = if panel.prefab_collapsed_categories.contains(&category_key) {
+                    true
+                } else if panel.prefab_expanded_categories.contains(&category_key) {
+                    false
+                } else {
+                    default_collapsed
+                };
+
+                let toggle_key = category_key.clone();
+                let was_collapsed = is_collapsed;
+                let accent = category_color_hex
+                    .as_deref()
+                    .and_then(crate::features::viewport::coordinates::parse_hex_color);
+
+                v_flex()
+                    .w_full()
+                    .gap_1()
+                    .p_2()
+                    .rounded(px(6.0))
+                    .border_1()
+                    .when_some(accent, |el, color| {
+                        el.border_color(color.opacity(0.7)).bg(color.opacity(0.08))
+                    })
+                    .when(accent.is_none(), |el| {
+                        el.border_color(cx.theme().border)
+                            .bg(cx.theme().border.opacity(0.08))
+                    })
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .items_center()
+                            .justify_between()
+                            .cursor_pointer()
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _event, _window, cx| {
+                                    if was_collapsed {
+                                        this.prefab_collapsed_categories.remove(&toggle_key);
+                                        this.prefab_expanded_categories
+                                            .insert(toggle_key.clone());
+                                    } else {
+                                        this.prefab_expanded_categories.remove(&toggle_key);
+                                        this.prefab_collapsed_categories
+                                            .insert(toggle_key.clone());
+                                    }
+                                    cx.notify();
+                                }),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .when_some(accent, |el, color| el.text_color(color))
+                                    .when(accent.is_none(), |el| {
+                                        el.text_color(cx.theme().muted_foreground)
+                                    })
+                                    .child(category_name),
+                            )
+                            .child(
+                                ui::Icon::new(if is_collapsed {
+                                    IconName::ChevronRight
+                                } else {
+                                    IconName::ChevronDown
+                                })
+                                .xsmall()
+                                .when_some(accent, |el, color| el.text_color(color))
+                                .when(accent.is_none(), |el| {
+                                    el.text_color(cx.theme().muted_foreground)
+                                }),
+                            ),
+                    )
+                    .when(!is_collapsed, |el| el.children(category_rows))
+                    .into_any_element()
+            })
+            .collect()
+    }
+
+    // ── Macro details ────────────────────────────────────────────────────────
+
+    fn render_macro_details(
+        panel: &BlueprintEditorPanel,
+        index: usize,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        let Some(macro_def) = panel.local_macros.get(index) else {
+            return Self::render_empty_state(cx);
+        };
+
+        v_flex()
+            .gap_4()
+            .p_3()
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_3()
+                            .child(
+                                ui::Icon::new(IconName::GitBranch)
+                                    .size(px(18.0))
+                                    .text_color(cx.theme().accent),
+                            )
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_bold()
+                                    .text_color(cx.theme().foreground)
+                                    .child(macro_def.name.clone()),
+                            ),
+                    )
+                    .when(!macro_def.description.is_empty(), |el| {
+                        el.child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(macro_def.description.clone()),
+                        )
+                    }),
+            )
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header("Inputs", IconName::ArrowRight, cx))
+                    .child(
+                        v_flex()
+                            .gap_1p5()
+                            .children(macro_def.interface.inputs.iter().map(|pin| {
+                                Self::render_info_row(&pin.name, &pin.data_type.to_string(), cx)
+                            }))
+                            .when(macro_def.interface.inputs.is_empty(), |el| {
+                                el.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("No inputs"),
+                                )
+                            }),
+                    ),
+            )
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header("Outputs", IconName::ArrowRight, cx))
+                    .child(
+                        v_flex()
+                            .gap_1p5()
+                            .children(macro_def.interface.outputs.iter().map(|pin| {
+                                Self::render_info_row(&pin.name, &pin.data_type.to_string(), cx)
+                            }))
+                            .when(macro_def.interface.outputs.is_empty(), |el| {
+                                el.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("No outputs"),
+                                )
+                            }),
+                    ),
+            )
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header("Macro Info", IconName::Info, cx))
+                    .child(Self::render_info_row("ID", &macro_def.id, cx))
+                    .child(Self::render_info_row(
+                        "Nodes",
+                        &macro_def.graph.nodes.len().to_string(),
+                        cx,
+                    )),
+            )
+            .into_any_element()
+    }
+
+    // ── Event details ────────────────────────────────────────────────────────
+
+    fn render_event_details(
+        panel: &BlueprintEditorPanel,
+        index: usize,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        let Some(event_def) = panel.local_event_defs.get(index) else {
+            return Self::render_empty_state(cx);
+        };
+
+        v_flex()
+            .gap_4()
+            .p_3()
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_3()
+                            .child(
+                ui::Icon::new(IconName::Flash)
+                    .size(px(18.0))
+                    .text_color(cx.theme().warning),
+                            )
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_bold()
+                                    .text_color(cx.theme().foreground)
+                                    .child(event_def.name.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .py_1()
+                            .rounded(px(4.0))
+                            .bg(cx.theme().warning.opacity(0.15))
+                            .border_1()
+                            .border_color(cx.theme().warning.opacity(0.3))
+                            .text_xs()
+                            .font_semibold()
+                            .text_color(cx.theme().warning)
+                            .child("Custom Event"),
+                    ),
+            )
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header("Fields", IconName::List, cx))
+                    .child(
+                        v_flex()
+                            .gap_1p5()
+                            .children(event_def.fields.iter().map(|field| {
+                                Self::render_info_row(&field.name, &field.type_name, cx)
+                            }))
+                            .when(event_def.fields.is_empty(), |el| {
+                                el.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("No fields"),
+                                )
+                            }),
+                    ),
+            )
+            .when(!event_def.return_type.is_empty(), |el| {
+                el.child(Self::render_separator(cx)).child(
+                    v_flex()
+                        .gap_3()
+                        .child(Self::render_section_header("Return Type", IconName::ArrowRight, cx))
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().foreground)
+                                .child(event_def.return_type.clone()),
+                        ),
+                )
+            })
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header("Event Info", IconName::Info, cx))
+                    .child(Self::render_info_row("UID", &event_def.uid, cx))
+            )
+            .into_any_element()
+    }
+
+    // ── Variable details ─────────────────────────────────────────────────────
+
+    fn render_variable_details(
+        panel: &BlueprintEditorPanel,
+        index: usize,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        let Some(var) = panel.class_variables.get(index) else {
+            return Self::render_empty_state(cx);
+        };
+
+        v_flex()
+            .gap_4()
+            .p_3()
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_3()
+                            .child(
+                                ui::Icon::new(IconName::Component)
+                                    .size(px(18.0))
+                                    .text_color(cx.theme().info),
+                            )
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_bold()
+                                    .text_color(cx.theme().foreground)
+                                    .child(var.name.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .py_1()
+                            .rounded(px(4.0))
+                            .bg(cx.theme().info.opacity(0.15))
+                            .border_1()
+                            .border_color(cx.theme().info.opacity(0.3))
+                            .text_xs()
+                            .font_semibold()
+                            .text_color(cx.theme().info)
+                            .child("Variable"),
+                    ),
+            )
+            .child(Self::render_separator(cx))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(Self::render_section_header("Variable Info", IconName::Info, cx))
+                    .child(Self::render_info_row("Type", &var.var_type, cx))
+                    .child(
+                        Self::render_info_row(
+                            "Default Value",
+                            &var.default_value.clone().unwrap_or_else(|| "—".to_string()),
+                            cx,
+                        ),
+                    ),
+            )
+            .into_any_element()
     }
 
     fn render_selected_node_readonly<T>(

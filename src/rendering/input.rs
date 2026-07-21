@@ -318,6 +318,9 @@ pub fn on_mouse_down_left(
                 cx.notify();
             }
 
+            // Clear sidebar selections for mutual exclusivity on any graph click
+            canvas.clear_sidebar_selections(cx);
+
             let cp = to_canvas(event.position, canvas);
             let gp = to_graph(cp, canvas);
 

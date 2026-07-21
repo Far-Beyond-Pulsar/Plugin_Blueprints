@@ -17,7 +17,7 @@ use crate::editor::panel::{BlueprintEditorPanel, ResizeHandle};
 use crate::features::connections::operations::ConnectionDrag;
 use crate::features::events::panel::EventsRenderer;
 use crate::features::macros::panel::MacrosRenderer;
-use crate::features::prefabs::panel::{PrefabHierarchyRenderer, PrefabPropertiesRenderer};
+use crate::features::prefabs::panel::PrefabHierarchyRenderer;
 use crate::features::undo::UndoManager;
 use crate::features::variables::rendering::VariablesRenderer;
 use crate::rendering::graph::NodeGraphRenderer;
@@ -297,7 +297,7 @@ impl Panel for PropertiesPanel {
     }
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Blueprint Details".into_any_element()
+        "Properties".into_any_element()
     }
 }
 
@@ -344,54 +344,6 @@ impl Panel for PrefabHierarchyPanel {
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         "Components".into_any_element()
-    }
-}
-
-/// Prefabs Panel
-pub struct PrefabsPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl PrefabsPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for PrefabsPanel {}
-
-impl Render for PrefabsPanel {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if let Some(editor) = self.editor.upgrade() {
-            div()
-                .size_full()
-                .bg(cx.theme().sidebar)
-                .child(editor.update(cx, |editor, cx| {
-                    PrefabPropertiesRenderer::render(editor, window, cx)
-                }))
-        } else {
-            div().child("Editor not available")
-        }
-    }
-}
-
-impl Focusable for PrefabsPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for PrefabsPanel {
-    fn panel_name(&self) -> &'static str {
-        "prefabs"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Component Properties".into_any_element()
     }
 }
 
@@ -1071,6 +1023,17 @@ impl GraphCanvasPanel {
                 self.is_dirty = true;
             }
             self.editing_comment = None; cx.notify();
+        }
+    }
+
+    /// Clear sidebar selections (variable, macro, event, prefab) on the parent
+    /// panel for mutual exclusivity with graph selections.
+    pub fn clear_sidebar_selections(&self, cx: &mut Context<Self>) {
+        if let Some(panel) = self.panel.upgrade() {
+            panel.update(cx, |panel, cx| {
+                panel.clear_sidebar_selections(false, false, false, false);
+                cx.notify();
+            });
         }
     }
 

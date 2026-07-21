@@ -10,7 +10,7 @@ use ui::workspace::Workspace;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::{
     CompilerPanel, EventsPanel, FindPanel, GraphCanvasPanel, MacrosPanel, PrefabHierarchyPanel,
-    PrefabsPanel, PropertiesPanel, VariablesPanel,
+    PropertiesPanel, VariablesPanel,
 };
 
 impl BlueprintEditorPanel {
@@ -61,7 +61,6 @@ impl BlueprintEditorPanel {
             let compiler_panel = cx.new(|cx| CompilerPanel::new(editor_weak.clone(), cx));
             let find_panel = cx.new(|cx| FindPanel::new(editor_weak.clone(), cx));
             let properties_panel = cx.new(|cx| PropertiesPanel::new(editor_weak.clone(), cx));
-            let prefabs_panel = cx.new(|cx| PrefabsPanel::new(editor_weak.clone(), cx));
             let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = self
                 .open_tabs
                 .iter()
@@ -146,21 +145,11 @@ impl BlueprintEditorPanel {
                 cx,
             );
 
-            // The node palette is now reachable via the canvas's quick palette
-            // (right-click), so the dedicated palette tab is redundant here.
-            // Stack the two remaining panels vertically rather than tabbing them.
-            let right = DockItem::split(
-                Axis::Vertical,
-                vec![
-                    DockItem::tabs(vec![Arc::new(prefabs_panel)], None, &dock_area_weak, window, cx),
-                    DockItem::tabs(
-                        vec![Arc::new(properties_panel)],
-                        None,
-                        &dock_area_weak,
-                        window,
-                        cx,
-                    ),
-                ],
+            // Unified Properties panel (multi-mode — prefab components, macros,
+            // events, variables, graph nodes, and comments all dispatch here).
+            let right = DockItem::tabs(
+                vec![Arc::new(properties_panel)],
+                None,
                 &dock_area_weak,
                 window,
                 cx,

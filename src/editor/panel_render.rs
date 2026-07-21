@@ -372,6 +372,7 @@ impl BlueprintEditorPanel {
                                                 .on_mouse_down(
                                                     gpui::MouseButton::Left,
                                                     cx.listener(move |panel, _, _window, cx| {
+                                                        panel.clear_sidebar_selections(false, false, false, false);
                                                         panel.graph.selected_nodes.clear();
                                                         panel
                                                             .graph

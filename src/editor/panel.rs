@@ -908,6 +908,26 @@ impl BlueprintEditorPanel {
             .map(|(_, entity)| entity)
     }
 
+    /// Clear all sidebar selections so the Properties panel can switch modes.
+    /// Keeps `selected_*` fields that match `keep` (bitmask).
+    pub fn clear_sidebar_selections(&mut self, keep_variable: bool, keep_macro: bool, keep_event: bool, keep_prefab: bool) {
+        if !keep_variable { self.selected_variable = None; }
+        if !keep_macro { self.selected_macro = None; }
+        if !keep_event { self.selected_event = None; }
+        if !keep_prefab { self.selected_prefab_component = None; }
+    }
+
+    /// Clear graph-node / comment selections on the active canvas.
+    pub fn clear_graph_selections(&mut self, cx: &mut Context<Self>) {
+        if let Some(canvas) = self.active_canvas().cloned() {
+            canvas.update(cx, |canvas, cx| {
+                canvas.graph.selected_nodes.clear();
+                canvas.graph.selected_comments.clear();
+                cx.notify();
+            });
+        }
+    }
+
     fn capture_interaction_state(&self) -> GraphInteractionState {
         GraphInteractionState {
             dragging_node: self.dragging_node.clone(),
