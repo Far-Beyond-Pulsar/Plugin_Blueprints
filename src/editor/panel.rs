@@ -123,6 +123,8 @@ pub struct BlueprintEditorPanel {
     pub compile_mode: crate::core::types::CompileMode,
     pub compiler_output_scroll_handle: VirtualListScrollHandle,
     pub compiler_output_scrollbar_state: ScrollbarState,
+    pub find_search_input: Entity<InputState>,
+    pub find_search_query: String,
     pub find_output_scroll_handle: VirtualListScrollHandle,
     pub find_output_scrollbar_state: ScrollbarState,
 
@@ -459,6 +461,15 @@ impl BlueprintEditorPanel {
         })
         .detach();
 
+        // ── Find panel search input ────────────────────────────────────────────
+        let find_search_input: Entity<InputState> =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
+        cx.subscribe_in(&find_search_input, window, move |this, input, _event: &InputEvent, _window, cx| {
+            this.find_search_query = input.read(cx).text().to_string();
+            cx.notify();
+        })
+        .detach();
+
         Self {
             focus_handle: cx.focus_handle(),
             graph: main_graph.clone(),
@@ -518,6 +529,8 @@ impl BlueprintEditorPanel {
             compile_mode: crate::core::types::CompileMode::default(),
             compiler_output_scroll_handle: VirtualListScrollHandle::new(),
             compiler_output_scrollbar_state: ScrollbarState::default(),
+            find_search_input,
+            find_search_query: String::new(),
             find_output_scroll_handle: VirtualListScrollHandle::new(),
             find_output_scrollbar_state: ScrollbarState::default(),
             library_manager: {
