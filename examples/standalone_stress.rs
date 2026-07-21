@@ -467,6 +467,7 @@ fn build_stress_graph() -> BlueprintGraph {
         zoom_level: 0.07,
         pan_offset: Point::new(30.0, 30.0),
         virtualization_stats: VirtualizationStats::default(),
+        custom_event_defs: HashMap::new(),
     }
 }
 

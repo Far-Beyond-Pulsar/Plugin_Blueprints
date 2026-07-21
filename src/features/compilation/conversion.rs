@@ -115,6 +115,25 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
+        // Convert custom event definitions
+        for (uid, def) in &graph.custom_event_defs {
+            graph_desc.custom_event_defs.insert(
+                uid.clone(),
+                graph_types::CustomEventDefDescription {
+                    name: def.name.clone(),
+                    uid: def.uid.clone(),
+                    fields: def
+                        .fields
+                        .iter()
+                        .map(|f| graph_types::CustomEventFieldDescription {
+                            name: f.name.clone(),
+                            type_name: f.type_name.clone(),
+                        })
+                        .collect(),
+                },
+            );
+        }
+
         Ok(graph_desc)
     }
 
@@ -331,6 +350,27 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
+        // Convert custom event definitions
+        let custom_event_defs: std::collections::HashMap<_, _> = graph_desc
+            .custom_event_defs
+            .iter()
+            .map(|(uid, def)| {
+                let graph_def = crate::core::graph::CustomEventDef {
+                    name: def.name.clone(),
+                    uid: def.uid.clone(),
+                    fields: def
+                        .fields
+                        .iter()
+                        .map(|f| crate::core::graph::CustomEventField {
+                            name: f.name.clone(),
+                            type_name: f.type_name.clone(),
+                        })
+                        .collect(),
+                };
+                (uid.clone(), graph_def)
+            })
+            .collect();
+
         Ok(BlueprintGraph {
             nodes,
             connections,
@@ -340,7 +380,7 @@ impl BlueprintEditorPanel {
             zoom_level: 1.0,
             pan_offset: Point::new(0.0, 0.0),
             virtualization_stats: crate::VirtualizationStats::default(),
-            custom_event_defs: std::collections::HashMap::new(),
+            custom_event_defs,
         })
     }
 }
