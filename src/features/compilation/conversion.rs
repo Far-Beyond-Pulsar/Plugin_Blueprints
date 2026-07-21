@@ -115,26 +115,6 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
-        // Convert custom event definitions
-        for (uid, def) in &graph.custom_event_defs {
-            graph_desc.custom_event_defs.insert(
-                uid.clone(),
-                graph_types::CustomEventDefDescription {
-                    name: def.name.clone(),
-                    uid: def.uid.clone(),
-                    return_type: def.return_type.clone(),
-                    fields: def
-                        .fields
-                        .iter()
-                        .map(|f| graph_types::CustomEventFieldDescription {
-                            name: f.name.clone(),
-                            type_name: f.type_name.clone(),
-                        })
-                        .collect(),
-                },
-            );
-        }
-
         Ok(graph_desc)
     }
 
@@ -168,20 +148,23 @@ impl BlueprintEditorPanel {
                     NodeType::Reroute,
                     None,
                 )
-            } else if definition_id.starts_with("custom_event:") {
-                let uid = definition_id.trim_start_matches("custom_event:");
-                let name = uid.replace('-', " ");
-                let name = name
-                    .split_whitespace()
-                    .map(|w| {
-                        let mut c = w.chars();
-                        match c.next() {
-                            None => String::new(),
-                            Some(f) => f.to_uppercase().to_string() + c.as_str(),
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
+            } else if let Some(uid) = definition_id.strip_prefix("custom_event:") {
+                let event_def = self.local_event_defs.iter().find(|d| d.uid == uid);
+                let name = event_def
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| {
+                        uid.replace('-', " ")
+                            .split_whitespace()
+                            .map(|w| {
+                                let mut c = w.chars();
+                                match c.next() {
+                                    None => String::new(),
+                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    });
                 (
                     format!("On {}", name),
                     "📡".to_string(),
@@ -189,20 +172,23 @@ impl BlueprintEditorPanel {
                     NodeType::CustomEvent,
                     None,
                 )
-            } else if definition_id.starts_with("custom_event_dispatch:") {
-                let uid = definition_id.trim_start_matches("custom_event_dispatch:");
-                let name = uid.replace('-', " ");
-                let name = name
-                    .split_whitespace()
-                    .map(|w| {
-                        let mut c = w.chars();
-                        match c.next() {
-                            None => String::new(),
-                            Some(f) => f.to_uppercase().to_string() + c.as_str(),
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
+            } else if let Some(uid) = definition_id.strip_prefix("custom_event_dispatch:") {
+                let event_def = self.local_event_defs.iter().find(|d| d.uid == uid);
+                let name = event_def
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| {
+                        uid.replace('-', " ")
+                            .split_whitespace()
+                            .map(|w| {
+                                let mut c = w.chars();
+                                match c.next() {
+                                    None => String::new(),
+                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    });
                 (
                     format!("Dispatch {}", name),
                     "📡".to_string(),
@@ -390,28 +376,6 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
-        // Convert custom event definitions
-        let custom_event_defs: std::collections::HashMap<_, _> = graph_desc
-            .custom_event_defs
-            .iter()
-            .map(|(uid, def)| {
-                let graph_def = crate::core::graph::CustomEventDef {
-                    name: def.name.clone(),
-                    uid: def.uid.clone(),
-                    return_type: def.return_type.clone(),
-                    fields: def
-                        .fields
-                        .iter()
-                        .map(|f| crate::core::graph::CustomEventField {
-                            name: f.name.clone(),
-                            type_name: f.type_name.clone(),
-                        })
-                        .collect(),
-                };
-                (uid.clone(), graph_def)
-            })
-            .collect();
-
         Ok(BlueprintGraph {
             nodes,
             connections,
@@ -421,7 +385,6 @@ impl BlueprintEditorPanel {
             zoom_level: 1.0,
             pan_offset: Point::new(0.0, 0.0),
             virtualization_stats: crate::VirtualizationStats::default(),
-            custom_event_defs,
         })
     }
 }

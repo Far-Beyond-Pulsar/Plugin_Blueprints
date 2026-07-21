@@ -15,6 +15,7 @@ use crate::core::graph::BlueprintGraph;
 use crate::core::types::BlueprintNode;
 use crate::editor::panel::{BlueprintEditorPanel, ResizeHandle};
 use crate::features::connections::operations::ConnectionDrag;
+use crate::features::events::panel::EventsRenderer;
 use crate::features::macros::panel::MacrosRenderer;
 use crate::features::prefabs::panel::{PrefabHierarchyRenderer, PrefabPropertiesRenderer};
 use crate::features::undo::UndoManager;
@@ -113,6 +114,52 @@ impl Panel for MacrosPanel {
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         "Macros".into_any_element()
+    }
+}
+
+/// Events Panel
+pub struct EventsPanel {
+    editor: WeakEntity<BlueprintEditorPanel>,
+    focus_handle: FocusHandle,
+}
+
+impl EventsPanel {
+    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+        Self {
+            editor,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+}
+
+impl EventEmitter<PanelEvent> for EventsPanel {}
+
+impl Render for EventsPanel {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(editor) = self.editor.upgrade() {
+            div()
+                .size_full()
+                .bg(cx.theme().sidebar)
+                .child(editor.update(cx, |editor, cx| EventsRenderer::render(editor, cx)))
+        } else {
+            div().child("Editor not available")
+        }
+    }
+}
+
+impl Focusable for EventsPanel {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Panel for EventsPanel {
+    fn panel_name(&self) -> &'static str {
+        "events"
+    }
+
+    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+        "Events".into_any_element()
     }
 }
 
@@ -506,15 +553,6 @@ pub struct GraphCanvasPanel {
     pub dragging_macro: Option<crate::features::macros::MacroDrag>,
     pub macro_pin_add_mode: Option<bool>,
 
-    // ── Custom Event Configurator ──────────────────────────────────────────
-    pub event_configurator_open: bool,
-    pub editing_event_node: Option<String>,
-    pub event_name_input: Entity<InputState>,
-    pub event_return_type_input: Entity<InputState>,
-    pub event_fields: Vec<crate::editor::panel::EventConfigField>,
-    pub field_name_inputs: Vec<Entity<InputState>>,
-    pub field_type_dropdowns: Vec<Entity<ui::dropdown::DropdownState<ui::dropdown::SearchableVec<crate::editor::panel::EventFieldType>>>>,
-
     pub subscriptions: Vec<Subscription>,
 }
 
@@ -633,13 +671,6 @@ impl GraphCanvasPanel {
             variable_drop_menu_position: None,
             dragging_macro: None,
             macro_pin_add_mode: None,
-            event_configurator_open: false,
-            editing_event_node: None,
-            event_name_input: cx.new(|cx| InputState::new(window, cx).placeholder("Event name...")),
-            event_return_type_input: cx.new(|cx| InputState::new(window, cx).placeholder("Return type (e.g. f32)...")),
-            event_fields: Vec::new(),
-            field_name_inputs: Vec::new(),
-            field_type_dropdowns: Vec::new(),
             subscriptions: Vec::new(),
         }
     }
@@ -1048,440 +1079,5 @@ impl GraphCanvasPanel {
         self.comment_color_bindings_dirty = true; cx.notify();
     }
 
-    /// Create a Dispatch node for a custom event from its On node's uid.
-    pub fn create_custom_event_dispatch_node(
-        &mut self,
-        uid: String,
-        position: Point<f32>,
-        cx: &mut Context<Self>,
-    ) {
-        use crate::core::types::*;
 
-        let on_def_id = format!("custom_event:{}", uid);
-        let dispatch_def_id = format!("custom_event_dispatch:{}", uid);
-
-        // Find the On node to copy its output pins
-        let on_node = self.graph.nodes.iter().find(|n| n.definition_id == on_def_id);
-
-        let mut dispatch_inputs: Vec<Pin> = vec![Pin {
-            id: "exec".to_string(),
-            name: String::new(),
-            pin_type: PinType::Input,
-            data_type: PinDataType::execution(),
-        }];
-
-        if let Some(on) = on_node {
-            for pin in &on.outputs {
-                if pin.data_type.is_execution() {
-                    continue;
-                }
-                dispatch_inputs.push(Pin {
-                    id: pin.id.clone(),
-                    name: pin.name.clone(),
-                    pin_type: PinType::Input,
-                    data_type: pin.data_type.clone(),
-                });
-            }
-        }
-
-        let event_name = on_node
-            .map(|n| n.title.strip_prefix("On ").unwrap_or(&n.title).to_string())
-            .unwrap_or_else(|| uid.clone());
-
-        let node = BlueprintNode {
-            id: uuid::Uuid::new_v4().to_string(),
-            definition_id: dispatch_def_id,
-            title: format!("Dispatch {}", event_name),
-            icon: "📡".to_string(),
-            node_type: NodeType::CustomEventDispatch,
-            position,
-            size: Size::new(240.0, 60.0),
-            inputs: dispatch_inputs,
-            outputs: Vec::new(),
-            properties: {
-                let mut m = std::collections::HashMap::new();
-                m.insert("event_uid".to_string(), uid);
-                m
-            },
-            is_selected: false,
-            description: format!("Dispatches the '{}' custom event", event_name),
-            color: None,
-        };
-        self.add_node(node, cx);
-    }
-
-    // ── Event Configurator ────────────────────────────────────────────────────
-
-    /// Open the event configurator. If `node_id` is Some, load existing event data
-    /// from that node for editing. If None, create fresh state for a new event.
-    pub fn open_event_configurator(
-        &mut self,
-        node_id: Option<String>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        use crate::editor::panel::EventConfigField;
-        use ui::dropdown::{DropdownState, SearchableVec};
-
-        self.event_fields.clear();
-        self.field_name_inputs.clear();
-        self.field_type_dropdowns.clear();
-        self.editing_event_node = node_id.clone();
-
-        if let Some(ref nid) = node_id {
-            // Load event data from the shared graph-level definition
-            let event_uid = self
-                .graph
-                .nodes
-                .iter()
-                .find(|n| n.id == *nid)
-                .and_then(|n| n.properties.get("event_uid"));
-            let def = event_uid
-                .and_then(|uid| self.graph.custom_event_defs.get(uid));
-
-            if let Some(def) = def {
-                self.event_name_input.update(cx, |input, cx| {
-                    input.set_value(def.name.clone(), window, cx);
-                });
-                self.event_return_type_input.update(cx, |input, cx| {
-                    input.set_value(def.return_type.clone(), window, cx);
-                });
-                for field in &def.fields {
-                    self.event_fields.push(EventConfigField {
-                        name: field.name.clone(),
-                        type_name: field.type_name.clone(),
-                    });
-                    let inp = cx.new(|cx| {
-                        InputState::new(window, cx).placeholder("Field name...")
-                    });
-                    inp.update(cx, |input, cx| {
-                        input.set_value(field.name.clone(), window, cx);
-                    });
-                    self.field_name_inputs.push(inp);
-
-                    let type_items: Vec<crate::editor::panel::EventFieldType> = vec![
-                        "f32", "f64", "i32", "u32", "i64", "u64", "bool", "String",
-                        "Vec3", "Entity",
-                    ]
-                    .into_iter()
-                    .map(|n| crate::editor::panel::EventFieldType { name: n.to_string() })
-                    .collect();
-                    let dd = cx.new(|cx| {
-                        DropdownState::new(SearchableVec::new(type_items), None, window, cx)
-                    });
-                    dd.update(cx, |state, cx| {
-                        state.set_selected_value(&field.type_name, window, cx);
-                    });
-                    self.field_type_dropdowns.push(dd);
-                }
-            } else if let Some(node) = self.graph.nodes.iter().find(|n| n.id == *nid) {
-                // Fallback: read directly from node outputs (legacy / out of sync)
-                self.event_name_input.update(cx, |input, cx| {
-                    input.set_value(
-                        node.title.trim_start_matches("On ").to_string(),
-                        window,
-                        cx,
-                    );
-                });
-                for pin in &node.outputs {
-                    if pin.data_type.is_execution() {
-                        continue;
-                    }
-                    self.event_fields.push(EventConfigField {
-                        name: pin.name.clone(),
-                        type_name: pin.data_type.type_name.clone(),
-                    });
-                    let inp = cx.new(|cx| {
-                        InputState::new(window, cx).placeholder("Field name...")
-                    });
-                    inp.update(cx, |input, cx| {
-                        input.set_value(pin.name.clone(), window, cx);
-                    });
-                    self.field_name_inputs.push(inp);
-
-                    let type_items: Vec<crate::editor::panel::EventFieldType> = vec![
-                        "f32", "f64", "i32", "u32", "i64", "u64", "bool", "String",
-                        "Vec3", "Entity",
-                    ]
-                    .into_iter()
-                    .map(|n| crate::editor::panel::EventFieldType { name: n.to_string() })
-                    .collect();
-                    let dd = cx.new(|cx| {
-                        DropdownState::new(SearchableVec::new(type_items), None, window, cx)
-                    });
-                    dd.update(cx, |state, cx| {
-                        state.set_selected_value(&pin.data_type.type_name, window, cx);
-                    });
-                    self.field_type_dropdowns.push(dd);
-                }
-            }
-        } else {
-            // Fresh state for a new event
-            self.event_name_input.update(cx, |input, cx| {
-                input.set_value(String::new(), window, cx);
-                input.focus(window, cx);
-            });
-        }
-
-        self.event_configurator_open = true;
-        cx.notify();
-    }
-
-    /// Save the event configurator — store the shared definition and sync all
-    /// On / Dispatch nodes that reference this event.
-    pub fn save_event_configurator(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        use crate::core::graph::CustomEventField;
-        use crate::core::types::PinDataType as DataType;
-        use crate::core::types::*;
-
-        let event_name = self.event_name_input.read(cx).text().to_string();
-        if event_name.is_empty() {
-            return;
-        }
-        let return_type = self.event_return_type_input.read(cx).text().to_string();
-
-        // Compute uid from event name (kebab-case)
-        let uid: String = event_name
-            .chars()
-            .map(|c| {
-                if c.is_uppercase() {
-                    format!("-{}", c.to_ascii_lowercase())
-                } else if c == ' ' {
-                    "-".to_string()
-                } else {
-                    c.to_string()
-                }
-            })
-            .collect::<String>()
-            .trim_start_matches('-')
-            .to_string();
-        let on_def_id = format!("custom_event:{}", uid);
-        let dispatch_def_id = format!("custom_event_dispatch:{}", uid);
-
-        // Capture old uid from the node being edited
-        let old_uid = self.editing_event_node.as_ref().and_then(|nid| {
-            self.graph.nodes.iter().find(|n| n.id == *nid)
-                .and_then(|n| n.properties.get("event_uid").cloned())
-        });
-
-        // Build the shared definition
-        let fields: Vec<CustomEventField> = self
-            .event_fields
-            .iter()
-            .map(|f| CustomEventField {
-                name: f.name.clone(),
-                type_name: f.type_name.clone(),
-            })
-            .collect();
-        let def = crate::core::graph::CustomEventDef {
-            name: event_name.clone(),
-            uid: uid.clone(),
-            return_type: return_type.clone(),
-            fields: fields.clone(),
-        };
-
-        // Remove old uid entry if renamed
-        if let Some(ref old) = old_uid {
-            if old != &uid {
-                self.graph.custom_event_defs.remove(old);
-            }
-        }
-        self.graph.custom_event_defs.insert(uid.clone(), def);
-
-        // Build pins from fields
-        let mut output_pins = vec![Pin {
-            id: "Body".to_string(),
-            name: "Body".to_string(),
-            pin_type: PinType::Output,
-            data_type: DataType::execution(),
-        }];
-        let mut dispatch_input_pins = vec![Pin {
-            id: "exec".to_string(),
-            name: String::new(),
-            pin_type: PinType::Input,
-            data_type: DataType::execution(),
-        }];
-        for field in &fields {
-            let pin_id = field.name.clone();
-            let data_type = DataType::from_type_str(&field.type_name);
-            output_pins.push(Pin {
-                id: pin_id.clone(),
-                name: field.name.clone(),
-                pin_type: PinType::Output,
-                data_type: data_type.clone(),
-            });
-            dispatch_input_pins.push(Pin {
-                id: pin_id.clone(),
-                name: field.name.clone(),
-                pin_type: PinType::Input,
-                data_type,
-            });
-        }
-
-        // On nodes always get the header pin (red square in header)
-        let on_inputs = vec![Pin {
-            id: "__return__".to_string(),
-            name: String::new(),
-            pin_type: PinType::Input,
-            data_type: DataType::from_type_str("?"),
-        }];
-
-        // Update or create the node being edited
-        if let Some(ref nid) = self.editing_event_node {
-            if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *nid) {
-                node.title = format!("On {}", event_name);
-                node.inputs = on_inputs;
-                node.outputs = output_pins.clone();
-                node.definition_id = on_def_id;
-                node.properties.insert("event_uid".to_string(), uid.clone());
-            }
-        } else {
-            self.graph.nodes.push(BlueprintNode {
-                id: uuid::Uuid::new_v4().to_string(),
-                definition_id: on_def_id,
-                title: format!("On {}", event_name),
-                icon: "📡".to_string(),
-                node_type: NodeType::CustomEvent,
-                position: Point::new(200.0, 200.0),
-                size: Size::new(240.0, 60.0),
-                inputs: on_inputs,
-                outputs: output_pins.clone(),
-                properties: {
-                    let mut m = std::collections::HashMap::new();
-                    m.insert("event_uid".to_string(), uid.clone());
-                    m
-                },
-                is_selected: false,
-                description: format!("Custom event listener for '{}'", uid),
-                color: None,
-            });
-        }
-
-        // Update Dispatch nodes matching this event uid (old + new if renamed)
-        let dispatch_ids: Vec<String> = self
-            .graph
-            .nodes
-            .iter()
-            .filter(|n| {
-                let matches = n.definition_id == dispatch_def_id
-                    || old_uid.as_ref().map_or(false, |old| {
-                        n.definition_id == format!("custom_event_dispatch:{}", old)
-                    });
-                matches
-            })
-            .map(|n| n.id.clone())
-            .collect();
-
-        if dispatch_ids.is_empty() && self.editing_event_node.is_none() {
-            // Auto-create a dispatch node for a brand-new event
-            self.graph.nodes.push(BlueprintNode {
-                id: uuid::Uuid::new_v4().to_string(),
-                definition_id: dispatch_def_id,
-                title: format!("Dispatch {}", event_name),
-                icon: "📡".to_string(),
-                node_type: NodeType::CustomEventDispatch,
-                position: Point::new(500.0, 200.0),
-                size: Size::new(240.0, 60.0),
-                inputs: dispatch_input_pins,
-                outputs: Vec::new(),
-                properties: {
-                    let mut m = std::collections::HashMap::new();
-                    m.insert("event_uid".to_string(), uid.clone());
-                    m
-                },
-                is_selected: false,
-                description: format!("Dispatch the '{}' custom event", uid),
-                color: None,
-            });
-        } else {
-            for id in &dispatch_ids {
-                if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *id) {
-                    node.inputs = dispatch_input_pins.clone();
-                    node.title = format!("Dispatch {}", event_name);
-                    node.definition_id = dispatch_def_id.clone();
-                    node.properties.insert("event_uid".to_string(), uid.clone());
-                }
-            }
-        }
-
-        self.is_dirty = true;
-        self.event_configurator_open = false;
-        self.editing_event_node = None;
-
-        // Refresh palette so new/updated Dispatch entries appear
-        let palette = self.quick_palette_view.clone();
-        cx.defer(move |cx| {
-            palette.update(cx, |view, cx| view.rebuild_items(cx));
-        });
-
-        cx.notify();
-    }
-
-    /// Cancel the event configurator without saving.
-    pub fn cancel_event_configurator(
-        &mut self,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.event_configurator_open = false;
-        self.editing_event_node = None;
-        self.event_fields.clear();
-        cx.notify();
-    }
-
-    /// Add a new empty field to the event configurator.
-    pub fn add_event_field(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        use crate::editor::panel::EventConfigField;
-        use ui::dropdown::{DropdownState, SearchableVec};
-
-        let idx = self.event_fields.len();
-        self.event_fields.push(EventConfigField {
-            name: format!("field_{}", idx + 1),
-            type_name: "f32".to_string(),
-        });
-
-        let inp = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Field name...")
-        });
-        inp.update(cx, |input, cx| {
-            input.set_value(format!("field_{}", idx + 1), window, cx);
-        });
-        self.field_name_inputs.push(inp);
-
-        let type_items: Vec<crate::editor::panel::EventFieldType> = vec![
-            "f32", "f64", "i32", "u32", "i64", "u64", "bool", "String",
-            "Vec3", "Entity",
-        ]
-        .into_iter()
-        .map(|n| crate::editor::panel::EventFieldType { name: n.to_string() })
-        .collect();
-        let dd = cx.new(|cx| {
-            DropdownState::new(SearchableVec::new(type_items), None, window, cx)
-        });
-        self.field_type_dropdowns.push(dd);
-
-        cx.notify();
-    }
-
-    /// Remove a field from the event configurator by index.
-    pub fn remove_event_field(
-        &mut self,
-        index: usize,
-        cx: &mut Context<Self>,
-    ) {
-        if index < self.event_fields.len() {
-            self.event_fields.remove(index);
-            self.field_name_inputs.remove(index);
-            self.field_type_dropdowns.remove(index);
-            cx.notify();
-        }
-    }
 }

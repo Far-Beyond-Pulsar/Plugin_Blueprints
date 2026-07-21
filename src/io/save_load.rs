@@ -192,6 +192,7 @@ impl BlueprintEditorPanel {
                     format_version: formats::current_format_version(),
                     main_graph: legacy_graph,
                     local_macros: Vec::new(),
+                    local_events: Vec::new(),
                     variables: Vec::new(),
                     editor_state: None,
                     blueprint_metadata: Default::default(),
@@ -270,6 +271,25 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
+        // Convert event defs to serializable format
+        let local_events: Vec<formats::EventDefDescription> = self
+            .local_event_defs
+            .iter()
+            .map(|def| formats::EventDefDescription {
+                uid: def.uid.clone(),
+                name: def.name.clone(),
+                fields: def
+                    .fields
+                    .iter()
+                    .map(|f| formats::EventFieldDescription {
+                        name: f.name.clone(),
+                        type_name: f.type_name.clone(),
+                    })
+                    .collect(),
+                return_type: def.return_type.clone(),
+            })
+            .collect();
+
         let graph_view_states = self
             .open_tabs
             .iter()
@@ -289,6 +309,7 @@ impl BlueprintEditorPanel {
             format_version: formats::current_format_version(),
             main_graph,
             local_macros,
+            local_events,
             variables,
             editor_state: Some(formats::BlueprintEditorState {
                 open_tab_ids: self.open_tabs.iter().map(|tab| tab.id.clone()).collect(),
@@ -325,6 +346,7 @@ impl BlueprintEditorPanel {
         let formats::BlueprintAsset {
             main_graph: graph_desc,
             local_macros,
+            local_events,
             variables,
             editor_state,
             format_version: _,
@@ -332,6 +354,24 @@ impl BlueprintEditorPanel {
         } = asset;
 
         self.local_macros = local_macros;
+
+        // Convert event defs from serializable format
+        self.local_event_defs = local_events
+            .into_iter()
+            .map(|ed| crate::core::graph::EventDefinition {
+                uid: ed.uid,
+                name: ed.name,
+                fields: ed
+                    .fields
+                    .into_iter()
+                    .map(|f| crate::core::graph::CustomEventField {
+                        name: f.name,
+                        type_name: f.type_name,
+                    })
+                    .collect(),
+                return_type: ed.return_type,
+            })
+            .collect();
 
         // Convert ui::ClassVariable to local ClassVariable
         self.class_variables = variables

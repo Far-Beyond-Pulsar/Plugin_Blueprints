@@ -128,15 +128,11 @@ impl NodePaletteView {
                 build_local_macro_palette_items(&editor_ref.local_macros, editing_macro_id.as_deref());
             all_items.extend(local_macro_items);
 
-            // Custom event Dispatch nodes — from the active canvas's live graph
-            if let Some(canvas) = editor_ref.active_canvas() {
-                let graph = canvas.read(cx);
-                let nodes = graph.graph.nodes.clone();
-                let defs = graph.graph.custom_event_defs.clone();
-                drop(graph);
-                let dispatch_items = build_custom_event_dispatch_palette_items(&nodes, &defs);
-                all_items.extend(dispatch_items);
-            }
+            // Custom event Dispatch nodes — from panel event defs
+            let dispatch_items = build_custom_event_dispatch_palette_items_from_panel(
+                &editor_ref.local_event_defs,
+            );
+            all_items.extend(dispatch_items);
         }
 
         self.all_items = all_items;
@@ -217,79 +213,43 @@ fn build_local_macro_palette_items(
     items
 }
 
-/// Build palette items for custom event Dispatch nodes from On nodes in the
-/// active canvas's graph.
-fn build_custom_event_dispatch_palette_items(
-    nodes: &[BlueprintNode],
-    defs: &std::collections::HashMap<String, crate::core::graph::CustomEventDef>,
+/// Build palette items for custom event Dispatch nodes from panel-level event
+/// definitions.
+fn build_custom_event_dispatch_palette_items_from_panel(
+    defs: &[crate::core::graph::EventDefinition],
 ) -> Vec<PaletteItem> {
-    let mut items = Vec::new();
-    let mut dispatch_entries: Vec<(String, String, Vec<PinDefinition>)> = Vec::new();
-
-    // Deduplicate by uid — only one dispatch entry per event definition
-    let mut seen = std::collections::HashSet::new();
-    for node in nodes {
-        if let Some(uid) = node.definition_id.strip_prefix("custom_event:") {
-            if !seen.insert(uid.to_string()) {
-                continue;
-            }
-            let (pins, event_name) = if let Some(def) = defs.get(uid) {
-                let input_pins: Vec<PinDefinition> = def
-                    .fields
-                    .iter()
-                    .map(|f| PinDefinition {
-                        id: f.name.clone(),
-                        name: f.name.clone(),
-                        data_type: crate::core::types::PinDataType::from_type_str(&f.type_name),
-                        pin_type: PinType::Input,
-                    })
-                    .collect();
-                (input_pins, def.name.clone())
-            } else {
-                // Fallback: read from node outputs
-                let input_pins: Vec<PinDefinition> = node
-                    .outputs
-                    .iter()
-                    .filter(|p| !p.data_type.is_execution())
-                    .map(|p| PinDefinition {
-                        id: p.id.clone(),
-                        name: p.name.clone(),
-                        data_type: p.data_type.clone(),
-                        pin_type: PinType::Input,
-                    })
-                    .collect();
-                let en = node.title.strip_prefix("On ").unwrap_or(&node.title).to_string();
-                (input_pins, en)
-            };
-            dispatch_entries.push((uid.to_string(), event_name, pins));
-        }
+    if defs.is_empty() {
+        return Vec::new();
     }
 
-    if dispatch_entries.is_empty() {
-        return items;
-    }
-
-    items.push(PaletteItem::CategoryHeader {
+    let mut items = vec![PaletteItem::CategoryHeader {
         name: "Custom Events".to_string(),
         color: "#E67E22".to_string(),
-        node_count: dispatch_entries.len(),
-    });
+        node_count: defs.len(),
+    }];
 
-    for (uid, event_name, input_pins) in dispatch_entries {
+    for def in defs {
         let mut dispatch_inputs = vec![PinDefinition {
             id: "exec".to_string(),
             name: String::new(),
             data_type: crate::core::types::PinDataType::execution(),
             pin_type: PinType::Input,
         }];
-        dispatch_inputs.extend(input_pins);
+        for field in &def.fields {
+            dispatch_inputs.push(PinDefinition {
+                id: field.name.clone(),
+                name: field.name.clone(),
+                data_type: crate::core::types::PinDataType::from_type_str(&field.type_name),
+                pin_type: PinType::Input,
+            });
+        }
 
         items.push(PaletteItem::NodeEntry {
             def: NodeDefinition {
-                id: format!("custom_event_dispatch:{}", uid),
-                name: format!("Dispatch {}", event_name),
+                id: format!("custom_event_dispatch:{}", def.uid),
+                name: format!("Dispatch {}", def.name),
                 icon: "📡".to_string(),
-                description: format!("Dispatches the '{}' custom event", event_name),
+                description: format!("Dispatches the '{}' custom event", def.name),
                 documentation: String::new(),
                 inputs: dispatch_inputs,
                 outputs: vec![PinDefinition {
@@ -300,7 +260,7 @@ fn build_custom_event_dispatch_palette_items(
                 }],
                 properties: {
                     let mut m = std::collections::HashMap::new();
-                    m.insert("event_uid".to_string(), uid);
+                    m.insert("event_uid".to_string(), def.uid.clone());
                     m
                 },
                 color: Some("#00A8E8".to_string()),
@@ -634,11 +594,26 @@ fn palette_node_row(
             cx.listener(move |view, _event, _window, cx| {
                 let def_now = def_for_click.clone();
 
-                // Sentinel: "Add Custom Event" → open configurator
+                // Sentinel: "Add Custom Event" → create event and On node
                 if def_now.id == "__add_custom_event__" {
                     if let Some(canvas_entity) = view.resolve_canvas(cx) {
+                        let panel = canvas_entity.read(cx).panel.clone();
+                        let win_handle = _window.window_handle();
+                        cx.defer(move |cx| {
+                            let _ = cx.update_window(win_handle, |_, window, cx| {
+                                if let Some(panel) = panel.upgrade() {
+                                    panel.update(cx, |panel, cx| {
+                                        let uid = panel.create_event_def("NewEvent".to_string(), String::new());
+                                        if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid).cloned() {
+                                            crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(&def, &uid, &mut panel.graph);
+                                        }
+                                        panel.sync_all_events(window, cx);
+                                        cx.notify();
+                                    });
+                                }
+                            });
+                        });
                         canvas_entity.update(cx, |canvas, cx| {
-                            canvas.open_event_configurator(None, _window, cx);
                             canvas.popup_palette_graph_pos = None;
                             canvas.quick_palette_connection_source = None;
                             canvas.quick_palette_open = false;

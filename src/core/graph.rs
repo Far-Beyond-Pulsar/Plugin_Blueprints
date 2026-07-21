@@ -7,18 +7,20 @@ use super::types::{BlueprintComment, BlueprintNode, Connection, VirtualizationSt
 use gpui::*;
 use std::collections::HashMap;
 
-/// A single field in a custom event definition.
+/// A single field in an event definition.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CustomEventField {
     pub name: String,
     pub type_name: String,
 }
 
-/// Shared definition for a custom event, stored at the graph level.
+/// Shared definition for a custom event, stored at the panel level (mirrors
+/// how macros are stored).  The On node and all Dispatch nodes derive their
+/// pins from this definition.
 #[derive(Clone, Debug, Default)]
-pub struct CustomEventDef {
-    pub name: String,
+pub struct EventDefinition {
     pub uid: String,
+    pub name: String,
     pub fields: Vec<CustomEventField>,
     pub return_type: String,
 }
@@ -35,6 +37,4 @@ pub struct BlueprintGraph {
     pub zoom_level: f32,
     pub pan_offset: Point<f32>,
     pub virtualization_stats: VirtualizationStats,
-    /// Shared definitions for custom events, keyed by uid.
-    pub custom_event_defs: HashMap<String, CustomEventDef>,
 }

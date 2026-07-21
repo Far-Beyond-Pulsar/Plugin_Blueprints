@@ -440,13 +440,21 @@ pub fn on_mouse_down_left(
                                 return;
                             }
                         }
-                        // Double-click on custom event node opens configurator
+                        // Double-click on custom event node – select in events sidebar
                         if node.node_type == NodeType::CustomEvent
                         {
+                            if let Some(uid) = node.properties.get("event_uid") {
+                                if let Some(panel) = canvas.panel.upgrade() {
+                                    panel.update(cx, |panel, cx| {
+                                        if let Some(idx) = panel.local_event_defs.iter().position(|d| d.uid == *uid) {
+                                            panel.selected_event = Some(idx);
+                                            cx.notify();
+                                        }
+                                    });
+                                }
+                            }
                             canvas.last_click_time = None;
                             canvas.last_click_pos = None;
-                            let nid = node.id.clone();
-                            canvas.open_event_configurator(Some(nid), window, cx);
                             return;
                         }
                     }

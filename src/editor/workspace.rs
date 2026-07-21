@@ -9,8 +9,8 @@ use ui::workspace::Workspace;
 
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::{
-    CompilerPanel, FindPanel, GraphCanvasPanel, MacrosPanel, PrefabHierarchyPanel, PrefabsPanel,
-    PropertiesPanel, VariablesPanel,
+    CompilerPanel, EventsPanel, FindPanel, GraphCanvasPanel, MacrosPanel, PrefabHierarchyPanel,
+    PrefabsPanel, PropertiesPanel, VariablesPanel,
 };
 
 impl BlueprintEditorPanel {
@@ -55,6 +55,7 @@ impl BlueprintEditorPanel {
 
             let variables_panel = cx.new(|cx| VariablesPanel::new(editor_weak.clone(), cx));
             let macros_panel = cx.new(|cx| MacrosPanel::new(editor_weak.clone(), cx));
+            let events_panel = cx.new(|cx| EventsPanel::new(editor_weak.clone(), cx));
             let prefab_hierarchy_panel =
                 cx.new(|cx| PrefabHierarchyPanel::new(editor_weak.clone(), cx));
             let compiler_panel = cx.new(|cx| CompilerPanel::new(editor_weak.clone(), cx));
@@ -106,10 +107,8 @@ impl BlueprintEditorPanel {
                 center_tab_panel = Some(view.clone());
             }
 
-            // Stack the three left-side panels vertically, each given an equal
-            // (1/3) share of the available height, instead of tabbing them
-            // together — they're all small reference lists the user wants
-            // visible side-by-side rather than switched between.
+            // Stack the left-side panels vertically so they're visible
+            // side-by-side rather than switched between.
             let left = DockItem::split(
                 Axis::Vertical,
                 vec![
@@ -129,6 +128,13 @@ impl BlueprintEditorPanel {
                     ),
                     DockItem::tabs(
                         vec![Arc::new(macros_panel)],
+                        None,
+                        &dock_area_weak,
+                        window,
+                        cx,
+                    ),
+                    DockItem::tabs(
+                        vec![Arc::new(events_panel)],
                         None,
                         &dock_area_weak,
                         window,
