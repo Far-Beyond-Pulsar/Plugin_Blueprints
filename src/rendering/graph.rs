@@ -1098,10 +1098,7 @@ impl NodeGraphRenderer {
             .graph
             .nodes
             .iter()
-            .filter(|n| {
-                n.node_type == NodeType::CustomEvent
-                    || n.node_type == NodeType::CustomEventDispatch
-            })
+            .filter(|n| n.node_type == NodeType::CustomEvent)
             .map(|n| {
                 let scr = Self::graph_to_screen_pos(n.position, &canvas.graph);
                 let win = Point::new(
