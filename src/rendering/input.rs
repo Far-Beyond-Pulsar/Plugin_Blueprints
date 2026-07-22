@@ -79,8 +79,12 @@ fn hit_node<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str>
 }
 
 fn hit_output_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, String)> {
-    let r = pin_hit_radius(canvas, 0.9, 6.0);
     for node in &canvas.graph.nodes {
+        let r = if node.node_type == NodeType::Reroute {
+            (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+        } else {
+            pin_hit_radius(canvas, 0.9, 6.0)
+        };
         for (i, pin) in node.outputs.iter().enumerate() {
             let c = NodeGraphRenderer::pin_canvas_pos(node, false, i, Some(pin.id.as_str()), &canvas.graph);
             if point_distance(cp, c) <= r {
@@ -97,8 +101,12 @@ fn hit_input_pin(
     skip_node: &str,
     src_type: &DataType,
 ) -> Option<(String, String)> {
-    let r = pin_hit_radius(canvas, 1.3, 8.0);
     for node in &canvas.graph.nodes {
+        let r = if node.node_type == NodeType::Reroute {
+            (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+        } else {
+            pin_hit_radius(canvas, 1.3, 8.0)
+        };
         if node.id == skip_node {
             continue;
         }
@@ -116,8 +124,12 @@ fn hit_input_pin(
 }
 
 fn hit_any_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, String)> {
-    let r = pin_hit_radius(canvas, 1.2, 8.0);
     for node in &canvas.graph.nodes {
+        let r = if node.node_type == NodeType::Reroute {
+            (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+        } else {
+            pin_hit_radius(canvas, 1.2, 8.0)
+        };
         for (is_input, pins) in [(true, &node.inputs), (false, &node.outputs)] {
             for (i, pin) in pins.iter().enumerate() {
                 let c = NodeGraphRenderer::pin_canvas_pos(
