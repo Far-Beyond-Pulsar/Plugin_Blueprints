@@ -585,9 +585,12 @@ impl NodeGraphRenderer {
             };
             let sep = [0.086, 0.098, 0.116, 1.0];
 
-            let max_rows = node.inputs.len().max(node.outputs.len()).max(1);
-            let gw = layout::snap_to_grid(node.size.width);
-            let gh = layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows));
+            let (gw, gh) = if is_reroute {
+                (layout::snap_to_grid(node.size.width), layout::snap_to_grid(node.size.height))
+            } else {
+                let max_rows = node.inputs.len().max(node.outputs.len()).max(1);
+                (layout::snap_to_grid(node.size.width), layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)))
+            };
             let hdr_frac = (HEADER_H + SEP_H) / gh;
             let is_running = node_is_active(node.id.as_str());
             let flags = (is_reroute as u32) | ((is_sel as u32) << 1) | ((is_running as u32) << 2);

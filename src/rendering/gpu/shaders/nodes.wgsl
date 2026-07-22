@@ -81,13 +81,9 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let is_selected = (in.flags & 2u) != 0u;
     let is_running = (in.flags & 4u) != 0u;
 
-    let local_px = in.uv * in.size_px;
-    let d = sdf_rrect(local_px, in.size_px, in.corner_r_px);
-    let aa = 1.0 - smoothstep(-0.5, 0.5, d);
-    if aa <= 0.0 { discard; }
-
     if is_reroute {
         // Draw as a circle (not a rounded rect) with a centered indicator dot.
+        let local_px = in.uv * in.size_px;
         let mid = in.size_px * 0.5;
         let radius = min(mid.x, mid.y);
         let circle_d = length(local_px - mid) - radius;
@@ -113,6 +109,11 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
 
         return vec4(col.rgb, col.a * circle_aa);
     }
+
+    let local_px = in.uv * in.size_px;
+    let d = sdf_rrect(local_px, in.size_px, in.corner_r_px);
+    let aa = 1.0 - smoothstep(-0.5, 0.5, d);
+    if aa <= 0.0 { discard; }
 
     let y = local_px.y;
     let header_h_px = in.header_h_frac * in.size_px.y;
