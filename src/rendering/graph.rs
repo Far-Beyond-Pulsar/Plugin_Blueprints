@@ -93,6 +93,11 @@ impl NodeGraphRenderer {
         pin_id: Option<&str>,
         graph: &BlueprintGraph,
     ) -> Point<f32> {
+        if node.node_type == NodeType::Reroute {
+            let cx = node.position.x + node.size.width * 0.5;
+            let cy = node.position.y + node.size.height * 0.5;
+            return Self::graph_to_screen_pos(Point::new(cx, cy), graph);
+        }
         // Special case: __return__ pin renders in the header (right side)
         if pin_id == Some("__return__") {
             let scr = Self::graph_to_screen_pos(node.position, graph);
@@ -121,7 +126,9 @@ impl NodeGraphRenderer {
         graph: &BlueprintGraph,
     ) -> Option<Point<f32>> {
         if node.node_type == NodeType::Reroute {
-            return Some(Self::graph_to_screen_pos(node.position, graph));
+            let cx = node.position.x + node.size.width * 0.5;
+            let cy = node.position.y + node.size.height * 0.5;
+            return Some(Self::graph_to_screen_pos(Point::new(cx, cy), graph));
         }
         let row = if is_input {
             node.inputs.iter().position(|p| p.id == pin_id)?
@@ -251,7 +258,9 @@ fn wire_phase(conn: &Connection) -> f32 {
 /// No pan or zoom applied — the GPU shader handles the transform.
 fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) {
     if node.node_type == NodeType::Reroute {
-        return (node.position.x, node.position.y);
+        let cx = node.position.x + node.size.width * 0.5;
+        let cy = node.position.y + node.size.height * 0.5;
+        return (cx, cy);
     }
     let py = node.position.y
         + HEADER_H
@@ -270,7 +279,9 @@ fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) 
 /// Graph-space pin centre addressed by pin ID.
 fn pin_gpos_id(node: &BlueprintNode, pin_id: &str, is_input: bool) -> Option<(f32, f32)> {
     if node.node_type == NodeType::Reroute {
-        return Some((node.position.x, node.position.y));
+        let cx = node.position.x + node.size.width * 0.5;
+        let cy = node.position.y + node.size.height * 0.5;
+        return Some((cx, cy));
     }
     if pin_id == "__return__" {
         return Some((
