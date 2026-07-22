@@ -17,8 +17,8 @@ use crate::core::{events::*, graph::*, types::*};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
 
-use crate::features::prefabs::add_component_dialog::AddPrefabComponentDialog;
 use crate::features::prefabs::PrefabAsset;
+use ui::dropdown::{SearchableList, SearchableListEvent};
 use crate::features::variables::ClassVariable;
 use crate::ui_components::palette_view::NodePaletteView;
 use ui::dock::{DockItem, DockPlacement};
@@ -99,7 +99,7 @@ pub struct BlueprintEditorPanel {
 
     // Prefab sidecar authoring
     pub prefab_asset: PrefabAsset,
-    pub prefab_add_component_dialog: Entity<AddPrefabComponentDialog>,
+    pub prefab_component_list: Entity<SearchableList<&'static str>>,
     pub show_add_component_dialog: bool,
     pub prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager,
     pub prefab_collapsed_categories: HashSet<(usize, String)>,
@@ -428,20 +428,23 @@ impl BlueprintEditorPanel {
 
         let editor_weak = cx.entity().downgrade();
         let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
-        let prefab_add_component_dialog = cx.new(|cx| AddPrefabComponentDialog::new(window, cx));
+        let mut engine_classes = pulsar_reflection::REGISTRY.get_class_names();
+        engine_classes.sort();
+        let prefab_component_list = cx.new(|cx| {
+            SearchableList::new(window, cx, engine_classes, |name| name.to_string())
+                .with_empty_text("No components found")
+                .with_max_width(px(260.0))
+                .with_max_height(px(320.0))
+                .with_icon_getter(|_| ui::IconName::Component)
+        });
         cx.subscribe(
-            &prefab_add_component_dialog,
-            |this, _, event: &crate::features::prefabs::add_component_dialog::PrefabComponentSelectedEvent, cx| {
-                this.add_prefab_component(event.class_name.clone());
-                cx.notify();
-            },
-        )
-        .detach();
-        cx.subscribe(
-            &prefab_add_component_dialog,
-            |this, _, _: &DismissEvent, cx| {
-                this.show_add_component_dialog = false;
-                cx.notify();
+            &prefab_component_list,
+            |this, _, event: &SearchableListEvent<&'static str>, cx| {
+                if let SearchableListEvent::Select(class_name) = event {
+                    this.add_prefab_component(class_name.to_string());
+                    this.show_add_component_dialog = false;
+                    cx.notify();
+                }
             },
         )
         .detach();
@@ -520,7 +523,7 @@ impl BlueprintEditorPanel {
             dragging_variable: None,
             variable_drop_menu_position: None,
             prefab_asset: PrefabAsset::new("Prefab"),
-            prefab_add_component_dialog,
+            prefab_component_list,
             show_add_component_dialog: false,
             prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager::new(),
             prefab_collapsed_categories: HashSet::new(),

@@ -5,10 +5,10 @@ use gpui::*;
 use pulsar_reflection::{TypeStructure, REGISTRY};
 use std::sync::Arc;
 use ui::{
-    button::Button, color_picker::{ColorPickerEvent, ColorPickerState}, h_flex,
-    input::{InputEvent, InputState}, scroll::ScrollbarAxis, v_flex, ActiveTheme,
-    CollapsibleSection, HierarchicalTreeView, HierarchyConfig, HierarchyLayout, IconName, Sizable,
-    StyledExt,
+    button::Button, color_picker::{ColorPickerEvent, ColorPickerState},
+    dropdown::SearchableList, h_flex, input::{InputEvent, InputState}, popover::Popover,
+    scroll::ScrollbarAxis, v_flex, ActiveTheme, CollapsibleSection, HierarchicalTreeView,
+    HierarchyConfig, HierarchyLayout, IconName, Sizable, StyledExt,
 };
 use ui_common::properties_inspector;
 pub struct PrefabHierarchyRenderer;
@@ -46,42 +46,23 @@ impl PrefabHierarchyRenderer {
         panel: &mut BlueprintEditorPanel,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        let dialog = panel.prefab_add_component_dialog.clone();
-        let show_dialog = panel.show_add_component_dialog;
+        let list = panel.prefab_component_list.clone();
 
-        let add_button = Button::new("prefab_component_add")
-            .label("Add Component")
-            .icon(IconName::Component)
-            .small()
-            .on_click(cx.listener(|panel, _, _window, cx| {
-                panel.show_add_component_dialog = true;
-                cx.notify();
-            }))
+        let add_popover = Popover::<SearchableList<&'static str>>::new("prefab-component-picker")
+            .anchor(Corner::TopRight)
+            .trigger(
+                Button::new("prefab_component_add")
+                    .label("Add Component")
+                    .icon(IconName::Component)
+                    .small(),
+            )
+            .content(move |_window, _cx| list.clone())
             .into_any_element();
 
         v_flex()
             .size_full()
             .bg(cx.theme().background)
-            .child(Self::render_hierarchy(panel, add_button, cx))
-            .when(show_dialog, |el| {
-                el.child(
-                    div()
-                        .absolute()
-                        .left(px(8.0))
-                        .bottom(px(8.0))
-                        .w(px(260.0))
-                        .shadow_lg()
-                        .rounded(px(6.0))
-                        .overflow_hidden()
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .on_mouse_down_out(cx.listener(|panel, _, _, cx| {
-                            panel.show_add_component_dialog = false;
-                            cx.notify();
-                        }))
-                        .child(dialog),
-                )
-            })
+            .child(Self::render_hierarchy(panel, add_popover, cx))
     }
 
     fn render_hierarchy(
@@ -128,14 +109,11 @@ impl PrefabHierarchyRenderer {
             root_ids,
             layout: HierarchyLayout::Panel,
 
-            // Panel header
-            title: Some("Components".to_string()),
+            title: None,
             header_buttons: vec![add_button],
 
-            // No root drop zone for now
             root_drop_zone: None,
 
-            // Widget config (not used in Panel mode)
             widget_title: None,
             widget_icon: None,
             widget_add_button: None,
