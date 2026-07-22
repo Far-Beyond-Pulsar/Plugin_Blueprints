@@ -106,13 +106,25 @@ impl BlueprintEditorPanel {
                 center_tab_panel = Some(view.clone());
             }
 
-            // Stack the left-side panels vertically so they're visible
-            // side-by-side rather than switched between.
+            // Left sidebar: Components/Find (multi-tab), Macros/Events (multi-tab), Variables
             let left = DockItem::split(
                 Axis::Vertical,
                 vec![
                     DockItem::tabs(
-                        vec![Arc::new(prefab_hierarchy_panel)],
+                        vec![
+                            Arc::new(prefab_hierarchy_panel) as Arc<dyn ui::dock::PanelView>,
+                            Arc::new(find_panel) as Arc<dyn ui::dock::PanelView>,
+                        ],
+                        None,
+                        &dock_area_weak,
+                        window,
+                        cx,
+                    ),
+                    DockItem::tabs(
+                        vec![
+                            Arc::new(macros_panel) as Arc<dyn ui::dock::PanelView>,
+                            Arc::new(events_panel) as Arc<dyn ui::dock::PanelView>,
+                        ],
                         None,
                         &dock_area_weak,
                         window,
@@ -125,56 +137,25 @@ impl BlueprintEditorPanel {
                         window,
                         cx,
                     ),
-                    DockItem::tabs(
-                        vec![Arc::new(macros_panel)],
-                        None,
-                        &dock_area_weak,
-                        window,
-                        cx,
-                    ),
-                    DockItem::tabs(
-                        vec![Arc::new(events_panel)],
-                        None,
-                        &dock_area_weak,
-                        window,
-                        cx,
-                    ),
                 ],
                 &dock_area_weak,
                 window,
                 cx,
             );
 
-            // Unified Properties panel (multi-mode — prefab components, macros,
-            // events, variables, graph nodes, and comments all dispatch here).
+            // Right sidebar: Properties / Compiler output (multi-tab)
             let right = DockItem::tabs(
-                vec![Arc::new(properties_panel)],
+                vec![
+                    Arc::new(properties_panel) as Arc<dyn ui::dock::PanelView>,
+                    Arc::new(compiler_panel) as Arc<dyn ui::dock::PanelView>,
+                ],
                 None,
                 &dock_area_weak,
                 window,
                 cx,
             );
 
-            // Side-by-side 50/50 instead of tabbed.
-            let bottom = DockItem::split(
-                Axis::Horizontal,
-                vec![
-                    DockItem::tabs(vec![Arc::new(compiler_panel)], None, &dock_area_weak, window, cx),
-                    DockItem::tabs(vec![Arc::new(find_panel)], None, &dock_area_weak, window, cx),
-                ],
-                &dock_area_weak,
-                window,
-                cx,
-            );
-
             workspace.initialize(center, Some(left), Some(right), None, window, cx);
-
-            // `Workspace::initialize` doesn't expose a custom size for the bottom
-            // dock — set it directly afterwards so we can shrink it 20% below the
-            // default 400px height.
-            workspace.dock_area().update(cx, |dock_area, cx| {
-                dock_area.set_bottom_dock(bottom, Some(px(320.0)), true, window, cx);
-            });
         });
 
         self.workspace = Some(workspace);
