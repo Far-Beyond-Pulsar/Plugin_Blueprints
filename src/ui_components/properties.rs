@@ -8,11 +8,9 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use pulsar_reflection::{TypeStructure, REGISTRY};
+use pulsar_reflection::REGISTRY;
 use ui::{
     button::Button,
-    color_picker::{ColorPickerEvent, ColorPickerState},
-    input::{InputEvent, InputState},
     scroll::ScrollbarAxis,
     IconName,
 };
@@ -235,30 +233,6 @@ impl PropertiesRenderer {
                             .unwrap_or(serde_json::json!(null))
                     });
 
-                match &prop.type_info.structure {
-                    TypeStructure::Primitive if prop.type_info.base_name() == "f32" => {
-                        let v = current_value.as_f64().unwrap_or(0.0) as f32;
-                        Self::ensure_numeric_input(panel, &state_key, prop.name, index, v, false, window, cx);
-                    }
-                    TypeStructure::Primitive if prop.type_info.base_name() == "i32" => {
-                        let v = current_value.as_i64().unwrap_or(0) as f32;
-                        Self::ensure_numeric_input(panel, &state_key, prop.name, index, v, true, window, cx);
-                    }
-                    _ => {}
-                }
-
-                let is_color = matches!(
-                    &prop.type_info.structure,
-                    TypeStructure::Primitive if prop.type_info.base_name() == "[f32; 4]"
-                ) || ui_common::reflected_properties_panel::is_color_field_name(prop.name);
-
-                if is_color {
-                    let rgba = ui_common::reflected_properties_panel::json_to_rgba_fallback(&current_value);
-                    Self::ensure_color_picker(panel, &state_key, prop.name, index, rgba, window, cx);
-                }
-
-                let widgets = panel.prefab_property_state.widget_map_for(&state_key, prop.name);
-
                 let current_any: Box<dyn Any> = if current_value.is_null() {
                     Box::new(())
                 } else {
@@ -279,6 +253,13 @@ impl PropertiesRenderer {
                         }
                     },
                 );
+
+                panel.prefab_property_state.init_widgets(
+                    &state_key, prop.name, prop.type_info,
+                    current_any.as_ref(), write_back.clone(), window, cx,
+                );
+
+                let widgets = panel.prefab_property_state.widget_map_for(&state_key, prop.name);
 
                 let row = ui_common::render_property_row_runtime(
                     "prefab",
@@ -351,99 +332,6 @@ impl PropertiesRenderer {
             cx,
         )
         .into_any_element()
-    }
-
-    fn ensure_numeric_input(
-        panel: &mut BlueprintEditorPanel,
-        state_key: &str,
-        prop_name: &str,
-        component_index: usize,
-        initial: f32,
-        is_integer: bool,
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) {
-        let key = (state_key.to_string(), prop_name.to_string());
-        if panel.prefab_property_state.numeric_inputs.contains_key(&key) {
-            return;
-        }
-
-        let text = if is_integer {
-            format!("{}", initial as i64)
-        } else {
-            format!("{:.3}", initial)
-        };
-        let input = cx.new(|cx| InputState::new(window, cx));
-        input.update(cx, |state, cx| {
-            state.set_value(&text, window, cx);
-        });
-
-        let pn = prop_name.to_string();
-        cx.subscribe_in(
-            &input,
-            window,
-            move |this: &mut BlueprintEditorPanel, state, event: &InputEvent, _window, cx| {
-                if matches!(event, InputEvent::Change | InputEvent::Blur) {
-                    let text = state.read(cx).text().to_string();
-                    let parsed = if is_integer {
-                        text.trim().parse::<i32>().ok().map(serde_json::Value::from)
-                    } else {
-                        text.trim().parse::<f32>().ok().map(serde_json::Value::from)
-                    };
-                    if let Some(value) = parsed {
-                        this.update_prefab_component_property(component_index, &pn, value);
-                        cx.notify();
-                    }
-                }
-            },
-        )
-        .detach();
-
-        panel.prefab_property_state.numeric_inputs.insert(key, input);
-    }
-
-    fn ensure_color_picker(
-        panel: &mut BlueprintEditorPanel,
-        state_key: &str,
-        prop_name: &str,
-        component_index: usize,
-        rgba: [f32; 4],
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) {
-        let key = (state_key.to_string(), prop_name.to_string());
-        if panel.prefab_property_state.color_pickers.contains_key(&key) {
-            return;
-        }
-
-        let picker = cx.new(|cx| {
-            let mut state = ColorPickerState::new(window, cx);
-            state.set_value(
-                ui_common::reflected_properties_panel::rgba_to_hsla(rgba),
-                window,
-                cx,
-            );
-            state
-        });
-
-        let pn = prop_name.to_string();
-        cx.subscribe_in(
-            &picker,
-            window,
-            move |this: &mut BlueprintEditorPanel, _state, event: &ColorPickerEvent, _window, cx| {
-                if let ColorPickerEvent::Change(Some(hsla)) = event {
-                    this.update_prefab_component_property(
-                        component_index,
-                        &pn,
-                        serde_json::json!(ui_common::reflected_properties_panel::hsla_to_rgba(*hsla)),
-                    );
-                    cx.notify();
-                }
-            },
-        )
-        .detach();
-
-        panel.prefab_property_state.color_pickers.insert(key, picker);
     }
 
     fn render_categorized_rows(
@@ -1707,7 +1595,6 @@ impl PropertiesRenderer {
         };
 
         let state_key = format!("{}#{}", node.id, pin.id);
-        let widgets = canvas.pin_property_state.widget_map_for(&state_key, &pin.id);
         let current_json = Self::read_pin_property_value(node, &pin.id);
         let current_any: Box<dyn Any> = if current_json.is_null() {
             Box::new(())
@@ -1729,6 +1616,13 @@ impl PropertiesRenderer {
                 }
             },
         );
+
+        canvas.pin_property_state.init_widgets(
+            &state_key, &pin.id, type_info,
+            current_any.as_ref(), write_back.clone(), window, cx,
+        );
+
+        let widgets = canvas.pin_property_state.widget_map_for(&state_key, &pin.id);
 
         let editor = ui_common::render_property_row_runtime(
             "node-input",
