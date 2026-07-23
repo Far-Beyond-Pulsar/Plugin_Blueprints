@@ -11,6 +11,7 @@ use gpui::*;
 use pulsar_reflection::REGISTRY;
 use ui::{
     button::Button,
+    input::{InputEvent, InputState},
     scroll::ScrollbarAxis,
     IconName,
 };
