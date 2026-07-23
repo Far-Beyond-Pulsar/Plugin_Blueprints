@@ -24,11 +24,8 @@ ui      = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI-Component", rev = 
 
 plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
 ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
-pulsar_std         = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
 engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
 pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
-pulsar_std_bundle  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
-pulsar_bp_executor = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
 
 # Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "e89c5c7b42ed23b06cc8f53dfc618ac8adfb3bb2" }
