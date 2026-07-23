@@ -255,22 +255,16 @@ impl PropertiesRenderer {
                     },
                 );
 
-                panel.prefab_property_state.init_widgets(
-                    &state_key, prop.name, prop.type_info,
-                    current_any.as_ref(), write_back.clone(), window, cx,
-                );
-
-                let widgets = panel.prefab_property_state.widget_map_for(&state_key, prop.name);
-
                 let row = ui_common::render_property_row_runtime(
+                    &mut panel.prefab_property_state,
                     "prefab",
                     &state_key,
                     &prop.display_name,
                     prop.name,
                     prop.type_info,
                     current_any.as_ref(),
-                    widgets,
                     write_back,
+                    window,
                     cx,
                 );
 
@@ -1618,22 +1612,16 @@ impl PropertiesRenderer {
             },
         );
 
-        canvas.pin_property_state.init_widgets(
-            &state_key, &pin.id, type_info,
-            current_any.as_ref(), write_back.clone(), window, cx,
-        );
-
-        let widgets = canvas.pin_property_state.widget_map_for(&state_key, &pin.id);
-
         let editor = ui_common::render_property_row_runtime(
+            &mut canvas.pin_property_state,
             "node-input",
             &state_key,
             &Self::format_property_name(&pin.name),
             &pin.id,
             type_info,
             current_any.as_ref(),
-            widgets,
             write_back,
+            window,
             cx,
         );
 

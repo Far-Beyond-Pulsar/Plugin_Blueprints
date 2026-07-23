@@ -450,22 +450,16 @@ impl PrefabPropertiesRenderer {
                     },
                 );
 
-                panel.prefab_property_state.init_widgets(
-                    &state_key, prop.name, prop.type_info,
-                    current_any.as_ref(), write_back.clone(), window, cx,
-                );
-
-                let widgets = panel.prefab_property_state.widget_map_for(&state_key, prop.name);
-
                 let row = ui_common::render_property_row_runtime(
+                    &mut panel.prefab_property_state,
                     "prefab",
                     &state_key,
                     &prop.display_name,
                     prop.name,
                     prop.type_info,
                     current_any.as_ref(),
-                    widgets,
                     write_back,
+                    window,
                     cx,
                 );
 
