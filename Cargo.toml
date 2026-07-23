@@ -6,30 +6,37 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 name = "blueprint_editor_plugin"
+test = false
+doctest = false
 
 [[example]]
 name = "standalone"
 path = "examples/standalone.rs"
+test = false
 
 [[example]]
 name = "standalone_stress"
 path = "examples/standalone_stress.rs"
+test = false
 
 
 [dependencies]
-# UI dependencies (local paths so traits resolve to the same crate instance)
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "31fbf35800b4cfc2ddf202a1c16a2971251ca84c" }
-ui      = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI-Component", rev = "eda5213258be50bf5a9556ff9a68221bd5f449cd" }
+# Resolve UI packages from the same Pulsar revision as the engine crates so
+# public GPUI types keep one Cargo package identity in standalone builds.
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
+ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
 
 
-plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
-ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
-engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
-pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "62bb5c130603c3d823a3ee9633cc4c374bdd2733" }
+plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
+ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
+engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
+pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "cf37ed000fedb9a01424c7e575d1d6ee30db7281" }
 
-# Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
-graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "e89c5c7b42ed23b06cc8f53dfc618ac8adfb3bb2" }
-pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "71504e3fb9c27d53f144a08636d4f32eb7eb085c" }
+# PBGC and Graphy must resolve to the revisions paired with current Pulsar.
+# PBGC temporarily points at the validated upstream PR commit; repin this URL
+# to Far-Beyond-Pulsar/PBGC after that engine PR is merged.
+graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
+pbgc = { git = "https://github.com/Tuafo/PBGC", rev = "606e52b3b940289cffeb77b921a084f6b6e0774e" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"
@@ -63,3 +70,10 @@ tool_registry_macros = { git = "https://github.com/Far-Beyond-Pulsar/ToolbeltRS"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common"] }
 parking_lot = "0.12"
+
+[patch."https://github.com/Far-Beyond-Pulsar/WGPUI"]
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
+
+[patch."https://github.com/Far-Beyond-Pulsar/WGPUI-Component"]
+ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
+ui-macros = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }

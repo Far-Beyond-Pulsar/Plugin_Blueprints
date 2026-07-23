@@ -41,6 +41,8 @@ jobs:
           libssh2-1-dev \
           libzstd-dev
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --locked --verbose
+    - name: Check examples
+      run: cargo check --examples --locked --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --tests --locked --verbose
