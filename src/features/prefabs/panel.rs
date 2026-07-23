@@ -3,6 +3,7 @@ use crate::features::prefabs::hierarchy_item::ComponentHierarchyItem;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use pulsar_reflection::{TypeStructure, REGISTRY};
+use std::any::Any;
 use std::sync::Arc;
 use ui::{
     button::Button, color_picker::{ColorPickerEvent, ColorPickerState},
@@ -515,34 +516,6 @@ impl PrefabPropertiesRenderer {
             Vec::new();
 
         if let Some(instance) = REGISTRY.create_instance(&class_name) {
-            let panel_entity = cx.entity().clone();
-            let on_bool_toggle = Arc::new(
-                move |prop_name: &str, checked: bool, _window: &mut Window, cx: &mut App| {
-                    panel_entity.update(cx, |panel, cx| {
-                        panel.update_prefab_component_property(
-                            index,
-                            prop_name,
-                            serde_json::Value::Bool(checked),
-                        );
-                        cx.notify();
-                    });
-                },
-            );
-
-            let panel_entity = cx.entity().clone();
-            let on_enum_select = Arc::new(
-                move |prop_name: &str, ix: usize, _window: &mut Window, cx: &mut App| {
-                    panel_entity.update(cx, |panel, cx| {
-                        panel.update_prefab_component_property(
-                            index,
-                            prop_name,
-                            serde_json::Value::from(ix as u64),
-                        );
-                        cx.notify();
-                    });
-                },
-            );
-
             for prop in instance.get_properties() {
                 let current_value = component
                     .data
@@ -589,19 +562,26 @@ impl PrefabPropertiesRenderer {
 
                 let widgets = panel.prefab_property_state.widget_map_for(&state_key, prop.name);
 
-                let prop_bool = prop.name.to_string();
-                let on_bool = on_bool_toggle.clone();
-                let bool_callback = Arc::new(
-                    move |checked: bool, window: &mut Window, cx: &mut App| {
-                        (on_bool)(&prop_bool, checked, window, cx);
+                let current_any: Box<dyn Any> = if current_value.is_null() {
+                    Box::new(())
+                } else {
+                    pulsar_reflection::RUNTIME_TYPE_REGISTRY
+                        .deserialize_json_for_type(prop.type_info, current_value.clone())
+                        .unwrap_or_else(|_| Box::new(()))
+                };
+
+                let panel_for_wb = cx.entity().clone();
+                let prop_name_for_wb = prop.name.to_string();
+                let write_back = Arc::new(
+                    move |new_val: Box<dyn Any + Send>, _window: &mut Window, cx: &mut App| {
+                        if let Ok(json) = pulsar_reflection::RUNTIME_TYPE_REGISTRY.serialize_json_for_any(new_val.as_ref()) {
+                            panel_for_wb.update(cx, |panel, cx| {
+                                panel.update_prefab_component_property(index, &prop_name_for_wb, json);
+                                cx.notify();
+                            });
+                        }
                     },
                 );
-
-                let prop_enum = prop.name.to_string();
-                let on_enum = on_enum_select.clone();
-                let enum_callback = Arc::new(move |ix: usize, window: &mut Window, cx: &mut App| {
-                    (on_enum)(&prop_enum, ix, window, cx);
-                });
 
                 let row = ui_common::render_property_row_runtime(
                     "prefab",
@@ -609,10 +589,9 @@ impl PrefabPropertiesRenderer {
                     &prop.display_name,
                     prop.name,
                     prop.type_info,
-                    &current_value,
+                    current_any.as_ref(),
                     widgets,
-                    bool_callback,
-                    enum_callback,
+                    write_back,
                     cx,
                 );
 

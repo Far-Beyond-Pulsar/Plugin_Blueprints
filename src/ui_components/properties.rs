@@ -28,6 +28,7 @@ use crate::features::connections::compatibility::is_pin_connected;
 use crate::features::prefabs::panel::group_rows_by_category;
 use ui_common::properties_inspector;
 use ui_common::reflected_properties_panel::rgba_to_hsla;
+use std::any::Any;
 use std::sync::Arc;
 
 /// Unified multi-mode Properties panel renderer.
@@ -221,34 +222,6 @@ impl PropertiesRenderer {
             Vec::new();
 
         if let Some(instance) = REGISTRY.create_instance(&class_name) {
-            let panel_entity = cx.entity().clone();
-            let on_bool_toggle = Arc::new(
-                move |prop_name: &str, checked: bool, _window: &mut Window, cx: &mut App| {
-                    panel_entity.update(cx, |panel, cx| {
-                        panel.update_prefab_component_property(
-                            index,
-                            prop_name,
-                            serde_json::Value::Bool(checked),
-                        );
-                        cx.notify();
-                    });
-                },
-            );
-
-            let panel_entity = cx.entity().clone();
-            let on_enum_select = Arc::new(
-                move |prop_name: &str, ix: usize, _window: &mut Window, cx: &mut App| {
-                    panel_entity.update(cx, |panel, cx| {
-                        panel.update_prefab_component_property(
-                            index,
-                            prop_name,
-                            serde_json::Value::from(ix as u64),
-                        );
-                        cx.notify();
-                    });
-                },
-            );
-
             for prop in instance.get_properties() {
                 let current_value = component
                     .data
@@ -286,19 +259,26 @@ impl PropertiesRenderer {
 
                 let widgets = panel.prefab_property_state.widget_map_for(&state_key, prop.name);
 
-                let prop_bool = prop.name.to_string();
-                let on_bool = on_bool_toggle.clone();
-                let bool_callback = Arc::new(
-                    move |checked: bool, window: &mut Window, cx: &mut App| {
-                        (on_bool)(&prop_bool, checked, window, cx);
+                let current_any: Box<dyn Any> = if current_value.is_null() {
+                    Box::new(())
+                } else {
+                    pulsar_reflection::RUNTIME_TYPE_REGISTRY
+                        .deserialize_json_for_type(prop.type_info, current_value.clone())
+                        .unwrap_or_else(|_| Box::new(()))
+                };
+
+                let panel_for_wb = cx.entity().clone();
+                let prop_name_for_wb = prop.name.to_string();
+                let write_back = Arc::new(
+                    move |new_val: Box<dyn Any + Send>, _window: &mut Window, cx: &mut App| {
+                        if let Ok(json) = pulsar_reflection::RUNTIME_TYPE_REGISTRY.serialize_json_for_any(new_val.as_ref()) {
+                            panel_for_wb.update(cx, |panel, cx| {
+                                panel.update_prefab_component_property(index, &prop_name_for_wb, json);
+                                cx.notify();
+                            });
+                        }
                     },
                 );
-
-                let prop_enum = prop.name.to_string();
-                let on_enum = on_enum_select.clone();
-                let enum_callback = Arc::new(move |ix: usize, window: &mut Window, cx: &mut App| {
-                    (on_enum)(&prop_enum, ix, window, cx);
-                });
 
                 let row = ui_common::render_property_row_runtime(
                     "prefab",
@@ -306,10 +286,9 @@ impl PropertiesRenderer {
                     &prop.display_name,
                     prop.name,
                     prop.type_info,
-                    &current_value,
+                    current_any.as_ref(),
                     widgets,
-                    bool_callback,
-                    enum_callback,
+                    write_back,
                     cx,
                 );
 
@@ -1729,31 +1708,25 @@ impl PropertiesRenderer {
 
         let state_key = format!("{}#{}", node.id, pin.id);
         let widgets = canvas.pin_property_state.widget_map_for(&state_key, &pin.id);
-        let current_value = Self::read_pin_property_value(node, &pin.id);
-        let node_id = node.id.clone();
-        let pin_id = pin.id.clone();
-        let canvas_for_bool = canvas_entity.clone();
-        let on_bool_toggle = Arc::new(
-            move |checked: bool, _window: &mut Window, cx: &mut App| {
-                canvas_for_bool.update(cx, |canvas, cx| {
-                    canvas.update_node_input_property(&node_id, &pin_id, serde_json::Value::Bool(checked), cx);
-                });
-            },
-        );
+        let current_json = Self::read_pin_property_value(node, &pin.id);
+        let current_any: Box<dyn Any> = if current_json.is_null() {
+            Box::new(())
+        } else {
+            pulsar_reflection::RUNTIME_TYPE_REGISTRY
+                .deserialize_json_for_type(type_info, current_json.clone())
+                .unwrap_or_else(|_| Box::new(()))
+        };
 
-        let canvas_for_enum = canvas_entity.clone();
-        let node_id_for_enum = node.id.clone();
-        let pin_id_for_enum = pin.id.clone();
-        let on_enum_select = Arc::new(
-            move |ix: usize, _window: &mut Window, cx: &mut App| {
-                canvas_for_enum.update(cx, |canvas, cx| {
-                    canvas.update_node_input_property(
-                        &node_id_for_enum,
-                        &pin_id_for_enum,
-                        serde_json::Value::from(ix as u64),
-                        cx,
-                    );
-                });
+        let canvas_for_wb = canvas_entity.clone();
+        let node_id_for_wb = node.id.clone();
+        let pin_id_for_wb = pin.id.clone();
+        let write_back = Arc::new(
+            move |new_val: Box<dyn Any + Send>, _window: &mut Window, cx: &mut App| {
+                if let Ok(json) = pulsar_reflection::RUNTIME_TYPE_REGISTRY.serialize_json_for_any(new_val.as_ref()) {
+                    canvas_for_wb.update(cx, |canvas, cx| {
+                        canvas.update_node_input_property(&node_id_for_wb, &pin_id_for_wb, json, cx);
+                    });
+                }
             },
         );
 
@@ -1763,10 +1736,9 @@ impl PropertiesRenderer {
             &Self::format_property_name(&pin.name),
             &pin.id,
             type_info,
-            &current_value,
+            current_any.as_ref(),
             widgets,
-            on_bool_toggle,
-            on_enum_select,
+            write_back,
             cx,
         );
 
