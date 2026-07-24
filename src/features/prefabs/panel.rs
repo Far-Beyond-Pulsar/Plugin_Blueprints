@@ -189,7 +189,7 @@ impl PrefabHierarchyRenderer {
             ),
         };
 
-        HierarchicalTreeView::new(config).render(cx)
+        cx.new(|cx| HierarchicalTreeView::new(config, cx)).into_any_element()
     }
 
     fn render_header(cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
