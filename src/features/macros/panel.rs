@@ -134,6 +134,6 @@ impl MacrosRenderer {
             ),
         };
 
-        cx.new(|cx| HierarchicalTreeView::new(config, cx)).into_any_element()
+        HierarchicalTreeView::new(config).render(cx)
     }
 }

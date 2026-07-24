@@ -124,7 +124,7 @@ impl VariablesRenderer {
             ),
         };
 
-        cx.new(|cx| HierarchicalTreeView::new(config, cx)).into_any_element()
+        HierarchicalTreeView::new(config).render(cx)
     }
 
     fn render_variable_creation_form(
