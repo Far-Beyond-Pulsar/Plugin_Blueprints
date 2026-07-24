@@ -19,6 +19,10 @@ name = "standalone_stress"
 path = "examples/standalone_stress.rs"
 test = false
 
+[features]
+# Pulsar statically links this crate when it is used as a built-in editor.
+# Dynamic plugin builds keep the loader ABI exports by default.
+builtin = []
 
 [dependencies]
 # Resolve every public UI and engine type through one current Pulsar revision.

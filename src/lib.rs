@@ -239,5 +239,7 @@ impl EditorPluginSubsystems for BlueprintEditorPlugin {
     }
 }
 
-// Export the plugin using the provided macro
+// Static built-ins are instantiated through the Rust API and must not emit the
+// process-global dynamic loader symbols shared by every plugin.
+#[cfg(not(feature = "builtin"))]
 export_plugin!(BlueprintEditorPlugin);
