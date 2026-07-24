@@ -33,10 +33,9 @@ engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native
 pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "cf37ed000fedb9a01424c7e575d1d6ee30db7281" }
 
 # PBGC and Graphy must resolve to the revisions paired with current Pulsar.
-# PBGC temporarily points at the validated upstream PR commit; repin this URL
-# to Far-Beyond-Pulsar/PBGC after that engine PR is merged.
+# PBGC is pinned to the official upstream merge that current Pulsar vendors.
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
-pbgc = { git = "https://github.com/Tuafo/PBGC", rev = "606e52b3b940289cffeb77b921a084f6b6e0774e" }
+pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "3aaa5100ce05bdccf361e68201252e944f57242d" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"

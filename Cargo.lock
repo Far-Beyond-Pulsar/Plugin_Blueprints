@@ -5978,7 +5978,7 @@ dependencies = [
 [[package]]
 name = "pbgc"
 version = "0.1.0"
-source = "git+https://github.com/Tuafo/PBGC?rev=606e52b3b940289cffeb77b921a084f6b6e0774e#606e52b3b940289cffeb77b921a084f6b6e0774e"
+source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=3aaa5100ce05bdccf361e68201252e944f57242d#3aaa5100ce05bdccf361e68201252e944f57242d"
 dependencies = [
  "graphy",
  "pulsar_std",
