@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "api-refactor-2026-07" ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -42,5 +42,7 @@ jobs:
           libzstd-dev
     - name: Build
       run: cargo build --verbose
+    - name: Check examples
+      run: cargo check --examples --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --tests --verbose

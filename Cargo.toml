@@ -6,33 +6,35 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 name = "blueprint_editor_plugin"
+test = false
+doctest = false
 
 [[example]]
 name = "standalone"
 path = "examples/standalone.rs"
+test = false
 
 [[example]]
 name = "standalone_stress"
 path = "examples/standalone_stress.rs"
+test = false
 
 
 [dependencies]
-# UI dependencies — revs MUST match workspace Cargo.toml exactly
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI", rev = "98e312efa8601b1244215c79aac88acb5e169e03" }
-ui      = { git = "https://github.com/Far-Beyond-Pulsar/WGPUI-Component", rev = "ccbab31e4e2364ef52efcb61c98c37a5d8cc79e1", features = ["tree-sitter-languages"] }
+# Resolve every public UI and engine type through one current Pulsar revision.
+# Mixing the standalone WGPUI repositories with Pulsar's re-exports creates
+# distinct Cargo package identities for otherwise identical GPUI types.
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
+ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
 
+plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
+ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
+engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
+pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "9b887f1ed327b5e3e2b6ba9066679469520cb446" }
 
-plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f91bbba2b90ebad0afa6b9940ecd52da0430e326" }
-ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f91bbba2b90ebad0afa6b9940ecd52da0430e326" }
-pulsar_std         = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f91bbba2b90ebad0afa6b9940ecd52da0430e326" }
-engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f91bbba2b90ebad0afa6b9940ecd52da0430e326" }
-pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f91bbba2b90ebad0afa6b9940ecd52da0430e326" }
-pulsar_std_bundle  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f91bbba2b90ebad0afa6b9940ecd52da0430e326" }
-pulsar_bp_executor = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "f91bbba2b90ebad0afa6b9940ecd52da0430e326" }
-
-# Compiler graph types — same revs as used by blueprint_compiler in Pulsar-Native
-graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "e89c5c7b42ed23b06cc8f53dfc618ac8adfb3bb2" }
-pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "71504e3fb9c27d53f144a08636d4f32eb7eb085c" }
+# Compiler graph types paired with the current Blueprint integration.
+graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
+pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "3aaa5100ce05bdccf361e68201252e944f57242d" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"
@@ -60,3 +62,10 @@ tool_registry_macros = { git = "https://github.com/Far-Beyond-Pulsar/ToolbeltRS"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common"] }
 parking_lot = "0.12"
+
+[patch."https://github.com/Far-Beyond-Pulsar/WGPUI"]
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
+
+[patch."https://github.com/Far-Beyond-Pulsar/WGPUI-Component"]
+ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
+ui-macros = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }

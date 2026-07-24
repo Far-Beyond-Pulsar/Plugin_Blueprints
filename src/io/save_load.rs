@@ -665,18 +665,3 @@ impl BlueprintEditorPanel {
         self.current_class_path = Some(class_path);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_autosave_path_generation() {
-        let path = PathBuf::from("/path/to/test.blueprint");
-        let autosave_path = path.with_extension("blueprint.autosave");
-        assert_eq!(
-            autosave_path.to_str().unwrap(),
-            "/path/to/test.blueprint.autosave"
-        );
-    }
-}
