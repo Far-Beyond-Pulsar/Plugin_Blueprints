@@ -6,7 +6,7 @@
 //!
 //! # Group layout (left → right)
 //!
-//! ```
+//! ```text
 //! [ Save ] | [ 🔨 Compile ] | [ Comment ] | [ 🔍 Find ] | [ Map Bug ⚙ ] ···flex··· status  [ 📦 Name ● ]
 //! ```
 //!

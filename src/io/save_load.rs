@@ -548,7 +548,6 @@ impl BlueprintEditorPanel {
         Ok(())
     }
 }
-
 /// Utility functions for file path handling
 impl BlueprintEditorPanel {
     fn resolve_blueprint_path(path: &Path) -> PathBuf {
@@ -614,20 +613,5 @@ impl BlueprintEditorPanel {
             .and_then(|name| name.to_str())
             .map(|name| name.to_string());
         self.current_class_path = Some(class_path);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_autosave_path_generation() {
-        let path = PathBuf::from("/path/to/test.blueprint");
-        let autosave_path = path.with_extension("blueprint.autosave");
-        assert_eq!(
-            autosave_path.to_str().unwrap(),
-            "/path/to/test.blueprint.autosave"
-        );
     }
 }

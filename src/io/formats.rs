@@ -189,33 +189,3 @@ pub fn is_version_supported(version: u32) -> bool {
 pub fn current_format_version() -> u32 {
     1
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_blueprint_asset_creation() {
-        let asset = BlueprintAsset::new();
-        assert_eq!(asset.format_version, 1);
-        assert_eq!(asset.main_graph.metadata.name, "EventGraph");
-        assert!(asset.local_macros.is_empty());
-        assert!(asset.variables.is_empty());
-    }
-
-    #[test]
-    fn test_strip_header_comments() {
-        let content = "// Comment 1\n// Comment 2\n{\"data\": \"value\"}";
-        let stripped = strip_header_comments(content);
-        assert_eq!(stripped, "{\"data\": \"value\"}");
-    }
-
-    #[test]
-    fn test_editor_state() {
-        let mut state = BlueprintEditorState::new();
-        state.add_tab("macro1".to_string());
-        assert_eq!(state.open_tab_ids.len(), 2);
-        assert!(state.open_tab_ids.contains(&"main".to_string()));
-        assert!(state.open_tab_ids.contains(&"macro1".to_string()));
-    }
-}

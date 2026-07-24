@@ -106,6 +106,7 @@ impl From<LegacyGraphDescription> for GraphDescription {
             connections: legacy.connections.into_iter().map(|c| c.into()).collect(),
             metadata: legacy.metadata,
             comments: legacy.comments.into_iter().map(|c| c.into()).collect(),
+            custom_event_defs: HashMap::new(),
         }
     }
 }
@@ -215,66 +216,4 @@ pub fn try_parse_legacy_format(json: &str) -> Result<GraphDescription, String> {
 pub fn is_legacy_format(json: &str) -> bool {
     // Try to parse as legacy format
     serde_json::from_str::<LegacyGraphDescription>(json).is_ok()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_hsl_to_rgb_grayscale() {
-        let (r, g, b) = hsl_to_rgb(0.0, 0.0, 0.5);
-        assert!((r - 0.5).abs() < 0.001);
-        assert!((g - 0.5).abs() < 0.001);
-        assert!((b - 0.5).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_hsl_to_rgb_red() {
-        let (r, g, b) = hsl_to_rgb(0.0, 1.0, 0.5);
-        assert!((r - 1.0).abs() < 0.001);
-        assert!(g.abs() < 0.001);
-        assert!(b.abs() < 0.001);
-    }
-
-    #[test]
-    fn test_legacy_connection_conversion() {
-        let legacy_conn = LegacyConnection {
-            id: "conn1".to_string(),
-            source_node: "node1".to_string(),
-            source_pin: "out".to_string(),
-            target_node: "node2".to_string(),
-            target_pin: "in".to_string(),
-            connection_type: ConnectionType::Data,
-        };
-
-        let conn: Connection = legacy_conn.into();
-        assert_eq!(conn.id, "conn1");
-        assert_eq!(conn.source_node, "node1");
-    }
-
-    #[test]
-    fn test_legacy_color_conversion() {
-        let legacy_comment = LegacyBlueprintComment {
-            id: "comment1".to_string(),
-            text: "Test".to_string(),
-            position: LegacyPosition { x: 0.0, y: 0.0 },
-            size: LegacySize {
-                width: 100.0,
-                height: 100.0,
-            },
-            color: LegacyColor {
-                h: 0.5,
-                s: 0.3,
-                l: 0.2,
-                a: 0.3,
-            },
-            contained_node_ids: vec![],
-        };
-
-        let comment: ui::graph::BlueprintComment = legacy_comment.into();
-        assert_eq!(comment.id, "comment1");
-        assert_eq!(comment.text, "Test");
-        assert_eq!(comment.color[3], 0.3); // Alpha should be preserved
-    }
 }

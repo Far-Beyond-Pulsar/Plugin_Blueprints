@@ -10,12 +10,12 @@
 //! Right-click → Add Node, context menus, and connection drag all work normally.
 
 use blueprint_editor_plugin::{
-    BlueprintEditorPanel, BlueprintGraph, BlueprintNode, Connection, NodeType, Pin, PinType,
-    VirtualizationStats,
+    BlueprintEditorPanel, BlueprintGraph, BlueprintNode, Connection, NodeType, Pin, PinDataType,
+    PinType, VirtualizationStats,
 };
 use gpui::*;
 use std::collections::HashMap;
-use ui::graph::{ConnectionType, DataType};
+use ui::graph::ConnectionType;
 use ui::{Assets, Root, Theme, ThemeMode};
 
 // ── tuning knobs ─────────────────────────────────────────────────────────────
@@ -35,27 +35,27 @@ const MODULE_ROWS: usize = 10;
 
 const TYPE_STRINGS: &[&str] = &["f32", "bool", "i64", "String", "execution"];
 
-fn dt(s: &str) -> DataType {
-    DataType::from_type_str(s)
+fn dt(s: &str) -> PinDataType {
+    PinDataType::from_type_str(s)
 }
-fn exec() -> DataType {
+fn exec() -> PinDataType {
     dt("execution")
 }
-fn float() -> DataType {
+fn float() -> PinDataType {
     dt("f32")
 }
-fn boolean() -> DataType {
+fn boolean() -> PinDataType {
     dt("bool")
 }
-fn integer() -> DataType {
+fn integer() -> PinDataType {
     dt("i64")
 }
-fn string() -> DataType {
+fn string() -> PinDataType {
     dt("String")
 }
 
 /// Cycles through a variety of non-exec data types based on an index.
-fn data_type(idx: usize) -> DataType {
+fn data_type(idx: usize) -> PinDataType {
     match idx % 4 {
         0 => float(),
         1 => boolean(),
@@ -64,8 +64,8 @@ fn data_type(idx: usize) -> DataType {
     }
 }
 
-fn connection_type_for(dt: &DataType) -> ConnectionType {
-    if *dt == exec() {
+fn connection_type_for(dt: &PinDataType) -> ConnectionType {
+    if dt.is_execution() {
         ConnectionType::Execution
     } else {
         ConnectionType::Data
@@ -345,7 +345,7 @@ fn build_stress_graph() -> BlueprintGraph {
                     src_pin: &str,
                     dst_node: &str,
                     dst_pin: &str,
-                    dt: &DataType| {
+                    dt: &PinDataType| {
         connections.push(Connection {
             id: format!("c{cid}"),
             source_node: src_node.to_string(),

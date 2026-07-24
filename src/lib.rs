@@ -28,7 +28,7 @@ mod ai_tools;
 mod core;
 mod editor;
 mod features;
-mod io;
+pub mod io;
 mod rendering;
 mod ui_components;
 
@@ -38,6 +38,7 @@ pub use core::events::*;
 pub use core::graph::*;
 pub use core::types::*;
 pub use editor::panel::BlueprintEditorPanel;
+pub use features::viewport::parse_hex_color;
 
 pub fn upsert_ai_session(file_path: PathBuf, graph: BlueprintGraph) {
     ai_tools::upsert_session(file_path, graph);
