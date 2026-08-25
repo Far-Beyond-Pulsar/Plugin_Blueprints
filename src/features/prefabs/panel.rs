@@ -456,6 +456,7 @@ impl PrefabPropertiesRenderer {
                     &state_key,
                     &prop.display_name,
                     prop.name,
+                    prop.name,
                     prop.type_info,
                     current_any.as_ref(),
                     write_back,
