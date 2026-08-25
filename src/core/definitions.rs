@@ -66,7 +66,8 @@ pub struct PinDefinition {
 use std::sync::OnceLock;
 static NODE_DEFINITIONS: OnceLock<NodeDefinitions> = OnceLock::new();
 
-pub(crate) fn extract_canonical_node_metadata() -> std::collections::HashMap<String, graphy::NodeMetadata> {
+pub(crate) fn extract_canonical_node_metadata(
+) -> std::collections::HashMap<String, graphy::NodeMetadata> {
     let mut metadata = pbgc::extract_node_metadata().unwrap_or_else(|e| {
         eprintln!("Failed to load node metadata: {}", e);
         std::collections::HashMap::new()
@@ -80,6 +81,10 @@ pub(crate) fn extract_canonical_node_metadata() -> std::collections::HashMap<Str
         if let Some(return_type) = node_meta.return_type.as_mut() {
             return_type.type_string =
                 ui::graph::DataType::from_type_str(&return_type.type_string).to_string();
+        }
+
+        for out in node_meta.output_params.iter_mut() {
+            out.param_type = ui::graph::DataType::from_type_str(&out.param_type).to_string();
         }
     }
 
@@ -250,17 +255,31 @@ impl NodeDefinitions {
                 });
             }
 
-            // Add regular outputs (return type, skip void)
-            if let Some(return_type) = &node_meta.return_type {
-                let canonical =
-                    ui::graph::DataType::from_type_str(&return_type.type_string).to_string();
-                if canonical != "()" && canonical != "execution" {
-                    outputs.push(PinDefinition {
-                        id: "result".to_string(),
-                        name: "result".to_string(),
-                        data_type: PinDataType::from_type_str(canonical),
-                        pin_type: PinType::Output,
-                    });
+            // Add multi-output params (Break nodes, etc.)
+            for out in &node_meta.output_params {
+                let canonical = ui::graph::DataType::from_type_str(&out.param_type).to_string();
+                outputs.push(PinDefinition {
+                    id: out.name.clone(),
+                    name: out.name.clone(),
+                    data_type: PinDataType::from_type_str(canonical),
+                    pin_type: PinType::Output,
+                });
+            }
+
+            // Add single regular output (return type, skip void) — only when
+            // there are no named output_params (backward compat).
+            if node_meta.output_params.is_empty() {
+                if let Some(return_type) = &node_meta.return_type {
+                    let canonical =
+                        ui::graph::DataType::from_type_str(&return_type.type_string).to_string();
+                    if canonical != "()" && canonical != "execution" {
+                        outputs.push(PinDefinition {
+                            id: "result".to_string(),
+                            name: "result".to_string(),
+                            data_type: PinDataType::from_type_str(canonical),
+                            pin_type: PinType::Output,
+                        });
+                    }
                 }
             }
 

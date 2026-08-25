@@ -106,7 +106,7 @@ impl From<LegacyGraphDescription> for GraphDescription {
             connections: legacy.connections.into_iter().map(|c| c.into()).collect(),
             metadata: legacy.metadata,
             comments: legacy.comments.into_iter().map(|c| c.into()).collect(),
-            custom_event_defs: std::collections::HashMap::new(),
+            custom_event_defs: HashMap::new(),
         }
     }
 }

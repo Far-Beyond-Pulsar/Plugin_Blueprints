@@ -28,13 +28,13 @@ builtin = []
 # Resolve every public UI and engine type through one current Pulsar revision.
 # Mixing the standalone WGPUI repositories with Pulsar's re-exports creates
 # distinct Cargo package identities for otherwise identical GPUI types.
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
-ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
 
-plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
-ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
-engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
-pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "9b887f1ed327b5e3e2b6ba9066679469520cb446" }
+plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "745ee787cc63288463c170aafb778672db8e85ac" }
 
 # Compiler graph types paired with the current Blueprint integration.
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
@@ -55,7 +55,13 @@ schemars = "1.0"
 futures = "0.3"
 arboard = "3.4"
 anyhow = "1.0"
-wgpu = { version = "30", default-features = false, features = ["dx12", "vulkan", "wgsl", "metal"] }
+wgpu = { version = "30.0.0", default-features = false, features = [
+    "web",
+    "webgpu",
+    "dx12",
+    "vulkan",
+    "wgsl",
+] }
 parking_lot = "0.12"
 fontdue = "0.9"
 bytemuck = { version = "1", features = ["derive"] }
@@ -68,8 +74,14 @@ windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D12", "Win32_
 parking_lot = "0.12"
 
 [patch."https://github.com/Far-Beyond-Pulsar/WGPUI"]
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
 
 [patch."https://github.com/Far-Beyond-Pulsar/WGPUI-Component"]
-ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
-ui-macros = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bd852204ba69382a6a5bfd04416bd03396ac1c97" }
+ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+ui-macros = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+
+# Helio's internal SceneDB pin predates the World subscription rework
+# (SceneDB#47) that Pulsar-Native#575 consumes; unify on one copy so
+# `World`/`ComponentId`/`Pod` types keep a single identity across the seam.
+[patch."https://github.com/Far-Beyond-Pulsar/SceneDB"]
+pulsar_scenedb = { git = "https://github.com/Far-Beyond-Pulsar//SceneDB", rev = "c761890789b3e3c16b362a91769570bd587e5ac6" }

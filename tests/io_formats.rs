@@ -1,5 +1,5 @@
 use blueprint_editor_plugin::io::formats::{
-    strip_header_comments, BlueprintAsset, BlueprintEditorState,
+    BlueprintAsset, BlueprintEditorState, strip_header_comments,
 };
 use blueprint_editor_plugin::io::legacy::{
     LegacyBlueprintComment, LegacyColor, LegacyConnection, LegacyPosition, LegacySize,

@@ -104,9 +104,12 @@ pub fn snap_to_grid(pos: Point<f32>, _zoom_level: f32) -> Point<f32> {
 ///
 /// # Examples
 /// ```
-/// # use gpui::*;
+/// use blueprint_editor_plugin::parse_hex_color;
+///
 /// let blue = parse_hex_color("#4A90E2");
 /// let transparent_red = parse_hex_color("#FF000080");
+/// assert!(blue.is_some());
+/// assert!(transparent_red.is_some());
 /// ```
 pub fn parse_hex_color(hex: &str) -> Option<gpui::Hsla> {
     let hex = hex.trim_start_matches('#');

@@ -597,7 +597,6 @@ impl BlueprintEditorPanel {
         Ok(())
     }
 }
-
 /// Utility functions for file path handling
 impl BlueprintEditorPanel {
     fn resolve_blueprint_path(path: &Path) -> PathBuf {
