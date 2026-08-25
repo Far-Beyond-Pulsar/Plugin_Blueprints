@@ -16,5 +16,6 @@ pub mod macros;
 pub mod nodes;
 pub mod prefabs;
 pub mod undo;
+pub mod validation;
 pub mod variables;
 pub mod viewport;

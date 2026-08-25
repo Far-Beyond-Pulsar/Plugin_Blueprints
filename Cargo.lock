@@ -6102,7 +6102,7 @@ dependencies = [
 [[package]]
 name = "pbgc"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=3aaa5100ce05bdccf361e68201252e944f57242d#3aaa5100ce05bdccf361e68201252e944f57242d"
+source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=8739ed4b9d4acc362887a3d6414d3ff96c880f4f#8739ed4b9d4acc362887a3d6414d3ff96c880f4f"
 dependencies = [
  "graphy",
  "pulsar_std",
