@@ -38,7 +38,7 @@ pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflec
 
 # Compiler graph types paired with the current Blueprint integration.
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
-pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "3aaa5100ce05bdccf361e68201252e944f57242d" }
+pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "8739ed4b9d4acc362887a3d6414d3ff96c880f4f" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"

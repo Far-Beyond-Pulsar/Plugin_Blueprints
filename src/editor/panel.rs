@@ -120,6 +120,8 @@ pub struct BlueprintEditorPanel {
     // Compilation
     pub compilation_status: CompilationStatus,
     pub compilation_history: Vec<CompilationHistoryEntry>,
+    /// Diagnostics from the last validation stage run (#656 preflight).
+    pub validation_problems: Vec<String>,
     pub compile_mode: crate::core::types::CompileMode,
     pub compiler_output_scroll_handle: VirtualListScrollHandle,
     pub compiler_output_scrollbar_state: ScrollbarState,
@@ -539,6 +541,7 @@ impl BlueprintEditorPanel {
             subscriptions: Vec::new(),
             compilation_status: CompilationStatus::default(),
             compilation_history: Vec::new(),
+            validation_problems: Vec::new(),
             compile_mode: crate::core::types::CompileMode::default(),
             compiler_output_scroll_handle: VirtualListScrollHandle::new(),
             compiler_output_scrollbar_state: ScrollbarState::default(),

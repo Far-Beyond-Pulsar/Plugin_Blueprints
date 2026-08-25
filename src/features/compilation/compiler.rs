@@ -15,7 +15,8 @@ use std::path::PathBuf;
 /// deserialise it without knowing about this type.
 #[derive(serde::Serialize)]
 struct BytecodeFileOutput {
-    /// Format version — must stay 1 unless the runtime is updated in lock-step.
+    /// Format version. 2 adds `components`; the runtime deserializes v1 files
+    /// with an empty list.
     version: u32,
     /// Blueprint class name (used as the key in `BlueprintDispatcher`).
     source_class: String,
@@ -29,6 +30,9 @@ struct BytecodeFileOutput {
     event_programs: HashMap<String, pbgc::BpProgram>,
     /// Bytes needed for the per-instance state arena.
     arena_size: usize,
+    /// Component operations referenced by any program (`comp_*` node ABI).
+    /// The runtime validates these before executing events.
+    components: Vec<pbgc::ComponentOpRef>,
 }
 
 // ── Property normalisation (shared by both compile paths) ────────────────────
@@ -449,6 +453,51 @@ impl BlueprintEditorPanel {
         Ok(graph)
     }
 
+    /// Run the #656 preflight validation stage against the live graph:
+    /// structural checks on the UI-level graph (dangling connections, empty
+    /// node types), then PBGC's own data-flow analysis over the converted and
+    /// macro-expanded graph — exactly what codegen is about to consume.
+    pub(crate) fn run_validation_stage(
+        &mut self,
+        target: crate::features::validation::ValidationTarget,
+    ) -> crate::features::validation::ValidationReport {
+        use crate::features::validation::{
+            check_ui_graph_diagnostics, ValidationReport, ValidationTarget,
+        };
+
+        let mut report = ValidationReport {
+            target: Some(target),
+            diagnostics: Vec::new(),
+        };
+
+        // Structural pass on the UI-level description of the main tab.
+        let main_tab = self.main_graph_tab();
+        match self.convert_graph_to_description(&main_tab.graph) {
+            Ok(description) => {
+                report.merge(check_ui_graph_diagnostics(&description));
+            }
+            Err(e) => {
+                report.push(format!("live graph conversion failed: {e}"));
+                return report;
+            }
+        }
+
+        // Conversion + macro expansion + data-flow analysis on the exact
+        // pipeline codegen uses.
+        match self.build_graphy_description() {
+            Ok(graph) => {
+                let metadata_provider = pbgc::metadata::BlueprintMetadataProvider::new();
+                if let Err(e) = graphy::DataResolver::build(&graph, &metadata_provider) {
+                    report.push(format!("data flow analysis failed: {e}"));
+                }
+                let _ = graphy::ExecutionRouting::build_from_graph(&graph);
+            }
+            Err(e) => report.push(format!("graph build failed: {e}")),
+        }
+
+        report
+    }
+
     /// Assemble a `GraphLibrary` (keyed by macro id) covering every sub-graph
     /// this blueprint file can reference: local macros — overlaid with any
     /// open-tab edits not yet flushed back to `local_macros` (mirroring
@@ -484,7 +533,7 @@ impl BlueprintEditorPanel {
     }
 
     /// Compile current graph → raw PBGC bytecode programs (one per event entry-point).
-    pub fn compile_to_bytecode(&self) -> Result<Vec<pbgc::BpProgram>, String> {
+    pub fn compile_to_bytecode(&self) -> Result<(Vec<pbgc::BpProgram>, Vec<pbgc::ComponentOpRef>), String> {
         let variables: std::collections::HashMap<String, String> = self
             .class_variables
             .iter()
@@ -492,8 +541,9 @@ impl BlueprintEditorPanel {
             .collect();
 
         let graph = self.build_graphy_description()?;
-        pbgc::compile_graph_to_bytecode_with_variables(&graph, variables)
-            .map_err(|e| format!("Bytecode compilation failed: {}", e))
+        let compiled = pbgc::compile_graph_to_bytecode_full(&graph, variables)
+            .map_err(|e| format!("Bytecode compilation failed: {}", e))?;
+        Ok((compiled.programs, compiled.components))
     }
 
     /// Compile the current graph and write the result to
@@ -509,11 +559,11 @@ impl BlueprintEditorPanel {
             .as_ref()
             .ok_or("No class loaded — cannot compile")?;
 
-        let programs = self.compile_to_bytecode()?;
+        let (programs, components) = self.compile_to_bytecode()?;
 
         if programs.is_empty() {
             return Err(
-                "No event entry-points found in graph — add a BeginPlay or Tick node".to_string(),
+                "No event entry-points found in graph - add a BeginPlay or Tick node".to_string(),
             );
         }
 
@@ -536,11 +586,12 @@ impl BlueprintEditorPanel {
             .to_owned();
 
         let output = BytecodeFileOutput {
-            version: 1,
+            version: 2,
             source_class: blueprint_name,
             variables: Vec::new(),
             event_programs,
             arena_size,
+            components,
         };
 
         let json = serde_json::to_string_pretty(&output)
@@ -735,6 +786,41 @@ impl BlueprintEditorPanel {
                 "Compilation started",
                 Some(format!("Class path: {}", class_path_display)),
             );
+
+            // ── Validation stage (#656): bad graphs never reach codegen ────
+            use crate::features::validation::ValidationTarget;
+            let validation_target = match &compile_mode {
+                CompileMode::DirectRust => ValidationTarget::DirectRust,
+                CompileMode::BytecodeVm => ValidationTarget::BytecodeVm,
+            };
+            let report = panel.run_validation_stage(validation_target);
+            panel.validation_problems = report.diagnostics.clone();
+            panel.push_compilation_history(
+                if report.has_errors() {
+                    CompilationState::Error
+                } else {
+                    CompilationState::Compiling
+                },
+                "validate",
+                format!("Graph validation: {}", report.summary()),
+                None,
+            );
+            if report.has_errors() {
+                panel.compilation_status = CompilationStatus {
+                    state: CompilationState::Error,
+                    message: format!(
+                        "✗ Validation failed: {} — see Problems",
+                        report.summary()
+                    ),
+                    progress: 0.0,
+                    is_compiling: false,
+                };
+                cx.notify();
+                return Err(format!(
+                    "Validation failed ({}). Fix the errors listed in the Problems panel.",
+                    report.summary()
+                ));
+            }
 
             use crate::core::types::CompileMode;
             match &compile_mode {
