@@ -8,15 +8,16 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui::{
     dock::{Panel, PanelEvent},
-    h_flex, input::{InputEvent, InputState}, v_flex, ActiveTheme,
+    h_flex, input::{InputEvent, InputState}, v_flex, ActiveTheme, PixelsExt,
 };
 
 use crate::core::graph::BlueprintGraph;
 use crate::core::types::BlueprintNode;
 use crate::editor::panel::{BlueprintEditorPanel, ResizeHandle};
 use crate::features::connections::operations::ConnectionDrag;
+use crate::features::events::panel::EventsRenderer;
 use crate::features::macros::panel::MacrosRenderer;
-use crate::features::prefabs::panel::{PrefabHierarchyRenderer, PrefabPropertiesRenderer};
+use crate::features::prefabs::panel::PrefabHierarchyRenderer;
 use crate::features::undo::UndoManager;
 use crate::features::variables::rendering::VariablesRenderer;
 use crate::rendering::graph::NodeGraphRenderer;
@@ -113,6 +114,52 @@ impl Panel for MacrosPanel {
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         "Macros".into_any_element()
+    }
+}
+
+/// Events Panel
+pub struct EventsPanel {
+    editor: WeakEntity<BlueprintEditorPanel>,
+    focus_handle: FocusHandle,
+}
+
+impl EventsPanel {
+    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+        Self {
+            editor,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+}
+
+impl EventEmitter<PanelEvent> for EventsPanel {}
+
+impl Render for EventsPanel {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(editor) = self.editor.upgrade() {
+            div()
+                .size_full()
+                .bg(cx.theme().sidebar)
+                .child(editor.update(cx, |editor, cx| EventsRenderer::render(editor, cx)))
+        } else {
+            div().child("Editor not available")
+        }
+    }
+}
+
+impl Focusable for EventsPanel {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Panel for EventsPanel {
+    fn panel_name(&self) -> &'static str {
+        "events"
+    }
+
+    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+        "Events".into_any_element()
     }
 }
 
@@ -250,7 +297,7 @@ impl Panel for PropertiesPanel {
     }
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Blueprint Details".into_any_element()
+        "Properties".into_any_element()
     }
 }
 
@@ -297,54 +344,6 @@ impl Panel for PrefabHierarchyPanel {
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         "Components".into_any_element()
-    }
-}
-
-/// Prefabs Panel
-pub struct PrefabsPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl PrefabsPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for PrefabsPanel {}
-
-impl Render for PrefabsPanel {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if let Some(editor) = self.editor.upgrade() {
-            div()
-                .size_full()
-                .bg(cx.theme().sidebar)
-                .child(editor.update(cx, |editor, cx| {
-                    PrefabPropertiesRenderer::render(editor, window, cx)
-                }))
-        } else {
-            div().child("Editor not available")
-        }
-    }
-}
-
-impl Focusable for PrefabsPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for PrefabsPanel {
-    fn panel_name(&self) -> &'static str {
-        "prefabs"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Component Properties".into_any_element()
     }
 }
 
@@ -506,6 +505,10 @@ pub struct GraphCanvasPanel {
     pub dragging_macro: Option<crate::features::macros::MacroDrag>,
     pub macro_pin_add_mode: Option<bool>,
 
+    // ── Animated pan to node ──────────────────────────────────────────────
+    pub pan_anim_target: Option<Point<f32>>,
+    pub pan_anim_start: Option<(Point<f32>, std::time::Instant)>,
+
     pub subscriptions: Vec<Subscription>,
 }
 
@@ -624,6 +627,8 @@ impl GraphCanvasPanel {
             variable_drop_menu_position: None,
             dragging_macro: None,
             macro_pin_add_mode: None,
+            pan_anim_target: None,
+            pan_anim_start: None,
             subscriptions: Vec::new(),
         }
     }
@@ -677,6 +682,50 @@ impl GraphCanvasPanel {
 
         self.is_dirty = true;
         cx.notify();
+    }
+
+    // ── Animated pan to node ──────────────────────────────────────────────────
+
+    /// Smoothly pan the viewport to `target_pan` (graph-space offset).
+    pub fn animate_pan_to(&mut self, target_pan: Point<f32>) {
+        self.pan_anim_start = Some((self.graph.pan_offset, std::time::Instant::now()));
+        self.pan_anim_target = Some(target_pan);
+    }
+
+    /// Compute the pan offset that would center `node_id` in the viewport
+    /// and start an animated transition.
+    pub fn animate_pan_to_node(&mut self, node_id: &str) {
+        let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id) else {
+            return;
+        };
+        self.animate_pan_to_node_inner(node.position, node.size);
+    }
+
+    /// Compute the pan offset that would center the node with `definition_id`
+    /// in the viewport and start an animated transition.
+    pub fn animate_pan_to_node_by_def_id(&mut self, definition_id: &str) {
+        let Some(node) = self.graph.nodes.iter().find(|n| n.definition_id == definition_id) else {
+            return;
+        };
+        self.animate_pan_to_node_inner(node.position, node.size);
+    }
+
+    fn animate_pan_to_node_inner(&mut self, position: Point<f32>, size: gpui::Size<f32>) {
+        let bounds = self.element_bounds.unwrap_or(
+            gpui::Bounds::from_corners(Default::default(), gpui::Point::new(px(1920.0), px(1080.0))),
+        );
+        let vw = bounds.size.width.as_f32();
+        let vh = bounds.size.height.as_f32();
+        let zoom = self.graph.zoom_level;
+        let center = Point::new(
+            position.x + size.width / 2.0,
+            position.y + size.height / 2.0,
+        );
+        let target = Point::new(
+            (vw / 2.0) / zoom - center.x,
+            (vh / 2.0) / zoom - center.y,
+        );
+        self.animate_pan_to(target);
     }
 }
 
@@ -977,6 +1026,17 @@ impl GraphCanvasPanel {
         }
     }
 
+    /// Clear sidebar selections (variable, macro, event, prefab) on the parent
+    /// panel for mutual exclusivity with graph selections.
+    pub fn clear_sidebar_selections(&self, cx: &mut Context<Self>) {
+        if let Some(panel) = self.panel.upgrade() {
+            panel.update(cx, |panel, cx| {
+                panel.clear_sidebar_selections(false, false, false, false);
+                cx.notify();
+            });
+        }
+    }
+
     pub fn sync_comment_inspector_state(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(comment_id) = self.graph.selected_comments.first().cloned() else {
             return;
@@ -1031,4 +1091,6 @@ impl GraphCanvasPanel {
         for conn in &conns { self.graph.connections.push(conn.clone()); }
         self.comment_color_bindings_dirty = true; cx.notify();
     }
+
+
 }

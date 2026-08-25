@@ -90,10 +90,20 @@ impl NodeGraphRenderer {
         node: &BlueprintNode,
         is_input: bool,
         row: usize,
+        pin_id: Option<&str>,
         graph: &BlueprintGraph,
     ) -> Point<f32> {
         if node.node_type == NodeType::Reroute {
-            return Self::graph_to_screen_pos(node.position, graph);
+            let cx = node.position.x + node.size.width * 0.5;
+            let cy = node.position.y + node.size.height * 0.5;
+            return Self::graph_to_screen_pos(Point::new(cx, cy), graph);
+        }
+        // Special case: __return__ pin renders in the header (right side)
+        if pin_id == Some("__return__") {
+            let scr = Self::graph_to_screen_pos(node.position, graph);
+            let px_ = scr.x + (node.size.width - 24.0) * graph.zoom_level;
+            let py = scr.y + HEADER_H * 0.5 * graph.zoom_level;
+            return Point::new(px_, py);
         }
         let zoom = graph.zoom_level;
         let scr = Self::graph_to_screen_pos(node.position, graph);
@@ -116,14 +126,16 @@ impl NodeGraphRenderer {
         graph: &BlueprintGraph,
     ) -> Option<Point<f32>> {
         if node.node_type == NodeType::Reroute {
-            return Some(Self::graph_to_screen_pos(node.position, graph));
+            let cx = node.position.x + node.size.width * 0.5;
+            let cy = node.position.y + node.size.height * 0.5;
+            return Some(Self::graph_to_screen_pos(Point::new(cx, cy), graph));
         }
         let row = if is_input {
             node.inputs.iter().position(|p| p.id == pin_id)?
         } else {
             node.outputs.iter().position(|p| p.id == pin_id)?
         };
-        Some(Self::pin_canvas_pos(node, is_input, row, graph))
+        Some(Self::pin_canvas_pos(node, is_input, row, Some(pin_id), graph))
     }
 
     pub fn calculate_pin_position_graph_space(
@@ -213,6 +225,8 @@ fn category_color(node: &BlueprintNode) -> [f32; 4] {
         NodeType::Reroute => [0.40, 0.40, 0.42, 1.0],
         NodeType::MacroEntry | NodeType::MacroExit => [0.44, 0.18, 0.72, 1.0],
         NodeType::MacroInstance => [0.32, 0.12, 0.52, 1.0],
+        NodeType::CustomEvent => [0.90, 0.50, 0.10, 1.0],       // orange
+        NodeType::CustomEventDispatch => [0.10, 0.60, 0.85, 1.0], // cyan
     }
 }
 
@@ -244,7 +258,9 @@ fn wire_phase(conn: &Connection) -> f32 {
 /// No pan or zoom applied — the GPU shader handles the transform.
 fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) {
     if node.node_type == NodeType::Reroute {
-        return (node.position.x, node.position.y);
+        let cx = node.position.x + node.size.width * 0.5;
+        let cy = node.position.y + node.size.height * 0.5;
+        return (cx, cy);
     }
     let py = node.position.y
         + HEADER_H
@@ -263,7 +279,15 @@ fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) 
 /// Graph-space pin centre addressed by pin ID.
 fn pin_gpos_id(node: &BlueprintNode, pin_id: &str, is_input: bool) -> Option<(f32, f32)> {
     if node.node_type == NodeType::Reroute {
-        return Some((node.position.x, node.position.y));
+        let cx = node.position.x + node.size.width * 0.5;
+        let cy = node.position.y + node.size.height * 0.5;
+        return Some((cx, cy));
+    }
+    if pin_id == "__return__" {
+        return Some((
+            node.position.x + node.size.width - 24.0,
+            node.position.y + HEADER_H * 0.5,
+        ));
     }
     let row = if is_input {
         node.inputs.iter().position(|p| p.id == pin_id)?
@@ -412,6 +436,23 @@ impl NodeGraphRenderer {
         canvas: &mut GraphCanvasPanel,
         cx: &mut Context<GraphCanvasPanel>,
     ) -> impl IntoElement {
+        // Animated pan interpolation (500ms cubic ease-out)
+        if let Some(target) = canvas.pan_anim_target {
+            if let Some((start, start_time)) = &canvas.pan_anim_start {
+                let elapsed = start_time.elapsed().as_secs_f32();
+                let t = (elapsed / 0.5).min(1.0);
+                let eased = 1.0 - (1.0 - t).powi(3);
+                canvas.graph.pan_offset.x = start.x + (target.x - start.x) * eased;
+                canvas.graph.pan_offset.y = start.y + (target.y - start.y) * eased;
+                if t >= 1.0 {
+                    canvas.pan_anim_target = None;
+                    canvas.pan_anim_start = None;
+                } else {
+                    cx.notify();
+                }
+            }
+        }
+
         let canvas_entity = cx.entity().clone();
         let zoom = canvas.graph.zoom_level;
         let pan_x = canvas.graph.pan_offset.x;
@@ -544,9 +585,12 @@ impl NodeGraphRenderer {
             };
             let sep = [0.086, 0.098, 0.116, 1.0];
 
-            let max_rows = node.inputs.len().max(node.outputs.len()).max(1);
-            let gw = layout::snap_to_grid(node.size.width);
-            let gh = layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows));
+            let (gw, gh) = if is_reroute {
+                (layout::snap_to_grid(node.size.width), layout::snap_to_grid(node.size.height))
+            } else {
+                let max_rows = node.inputs.len().max(node.outputs.len()).max(1);
+                (layout::snap_to_grid(node.size.width), layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)))
+            };
             let hdr_frac = (HEADER_H + SEP_H) / gh;
             let is_running = node_is_active(node.id.as_str());
             let flags = (is_reroute as u32) | ((is_sel as u32) << 1) | ((is_running as u32) << 2);
@@ -589,7 +633,17 @@ impl NodeGraphRenderer {
                     (false, node.outputs.as_slice()),
                 ] {
                     for (i, pin) in pins.iter().enumerate() {
-                        let (cgx, cgy) = pin_gpos_row(node, is_input, i);
+                        let is_return = pin.id == "__return__";
+                        let is_fn_ptr = pin.id == "__fn_ptr__";
+                        let is_special = is_return || is_fn_ptr;
+                        let (cgx, cgy) = if is_return {
+                            // Header position: right side, middle of header
+                            let hx = node.position.x + node.size.width - 24.0;
+                            let hy = node.position.y + HEADER_H * 0.5;
+                            (hx, hy)
+                        } else {
+                            pin_gpos_row(node, is_input, i)
+                        };
                         let pc = pin_color(&pin.data_type);
                         let exe = pin.data_type == DataType::execution();
                         let compat = dragging_conn.as_ref().map_or(false, |d| {
@@ -601,8 +655,12 @@ impl NodeGraphRenderer {
                             center: [cgx, cgy],
                             size: PIN_SIZE,
                             _pad0: 0.0,
-                            color: pc,
-                            kind: exe as u32,
+                            color: if is_special {
+                                [1.0, 0.2, 0.2, 1.0]
+                            } else {
+                                pc
+                            },
+                            kind: if is_special { 2 } else { exe as u32 },
                             is_input: is_input as u32,
                             compatible: compat as u32,
                             _pad1: 0,

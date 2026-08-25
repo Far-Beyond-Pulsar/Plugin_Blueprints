@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui::{
-    input::InputState, resizable::ResizableState,
+    input::{InputEvent, InputState}, resizable::ResizableState,
     scroll::ScrollbarState, VirtualListScrollHandle,
 };
 
@@ -16,12 +16,20 @@ use super::tabs::GraphTab;
 use crate::core::{events::*, graph::*, types::*};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
-use crate::features::prefabs::add_component_dialog::AddPrefabComponentDialog;
+
 use crate::features::prefabs::PrefabAsset;
+use ui::dropdown::{SearchableList, SearchableListEvent};
 use crate::features::variables::ClassVariable;
 use crate::ui_components::palette_view::NodePaletteView;
 use ui::dock::{DockItem, DockPlacement};
 use ui::graph::{LibraryManager, SubGraphDefinition};
+
+/// Which item is being renamed inline in a hierarchy panel.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RenameTarget {
+    Event(String),
+    Macro(String),
+}
 
 /// Main Blueprint Editor Panel struct
 pub struct BlueprintEditorPanel {
@@ -91,7 +99,7 @@ pub struct BlueprintEditorPanel {
 
     // Prefab sidecar authoring
     pub prefab_asset: PrefabAsset,
-    pub prefab_add_component_dialog: Entity<AddPrefabComponentDialog>,
+    pub prefab_component_list: Entity<SearchableList<&'static str>>,
     pub show_add_component_dialog: bool,
     pub prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager,
     pub prefab_collapsed_categories: HashSet<(usize, String)>,
@@ -115,6 +123,8 @@ pub struct BlueprintEditorPanel {
     pub compile_mode: crate::core::types::CompileMode,
     pub compiler_output_scroll_handle: VirtualListScrollHandle,
     pub compiler_output_scrollbar_state: ScrollbarState,
+    pub find_search_input: Entity<InputState>,
+    pub find_search_query: String,
     pub find_output_scroll_handle: VirtualListScrollHandle,
     pub find_output_scrollbar_state: ScrollbarState,
 
@@ -122,6 +132,13 @@ pub struct BlueprintEditorPanel {
     pub library_manager: LibraryManager,
     pub local_macros: Vec<SubGraphDefinition>,
     pub selected_macro: Option<usize>,
+    // Event system (mirrors macro storage pattern)
+    pub local_event_defs: Vec<crate::core::graph::EventDefinition>,
+    pub selected_event: Option<usize>,
+
+    // Rename state — shared across event/macro/variable panels
+    pub renaming_target: Option<RenameTarget>,
+    pub rename_input: Entity<InputState>,
 
     // Tab system
     pub open_tabs: Vec<GraphTab>,
@@ -157,7 +174,7 @@ pub struct BlueprintEditorPanel {
     pub hovered_pin_tooltip_pos: Option<Point<Pixels>>,
 
     // Sidebar tab states
-    pub left_top_tab: usize,    // 0=Variables, 1=Functions, 2=Macros
+    pub left_top_tab: usize,    // 0=Variables, 1=Functions, 2=Macros, 3=Events
     pub left_bottom_tab: usize, // 0=Library, 1=Compiler
     pub right_tab: usize,       // 0=Details, 1=Prefabs, 2=Palette
 
@@ -192,6 +209,16 @@ pub struct BlueprintEditorPanel {
     // ── Macro pin editor state ────────────────────────────────────────────────
     /// When Some: true = adding an input, false = adding an output.
     pub macro_pin_add_mode: Option<bool>,
+
+    // ── Properties panel inline editors ──────────────────────────────────────
+    /// Name inputs for macro pins: (macro_id, pin_index, is_input) → Entity
+    pub macro_pin_name_inputs: HashMap<(String, usize, bool), Entity<InputState>>,
+    /// Type inputs for macro pins: (macro_id, pin_index, is_input) → Entity
+    pub macro_pin_type_inputs: HashMap<(String, usize, bool), Entity<InputState>>,
+    /// Name inputs for event fields: (event_uid, field_index) → Entity
+    pub event_field_name_inputs: HashMap<(String, usize), Entity<InputState>>,
+    /// Type inputs for event fields: (event_uid, field_index) → Entity
+    pub event_field_type_inputs: HashMap<(String, usize), Entity<InputState>>,
 }
 
 /// Information about a tab being dragged
@@ -401,22 +428,59 @@ impl BlueprintEditorPanel {
 
         let editor_weak = cx.entity().downgrade();
         let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
-        let prefab_add_component_dialog = cx.new(|cx| AddPrefabComponentDialog::new(window, cx));
+        let mut engine_classes = pulsar_reflection::REGISTRY.get_class_names();
+        engine_classes.sort();
+        let prefab_component_list = cx.new(|cx| {
+            SearchableList::new(window, cx, engine_classes, |name| name.to_string())
+                .with_empty_text("No components found")
+                .with_max_width(px(260.0))
+                .with_max_height(px(320.0))
+                .with_icon_getter(|_| ui::IconName::Component)
+        });
         cx.subscribe(
-            &prefab_add_component_dialog,
-            |this, _, event: &crate::features::prefabs::add_component_dialog::PrefabComponentSelectedEvent, cx| {
-                this.add_prefab_component(event.class_name.clone());
-                cx.notify();
+            &prefab_component_list,
+            |this, _, event: &SearchableListEvent<&'static str>, cx| {
+                if let SearchableListEvent::Select(class_name) = event {
+                    this.add_prefab_component(class_name.to_string());
+                    this.show_add_component_dialog = false;
+                    cx.notify();
+                }
             },
         )
         .detach();
-        cx.subscribe(
-            &prefab_add_component_dialog,
-            |this, _, _: &DismissEvent, cx| {
-                this.show_add_component_dialog = false;
-                cx.notify();
-            },
-        )
+
+        let rename_input: Entity<InputState> =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Rename..."));
+        // Commit rename on blur or Enter
+        let sub_input = rename_input.clone();
+        cx.subscribe_in(&rename_input, window, move |this, input, event: &InputEvent, window, cx| {
+            if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
+                if let Some(target) = this.renaming_target.take() {
+                    let new_name = input.read(cx).text().to_string().trim().to_string();
+                    if !new_name.is_empty() {
+                        match target {
+                            RenameTarget::Event(uid) => {
+                                this.rename_event_def(&uid, new_name);
+                                this.sync_all_events(window, cx);
+                            }
+                            RenameTarget::Macro(id) => {
+                                this.rename_local_macro(&id, new_name, cx);
+                            }
+                        }
+                    }
+                    cx.notify();
+                }
+            }
+        })
+        .detach();
+
+        // ── Find panel search input ────────────────────────────────────────────
+        let find_search_input: Entity<InputState> =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
+        cx.subscribe_in(&find_search_input, window, move |this, input, _event: &InputEvent, _window, cx| {
+            this.find_search_query = input.read(cx).text().to_string();
+            cx.notify();
+        })
         .detach();
 
         Self {
@@ -459,7 +523,7 @@ impl BlueprintEditorPanel {
             dragging_variable: None,
             variable_drop_menu_position: None,
             prefab_asset: PrefabAsset::new("Prefab"),
-            prefab_add_component_dialog,
+            prefab_component_list,
             show_add_component_dialog: false,
             prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager::new(),
             prefab_collapsed_categories: HashSet::new(),
@@ -478,6 +542,8 @@ impl BlueprintEditorPanel {
             compile_mode: crate::core::types::CompileMode::default(),
             compiler_output_scroll_handle: VirtualListScrollHandle::new(),
             compiler_output_scrollbar_state: ScrollbarState::default(),
+            find_search_input,
+            find_search_query: String::new(),
             find_output_scroll_handle: VirtualListScrollHandle::new(),
             find_output_scrollbar_state: ScrollbarState::default(),
             library_manager: {
@@ -489,6 +555,10 @@ impl BlueprintEditorPanel {
             },
             local_macros: Vec::new(),
             selected_macro: None,
+            local_event_defs: Vec::new(),
+            selected_event: None,
+            renaming_target: None,
+            rename_input,
             open_tabs: vec![GraphTab {
                 id: "main".to_string(),
                 name: "EventGraph".to_string(),
@@ -530,6 +600,10 @@ impl BlueprintEditorPanel {
             debug_session: None,
             dragging_macro: None,
             macro_pin_add_mode: None,
+            macro_pin_name_inputs: HashMap::new(),
+            macro_pin_type_inputs: HashMap::new(),
+            event_field_name_inputs: HashMap::new(),
+            event_field_type_inputs: HashMap::new(),
         }
     }
 
@@ -862,6 +936,26 @@ impl BlueprintEditorPanel {
             .iter()
             .find(|(id, _)| id == tab_id)
             .map(|(_, entity)| entity)
+    }
+
+    /// Clear all sidebar selections so the Properties panel can switch modes.
+    /// Keeps `selected_*` fields that match `keep` (bitmask).
+    pub fn clear_sidebar_selections(&mut self, keep_variable: bool, keep_macro: bool, keep_event: bool, keep_prefab: bool) {
+        if !keep_variable { self.selected_variable = None; }
+        if !keep_macro { self.selected_macro = None; }
+        if !keep_event { self.selected_event = None; }
+        if !keep_prefab { self.selected_prefab_component = None; }
+    }
+
+    /// Clear graph-node / comment selections on the active canvas.
+    pub fn clear_graph_selections(&mut self, cx: &mut Context<Self>) {
+        if let Some(canvas) = self.active_canvas().cloned() {
+            canvas.update(cx, |canvas, cx| {
+                canvas.graph.selected_nodes.clear();
+                canvas.graph.selected_comments.clear();
+                cx.notify();
+            });
+        }
     }
 
     fn capture_interaction_state(&self) -> GraphInteractionState {

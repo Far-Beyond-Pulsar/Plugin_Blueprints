@@ -219,6 +219,8 @@ pub enum NodeType {
     MacroEntry,    // Entry point for macro graphs (replaces generic subgraph_input)
     MacroExit,     // Exit point for macro graphs (replaces generic subgraph_output)
     MacroInstance, // Instance of a macro in parent graph
+    CustomEvent,   // On-node for a custom event definition (definition_id: "custom_event:<uid>")
+    CustomEventDispatch, // Dispatch node for a custom event (definition_id: "custom_event_dispatch:<uid>")
 }
 
 // ============================================================================
@@ -443,7 +445,7 @@ impl BlueprintNode {
             icon: "•".to_string(),
             node_type: NodeType::Reroute,
             position,
-            size: Size::new(16.0, 16.0), // Small size for reroute nodes
+            size: Size::new(30.0, 30.0), // Snaps cleanly to grid (GRID_SNAP=10)
             inputs: vec![Pin {
                 id: "input".to_string(),
                 name: "".to_string(),

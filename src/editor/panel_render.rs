@@ -5,6 +5,7 @@ use gpui::*;
 use ui::{
     dock::{Panel, PanelEvent, PanelState},
     h_flex,
+    input::TextInput,
     scroll::Scrollbar,
     v_flex, v_virtual_list, ActiveTheme, StyledExt,
 };
@@ -13,6 +14,16 @@ use super::panel::BlueprintEditorPanel;
 use super::toolbar::ToolbarRenderer;
 use crate::core::events::*;
 use crate::rendering::graph::NodeGraphRenderer;
+
+/// A node entry in the find-panel listing, tagged with its owning subgraph tab
+/// so clicking it can switch tabs and pan to the correct canvas.
+struct FindNodeEntry {
+    node: crate::core::types::BlueprintNode,
+    tab_index: usize,
+    tab_name: String,
+    is_active_tab: bool,
+    canvas: Option<Entity<crate::editor::workspace_panels::GraphCanvasPanel>>,
+}
 
 impl Panel for BlueprintEditorPanel {
     fn panel_name(&self) -> &'static str {
@@ -251,62 +262,104 @@ impl BlueprintEditorPanel {
     }
 
     pub fn render_find_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        // Read nodes from the live canvas if available; fall back to self.graph shadow.
-        let (node_count, comment_count, nodes, selected_nodes) =
-            if let Some(canvas) = self.active_canvas() {
-                let g = canvas.read(cx).graph.clone();
-                (
-                    g.nodes.len(),
-                    g.comments.len(),
-                    g.nodes.clone(),
-                    g.selected_nodes.clone(),
-                )
-            } else {
-                (
-                    self.graph.nodes.len(),
-                    self.graph.comments.len(),
-                    self.graph.nodes.clone(),
-                    self.graph.selected_nodes.clone(),
-                )
-            };
-        let item_sizes = std::rc::Rc::new(
-            nodes
+        let active_tab_index = self.active_tab_index;
+
+        // Collect nodes from every open tab, reading from live canvases first.
+        let mut entries: Vec<FindNodeEntry> = Vec::new();
+        let mut total_nodes = 0usize;
+        for (ti, tab) in self.open_tabs.iter().enumerate() {
+            let canvas = self
+                .graph_panels
                 .iter()
-                .map(|_| size(px(0.0), px(34.0)))
+                .find(|(id, _)| id == &tab.id)
+                .map(|(_, c)| c.clone());
+            // Prefer live canvas data, fall back to tab snapshot.
+            let graph = canvas
+                .as_ref()
+                .map(|c| c.read(cx).graph.clone())
+                .unwrap_or_else(|| tab.graph.clone());
+            total_nodes += graph.nodes.len();
+            for node in &graph.nodes {
+                entries.push(FindNodeEntry {
+                    node: node.clone(),
+                    tab_index: ti,
+                    tab_name: tab.name.clone(),
+                    is_active_tab: ti == active_tab_index,
+                    canvas: canvas.clone(),
+                });
+            }
+        }
+
+        let tab_count = self.open_tabs.len();
+        let query = self.find_search_query.to_lowercase();
+
+        // Filter entries based on search query (matches title, type, definition_id)
+        let filtered: Vec<FindNodeEntry> = if query.is_empty() {
+            entries
+        } else {
+            entries
+                .into_iter()
+                .filter(|e| {
+                    e.node.title.to_lowercase().contains(&query)
+                        || format!("{:?}", e.node.node_type).to_lowercase().contains(&query)
+                        || e.node.definition_id.to_lowercase().contains(&query)
+                })
+                .collect()
+        };
+
+        let item_sizes = std::rc::Rc::new(
+            std::iter::repeat(size(px(0.0), px(36.0)))
+                .take(filtered.len())
                 .collect::<Vec<_>>(),
         );
+
         let panel_entity = cx.entity().clone();
         let scroll_handle = self.find_output_scroll_handle.clone();
         let scrollbar_state = self.find_output_scrollbar_state.clone();
+        let find_search_input = self.find_search_input.clone();
 
         v_flex()
             .size_full()
             .p_2()
             .gap_2()
             .child(
-                h_flex()
-                    .w_full()
-                    .items_center()
-                    .justify_between()
+                v_flex()
+                    .gap_1p5()
                     .child(
-                        div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(cx.theme().foreground)
-                            .child("Graph Index"),
+                        h_flex()
+                            .w_full()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(cx.theme().foreground)
+                                    .child("Graph Index"),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(if query.is_empty() {
+                                        format!("{} nodes across {} tabs", total_nodes, tab_count)
+                                    } else {
+                                        format!("{} of {} nodes", filtered.len(), total_nodes)
+                                    }),
+                            ),
                     )
                     .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(format!("{} nodes, {} comments", node_count, comment_count)),
+                        h_flex()
+                            .w_full()
+                            .h(px(28.0))
+                            .items_center()
+                            .px_2()
+                            .rounded(px(4.0))
+                            .bg(cx.theme().input)
+                            .border_1()
+                            .border_color(cx.theme().border.opacity(0.6))
+                            .child(TextInput::new(&find_search_input).text_sm()),
                     ),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Click a node entry to select it in the graph."),
             )
             .child(
                 div()
@@ -314,7 +367,7 @@ impl BlueprintEditorPanel {
                     .min_h_0()
                     .overflow_hidden()
                     .relative()
-                    .when(nodes.is_empty(), |this| {
+                    .when(filtered.is_empty(), |this| {
                         this.child(
                             div()
                                 .size_full()
@@ -323,10 +376,10 @@ impl BlueprintEditorPanel {
                                 .justify_center()
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("No nodes in graph."),
+                                .child("No nodes in any subgraph."),
                         )
                     })
-                    .when(!nodes.is_empty(), |this| {
+                    .when(!filtered.is_empty(), |this| {
                         this.child(
                             v_virtual_list(
                                 panel_entity,
@@ -335,45 +388,77 @@ impl BlueprintEditorPanel {
                                 move |_panel, range, _window, cx| {
                                     range
                                         .map(|ix| -> AnyElement {
-                                            let Some(node) = nodes.get(ix) else {
-                                                return div().h(px(34.0)).into_any_element();
+                                            let Some(entry) = filtered.get(ix) else {
+                                                return div().h(px(36.0)).into_any_element();
                                             };
 
-                                            let node_id = node.id.clone();
-                                            let node_title = node.title.clone();
-                                            let is_selected = selected_nodes.contains(&node_id);
+                                            let node_id = entry.node.id.clone();
+                                            let node_title = entry.node.title.clone();
+                                            let node_tab_name = entry.tab_name.clone();
+                                            let node_tab_index = entry.tab_index;
+                                            let is_active_tab = entry.is_active_tab;
+                                            let canvas_for_click = entry.canvas.clone();
 
                                             h_flex()
                                                 .w_full()
-                                                .h(px(34.0))
+                                                .h(px(36.0))
                                                 .items_center()
                                                 .justify_between()
                                                 .px_2()
                                                 .cursor_pointer()
-                                                .bg(if is_selected {
-                                                    cx.theme().accent.opacity(0.12)
-                                                } else {
-                                                    gpui::transparent_black()
-                                                })
-                                                .border_b_1()
-                                                .border_color(cx.theme().border.opacity(0.08))
                                                 .hover(|s| s.bg(cx.theme().muted.opacity(0.2)))
                                                 .on_mouse_down(
                                                     gpui::MouseButton::Left,
-                                                    cx.listener(move |panel, _, _window, cx| {
+                                                    cx.listener(move |panel, _, window, cx| {
+                                                        panel.clear_sidebar_selections(false, false, false, false);
                                                         panel.graph.selected_nodes.clear();
-                                                        panel
-                                                            .graph
-                                                            .selected_nodes
-                                                            .push(node_id.clone());
+                                                        panel.graph.selected_nodes.push(node_id.clone());
+
+                                                        // Switch to the owning tab if needed
+                                                        if node_tab_index != panel.active_tab_index {
+                                                            panel.switch_to_tab(node_tab_index, window, cx);
+                                                        }
+
+                                                        // Pan & select on the correct canvas
+                                                        if let Some(ref canvas) = canvas_for_click {
+                                                            canvas.update(cx, |canvas, _cx| {
+                                                                canvas.graph.selected_nodes.clear();
+                                                                canvas.graph.selected_nodes.push(node_id.clone());
+                                                                canvas.animate_pan_to_node(&node_id);
+                                                            });
+                                                        }
                                                         cx.notify();
                                                     }),
                                                 )
                                                 .child(
-                                                    div()
-                                                        .text_xs()
-                                                        .text_color(cx.theme().foreground)
-                                                        .child(node_title),
+                                                    h_flex()
+                                                        .gap_2()
+                                                        .items_center()
+                                                        .child(
+                                                            div()
+                                                                .text_xs()
+                                                                .text_color(cx.theme().foreground)
+                                                                .child(node_title),
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .px_1p5()
+                                                                .py_0p5()
+                                                                .rounded(px(3.0))
+                                                                .bg(if is_active_tab {
+                                                                    cx.theme().accent.opacity(0.15)
+                                                                } else {
+                                                                    cx.theme().muted.opacity(0.3)
+                                                                })
+                                                                .text_xs()
+                                                                .font_family("JetBrainsMono-Regular")
+                                                                .text_color(if is_active_tab {
+                                                                    cx.theme().accent
+                                                                } else {
+                                                                    cx.theme().muted_foreground
+                                                                })
+                                                                .child(node_tab_name),
+                                                        ),
                                                 )
                                                 .child(
                                                     div()
@@ -381,7 +466,7 @@ impl BlueprintEditorPanel {
                                                         .text_color(cx.theme().muted_foreground)
                                                         .child(format!(
                                                             "({:.0}, {:.0})",
-                                                            node.position.x, node.position.y
+                                                            entry.node.position.x, entry.node.position.y
                                                         )),
                                                 )
                                                 .into_any_element()

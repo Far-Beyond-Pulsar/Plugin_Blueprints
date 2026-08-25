@@ -9,6 +9,21 @@ use ui::graph::{
     BlueprintMetadata, ClassVariable, GraphDescription, GraphViewState, SubGraphDefinition,
 };
 
+/// Serializable event definition (mirrors core::graph::EventDefinition).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventDefDescription {
+    pub uid: String,
+    pub name: String,
+    pub fields: Vec<EventFieldDescription>,
+    pub return_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventFieldDescription {
+    pub name: String,
+    pub type_name: String,
+}
+
 // ============================================================================
 // Main Blueprint Asset Format
 // ============================================================================
@@ -25,6 +40,10 @@ pub struct BlueprintAsset {
 
     /// Local macro definitions (subgraphs)
     pub local_macros: Vec<SubGraphDefinition>,
+
+    /// Local event definitions
+    #[serde(default)]
+    pub local_events: Vec<EventDefDescription>,
 
     /// Class variables for this blueprint
     pub variables: Vec<ClassVariable>,
@@ -45,6 +64,7 @@ impl BlueprintAsset {
             format_version: 1,
             main_graph: GraphDescription::new("EventGraph"),
             local_macros: Vec::new(),
+            local_events: Vec::new(),
             variables: Vec::new(),
             editor_state: None,
             blueprint_metadata: BlueprintMetadata::default(),
@@ -55,6 +75,7 @@ impl BlueprintAsset {
     pub fn from_components(
         main_graph: GraphDescription,
         local_macros: Vec<SubGraphDefinition>,
+        local_events: Vec<EventDefDescription>,
         variables: Vec<ClassVariable>,
         editor_state: Option<BlueprintEditorState>,
     ) -> Self {
@@ -62,6 +83,7 @@ impl BlueprintAsset {
             format_version: 1,
             main_graph,
             local_macros,
+            local_events,
             variables,
             editor_state,
             blueprint_metadata: BlueprintMetadata::default(),

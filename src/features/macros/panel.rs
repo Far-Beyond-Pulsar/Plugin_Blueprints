@@ -9,7 +9,7 @@ use ui::{
     IconName, StyledExt,
 };
 
-use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::panel::{BlueprintEditorPanel, RenameTarget};
 
 pub struct MacrosRenderer;
 
@@ -43,11 +43,23 @@ impl MacrosRenderer {
             .local_macros
             .iter()
             .enumerate()
-            .map(|(index, subgraph)| MacroHierarchyItem {
-                subgraph: subgraph.clone(),
-                index,
-                is_selected: panel.selected_macro == Some(index),
-                panel: cx.entity().downgrade(),
+            .map(|(index, subgraph)| {
+                let is_renaming = panel
+                    .renaming_target
+                    .as_ref()
+                    .map_or(false, |t| matches!(t, RenameTarget::Macro(id) if *id == subgraph.id));
+                MacroHierarchyItem {
+                    subgraph: subgraph.clone(),
+                    index,
+                    is_selected: panel.selected_macro == Some(index),
+                    panel: cx.entity().downgrade(),
+                    is_renaming,
+                    rename_input: if is_renaming {
+                        Some(panel.rename_input.clone())
+                    } else {
+                        None
+                    },
+                }
             })
             .collect();
 
@@ -80,13 +92,12 @@ impl MacrosRenderer {
             on_select: Arc::new(move |id: &usize, window, cx| {
                 let selected_id = *id;
                 let panel = panel_entity.clone();
-                // Capture the window handle before deferring so we can pass &mut Window
-                // to open_local_macro inside the deferred callback.
                 let window_handle = window.window_handle();
-                // Defer so the entity borrow from cx.listener is released first.
                 cx.defer(move |cx| {
                     let _ = cx.update_window(window_handle, |_, window, cx| {
                         panel.update(cx, |panel, cx| {
+                            panel.clear_sidebar_selections(false, true, false, false);
+                            panel.clear_graph_selections(cx);
                             panel.selected_macro = Some(selected_id);
                             cx.notify();
 

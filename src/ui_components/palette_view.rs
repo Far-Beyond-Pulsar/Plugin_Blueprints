@@ -20,7 +20,8 @@ use ui::{
 };
 
 use crate::core::definitions::{NodeDefinition, NodeDefinitions};
-use crate::core::types::BlueprintNode;
+use crate::core::types::{BlueprintNode, PinType};
+use crate::core::definitions::PinDefinition;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
@@ -126,6 +127,12 @@ impl NodePaletteView {
             let local_macro_items =
                 build_local_macro_palette_items(&editor_ref.local_macros, editing_macro_id.as_deref());
             all_items.extend(local_macro_items);
+
+            // Custom event Dispatch nodes — from panel event defs
+            let dispatch_items = build_custom_event_dispatch_palette_items_from_panel(
+                &editor_ref.local_event_defs,
+            );
+            all_items.extend(dispatch_items);
         }
 
         self.all_items = all_items;
@@ -201,6 +208,65 @@ fn build_local_macro_palette_items(
                 is_event: false,
             },
             category_color: "#9B59B6".to_string(),
+        });
+    }
+    items
+}
+
+/// Build palette items for custom event Dispatch nodes from panel-level event
+/// definitions.
+fn build_custom_event_dispatch_palette_items_from_panel(
+    defs: &[crate::core::graph::EventDefinition],
+) -> Vec<PaletteItem> {
+    if defs.is_empty() {
+        return Vec::new();
+    }
+
+    let mut items = vec![PaletteItem::CategoryHeader {
+        name: "Custom Events".to_string(),
+        color: "#E67E22".to_string(),
+        node_count: defs.len(),
+    }];
+
+    for def in defs {
+        let mut dispatch_inputs = vec![PinDefinition {
+            id: "exec".to_string(),
+            name: String::new(),
+            data_type: crate::core::types::PinDataType::execution(),
+            pin_type: PinType::Input,
+        }];
+        for field in &def.fields {
+            dispatch_inputs.push(PinDefinition {
+                id: field.name.clone(),
+                name: field.name.clone(),
+                data_type: crate::core::types::PinDataType::from_type_str(&field.type_name),
+                pin_type: PinType::Input,
+            });
+        }
+
+        items.push(PaletteItem::NodeEntry {
+            def: NodeDefinition {
+                id: format!("custom_event_dispatch:{}", def.uid),
+                name: format!("Dispatch {}", def.name),
+                icon: "📡".to_string(),
+                description: format!("Dispatches the '{}' custom event", def.name),
+                documentation: String::new(),
+                inputs: dispatch_inputs,
+                outputs: vec![PinDefinition {
+                    id: "exec".to_string(),
+                    name: "Then".to_string(),
+                    data_type: crate::core::types::PinDataType::execution(),
+                    pin_type: PinType::Output,
+                }],
+                properties: {
+                    let mut m = std::collections::HashMap::new();
+                    m.insert("event_uid".to_string(), def.uid.clone());
+                    m
+                },
+                color: Some("#00A8E8".to_string()),
+                is_event: false,
+            },
+            category_color: "#E67E22".to_string(),
         });
     }
     items
@@ -296,8 +362,7 @@ impl Render for NodePaletteView {
                                     .items_center()
                                     .child(
                                         Icon::new(IconName::Search)
-                                            .size(px(14.0))
-                                            .text_color(cx.theme().accent),
+                                            .size(px(14.0)),
                                     )
                                     .child(
                                         div()
@@ -527,6 +592,48 @@ fn palette_node_row(
             MouseButton::Left,
             cx.listener(move |view, _event, _window, cx| {
                 let def_now = def_for_click.clone();
+
+                // Sentinel: "Add Custom Event" → create event and On node
+                if def_now.id == "__add_custom_event__" {
+                    if let Some(canvas_entity) = view.resolve_canvas(cx) {
+                        let panel = canvas_entity.read(cx).panel.clone();
+                        let canvas_id = canvas_entity.read(cx).id.clone();
+                        let win_handle = _window.window_handle();
+                        cx.defer(move |cx| {
+                            let _ = cx.update_window(win_handle, |_, window, cx| {
+                                if let Some(panel) = panel.upgrade() {
+                                    panel.update(cx, |panel, cx| {
+                                        let uid = panel.create_event_def("NewEvent".to_string(), String::new());
+                                        // Sync to the active tab matching this canvas
+                                        if let Some(tab) = panel.open_tabs.iter_mut().find(|t| t.id == canvas_id) {
+                                            if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid) {
+                                                crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(def, &uid, &mut tab.graph);
+                                            }
+                                        }
+                                        // Also sync the live canvas
+                                        if let Some((_, canvas)) = panel.graph_panels.iter().find(|(id, _)| *id == canvas_id) {
+                                            canvas.update(cx, |canvas_panel, _cx| {
+                                                if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid) {
+                                                    crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(def, &uid, &mut canvas_panel.graph);
+                                                }
+                                            });
+                                        }
+                                        cx.notify();
+                                    });
+                                }
+                            });
+                        });
+                        canvas_entity.update(cx, |canvas, cx| {
+                            canvas.popup_palette_graph_pos = None;
+                            canvas.quick_palette_connection_source = None;
+                            canvas.quick_palette_open = false;
+                            canvas.quick_palette_focus_pending = false;
+                            cx.notify();
+                        });
+                    }
+                    return;
+                }
+
                 // Route node placement through the resolved canvas entity.
                 if let Some(canvas_entity) = view.resolve_canvas(cx) {
                     canvas_entity.update(cx, |canvas, cx| {
@@ -543,15 +650,20 @@ fn palette_node_row(
                         let stagger = (canvas.graph.nodes.len() % 8) as f32 * 18.0;
                         let place_pos = Point::new(base.x + stagger, base.y + stagger);
 
-                        let node_clone = if let Some(macro_id) = def_now.id.strip_prefix("macro:") {
-                            canvas.create_macro_instance_node(macro_id.to_string(), place_pos, cx);
-                            canvas.graph.nodes.last().cloned()
-                        } else {
-                            let node = crate::core::types::BlueprintNode::from_definition(&def_now, place_pos);
-                            let clone = node.clone();
-                            canvas.add_node(node, cx);
-                            Some(clone)
-                        };
+                        let node_clone =
+                            if let Some(macro_id) = def_now.id.strip_prefix("macro:") {
+                                canvas.create_macro_instance_node(macro_id.to_string(), place_pos, cx);
+                                canvas.graph.nodes.last().cloned()
+                            } else if let Some(uid) = def_now.id.strip_prefix("custom_event_dispatch:") {
+                                canvas.create_custom_event_dispatch_node(uid.to_string(), place_pos, cx);
+                                canvas.graph.nodes.last().cloned()
+                            } else {
+                                let node =
+                                    crate::core::types::BlueprintNode::from_definition(&def_now, place_pos);
+                                let clone = node.clone();
+                                canvas.add_node(node, cx);
+                                Some(clone)
+                            };
 
                         if let (Some(source), Some(ref new_node)) =
                             (canvas.quick_palette_connection_source.take(), node_clone.as_ref())

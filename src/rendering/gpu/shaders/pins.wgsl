@@ -43,6 +43,11 @@ fn sdf_circle(p: vec2<f32>, r: f32) -> f32 {
     return length(p) - r;
 }
 
+fn sdf_box(p: vec2<f32>, size: vec2<f32>) -> f32 {
+    let d = abs(p) - size;
+    return length(max(d, vec2(0.0))) + min(max(d.x, d.y), 0.0);
+}
+
 fn sdf_exec(p: vec2<f32>, is_input: bool) -> f32 {
     var q = p;
     if is_input { q.x = -q.x; }
@@ -99,8 +104,10 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     var d: f32;
     if in.kind == 0u {
         d = sdf_circle(in.uv, 0.78);
-    } else {
+    } else if in.kind == 1u {
         d = sdf_exec(in.uv, in.is_input != 0u);
+    } else {
+        d = sdf_box(in.uv, vec2(0.70, 0.70));
     }
 
     let aa = max(fwidth(d), 0.02);

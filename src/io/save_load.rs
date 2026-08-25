@@ -192,6 +192,7 @@ impl BlueprintEditorPanel {
                     format_version: formats::current_format_version(),
                     main_graph: legacy_graph,
                     local_macros: Vec::new(),
+                    local_events: Vec::new(),
                     variables: Vec::new(),
                     editor_state: None,
                     blueprint_metadata: Default::default(),
@@ -270,6 +271,25 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
+        // Convert event defs to serializable format
+        let local_events: Vec<formats::EventDefDescription> = self
+            .local_event_defs
+            .iter()
+            .map(|def| formats::EventDefDescription {
+                uid: def.uid.clone(),
+                name: def.name.clone(),
+                fields: def
+                    .fields
+                    .iter()
+                    .map(|f| formats::EventFieldDescription {
+                        name: f.name.clone(),
+                        type_name: f.type_name.clone(),
+                    })
+                    .collect(),
+                return_type: def.return_type.clone(),
+            })
+            .collect();
+
         let graph_view_states = self
             .open_tabs
             .iter()
@@ -289,6 +309,7 @@ impl BlueprintEditorPanel {
             format_version: formats::current_format_version(),
             main_graph,
             local_macros,
+            local_events,
             variables,
             editor_state: Some(formats::BlueprintEditorState {
                 open_tab_ids: self.open_tabs.iter().map(|tab| tab.id.clone()).collect(),
@@ -322,20 +343,38 @@ impl BlueprintEditorPanel {
             asset.variables.len(),
         );
 
-        let main_graph = self.convert_graph_description_to_blueprint(&asset.main_graph, window, cx)?;
-        tracing::info!(
-            ">>> load_blueprint_asset: converted main graph: {} nodes, {} connections, {} comments",
-            main_graph.nodes.len(),
-            main_graph.connections.len(),
-            main_graph.comments.len(),
-        );
+        let formats::BlueprintAsset {
+            main_graph: graph_desc,
+            local_macros,
+            local_events,
+            variables,
+            editor_state,
+            format_version: _,
+            blueprint_metadata: _,
+        } = asset;
 
-        self.comment_color_bindings_dirty = true;
-        self.local_macros = asset.local_macros;
+        self.local_macros = local_macros;
+
+        // Convert event defs from serializable format
+        self.local_event_defs = local_events
+            .into_iter()
+            .map(|ed| crate::core::graph::EventDefinition {
+                uid: ed.uid,
+                name: ed.name,
+                fields: ed
+                    .fields
+                    .into_iter()
+                    .map(|f| crate::core::graph::CustomEventField {
+                        name: f.name,
+                        type_name: f.type_name,
+                    })
+                    .collect(),
+                return_type: ed.return_type,
+            })
+            .collect();
 
         // Convert ui::ClassVariable to local ClassVariable
-        self.class_variables = asset
-            .variables
+        self.class_variables = variables
             .iter()
             .map(|v| crate::features::variables::ClassVariable {
                 name: v.name.clone(),
@@ -344,10 +383,20 @@ impl BlueprintEditorPanel {
             })
             .collect();
 
+        let main_graph = self.convert_graph_description_to_blueprint(&graph_desc, window, cx)?;
+        tracing::info!(
+            ">>> load_blueprint_asset: converted main graph: {} nodes, {} connections, {} comments",
+            main_graph.nodes.len(),
+            main_graph.connections.len(),
+            main_graph.comments.len(),
+        );
+
+        self.comment_color_bindings_dirty = true;
+
         self.open_tabs = vec![GraphTab::new_main(main_graph)];
         self.active_tab_index = 0;
 
-        if let Some(editor_state) = asset.editor_state {
+        if let Some(editor_state) = editor_state {
             for tab_id in &editor_state.open_tab_ids {
                 if tab_id == "main" {
                     continue;

@@ -2,13 +2,15 @@ use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::prefabs::hierarchy_item::ComponentHierarchyItem;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use pulsar_reflection::{TypeStructure, REGISTRY};
+use pulsar_reflection::REGISTRY;
+use std::any::Any;
 use std::sync::Arc;
 use ui::{
-    button::Button, color_picker::{ColorPickerEvent, ColorPickerState}, h_flex,
-    input::{InputEvent, InputState}, scroll::ScrollbarAxis, v_flex, ActiveTheme,
-    CollapsibleSection, HierarchicalTreeView, HierarchyConfig, HierarchyLayout, IconName, Sizable,
-    StyledExt,
+    button::Button,
+    dropdown::SearchableList, h_flex,
+    popover::Popover,
+    scroll::ScrollbarAxis, v_flex, ActiveTheme, CollapsibleSection, HierarchicalTreeView,
+    HierarchyConfig, HierarchyLayout, IconName, Sizable, StyledExt,
 };
 use ui_common::properties_inspector;
 pub struct PrefabHierarchyRenderer;
@@ -46,42 +48,23 @@ impl PrefabHierarchyRenderer {
         panel: &mut BlueprintEditorPanel,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        let dialog = panel.prefab_add_component_dialog.clone();
-        let show_dialog = panel.show_add_component_dialog;
+        let list = panel.prefab_component_list.clone();
 
-        let add_button = Button::new("prefab_component_add")
-            .label("Add Component")
-            .icon(IconName::Component)
-            .small()
-            .on_click(cx.listener(|panel, _, _window, cx| {
-                panel.show_add_component_dialog = true;
-                cx.notify();
-            }))
+        let add_popover = Popover::<SearchableList<&'static str>>::new("prefab-component-picker")
+            .anchor(Corner::TopRight)
+            .trigger(
+                Button::new("prefab_component_add")
+                    .label("Add Component")
+                    .icon(IconName::Component)
+                    .small(),
+            )
+            .content(move |_window, _cx| list.clone())
             .into_any_element();
 
         v_flex()
             .size_full()
             .bg(cx.theme().background)
-            .child(Self::render_hierarchy(panel, add_button, cx))
-            .when(show_dialog, |el| {
-                el.child(
-                    div()
-                        .absolute()
-                        .left(px(8.0))
-                        .bottom(px(8.0))
-                        .w(px(260.0))
-                        .shadow_lg()
-                        .rounded(px(6.0))
-                        .overflow_hidden()
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .on_mouse_down_out(cx.listener(|panel, _, _, cx| {
-                            panel.show_add_component_dialog = false;
-                            cx.notify();
-                        }))
-                        .child(dialog),
-                )
-            })
+            .child(Self::render_hierarchy(panel, add_popover, cx))
     }
 
     fn render_hierarchy(
@@ -128,14 +111,11 @@ impl PrefabHierarchyRenderer {
             root_ids,
             layout: HierarchyLayout::Panel,
 
-            // Panel header
-            title: Some("Components".to_string()),
+            title: None,
             header_buttons: vec![add_button],
 
-            // No root drop zone for now
             root_drop_zone: None,
 
-            // Widget config (not used in Panel mode)
             widget_title: None,
             widget_icon: None,
             widget_add_button: None,
@@ -152,6 +132,8 @@ impl PrefabHierarchyRenderer {
                 let panel = panel_entity.clone();
                 cx.defer(move |cx| {
                     panel.update(cx, |panel, cx| {
+                        panel.clear_sidebar_selections(false, false, false, true);
+                        panel.clear_graph_selections(cx);
                         panel.selected_prefab_component = Some(selected_id);
                         cx.notify();
                     });
@@ -413,107 +395,6 @@ impl PrefabPropertiesRenderer {
         format!("{}#{}", component_index, class_name)
     }
 
-    /// Ensure a numeric (`f32`/`i32`) input widget exists for `prop_name`,
-    /// stored in `panel.prefab_property_state.numeric_inputs`. Built directly
-    /// (rather than via `PropertyStateManager::ensure_f32_input`) because
-    /// committing an edit needs `&mut BlueprintEditorPanel`
-    /// (`update_prefab_component_property`) — see the note at the call site.
-    fn ensure_numeric_input(
-        panel: &mut BlueprintEditorPanel,
-        state_key: &str,
-        prop_name: &str,
-        component_index: usize,
-        initial: f32,
-        is_integer: bool,
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) {
-        let key = (state_key.to_string(), prop_name.to_string());
-        if panel.prefab_property_state.numeric_inputs.contains_key(&key) {
-            return;
-        }
-
-        let text = if is_integer {
-            format!("{}", initial as i64)
-        } else {
-            format!("{:.3}", initial)
-        };
-        let input = cx.new(|cx| InputState::new(window, cx));
-        input.update(cx, |state, cx| {
-            state.set_value(&text, window, cx);
-        });
-
-        let pn = prop_name.to_string();
-        cx.subscribe_in(
-            &input,
-            window,
-            move |this: &mut BlueprintEditorPanel, state, event: &InputEvent, _window, cx| {
-                if matches!(event, InputEvent::Change | InputEvent::Blur) {
-                    let text = state.read(cx).text().to_string();
-                    let parsed = if is_integer {
-                        text.trim().parse::<i32>().ok().map(serde_json::Value::from)
-                    } else {
-                        text.trim().parse::<f32>().ok().map(serde_json::Value::from)
-                    };
-                    if let Some(value) = parsed {
-                        this.update_prefab_component_property(component_index, &pn, value);
-                        cx.notify();
-                    }
-                }
-            },
-        )
-        .detach();
-
-        panel.prefab_property_state.numeric_inputs.insert(key, input);
-    }
-
-    /// Ensure a colour-picker widget exists for `prop_name`, stored in
-    /// `panel.prefab_property_state.color_pickers` — see `ensure_numeric_input`
-    /// for why this is built directly rather than via `ensure_color_picker`.
-    fn ensure_color_picker(
-        panel: &mut BlueprintEditorPanel,
-        state_key: &str,
-        prop_name: &str,
-        component_index: usize,
-        rgba: [f32; 4],
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) {
-        let key = (state_key.to_string(), prop_name.to_string());
-        if panel.prefab_property_state.color_pickers.contains_key(&key) {
-            return;
-        }
-
-        let picker = cx.new(|cx| {
-            let mut state = ColorPickerState::new(window, cx);
-            state.set_value(
-                ui_common::reflected_properties_panel::rgba_to_hsla(rgba),
-                window,
-                cx,
-            );
-            state
-        });
-
-        let pn = prop_name.to_string();
-        cx.subscribe_in(
-            &picker,
-            window,
-            move |this: &mut BlueprintEditorPanel, _state, event: &ColorPickerEvent, _window, cx| {
-                if let ColorPickerEvent::Change(Some(hsla)) = event {
-                    this.update_prefab_component_property(
-                        component_index,
-                        &pn,
-                        serde_json::json!(ui_common::reflected_properties_panel::hsla_to_rgba(*hsla)),
-                    );
-                    cx.notify();
-                }
-            },
-        )
-        .detach();
-
-        panel.prefab_property_state.color_pickers.insert(key, picker);
-    }
-
     fn render_component_properties(
         panel: &mut BlueprintEditorPanel,
         index: usize,
@@ -535,34 +416,6 @@ impl PrefabPropertiesRenderer {
             Vec::new();
 
         if let Some(instance) = REGISTRY.create_instance(&class_name) {
-            let panel_entity = cx.entity().clone();
-            let on_bool_toggle = Arc::new(
-                move |prop_name: &str, checked: bool, _window: &mut Window, cx: &mut App| {
-                    panel_entity.update(cx, |panel, cx| {
-                        panel.update_prefab_component_property(
-                            index,
-                            prop_name,
-                            serde_json::Value::Bool(checked),
-                        );
-                        cx.notify();
-                    });
-                },
-            );
-
-            let panel_entity = cx.entity().clone();
-            let on_enum_select = Arc::new(
-                move |prop_name: &str, ix: usize, _window: &mut Window, cx: &mut App| {
-                    panel_entity.update(cx, |panel, cx| {
-                        panel.update_prefab_component_property(
-                            index,
-                            prop_name,
-                            serde_json::Value::from(ix as u64),
-                        );
-                        cx.notify();
-                    });
-                },
-            );
-
             for prop in instance.get_properties() {
                 let current_value = component
                     .data
@@ -576,63 +429,38 @@ impl PrefabPropertiesRenderer {
                             .unwrap_or(serde_json::json!(null))
                     });
 
-                // Numeric inputs — stored in the shared `PropertyStateManager`
-                // (consolidating the old per-feature HashMaps), but constructed
-                // here directly via `cx.subscribe_in` because committing an
-                // edit needs `&mut BlueprintEditorPanel`
-                // (`update_prefab_component_property`) — unlike the level
-                // editor's `scene_db`, the prefab asset lives on the panel
-                // entity itself, so the `Fn(T) + Send + Sync` callback shape
-                // `ensure_f32_input`/`ensure_color_picker` expect can't reach it.
-                match &prop.type_info.structure {
-                    TypeStructure::Primitive if prop.type_info.base_name() == "f32" => {
-                        let v = current_value.as_f64().unwrap_or(0.0) as f32;
-                        Self::ensure_numeric_input(panel, &state_key, prop.name, index, v, false, window, cx);
-                    }
-                    TypeStructure::Primitive if prop.type_info.base_name() == "i32" => {
-                        let v = current_value.as_i64().unwrap_or(0) as f32;
-                        Self::ensure_numeric_input(panel, &state_key, prop.name, index, v, true, window, cx);
-                    }
-                    _ => {}
-                }
+                let current_any: Box<dyn Any> = if current_value.is_null() {
+                    Box::new(())
+                } else {
+                    pulsar_reflection::RUNTIME_TYPE_REGISTRY
+                        .deserialize_json_for_type(prop.type_info, current_value.clone())
+                        .unwrap_or_else(|_| Box::new(()))
+                };
 
-                // Colour picker (`[f32; 4]` primitive or colour-named field)
-                let is_color = matches!(
-                    &prop.type_info.structure,
-                    TypeStructure::Primitive if prop.type_info.base_name() == "[f32; 4]"
-                ) || ui_common::reflected_properties_panel::is_color_field_name(prop.name);
-
-                if is_color {
-                    let rgba = ui_common::reflected_properties_panel::json_to_rgba_fallback(&current_value);
-                    Self::ensure_color_picker(panel, &state_key, prop.name, index, rgba, window, cx);
-                }
-
-                let widgets = panel.prefab_property_state.widget_map_for(&state_key, prop.name);
-
-                let prop_bool = prop.name.to_string();
-                let on_bool = on_bool_toggle.clone();
-                let bool_callback = Arc::new(
-                    move |checked: bool, window: &mut Window, cx: &mut App| {
-                        (on_bool)(&prop_bool, checked, window, cx);
+                let panel_for_wb = cx.entity().clone();
+                let prop_name_for_wb = prop.name.to_string();
+                let write_back = Arc::new(
+                    move |new_val: Box<dyn Any + Send>, _window: &mut Window, cx: &mut App| {
+                        if let Ok(json) = pulsar_reflection::RUNTIME_TYPE_REGISTRY.serialize_json_for_any(new_val.as_ref()) {
+                            panel_for_wb.update(cx, |panel, cx| {
+                                panel.update_prefab_component_property(index, &prop_name_for_wb, json);
+                                cx.notify();
+                            });
+                        }
                     },
                 );
 
-                let prop_enum = prop.name.to_string();
-                let on_enum = on_enum_select.clone();
-                let enum_callback = Arc::new(move |ix: usize, window: &mut Window, cx: &mut App| {
-                    (on_enum)(&prop_enum, ix, window, cx);
-                });
-
                 let row = ui_common::render_property_row_runtime(
+                    &mut panel.prefab_property_state,
                     "prefab",
                     &state_key,
                     &prop.display_name,
                     prop.name,
+                    prop.name,
                     prop.type_info,
-                    &current_value,
-                    widgets,
-                    bool_callback,
-                    enum_callback,
+                    current_any.as_ref(),
+                    write_back,
+                    window,
                     cx,
                 );
 
@@ -779,7 +607,7 @@ impl PrefabPropertiesRenderer {
 /// rows into uncategorised + categorised buckets — direct port of the level
 /// editor's `category_section::group_rows_by_category` so both panels group
 /// reflected properties identically.
-fn group_rows_by_category(
+pub fn group_rows_by_category(
     rows: Vec<(
         AnyElement,
         Option<String>,

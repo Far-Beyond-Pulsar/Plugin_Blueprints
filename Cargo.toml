@@ -19,21 +19,24 @@ name = "standalone_stress"
 path = "examples/standalone_stress.rs"
 test = false
 
+[features]
+# Pulsar statically links this crate when it is used as a built-in editor.
+# Dynamic plugin builds keep the loader ABI exports by default.
+builtin = []
 
 [dependencies]
-# Resolve UI packages from the same Pulsar revision as the engine crates so
-# public GPUI types keep one Cargo package identity in standalone builds.
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
-ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
+# Resolve every public UI and engine type through one current Pulsar revision.
+# Mixing the standalone WGPUI repositories with Pulsar's re-exports creates
+# distinct Cargo package identities for otherwise identical GPUI types.
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
 
+plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "745ee787cc63288463c170aafb778672db8e85ac" }
 
-plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
-ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
-engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
-pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "cf37ed000fedb9a01424c7e575d1d6ee30db7281" }
-
-# PBGC and Graphy must resolve to the revisions paired with current Pulsar.
-# PBGC is pinned to the official upstream merge that current Pulsar vendors.
+# Compiler graph types paired with the current Blueprint integration.
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
 pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "3aaa5100ce05bdccf361e68201252e944f57242d" }
 # Utilities
@@ -71,8 +74,14 @@ windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D12", "Win32_
 parking_lot = "0.12"
 
 [patch."https://github.com/Far-Beyond-Pulsar/WGPUI"]
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
 
 [patch."https://github.com/Far-Beyond-Pulsar/WGPUI-Component"]
-ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
-ui-macros = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "38bbbd93a5986c43955af8879380ee544025abbb" }
+ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+ui-macros = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "bbe5ecd3f10746c7ba580a113c06b8e4b6e5d0e2" }
+
+# Helio's internal SceneDB pin predates the World subscription rework
+# (SceneDB#47) that Pulsar-Native#575 consumes; unify on one copy so
+# `World`/`ComponentId`/`Pod` types keep a single identity across the seam.
+[patch."https://github.com/Far-Beyond-Pulsar/SceneDB"]
+pulsar_scenedb = { git = "https://github.com/Far-Beyond-Pulsar//SceneDB", rev = "c761890789b3e3c16b362a91769570bd587e5ac6" }

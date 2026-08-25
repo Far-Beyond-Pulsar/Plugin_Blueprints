@@ -11,6 +11,7 @@ pub mod comments;
 pub mod compilation;
 pub mod connections;
 pub mod debug;
+pub mod events;
 pub mod macros;
 pub mod nodes;
 pub mod prefabs;

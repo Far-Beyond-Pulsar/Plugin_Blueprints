@@ -7,8 +7,15 @@ use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
 
 impl GraphCanvasPanel {
-    /// Select a single node (or clear selection if None)
+    /// Select a single node (or clear selection if None).
+    /// Also clears sidebar selections for mutual exclusivity.
     pub fn select_node(&mut self, node_id: Option<String>, cx: &mut Context<Self>) {
+        if let Some(panel) = self.panel.upgrade() {
+            panel.update(cx, |panel, cx| {
+                panel.clear_sidebar_selections(false, false, false, false);
+                cx.notify();
+            });
+        }
         self.graph.selected_nodes.clear();
         if let Some(id) = node_id {
             self.graph.selected_nodes.push(id);
@@ -41,7 +48,9 @@ impl GraphCanvasPanel {
         }
     }
 
-    /// End selection drag
+    /// End selection drag.
+    /// Also clears sidebar selections for mutual exclusivity when a rubber-band
+    /// selection produces actual selected items.
     pub fn end_selection_drag(&mut self, cx: &mut Context<Self>) {
         // If selection box was very small, treat as click and clear selection
         if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
@@ -49,6 +58,16 @@ impl GraphCanvasPanel {
             if distance < 5.0 {
                 self.graph.selected_nodes.clear();
                 tracing::info!("[SELECTION] Cleared selection (click on empty space)");
+            }
+        }
+
+        // Clear sidebar selections when graph items are selected via rubber-band
+        if !self.graph.selected_nodes.is_empty() || !self.graph.selected_comments.is_empty() {
+            if let Some(panel) = self.panel.upgrade() {
+                panel.update(cx, |panel, cx| {
+                    panel.clear_sidebar_selections(false, false, false, false);
+                    cx.notify();
+                });
             }
         }
 

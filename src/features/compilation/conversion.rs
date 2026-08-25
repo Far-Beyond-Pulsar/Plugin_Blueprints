@@ -148,6 +148,81 @@ impl BlueprintEditorPanel {
                     NodeType::Reroute,
                     None,
                 )
+            } else if let Some(uid) = definition_id.strip_prefix("custom_event:") {
+                let event_def = self.local_event_defs.iter().find(|d| d.uid == uid);
+                let name = event_def
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| {
+                        uid.replace('-', " ")
+                            .split_whitespace()
+                            .map(|w| {
+                                let mut c = w.chars();
+                                match c.next() {
+                                    None => String::new(),
+                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    });
+                (
+                    format!("On {}", name),
+                    "📡".to_string(),
+                    format!("Custom event listener for '{}'", uid),
+                    NodeType::CustomEvent,
+                    None,
+                )
+            } else if let Some(uid) = definition_id.strip_prefix("custom_event_dispatch:") {
+                let event_def = self.local_event_defs.iter().find(|d| d.uid == uid);
+                let name = event_def
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| {
+                        uid.replace('-', " ")
+                            .split_whitespace()
+                            .map(|w| {
+                                let mut c = w.chars();
+                                match c.next() {
+                                    None => String::new(),
+                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    });
+                (
+                    format!("Dispatch {}", name),
+                    "📡".to_string(),
+                    format!("Dispatch the '{}' custom event", uid),
+                    NodeType::CustomEventDispatch,
+                    None,
+                )
+            } else if let Some(macro_id) = definition_id.strip_prefix("macro:") {
+                let macro_name = self
+                    .local_macros
+                    .iter()
+                    .find(|m| m.id == macro_id)
+                    .or_else(|| self.library_manager.get_subgraph(macro_id))
+                    .map(|m| m.name.clone())
+                    .unwrap_or_else(|| {
+                        let name = macro_id.replace('-', " ");
+                        name.split_whitespace()
+                            .map(|w| {
+                                let mut c = w.chars();
+                                match c.next() {
+                                    None => String::new(),
+                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    });
+                (
+                    macro_name,
+                    "📦".to_string(),
+                    format!("Instance of macro '{}'", macro_id),
+                    NodeType::MacroInstance,
+                    Some("#9B59B6".to_string()),
+                )
             } else if let Some(def) = node_def {
                 // Event entry-points are identified by their underlying Blueprint
                 // node type, not by category — events such as `on_input_key`/
@@ -180,19 +255,8 @@ impl BlueprintEditorPanel {
                 )
             };
 
-            let bp_node = BlueprintNode {
-                id: node_id.clone(),
-                definition_id,
-                title,
-                icon,
-                node_type,
-                position: Point::new(node_instance.position.x, node_instance.position.y),
-                size: {
-                    let max_pins = node_instance.inputs.len().max(node_instance.outputs.len());
-                    let height = layout::node_height_for_pin_rows(max_pins);
-                    crate::Size::new(240.0, height)
-                },
-                inputs: node_instance
+                // Ensure custom event On nodes always have the __return__ header pin
+                let mut node_inputs: Vec<Pin> = node_instance
                     .inputs
                     .iter()
                     .map(|pin_inst| {
@@ -208,7 +272,30 @@ impl BlueprintEditorPanel {
                             data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
                         }
                     })
-                    .collect(),
+                    .collect();
+                if node_type == NodeType::CustomEvent
+                    && !node_inputs.iter().any(|p| p.id == "__return__")
+                {
+                    node_inputs.insert(0, Pin {
+                        id: "__return__".to_string(),
+                        name: String::new(),
+                        pin_type: PinType::Input,
+                        data_type: crate::core::types::PinDataType::from_type_str("?"),
+                    });
+                }
+                let bp_node = BlueprintNode {
+                id: node_id.clone(),
+                definition_id,
+                title,
+                icon,
+                node_type,
+                position: Point::new(node_instance.position.x, node_instance.position.y),
+                size: {
+                    let max_pins = node_instance.inputs.len().max(node_instance.outputs.len());
+                    let height = layout::node_height_for_pin_rows(max_pins);
+                    crate::Size::new(240.0, height)
+                },
+                inputs: node_inputs,
                 outputs: node_instance
                     .outputs
                     .iter()

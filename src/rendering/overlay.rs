@@ -183,7 +183,7 @@ pub fn render_debug_overlay(
                                     div()
                                         .text_sm()
                                         .font_bold()
-                                        .text_color(cx.theme().accent)
+                                        .text_color(cx.theme().foreground)
                                         .child("Blueprint Viewport Debug"),
                                 )
                                 .child(

@@ -100,6 +100,8 @@ fn node_icon(nt: &NodeType) -> &'static str {
         NodeType::MacroEntry => "→",
         NodeType::MacroExit => "←",
         NodeType::MacroInstance => "⊡",
+        NodeType::CustomEvent => "◆",
+        NodeType::CustomEventDispatch => "◇",
     }
 }
 

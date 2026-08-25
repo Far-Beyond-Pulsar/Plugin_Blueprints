@@ -81,16 +81,39 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let is_selected = (in.flags & 2u) != 0u;
     let is_running = (in.flags & 4u) != 0u;
 
+    if is_reroute {
+        // Draw as a circle (not a rounded rect) with a centered indicator dot.
+        let local_px = in.uv * in.size_px;
+        let mid = in.size_px * 0.5;
+        let radius = min(mid.x, mid.y);
+        let circle_d = length(local_px - mid) - radius;
+        let circle_aa = 1.0 - smoothstep(-0.5, 0.5, circle_d);
+        if circle_aa <= 0.0 { discard; }
+
+        let circle_edge = smoothstep(-BORDER_PX - 0.5, -BORDER_PX + 0.5, circle_d)
+                       * smoothstep(-0.5, 0.5, -circle_d);
+        var col = mix(in.body_color, in.border_color, circle_edge);
+
+        // Inner indicator: a smaller filled circle at centre.
+        let inner_r = radius * 0.28;
+        let inner_d = length(local_px - mid) - inner_r;
+        let inner_fill = 1.0 - smoothstep(-0.5, 0.5, inner_d);
+        col = mix(col, vec4(1.0, 1.0, 1.0, 1.0), inner_fill * 0.35);
+
+        // Running pulse (subtle glow behind the reroute dot).
+        if (in.flags & 4u) != 0u {
+            let pulse = 0.55 + 0.45 * sin(u.time * 6.0);
+            let run_glow = 1.0 - smoothstep(0.0, radius, circle_d);
+            col = mix(col, vec4(1.0, 1.0, 1.0, 1.0), run_glow * pulse * 0.08);
+        }
+
+        return vec4(col.rgb, col.a * circle_aa);
+    }
+
     let local_px = in.uv * in.size_px;
     let d = sdf_rrect(local_px, in.size_px, in.corner_r_px);
     let aa = 1.0 - smoothstep(-0.5, 0.5, d);
     if aa <= 0.0 { discard; }
-
-    if is_reroute {
-        let edge = smoothstep(-BORDER_PX - 0.5, -BORDER_PX + 0.5, d) * smoothstep(-0.5, 0.5, -d);
-        let dot_col = mix(in.body_color, in.border_color, edge);
-        return vec4(dot_col.rgb, dot_col.a * aa);
-    }
 
     let y = local_px.y;
     let header_h_px = in.header_h_frac * in.size_px.y;

@@ -7,7 +7,8 @@
 //! - Row-height constants
 //! - Helper functions for building, filtering, and sizing the list
 
-use crate::core::definitions::{NodeDefinition, NodeDefinitions};
+use crate::core::definitions::{NodeDefinition, NodeDefinitions, PinDefinition};
+use crate::core::types::PinType;
 use gpui::{px, size, Pixels, Size};
 use std::rc::Rc;
 
@@ -56,7 +57,9 @@ impl PaletteItem {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Build the complete flat list from the global node definitions.
+/// Build the complete flat list from the global node definitions,
+/// optionally augmented with custom event dispatch entries and the
+/// "Add Custom Event" sentinel.
 ///
 /// The list is ordered: category header, then all nodes in that category,
 /// then the next category header, and so on.
@@ -71,6 +74,46 @@ pub fn build_palette_items(defs: &NodeDefinitions) -> Vec<PaletteItem> {
         for def in &category.nodes {
             items.push(PaletteItem::NodeEntry {
                 def: def.clone(),
+                category_color: category.color.clone(),
+            });
+        }
+
+        // Inject "Add Custom Event" sentinel into the Events category.
+        if category.name == "Events" {
+            items.push(PaletteItem::NodeEntry {
+                def: NodeDefinition {
+                    id: "__add_custom_event__".to_string(),
+                    name: "Add Custom Event".to_string(),
+                    icon: "📡".to_string(),
+                    description: "Create a new custom event definition".to_string(),
+                    documentation: String::new(),
+                    inputs: Vec::new(),
+                    outputs: Vec::new(),
+                    properties: std::collections::HashMap::new(),
+                    color: Some("#E67E22".to_string()),
+                    is_event: false,
+                },
+                category_color: category.color.clone(),
+            });
+            // Test node that returns a fn pointer (for testing return pin connections)
+            items.push(PaletteItem::NodeEntry {
+                def: NodeDefinition {
+                    id: "__fn_return_test__".to_string(),
+                    name: "FnReturn (test)".to_string(),
+                    icon: "🔙".to_string(),
+                    description: "Test node that outputs a fn pointer (f32 -> f32)".to_string(),
+                    documentation: String::new(),
+                    inputs: vec![PinDefinition {
+                        id: "__fn_ptr__".to_string(),
+                        name: "fn(f32)->f32".to_string(),
+                        data_type: crate::core::types::PinDataType::from_type_str("fn(f32)->f32"),
+                        pin_type: PinType::Input,
+                    }],
+                    outputs: Vec::new(),
+                    properties: std::collections::HashMap::new(),
+                    color: Some("#FF3333".to_string()),
+                    is_event: false,
+                },
                 category_color: category.color.clone(),
             });
         }

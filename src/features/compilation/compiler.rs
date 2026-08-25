@@ -105,38 +105,32 @@ fn pin_data_type_to_graphy(dt: &crate::core::types::PinDataType) -> pbgc::DataTy
 /// `pbgc::GraphDescription` shape the compiler and `SubGraphExpander` operate
 /// on.
 ///
-/// Mirrors the node/pin/connection filtering used for the main event graph
-/// (skips editor-only `get_component_ref::` wiring helpers and strips the
-/// synthetic `component_ref` pin from `comp_*` nodes), and additionally remaps
-/// the editor's `macro_entry`/`macro_exit` interface nodes to the
+/// Identity-reference nodes (`get_component_ref::`, `find_object_by_*`,
+/// `object_ref_literal`) and `comp_*` nodes' synthetic `component_ref` pins
+/// compile like any other node/pin since #654 — PBGC routes them to runtime
+/// reference resolution. This function additionally remaps the editor's
+/// `macro_entry`/`macro_exit` interface nodes to the
 /// `subgraph_entry`/`subgraph_exit` node-type strings that
 /// `graphy::NodeInstance::kind()` recognises as macro interface points — the
 /// expander rewires call-site connections through these during inlining.
-fn convert_ui_graph_description_to_pbgc(ui_graph: &ui::graph::GraphDescription) -> pbgc::GraphDescription {
+///
+/// `pub(crate)` since #656: the disk-level PIE preflight reuses this exact
+/// conversion so validation sees byte-identical graphs to codegen.
+pub(crate) fn convert_ui_graph_description_to_pbgc(ui_graph: &ui::graph::GraphDescription) -> pbgc::GraphDescription {
     use pbgc::Connection as GConnection;
     use pbgc::{ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position};
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     let mut graph = GraphDescription::new("Subgraph");
-    let mut skipped_nodes: HashSet<String> = HashSet::new();
     let mut valid_input_pins: HashMap<String, HashSet<String>> = HashMap::new();
     let mut valid_output_pins: HashMap<String, HashSet<String>> = HashMap::new();
 
     for (node_id, node_instance) in &ui_graph.nodes {
-        if node_instance.node_type.starts_with("get_component_ref::") {
-            skipped_nodes.insert(node_id.clone());
-            continue;
-        }
-
         let node_type = match node_instance.node_type.as_str() {
             "macro_entry" => "subgraph_entry".to_string(),
             "macro_exit" => "subgraph_exit".to_string(),
             other => other.to_string(),
         };
-        let is_component_method_node = node_type.starts_with("comp_get_prop::")
-            || node_type.starts_with("comp_set_prop::")
-            || node_type.starts_with("comp_call::");
-
         let mut node = NodeInstance {
             id: node_id.clone(),
             node_type,
@@ -155,9 +149,6 @@ fn convert_ui_graph_description_to_pbgc(ui_graph: &ui::graph::GraphDescription) 
         };
 
         for pin_inst in &node_instance.inputs {
-            if is_component_method_node && pin_inst.id == "component_ref" {
-                continue;
-            }
             node.inputs.push(PinInstance {
                 id: pin_inst.id.clone(),
                 pin: Pin {
@@ -192,9 +183,6 @@ fn convert_ui_graph_description_to_pbgc(ui_graph: &ui::graph::GraphDescription) 
     }
 
     for conn in &ui_graph.connections {
-        if skipped_nodes.contains(&conn.source_node) || skipped_nodes.contains(&conn.target_node) {
-            continue;
-        }
         let Some(source_pins) = valid_output_pins.get(&conn.source_node) else {
             continue;
         };
@@ -347,7 +335,10 @@ impl BlueprintEditorPanel {
     /// previous behaviour) silently dropped macro bodies — PBGC's metadata
     /// provider doesn't recognise `"macro:<id>"` as a node type, so those
     /// instances would compile to nothing.
-    fn build_graphy_description(&self) -> Result<pbgc::GraphDescription, String> {
+    ///
+    /// `pub(crate)` since #656 — the validation stage runs the SAME expanded
+    /// graph codegen consumes.
+    pub(crate) fn build_graphy_description(&self) -> Result<pbgc::GraphDescription, String> {
         use pbgc::Connection as GConnection;
         use pbgc::{
             ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
@@ -355,23 +346,22 @@ impl BlueprintEditorPanel {
         use std::collections::HashSet;
 
         let mut graph = GraphDescription::new("Blueprint Graph");
-        let mut skipped_nodes: HashSet<String> = HashSet::new();
         let mut valid_input_pins: HashMap<String, HashSet<String>> = HashMap::new();
         let mut valid_output_pins: HashMap<String, HashSet<String>> = HashMap::new();
         let main_tab = self.main_graph_tab();
 
         // Nodes
         for bp_node in &main_tab.graph.nodes {
-            // Runtime component reference nodes are editor-only wiring helpers.
-            if bp_node.definition_id.starts_with("get_component_ref::") {
-                skipped_nodes.insert(bp_node.id.clone());
-                continue;
-            }
-
-            let node_type = bp_node.definition_id.clone();
-            let is_component_method_node = node_type.starts_with("comp_get_prop::")
-                || node_type.starts_with("comp_set_prop::")
-                || node_type.starts_with("comp_call::");
+            // Custom event On nodes → treat as event entry points named after the uid.
+            // Custom event Dispatch nodes → emit_custom_event with an event_uid property.
+            let node_type = if bp_node.definition_id.starts_with("custom_event:") {
+                let uid = bp_node.definition_id.trim_start_matches("custom_event:");
+                format!("on_{}", uid.replace('-', "_"))
+            } else if bp_node.definition_id.starts_with("custom_event_dispatch:") {
+                "emit_custom_event".to_string()
+            } else {
+                bp_node.definition_id.clone()
+            };
             let mut node = NodeInstance {
                 id: bp_node.id.clone(),
                 node_type,
@@ -390,12 +380,6 @@ impl BlueprintEditorPanel {
             };
 
             for pin in &bp_node.inputs {
-                // The UI exposes component-ref pins, but current PBGC node handlers
-                // still compile component nodes by class/property/method id.
-                // Strip the editor-only target ref pin before codegen.
-                if is_component_method_node && pin.id == "component_ref" {
-                    continue;
-                }
                 node.inputs.push(PinInstance {
                     id: pin.id.clone(),
                     pin: Pin {
@@ -431,11 +415,6 @@ impl BlueprintEditorPanel {
 
         // Connections
         for conn in &main_tab.graph.connections {
-            if skipped_nodes.contains(&conn.source_node)
-                || skipped_nodes.contains(&conn.target_node)
-            {
-                continue;
-            }
             let Some(source_pins) = valid_output_pins.get(&conn.source_node) else {
                 continue;
             };

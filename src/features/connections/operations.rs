@@ -25,7 +25,14 @@ impl GraphCanvasPanel {
         cx: &mut Context<Self>,
     ) {
         if let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id) {
-            if let Some(pin) = node.outputs.iter().find(|p| p.id == pin_id) {
+            // Allow dragging from special header/fn-ptr pins even though they're in inputs
+            let is_special = pin_id == "__return__" || pin_id == "__fn_ptr__";
+            let pin = if is_special {
+                node.inputs.iter().chain(node.outputs.iter()).find(|p| p.id == pin_id)
+            } else {
+                node.outputs.iter().find(|p| p.id == pin_id)
+            };
+            if let Some(pin) = pin {
                 tracing::info!(
                     "Starting connection drag from pin {} on node {}",
                     pin_id,

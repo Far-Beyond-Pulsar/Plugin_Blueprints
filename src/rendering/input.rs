@@ -80,14 +80,13 @@ fn hit_node<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str>
 
 fn hit_output_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, String)> {
     for node in &canvas.graph.nodes {
+        let r = if node.node_type == NodeType::Reroute {
+            (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+        } else {
+            pin_hit_radius(canvas, 0.9, 6.0)
+        };
         for (i, pin) in node.outputs.iter().enumerate() {
-            let c = NodeGraphRenderer::pin_canvas_pos(node, false, i, &canvas.graph);
-            let r = if node.node_type == NodeType::Reroute {
-                // Inner 40% of the reroute circle — small pin grab area.
-                (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
-            } else {
-                pin_hit_radius(canvas, 0.9, 6.0)
-            };
+            let c = NodeGraphRenderer::pin_canvas_pos(node, false, i, Some(pin.id.as_str()), &canvas.graph);
             if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
@@ -103,6 +102,11 @@ fn hit_input_pin(
     src_type: &DataType,
 ) -> Option<(String, String)> {
     for node in &canvas.graph.nodes {
+        let r = if node.node_type == NodeType::Reroute {
+            (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+        } else {
+            pin_hit_radius(canvas, 1.3, 8.0)
+        };
         if node.id == skip_node {
             continue;
         }
@@ -110,13 +114,7 @@ fn hit_input_pin(
             if !src_type.is_compatible_with(&pin.data_type) {
                 continue;
             }
-            let c = NodeGraphRenderer::pin_canvas_pos(node, true, i, &canvas.graph);
-            let r = if node.node_type == NodeType::Reroute {
-                // Inner 40% of the reroute circle — small pin grab area.
-                (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
-            } else {
-                pin_hit_radius(canvas, 1.3, 8.0)
-            };
+            let c = NodeGraphRenderer::pin_canvas_pos(node, true, i, Some(pin.id.as_str()), &canvas.graph);
             if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
@@ -126,11 +124,17 @@ fn hit_input_pin(
 }
 
 fn hit_any_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, String)> {
-    let r = pin_hit_radius(canvas, 1.2, 8.0);
     for node in &canvas.graph.nodes {
+        let r = if node.node_type == NodeType::Reroute {
+            (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+        } else {
+            pin_hit_radius(canvas, 1.2, 8.0)
+        };
         for (is_input, pins) in [(true, &node.inputs), (false, &node.outputs)] {
             for (i, pin) in pins.iter().enumerate() {
-                let c = NodeGraphRenderer::pin_canvas_pos(node, is_input, i, &canvas.graph);
+                let c = NodeGraphRenderer::pin_canvas_pos(
+                    node, is_input, i, Some(pin.id.as_str()), &canvas.graph,
+                );
                 if point_distance(cp, c) <= r {
                     return Some((node.id.clone(), pin.id.clone()));
                 }
@@ -326,6 +330,9 @@ pub fn on_mouse_down_left(
                 cx.notify();
             }
 
+            // Clear sidebar selections for mutual exclusivity on any graph click
+            canvas.clear_sidebar_selections(cx);
+
             let cp = to_canvas(event.position, canvas);
             let gp = to_graph(cp, canvas);
 
@@ -397,6 +404,16 @@ pub fn on_mouse_down_left(
                 return;
             }
 
+            // Also check input pins (like __return__ header pin) before falling through to node drag
+            if let Some((node_id, pin_id)) = hit_any_pin(cp, canvas) {
+                canvas.last_comment_click_time = None;
+                canvas.last_comment_click_pos = None;
+                canvas.last_comment_click_id = None;
+                canvas.start_connection_drag_from_pin(node_id, pin_id, gp, cx);
+                update_graph_cursor(window, canvas, cp, gp);
+                return;
+            }
+
             if let Some(node_id) = hit_node(gp, canvas).map(str::to_owned) {
                 canvas.last_comment_click_time = None;
                 canvas.last_comment_click_pos = None;
@@ -438,6 +455,36 @@ pub fn on_mouse_down_left(
                                 return;
                             }
                         }
+                        // Double-click on dispatch node → pan to the event handler
+                        if node.node_type == NodeType::CustomEventDispatch {
+                            if let Some(uid) = node.properties.get("event_uid") {
+                                let handler_def_id = format!("custom_event:{}", uid);
+                                if canvas.graph.nodes.iter().any(|n| n.definition_id == handler_def_id) {
+                                    canvas.animate_pan_to_node_by_def_id(&handler_def_id);
+                                }
+                            }
+                            canvas.last_click_time = None;
+                            canvas.last_click_pos = None;
+                            return;
+                        }
+
+                        // Double-click on custom event node – select in events sidebar
+                        if node.node_type == NodeType::CustomEvent
+                        {
+                            if let Some(uid) = node.properties.get("event_uid") {
+                                if let Some(panel) = canvas.panel.upgrade() {
+                                    panel.update(cx, |panel, cx| {
+                                        if let Some(idx) = panel.local_event_defs.iter().position(|d| d.uid == *uid) {
+                                            panel.selected_event = Some(idx);
+                                            cx.notify();
+                                        }
+                                    });
+                                }
+                            }
+                            canvas.last_click_time = None;
+                            canvas.last_click_pos = None;
+                            return;
+                        }
                     }
                     canvas.last_click_time = None;
                     canvas.last_click_pos = None;
@@ -478,6 +525,12 @@ pub fn on_mouse_down_left(
             }
 
             if let Some(comment_id) = hit_comment(gp, canvas).map(str::to_owned) {
+                // Check for double-click on connection line first (reroute)
+                if canvas.handle_empty_space_click(gp, cx) {
+                    update_graph_cursor(window, canvas, cp, gp);
+                    return;
+                }
+
                 if !event.modifiers.control {
                     canvas.graph.selected_nodes.clear();
                     canvas.graph.selected_comments.clear();
@@ -490,12 +543,13 @@ pub fn on_mouse_down_left(
                 return;
             }
 
-            // Empty space — check for double-click on connection (reroute)
+            // Empty space — try double-click on connection for reroute first
             if canvas.handle_empty_space_click(gp, cx) {
                 update_graph_cursor(window, canvas, cp, gp);
                 return;
             }
-            // Empty space — start selection drag
+
+            // Single click — start selection drag
             if !event.modifiers.control {
                 canvas.graph.selected_nodes.clear();
                 canvas.graph.selected_comments.clear();
@@ -597,9 +651,10 @@ pub fn on_mouse_up_left(
             } else if canvas.dragging_variable.is_some() {
                 canvas.finish_dragging_variable(gp, cx);
             } else if let Some(drag) = canvas.dragging_connection.clone() {
-                if let Some((nid, pid)) =
-                    hit_input_pin(cp, canvas, &drag.source_node, &drag.source_pin_type)
-                {
+                // Try dropping on any pin (input or output) before falling through to palette
+                let drop_target = hit_input_pin(cp, canvas, &drag.source_node, &drag.source_pin_type)
+                    .or_else(|| hit_any_pin(cp, canvas));
+                if let Some((nid, pid)) = drop_target {
                     canvas.complete_connection_on_pin(nid, pid, cx);
                 } else {
                     canvas.popup_palette_graph_pos = Some(gp);
