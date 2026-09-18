@@ -246,7 +246,7 @@ impl PrefabHierarchyRenderer {
     fn render_component_item(
         panel: &BlueprintEditorPanel,
         idx: usize,
-        component: engine_backend::scene::metadata::ComponentInstance,
+        component: engine_backend::scene::ComponentInstance,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         let selected = panel.selected_prefab_component == Some(idx);

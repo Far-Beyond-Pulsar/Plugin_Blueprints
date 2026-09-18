@@ -10,7 +10,7 @@ pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
 use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
-use engine_backend::scene::metadata::ComponentInstance;
+use engine_backend::scene::ComponentInstance;
 use gpui::{AppContext, Context, Entity, Window};
 use pulsar_reflection::{REGISTRY, RUNTIME_TYPE_REGISTRY};
 use serde::{Deserialize, Serialize};
