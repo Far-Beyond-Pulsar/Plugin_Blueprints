@@ -275,6 +275,7 @@ pub struct TextRenderer {
     pipeline: Option<wgpu::RenderPipeline>,
     vert_buf: Option<wgpu::Buffer>,
     vert_cap: u64,
+    vert_shadow: Vec<u8>,
     atlas_bg: Option<wgpu::BindGroup>,
     atlas_bgl: Option<wgpu::BindGroupLayout>,
     uni_bgl: Option<wgpu::BindGroupLayout>,
@@ -288,6 +289,7 @@ impl TextRenderer {
             pipeline: None,
             vert_buf: None,
             vert_cap: 0,
+            vert_shadow: Vec::new(),
             atlas_bg: None,
             atlas_bgl: None,
             uni_bgl: None,
@@ -409,7 +411,9 @@ impl TextRenderer {
         // Upload vertex buffer
         let bytes = bytemuck::cast_slice(&self.verts);
         let needed = bytes.len() as u64;
+        let mut grew = false;
         if needed > self.vert_cap {
+            grew = true;
             self.vert_cap = (needed * 2).max(4096);
             self.vert_buf = Some(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("text_verts"),
@@ -419,7 +423,7 @@ impl TextRenderer {
             }));
         }
         if let Some(vb) = &self.vert_buf {
-            queue.write_buffer(vb, 0, bytes);
+            super::delta::delta_write(queue, vb, &mut self.vert_shadow, bytes, grew);
         }
 
         // Draw
@@ -590,7 +594,9 @@ impl TextRenderer {
 
         let bytes = bytemuck::cast_slice(&self.verts);
         let needed = bytes.len() as u64;
+        let mut grew = false;
         if needed > self.vert_cap {
+            grew = true;
             self.vert_cap = (needed * 2).max(4096);
             self.vert_buf = Some(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("text_verts"),
@@ -600,7 +606,7 @@ impl TextRenderer {
             }));
         }
         if let Some(vb) = &self.vert_buf {
-            queue.write_buffer(vb, 0, bytes);
+            super::delta::delta_write(queue, vb, &mut self.vert_shadow, bytes, grew);
         }
 
         if let (Some(pipeline), Some(vb), Some(atlas_bg)) =

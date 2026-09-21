@@ -31,6 +31,7 @@ struct NodeState {
     uni_bg: wgpu::BindGroup,
     inst_buf: wgpu::Buffer,
     inst_cap: u64,
+    shadow: Vec<u8>,
 }
 
 struct CommentState {
@@ -39,6 +40,7 @@ struct CommentState {
     uni_bg: wgpu::BindGroup,
     inst_buf: wgpu::Buffer,
     inst_cap: u64,
+    shadow: Vec<u8>,
 }
 
 /// Instanced bezier wire pipeline — one instance per connection.
@@ -48,6 +50,7 @@ struct BezierState {
     uni_bg: wgpu::BindGroup,
     inst_buf: wgpu::Buffer,
     inst_cap: u64,
+    shadow: Vec<u8>,
 }
 
 /// Vertex-buffer straight-line pipeline — used only for selection box outline.
@@ -57,6 +60,7 @@ struct LineState {
     uni_bg: wgpu::BindGroup,
     vert_buf: wgpu::Buffer,
     vert_cap: u64,
+    shadow: Vec<u8>,
 }
 
 struct PinState {
@@ -65,6 +69,7 @@ struct PinState {
     uni_bg: wgpu::BindGroup,
     inst_buf: wgpu::Buffer,
     inst_cap: u64,
+    shadow: Vec<u8>,
 }
 
 // ─── public renderer ──────────────────────────────────────────────────────────
@@ -165,14 +170,14 @@ impl BpRenderer {
                 if let Some(cs) = &mut self.comments {
                     queue.write_buffer(&cs.uni_buf, 0, uni_bytes);
                     let bytes = bytemuck::cast_slice(comment_instances);
-                    Self::ensure_buf(
+                    let grew = Self::ensure_buf(
                         device,
                         &mut cs.inst_buf,
                         &mut cs.inst_cap,
                         bytes,
                         wgpu::BufferUsages::VERTEX,
                     );
-                    queue.write_buffer(&cs.inst_buf, 0, bytes);
+                    super::delta::delta_write(queue, &cs.inst_buf, &mut cs.shadow, bytes, grew);
                     pass.set_pipeline(&cs.pipeline);
                     pass.set_bind_group(0, &cs.uni_bg, &[]);
                     pass.set_vertex_buffer(0, cs.inst_buf.slice(..));
@@ -186,14 +191,14 @@ impl BpRenderer {
                 if let Some(bs) = &mut self.bezier {
                     queue.write_buffer(&bs.uni_buf, 0, uni_bytes);
                     let bytes = bytemuck::cast_slice(wire_instances);
-                    Self::ensure_buf(
+                    let grew = Self::ensure_buf(
                         device,
                         &mut bs.inst_buf,
                         &mut bs.inst_cap,
                         bytes,
                         wgpu::BufferUsages::VERTEX,
                     );
-                    queue.write_buffer(&bs.inst_buf, 0, bytes);
+                    super::delta::delta_write(queue, &bs.inst_buf, &mut bs.shadow, bytes, grew);
                     pass.set_pipeline(&bs.pipeline);
                     pass.set_bind_group(0, &bs.uni_bg, &[]);
                     pass.set_vertex_buffer(0, bs.inst_buf.slice(..));
@@ -207,14 +212,14 @@ impl BpRenderer {
                 if let Some(ls) = &mut self.lines {
                     queue.write_buffer(&ls.uni_buf, 0, uni_bytes);
                     let bytes = bytemuck::cast_slice(line_verts);
-                    Self::ensure_buf(
+                    let grew = Self::ensure_buf(
                         device,
                         &mut ls.vert_buf,
                         &mut ls.vert_cap,
                         bytes,
                         wgpu::BufferUsages::VERTEX,
                     );
-                    queue.write_buffer(&ls.vert_buf, 0, bytes);
+                    super::delta::delta_write(queue, &ls.vert_buf, &mut ls.shadow, bytes, grew);
                     pass.set_pipeline(&ls.pipeline);
                     pass.set_bind_group(0, &ls.uni_bg, &[]);
                     pass.set_vertex_buffer(0, ls.vert_buf.slice(..));
@@ -227,14 +232,14 @@ impl BpRenderer {
                 if let Some(ns) = &mut self.nodes {
                     queue.write_buffer(&ns.uni_buf, 0, uni_bytes);
                     let bytes = bytemuck::cast_slice(nodes);
-                    Self::ensure_buf(
+                    let grew = Self::ensure_buf(
                         device,
                         &mut ns.inst_buf,
                         &mut ns.inst_cap,
                         bytes,
                         wgpu::BufferUsages::VERTEX,
                     );
-                    queue.write_buffer(&ns.inst_buf, 0, bytes);
+                    super::delta::delta_write(queue, &ns.inst_buf, &mut ns.shadow, bytes, grew);
                     pass.set_pipeline(&ns.pipeline);
                     pass.set_bind_group(0, &ns.uni_bg, &[]);
                     pass.set_vertex_buffer(0, ns.inst_buf.slice(..));
@@ -247,14 +252,14 @@ impl BpRenderer {
                 if let Some(ps) = &mut self.pins {
                     queue.write_buffer(&ps.uni_buf, 0, uni_bytes);
                     let bytes = bytemuck::cast_slice(pins);
-                    Self::ensure_buf(
+                    let grew = Self::ensure_buf(
                         device,
                         &mut ps.inst_buf,
                         &mut ps.inst_cap,
                         bytes,
                         wgpu::BufferUsages::VERTEX,
                     );
-                    queue.write_buffer(&ps.inst_buf, 0, bytes);
+                    super::delta::delta_write(queue, &ps.inst_buf, &mut ps.shadow, bytes, grew);
                     pass.set_pipeline(&ps.pipeline);
                     pass.set_bind_group(0, &ps.uni_bg, &[]);
                     pass.set_vertex_buffer(0, ps.inst_buf.slice(..));
@@ -296,7 +301,7 @@ impl BpRenderer {
         cap: &mut u64,
         data: &[u8],
         usage: wgpu::BufferUsages,
-    ) {
+    ) -> bool {
         let needed = data.len() as u64;
         if needed > *cap {
             *cap = (needed * 2).max(256);
@@ -306,7 +311,9 @@ impl BpRenderer {
                 usage: usage | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
+            return true;
         }
+        false
     }
 
     // ── pipeline creators ─────────────────────────────────────────────────────
@@ -420,6 +427,7 @@ impl BpRenderer {
             uni_bg,
             inst_buf,
             inst_cap: 256,
+            shadow: Vec::new(),
         }
     }
 
@@ -534,6 +542,7 @@ impl BpRenderer {
             uni_bg,
             inst_buf,
             inst_cap: init_cap,
+            shadow: Vec::new(),
         }
     }
 
@@ -606,6 +615,7 @@ impl BpRenderer {
             uni_bg,
             inst_buf,
             inst_cap: init_cap,
+            shadow: Vec::new(),
         }
     }
 
@@ -670,6 +680,7 @@ impl BpRenderer {
             uni_bg,
             vert_buf,
             vert_cap: init_cap,
+            shadow: Vec::new(),
         }
     }
 
@@ -739,6 +750,7 @@ impl BpRenderer {
             uni_bg,
             inst_buf,
             inst_cap: init_cap,
+            shadow: Vec::new(),
         }
     }
 }

@@ -938,7 +938,21 @@ impl NodeGraphRenderer {
                             || (canvas.wire_active_test_mode
                                 && !canvas.graph.selected_nodes.is_empty())
                         {
-                            cx.notify();
+                            // Running-node glow animates, but a full redraw
+                            // re-lays-out the editor tree: cap it at ~30 Hz.
+                            if !canvas.anim_notify_pending {
+                                canvas.anim_notify_pending = true;
+                                cx.spawn(async move |this, cx| {
+                                    cx.background_executor()
+                                        .timer(std::time::Duration::from_millis(33))
+                                        .await;
+                                    let _ = this.update(cx, |this, cx| {
+                                        this.anim_notify_pending = false;
+                                        cx.notify();
+                                    });
+                                })
+                                .detach();
+                            }
                         }
                     });
                 },

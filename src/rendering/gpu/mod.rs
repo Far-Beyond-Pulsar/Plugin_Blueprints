@@ -1,3 +1,4 @@
+pub mod delta;
 pub mod renderer;
 pub mod text;
 pub mod types;
