@@ -411,12 +411,6 @@ fn diagnostics() {
     let d = errors(&g, &log_vars());
     assert!(d.iter().any(|d| d.message.contains("expected int, got string")), "{d:?}");
 
-    // Nodes the VM cannot run are reported, not silently dropped.
-    let mut g = Graph::default();
-    g.event("bp", "begin_play").node("lua", "runlua", &[P::ExecIn, P::ExecOut("exec_out")]);
-    g.exec("bp", "Body", "lua");
-    let d = errors(&g, &[]);
-    assert!(d.iter().any(|d| d.message.contains("not supported")), "{d:?}");
 
     // Unknown variable type.
     let d = errors(&Graph::default(), &[var("v", "Vec<Mystery>", None)]);
@@ -626,4 +620,51 @@ fn retriggerable_delays_restart_their_countdown() {
     let mut host = Host::at_time(&mut world, e, 1.8);
     assert!(matches!(vm.resume(&program, &mut inst, continuation, &mut host, &mut Budget::new(1000)).unwrap(), Completion::Returned(_)));
     assert_eq!(program.var(&inst, log), Some(&Value::from("!")));
+}
+
+#[test]
+fn other_flow_nodes_jump_where_their_selector_says() {
+    // A selector native standing in for a pulsar_std control-flow node:
+    // `pick(n)` fires output n % 3 and returns n * 10.
+    let mut registry = natives();
+    registry
+        .register(
+            NativeFn::builder("std::pick")
+                .attr("exec_outputs", "X,Y,Z")
+                .params(["n", "result"])
+                .build_raw(
+                    pulsar_script_vm::Signature::new(
+                        [pulsar_script_vm::Param::new(pulsar_script_vm::Type::Int), pulsar_script_vm::Param::inout(pulsar_script_vm::Type::Int)],
+                        pulsar_script_vm::Type::Int,
+                    ),
+                    Box::new(|_, args| {
+                        let n = args[0].as_int().unwrap();
+                        args[1] = Value::Int(n * 10);
+                        Ok(Value::Int(n % 3))
+                    }),
+                ),
+        )
+        .unwrap();
+    let mut g = Graph::default();
+    g.node("ev", "on_pick", &[P::ExecOut("Body"), P::Out("n", "i64")]);
+    g.node("pick", "pick", &[P::ExecIn, P::In("n", "i64"), P::ExecOut("X"), P::ExecOut("Y"), P::ExecOut("Z"), P::Out("result", "i64")]);
+    g.data("ev", "n", "pick", "n").exec("ev", "Body", "pick");
+    g.log("x", "x").log("y", "y").log("z", "z");
+    g.exec("pick", "X", "x").exec("pick", "Y", "y").exec("pick", "Z", "z");
+    // count = result, after the chosen chain
+    g.set_var("setc", "count", "i64").data("pick", "result", "setc", "value").exec("z", "exec_out", "setc");
+    let built = g.build();
+    let vars = log_vars();
+    let module = compile(&ClassSource { name: "Pick", graph: &built, variables: &vars }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let program = Program::link(Arc::new(module), &registry).unwrap();
+    let mut world = World::new();
+    let e = world.spawn();
+    let mut inst = program.instantiate();
+    let pick = program.entry("on_pick").unwrap();
+    for n in [4, 0, 5] {
+        let mut host = Host::new(&mut world, e);
+        Vm::new().call(&program, &mut inst, pick, &[Value::Int(n)], &mut host, &mut Budget::new(1000)).unwrap();
+    }
+    assert_eq!(program.var(&inst, program.variable("log").unwrap()), Some(&Value::from("yxz")));
+    assert_eq!(program.var(&inst, program.variable("count").unwrap()), Some(&Value::Int(50)));
 }

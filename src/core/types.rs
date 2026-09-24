@@ -133,8 +133,8 @@ impl std::fmt::Display for PinDataType {
 ///
 /// - `DirectRust` — existing path: graph → Rust source written to
 ///   `events/events.rs` inside the class directory.
-/// - `BytecodeVm` — new path: graph → PBGC bytecode executed immediately
-///   against the embedded `pulsar_std` native cdylib.
+/// - `BytecodeVm` — graph → engine script module (`events/.build/module.json`)
+///   run by the game's script runtime.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum CompileMode {
     #[default]

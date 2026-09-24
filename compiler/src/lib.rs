@@ -24,6 +24,9 @@
 //!   Stateful ones keep their state in hidden per-instance variables, so
 //!   instances never share it. Delays suspend the call (the VM's `Wait`);
 //!   the script runtime resumes it after that much game time.
+//! - **Other flow nodes** run their own pulsar_std body through a selector
+//!   native (`std::<node>` with an `exec_outputs` attribute) that reports
+//!   which exec output fired; the compiler jumps there.
 //! - **Other nodes** call the native `std::<node_type>` (pulsar_std's
 //!   functions). Pure nodes are evaluated where their value is used;
 //!   impure nodes' outputs keep the value from their last execution.
@@ -143,9 +146,6 @@ fn builtin_event(node_type: &str) -> Option<(&'static str, Vec<(&'static str, Ty
         _ => return None,
     })
 }
-
-/// Nodes the script VM cannot run.
-const UNSUPPORTED: &[&str] = &["randexec", "random_exec_switch", "runlua"];
 
 const DELTA_TIME: &str = "__bp_delta_time";
 
@@ -471,10 +471,10 @@ impl<'a> Compiler<'a> {
             }
             return self.follow_all_exec(f, id);
         }
-        if UNSUPPORTED.contains(&ty) {
-            return self.error(Some(id), format!("`{ty}` is not supported by the script VM yet"));
-        }
         if self.flow(f, node) {
+            return;
+        }
+        if self.selector(f, node) {
             return;
         }
         if ty == "emit_custom_event" {
@@ -883,6 +883,45 @@ impl<'a> Compiler<'a> {
         let seconds = f.reg(Type::Float);
         f.emit(Instr::Binary { op: BinOp::Div, dst: seconds, a: ms, b: thousand });
         Some(seconds)
+    }
+
+    /// Any other control-flow node: its selector native (`std::<node>`
+    /// with an `exec_outputs` attribute) runs the node's own body and
+    /// reports which exec output fired; jump there. A value the node
+    /// returns comes back on `result`. `false` if the node has none.
+    fn selector(&mut self, f: &mut Func, node: &'a NodeInstance) -> bool {
+        let id = node.id.as_str();
+        let name = format!("std::{}", node.node_type);
+        let Some(native) = self.natives.get(&name).cloned() else { return false };
+        let Some(labels) = native.attr("exec_outputs") else { return false };
+        let labels: Vec<String> = labels.split(',').map(str::to_owned).collect();
+        let mut args = Vec::with_capacity(native.sig.params.len());
+        for (pin, param) in native.param_names.iter().zip(&native.sig.params) {
+            let reg = if param.inout && pin == "result" {
+                self.output_reg(f, id, "result", param.ty.clone())
+            } else {
+                let input = node
+                    .inputs
+                    .iter()
+                    .find(|p| p.id == *pin || p.id.trim_start_matches('_') == pin)
+                    .map(|p| p.id.clone())
+                    .unwrap_or_else(|| pin.clone());
+                match self.input(f, node, &input, &param.ty) {
+                    Some(reg) => reg,
+                    None => return true,
+                }
+            };
+            args.push(reg);
+        }
+        let fired = f.reg(Type::Int);
+        self.call(f, &name, args, Some(fired));
+        let cases = labels
+            .into_iter()
+            .enumerate()
+            .map(|(index, label)| (Case::Eq(fired, Constant::Int(index as i64)), label))
+            .collect();
+        self.cases(f, node, cases, None);
+        true
     }
 
     fn if_then(&mut self, f: &mut Func, cond: Reg, then: impl FnOnce(&mut Self, &mut Func)) {
