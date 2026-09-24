@@ -511,3 +511,39 @@ fn palette_lists_methods_by_reference_type_and_globally() {
     assert!(of.receiver.is_none());
     assert!(nodes.iter().any(|n| n.node_type == "native::math::sin" && n.category == "Math"));
 }
+
+#[test]
+fn component_refs_on_other_objects_and_scene_lookups() {
+    // on_hit: find_object_by_name("target") -> get_component_ref::Health::0 -> set value
+    let mut g = Graph::default();
+    g.event("ev", "on_hit");
+    g.node("find", "find_object_by_name", &[P::In("name", "String"), P::Out("object", "Entity")]).prop("find", "name", json!("target"));
+    g.node("ref", "get_component_ref::Health::0", &[P::In("object", "Entity"), P::Out("component", "Health")]).data("find", "object", "ref", "object");
+    g.node("set", "comp_set_prop::Health::value", &[P::ExecIn, P::In("component_ref", "Health"), P::In("value", "f32"), P::ExecOut("exec_out")]);
+    g.prop("set", "value", json!(42.0)).data("ref", "component", "set", "component_ref").exec("ev", "Body", "set");
+    // Stand-in for pulsar_game's world lookup: the entity at index 1.
+    let registry = {
+        let mut r = natives();
+        r.register(NativeFn::builder("world::find_by_name").side_effect_free().params(["name"]).build(
+            |host: &mut Host<'_>, name: String| {
+                assert_eq!(name, "target");
+                host.world.query::<&Health>().map(|(e, _)| e).find(|e| e.index() == 1).unwrap_or(Entity::DANGLING)
+            },
+        ))
+        .unwrap();
+        r
+    };
+    let built = g.build();
+    let module = compile(&ClassSource { name: "Hit", graph: &built, variables: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let program = Program::link(Arc::new(module), &registry).unwrap();
+    let mut world = World::new();
+    let me = world.spawn();
+    let target = world.spawn();
+    world.insert(me, Health { value: 1.0 });
+    world.insert(target, Health { value: 1.0 });
+    let mut inst = program.instantiate();
+    let mut host = Host::new(&mut world, me);
+    Vm::new().call(&program, &mut inst, program.entry("on_hit").unwrap(), &[], &mut host, &mut Budget::new(1000)).unwrap();
+    assert_eq!(world.get::<Health>(target).unwrap().value, 42.0);
+    assert_eq!(world.get::<Health>(me).unwrap().value, 1.0);
+}

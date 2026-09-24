@@ -33,9 +33,12 @@
 //!   pin of the same name, the return value is `result`, and an
 //!   unconnected method receiver means this entity's component.
 //! - **Component nodes**: `comp_get_prop::C::p`, `comp_set_prop::C::p`,
-//!   `comp_call::C::m` and `get_component_ref::C` call the natives
+//!   `comp_call::C::m` and `get_component_ref::C[::index]` call the natives
 //!   `C::get_p`, `C::set_p`, `C::m` and `C::of`. An unconnected component
-//!   input means this entity's component.
+//!   input means this entity's component; a `get_component_ref` whose
+//!   entity input is wired takes that object's component.
+//! - **Scene lookups**: `find_object_by_stable_id`, `find_object_by_name` and
+//!   `object_ref_literal` produce an entity through `world::find_by_*`.
 
 pub mod palette;
 
@@ -507,6 +510,7 @@ impl<'a> Compiler<'a> {
         }
         let is_value_node = ty.starts_with("comp_get_prop::")
             || ty.starts_with("get_component_ref::")
+            || matches!(ty, "find_object_by_stable_id" | "find_object_by_name" | "object_ref_literal")
             || ty == "get_delta_time"
             || ty.strip_prefix("get_").is_some_and(|v| self.vars.contains_key(v));
         if is_value_node {
@@ -977,8 +981,47 @@ impl<'a> Compiler<'a> {
             let dst = f.reg(sig.ret.clone());
             self.call(f, &native, vec![component], Some(dst));
             dst
-        } else if let Some(class) = ty.strip_prefix("get_component_ref::") {
-            self.self_component(f, id, class)?
+        } else if let Some(rest) = ty.strip_prefix("get_component_ref::") {
+            // `Class` or `Class::index`: SceneDB holds one live component per
+            // type, so the index (duplicate records) does not apply.
+            let class = rest.split("::").next().unwrap_or(rest);
+            match data_inputs(node).into_iter().find(|p| self.data_in.contains_key(&(id.to_owned(), p.clone()))) {
+                // Another object's component.
+                Some(pin) => {
+                    let entity = self.input(f, node, &pin, &Type::Entity)?;
+                    let native = format!("{class}::of");
+                    self.native_sig(id, &native)?;
+                    let component = f.reg(Type::Component(class.to_owned()));
+                    self.call(f, &native, vec![entity], Some(component));
+                    component
+                }
+                None => self.self_component(f, id, class)?,
+            }
+        } else if matches!(ty, "find_object_by_stable_id" | "find_object_by_name" | "object_ref_literal") {
+            let native = if ty == "find_object_by_name" { "world::find_by_name" } else { "world::find_by_stable_id" };
+            self.native_sig(id, native)?;
+            let needle = if ty == "object_ref_literal" {
+                // `stable_id` property: a string, or the saved
+                // `{stable_id, class_name, component_index}` object.
+                let stable_id = match node.properties.get("stable_id").or_else(|| node.properties.get("object")) {
+                    Some(Json::String(s)) => s.clone(),
+                    Some(Json::Object(o)) => o.get("stable_id").and_then(Json::as_str).unwrap_or_default().to_owned(),
+                    _ => {
+                        self.error(Some(id), "object reference without a stable id");
+                        return None;
+                    }
+                };
+                self.konst(f, Constant::Str(stable_id))
+            } else {
+                let Some(pin) = data_inputs(node).into_iter().next() else {
+                    self.error(Some(id), "lookup node without an input");
+                    return None;
+                };
+                self.input(f, node, &pin, &Type::Str)?
+            };
+            let entity = f.reg(Type::Entity);
+            self.call(f, native, vec![needle], Some(entity));
+            entity
         } else if let Some(rest) = ty.strip_prefix("comp_call::") {
             // A call's return value read before (or without) the call runs
             // on this path: its last value.
