@@ -240,7 +240,37 @@ impl EditorPluginSubsystems for BlueprintEditorPlugin {
     }
 }
 
+/// Blueprints as a scripting language: classes compile to engine script
+/// modules (see `blueprint_compiler`); before Play the editor validates
+/// every saved class graph through this.
+pub struct BlueprintLanguage;
+
+impl ScriptLanguage for BlueprintLanguage {
+    fn id(&self) -> &str {
+        "blueprint"
+    }
+
+    fn display_name(&self) -> &str {
+        "Blueprints"
+    }
+
+    fn validate_project(&self, project_root: &std::path::Path) -> Result<(), String> {
+        validation::validate_project_classes(project_root)
+    }
+}
+
+/// The Blueprint scripting language, for hosts that embed this plugin.
+pub fn script_language() -> Arc<dyn ScriptLanguage> {
+    Arc::new(BlueprintLanguage)
+}
+
+impl EditorPluginScripting for BlueprintEditorPlugin {
+    fn script_languages(&self) -> Vec<Arc<dyn ScriptLanguage>> {
+        vec![script_language()]
+    }
+}
+
 // Static built-ins are instantiated through the Rust API and must not emit the
 // process-global dynamic loader symbols shared by every plugin.
 #[cfg(not(feature = "builtin"))]
-export_plugin!(BlueprintEditorPlugin);
+export_plugin!(BlueprintEditorPlugin, scripting);
