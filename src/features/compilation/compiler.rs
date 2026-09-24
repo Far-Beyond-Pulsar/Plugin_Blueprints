@@ -1,4 +1,4 @@
-//! Compiler - Compile blueprints to Rust code or PBGC bytecode
+//! Compiler - Compile blueprints to engine script modules or Rust code
 
 use crate::editor::panel::{BlueprintEditorPanel, CompilationHistoryEntry};
 use crate::{CompilationState, CompilationStatus};
@@ -6,41 +6,19 @@ use gpui::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-// ── Bytecode file format ──────────────────────────────────────────────────────
-
-/// JSON output written to `<class>/events/.build/bytecode.json`.
-///
-/// Field layout is intentionally compatible with
-/// `pulsar_game::blueprint_runtime::CompiledBytecode` so the game runtime can
-/// deserialise it without knowing about this type.
-#[derive(serde::Serialize)]
-struct BytecodeFileOutput {
-    /// Format version. 2 adds `components`; the runtime deserializes v1 files
-    /// with an empty list.
-    version: u32,
-    /// Blueprint class name (used as the key in `BlueprintDispatcher`).
-    source_class: String,
-    /// Variable descriptors — currently empty; the runtime initialises an arena
-    /// large enough for the programs' combined `arena_size` without needing
-    /// explicit layout here.
-    variables: Vec<serde_json::Value>,
-    /// One compiled program per event entry-point, keyed by event name
-    /// ("begin_play", "tick", …).  Function pointers are zero here; the game
-    /// runtime's `BpExecutor::prepare` patches them from `pulsar_std`.
-    event_programs: HashMap<String, pbgc::BpProgram>,
-    /// Bytes needed for the per-instance state arena.
-    arena_size: usize,
-    /// Component operations referenced by any program (`comp_*` node ABI).
-    /// The runtime validates these before executing events.
-    components: Vec<pbgc::ComponentOpRef>,
-}
-
 // ── Property normalisation (shared by both compile paths) ────────────────────
 
 /// Normalizes property literals that may be JSON-string-encoded one or more
 /// times by the editor/serialization path.
 ///
 /// Example: `"\"2\""` -> `2`
+/// Every native the engine registers (pulsar_std, world components,
+/// reflected methods), built once: what compiled modules link against.
+pub(crate) fn script_natives() -> &'static pulsar_script_vm::NativeRegistry {
+    static NATIVES: std::sync::OnceLock<pulsar_script_vm::NativeRegistry> = std::sync::OnceLock::new();
+    NATIVES.get_or_init(pulsar_script_vm::NativeRegistry::with_engine_natives)
+}
+
 fn normalize_property_literal(raw: &str) -> String {
     let mut out = raw.trim().to_string();
 
@@ -532,81 +510,44 @@ impl BlueprintEditorPanel {
         library
     }
 
-    /// Compile current graph → raw PBGC bytecode programs (one per event entry-point).
-    pub fn compile_to_bytecode(&self) -> Result<(Vec<pbgc::BpProgram>, Vec<pbgc::ComponentOpRef>), String> {
-        let variables: std::collections::HashMap<String, String> = self
-            .class_variables
-            .iter()
-            .map(|v| (v.name.clone(), v.var_type.clone()))
-            .collect();
-
-        let graph = self.build_graphy_description()?;
-        let compiled = pbgc::compile_graph_to_bytecode_full(&graph, variables)
-            .map_err(|e| format!("Bytecode compilation failed: {}", e))?;
-        Ok((compiled.programs, compiled.components))
-    }
-
-    /// Compile the current graph and write the result to
-    /// `<class_path>/events/.build/bytecode.json`.
-    ///
-    /// The produced file can be loaded by
-    /// `pulsar_game::blueprint_runtime::BlueprintDispatcher` at game startup —
-    /// the game runtime handles `BpExecutor::prepare` (function-pointer patching)
-    /// and drives `begin_play` / `tick` / `end_play` through the `TickLoop`.
-    pub fn compile_to_bytecode_files(&self) -> Result<PathBuf, String> {
+    /// Compile the class to an engine script module and write it to
+    /// `<class_path>/events/.build/module.json`: the language-neutral
+    /// bytecode `pulsar_script_runtime` loads (see `blueprint_compiler`).
+    pub fn compile_to_script_module(&self) -> Result<PathBuf, String> {
         let class_path = self
             .current_class_path
             .as_ref()
             .ok_or("No class loaded — cannot compile")?;
-
-        let (programs, components) = self.compile_to_bytecode()?;
-
-        if programs.is_empty() {
-            return Err(
-                "No event entry-points found in graph - add a BeginPlay or Tick node".to_string(),
-            );
-        }
-
-        // Map programs by event name.  BpProgram::name carries the event type
-        // ("begin_play", "tick", …) set by the bytecode codegen.
-        let arena_size = programs
-            .iter()
-            .map(|p| p.arena_size)
-            .max()
-            .unwrap_or(0)
-            .max(1024); // minimum 1 KiB so the runtime always has headroom
-
-        let event_programs: HashMap<String, pbgc::BpProgram> =
-            programs.into_iter().map(|p| (p.name.clone(), p)).collect();
-
-        let blueprint_name = class_path
+        let class_name = class_path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unnamed_blueprint")
             .to_owned();
-
-        let output = BytecodeFileOutput {
-            version: 2,
-            source_class: blueprint_name,
-            variables: Vec::new(),
-            event_programs,
-            arena_size,
-            components,
-        };
-
-        let json = serde_json::to_string_pretty(&output)
-            .map_err(|e| format!("Failed to serialise bytecode: {}", e))?;
-
-        // Ensure .build directory exists under events/
+        let variables: Vec<blueprint_compiler::VariableSource> = self
+            .class_variables
+            .iter()
+            .map(|v| blueprint_compiler::VariableSource {
+                name: v.name.clone(),
+                type_name: v.var_type.clone(),
+                default: v.default_value.as_deref().map(property_value_from_raw),
+            })
+            .collect();
+        let graph = self.build_graphy_description()?;
+        let source = blueprint_compiler::ClassSource { name: &class_name, graph: &graph, variables: &variables };
         let build_dir = class_path.join("events").join(".build");
+        let out_path = build_dir.join("module.json");
+        let module = blueprint_compiler::compile(&source, script_natives()).map_err(|diagnostics| {
+            // Never leave a module from an older graph behind.
+            let _ = std::fs::remove_file(&out_path);
+            let lines: Vec<String> = diagnostics.iter().map(ToString::to_string).collect();
+            format!("Script module compilation failed:\n{}", lines.join("\n"))
+        })?;
+
+        let json = module.to_json().map_err(|e| format!("Failed to serialise module: {e}"))?;
         std::fs::create_dir_all(&build_dir)
-            .map_err(|e| format!("Failed to create .build directory: {}", e))?;
-
-        let out_path = build_dir.join("bytecode.json");
-        std::fs::write(&out_path, json)
-            .map_err(|e| format!("Failed to write bytecode.json: {}", e))?;
-
-        tracing::info!("Bytecode written to {}", out_path.display());
+            .map_err(|e| format!("Failed to create .build directory: {e}"))?;
+        std::fs::write(&out_path, json).map_err(|e| format!("Failed to write module.json: {e}"))?;
+        tracing::info!("Script module written to {}", out_path.display());
         Ok(out_path)
     }
 
@@ -842,16 +783,21 @@ impl BlueprintEditorPanel {
                     panel.push_compilation_history(
                         CompilationState::Compiling,
                         "build",
-                        "Compiling to PBGC bytecode",
+                        "Compiling to an engine script module",
                         Some(
-                            "Steps: build graph description, compile to bytecode programs, \
-                             write events/.build/bytecode.json"
+                            "Steps: build graph description, compile to a script module \
+                             (events/.build/module.json)"
                                 .to_string(),
                         ),
                     );
                     cx.notify();
                     panel.sync_all_canvases_to_tabs(cx);
-                    panel.compile_to_bytecode_files().map(Some)
+                    // The engine script module is what the game runtime runs.
+                    // Remove bytecode left by the old PBGC VM path.
+                    if let Some(class_path) = &panel.current_class_path {
+                        let _ = std::fs::remove_file(class_path.join("events").join(".build").join("bytecode.json"));
+                    }
+                    panel.compile_to_script_module().map(Some)
                 }
             }
         });
@@ -887,7 +833,7 @@ impl BlueprintEditorPanel {
                             CompileMode::BytecodeVm => {
                                 let out = maybe_path
                                     .map(|p| p.display().to_string())
-                                    .unwrap_or_else(|| "events/.build/bytecode.json".to_string());
+                                    .unwrap_or_else(|| "events/.build/module.json".to_string());
                                 format!(
                                     "Duration: {} ms | Output: {} | \
                                      Run `cargo run` in your project to execute via the VM runtime",

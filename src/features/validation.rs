@@ -196,7 +196,7 @@ fn check_pbgc_graph(graph: &pbgc::GraphDescription, report: &mut ValidationRepor
 }
 
 /// Validate a saved [`crate::io::formats::BlueprintAsset`] end-to-end:
-/// structural checks, macro expansion and full bytecode dry-run.
+/// structural checks, macro expansion and a script module compile dry-run.
 pub(crate) fn validate_asset(
     asset: &crate::io::formats::BlueprintAsset,
 ) -> Vec<String> {
@@ -230,13 +230,23 @@ pub(crate) fn validate_asset(
         }
         check_pbgc_graph(&graph, &mut report);
 
-        let variables: HashMap<String, String> = asset
+        // Dry-run the script module compiler: exactly what Play will run.
+        let variables: Vec<blueprint_compiler::VariableSource> = asset
             .variables
             .iter()
-            .map(|v| (v.name.clone(), v.data_type.to_string()))
+            .map(|v| blueprint_compiler::VariableSource {
+                name: v.name.clone(),
+                type_name: v.data_type.to_string(),
+                default: None,
+            })
             .collect();
-        if let Err(e) = pbgc::compile_graph_to_bytecode_with_variables(&graph, variables) {
-            report.push(format!("bytecode dry-run failed: {e}"));
+        let source = blueprint_compiler::ClassSource { name: "validation", graph: &graph, variables: &variables };
+        if let Err(diagnostics) =
+            blueprint_compiler::compile(&source, crate::features::compilation::compiler::script_natives())
+        {
+            for diagnostic in diagnostics {
+                report.push(format!("compile: {diagnostic}"));
+            }
         }
     }
 
