@@ -291,20 +291,35 @@ impl Render for NodePaletteView {
 
         // ── Filtered list ─────────────────────────────────────────────────────
         let query = self.search_input.read(cx).value().to_string();
+        // Opened by dropping a wire on empty canvas: only offer nodes that
+        // can take the dragged pin's type. The drag lives on the canvas this
+        // quick palette belongs to; the dock palette never filters.
         let connection_filter_type = self
-            .editor
-            .upgrade()
-            .and_then(|editor| {
-                let editor = editor.read(cx);
-                editor.quick_palette_connection_source.as_ref().cloned()
-            })
+            .canvas
+            .as_ref()
+            .and_then(WeakEntity::upgrade)
+            .and_then(|canvas| canvas.read(cx).quick_palette_connection_source.clone())
             .map(|drag| drag.source_pin_type);
 
-        let items = if let Some(source_type) = connection_filter_type {
-            filter_compatible_palette_items(&self.all_items, &source_type)
+        let items = if let Some(source_type) = &connection_filter_type {
+            filter_compatible_palette_items(&self.all_items, source_type)
         } else {
             self.all_items.clone()
         };
+        let filter_label = connection_filter_type.as_ref().map(|ty| {
+            if ty.is_execution() {
+                "Takes exec".to_string()
+            } else {
+                format!("Takes {ty}")
+            }
+        });
+        let filter_color = connection_filter_type
+            .as_ref()
+            .map(|ty| {
+                let [r, g, b, a] = ty.display_color();
+                Hsla::from(Rgba { r, g, b, a })
+            })
+            .unwrap_or_else(|| cx.theme().border);
         let visible = filter_palette_items(&items, &query);
         let node_count = count_nodes(&visible);
         let item_sizes = build_item_sizes(&visible);
@@ -351,10 +366,28 @@ impl Render for NodePaletteView {
                                     ),
                             )
                             .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(format!("{node_count} nodes")),
+                                h_flex()
+                                    .gap_2()
+                                    .items_center()
+                                    .when_some(filter_label, |row, label| {
+                                        row.child(
+                                            div()
+                                                .px_1p5()
+                                                .rounded_sm()
+                                                .bg(filter_color.opacity(0.2))
+                                                .border_1()
+                                                .border_color(filter_color.opacity(0.6))
+                                                .text_xs()
+                                                .text_color(cx.theme().foreground)
+                                                .child(label),
+                                        )
+                                    })
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(format!("{node_count} nodes")),
+                                    ),
                             ),
                     )
                     // Search box
