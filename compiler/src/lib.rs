@@ -19,9 +19,11 @@
 //!   emitted on each path; an exec path that revisits a node on itself is
 //!   an error (use a loop node).
 //! - **Flow nodes** (`branch`, switches, `for_loop`, `while_loop`,
-//!   `sequence`, `gate`, `multi_gate`, `flip_flop`, `do_once`, `do_n`) are
-//!   intrinsics with real jumps. Stateful ones keep their state in hidden
-//!   per-instance variables, so instances never share it.
+//!   `sequence`, `gate`, `multi_gate`, `flip_flop`, `do_once`, `do_n`,
+//!   `delay`, `retriggerable_delay`) are intrinsics with real jumps.
+//!   Stateful ones keep their state in hidden per-instance variables, so
+//!   instances never share it. Delays suspend the call (the VM's `Wait`);
+//!   the script runtime resumes it after that much game time.
 //! - **Other nodes** call the native `std::<node_type>` (pulsar_std's
 //!   functions). Pure nodes are evaluated where their value is used;
 //!   impure nodes' outputs keep the value from their last execution.
@@ -142,8 +144,8 @@ fn builtin_event(node_type: &str) -> Option<(&'static str, Vec<(&'static str, Ty
     })
 }
 
-/// Flow nodes that suspend execution; the VM has no latent calls yet.
-const UNSUPPORTED: &[&str] = &["delay", "retriggerable_delay", "randexec", "random_exec_switch", "runlua"];
+/// Nodes the script VM cannot run.
+const UNSUPPORTED: &[&str] = &["randexec", "random_exec_switch", "runlua"];
 
 const DELTA_TIME: &str = "__bp_delta_time";
 
@@ -786,6 +788,61 @@ impl<'a> Compiler<'a> {
                     },
                 );
             }
+            // Latent: the call waits (the runtime resumes it after the
+            // delay). While a delay is counting down, `delay` ignores new
+            // triggers and `retriggerable_delay` restarts the countdown.
+            "delay" => {
+                let active = self.hidden_var(id, "delay_active", Type::Bool);
+                let Some(seconds) = self.seconds_input(f, node, "milliseconds") else { return true };
+                let busy = self.load(f, active, Type::Bool);
+                let idle = f.reg(Type::Bool);
+                f.emit(Instr::Unary { op: UnOp::Not, dst: idle, src: busy });
+                self.if_then(f, idle, |c, f| {
+                    let yes = c.konst(f, Constant::Bool(true));
+                    f.emit(Instr::StoreVar { var: active, src: yes });
+                    f.emit(Instr::Wait { seconds });
+                    let no = c.konst(f, Constant::Bool(false));
+                    f.emit(Instr::StoreVar { var: active, src: no });
+                    c.follow_all_exec(f, id);
+                });
+            }
+            "retriggerable_delay" => {
+                let active = self.hidden_var(id, "retrigger_active", Type::Bool);
+                let deadline = self.hidden_var(id, "retrigger_deadline", Type::Float);
+                let Some(seconds) = self.seconds_input(f, node, "delay_ms") else { return true };
+                let now = f.reg(Type::Float);
+                f.emit(Instr::Now { dst: now });
+                let until = f.reg(Type::Float);
+                f.emit(Instr::Binary { op: BinOp::Add, dst: until, a: now, b: seconds });
+                f.emit(Instr::StoreVar { var: deadline, src: until });
+                let busy = self.load(f, active, Type::Bool);
+                let idle = f.reg(Type::Bool);
+                f.emit(Instr::Unary { op: UnOp::Not, dst: idle, src: busy });
+                self.if_then(f, idle, |c, f| {
+                    let yes = c.konst(f, Constant::Bool(true));
+                    f.emit(Instr::StoreVar { var: active, src: yes });
+                    // Wait until the (possibly extended) deadline passes.
+                    let zero = c.konst(f, Constant::Float(0.0));
+                    let head = f.here();
+                    let now = f.reg(Type::Float);
+                    f.emit(Instr::Now { dst: now });
+                    let target = c.load(f, deadline, Type::Float);
+                    let remaining = f.reg(Type::Float);
+                    f.emit(Instr::Binary { op: BinOp::Sub, dst: remaining, a: target, b: now });
+                    let pending = f.reg(Type::Bool);
+                    f.emit(Instr::Binary { op: BinOp::Gt, dst: pending, a: remaining, b: zero });
+                    let at = f.emit(Instr::Branch { cond: pending, then: 0, otherwise: 0 });
+                    let wait = f.here();
+                    f.patch(at, wait, false);
+                    f.emit(Instr::Wait { seconds: remaining });
+                    f.emit(Instr::Jump { target: head });
+                    let done = f.here();
+                    f.patch(at, done, true);
+                    let no = c.konst(f, Constant::Bool(false));
+                    f.emit(Instr::StoreVar { var: active, src: no });
+                    c.follow_all_exec(f, id);
+                });
+            }
             "do_n" => {
                 let counter = self.hidden_var(id, "do_n", Type::Int);
                 let (Some(n), Some(reset)) = (self.input(f, node, "n", &Type::Int), self.input(f, node, "reset", &Type::Bool))
@@ -816,6 +873,16 @@ impl<'a> Compiler<'a> {
             _ => return false,
         }
         true
+    }
+
+    /// A milliseconds input as seconds (`float`).
+    fn seconds_input(&mut self, f: &mut Func, node: &'a NodeInstance, pin: &str) -> Option<Reg> {
+        let ms = self.input(f, node, pin, &Type::Int)?;
+        let ms = self.coerce(f, &node.id, ms, &Type::Float)?;
+        let thousand = self.konst(f, Constant::Float(1000.0));
+        let seconds = f.reg(Type::Float);
+        f.emit(Instr::Binary { op: BinOp::Div, dst: seconds, a: ms, b: thousand });
+        Some(seconds)
     }
 
     fn if_then(&mut self, f: &mut Func, cond: Reg, then: impl FnOnce(&mut Self, &mut Func)) {

@@ -411,10 +411,10 @@ fn diagnostics() {
     let d = errors(&g, &log_vars());
     assert!(d.iter().any(|d| d.message.contains("expected int, got string")), "{d:?}");
 
-    // Latent nodes are reported, not silently dropped.
+    // Nodes the VM cannot run are reported, not silently dropped.
     let mut g = Graph::default();
-    g.event("bp", "begin_play").node("wait", "delay", &[P::ExecIn, P::In("milliseconds", "i64"), P::ExecOut("Completed")]);
-    g.exec("bp", "Body", "wait");
+    g.event("bp", "begin_play").node("lua", "runlua", &[P::ExecIn, P::ExecOut("exec_out")]);
+    g.exec("bp", "Body", "lua");
     let d = errors(&g, &[]);
     assert!(d.iter().any(|d| d.message.contains("not supported")), "{d:?}");
 
@@ -546,4 +546,84 @@ fn component_refs_on_other_objects_and_scene_lookups() {
     Vm::new().call(&program, &mut inst, program.entry("on_hit").unwrap(), &[], &mut host, &mut Budget::new(1000)).unwrap();
     assert_eq!(world.get::<Health>(target).unwrap().value, 42.0);
     assert_eq!(world.get::<Health>(me).unwrap().value, 1.0);
+}
+
+#[test]
+fn delays_suspend_until_game_time_passes() {
+    use pulsar_script_vm::Completion;
+    // on_fire: log "a"; delay 500ms; log "b"
+    let mut g = Graph::default();
+    g.event("ev", "on_fire");
+    g.log("a", "a").log("b", "b");
+    g.node("wait", "delay", &[P::ExecIn, P::In("milliseconds", "i64"), P::ExecOut("Completed")]).prop("wait", "milliseconds", json!(500));
+    g.exec("ev", "Body", "a").exec("a", "exec_out", "wait").exec("wait", "Completed", "b");
+    let registry = natives();
+    let built = g.build();
+    let vars = log_vars();
+    let module = compile(&ClassSource { name: "Delay", graph: &built, variables: &vars }, &registry).unwrap();
+    let program = Program::link(Arc::new(module), &registry).unwrap();
+    let mut world = World::new();
+    let e = world.spawn();
+    let mut vm = Vm::new();
+    let mut inst = program.instantiate();
+    let fire = program.entry("on_fire").unwrap();
+    let log = program.variable("log").unwrap();
+
+    let start = |vm: &mut Vm, inst: &mut Instance, world: &mut World, t: f64| {
+        vm.start(&program, inst, fire, &[], &mut Host::at_time(world, e, t), &mut Budget::new(1000)).unwrap()
+    };
+    let Completion::Waiting { seconds, continuation } = start(&mut vm, &mut inst, &mut world, 0.0) else { panic!() };
+    assert_eq!(seconds, 0.5);
+    // Firing again while the delay counts down is ignored.
+    assert!(matches!(start(&mut vm, &mut inst, &mut world, 0.1), Completion::Returned(_)));
+    assert_eq!(program.var(&inst, log), Some(&Value::from("aa")));
+    let done = vm.resume(&program, &mut inst, continuation, &mut Host::at_time(&mut world, e, 0.5), &mut Budget::new(1000)).unwrap();
+    assert!(matches!(done, Completion::Returned(_)));
+    assert_eq!(program.var(&inst, log), Some(&Value::from("aab")));
+    // Ready again.
+    assert!(matches!(start(&mut vm, &mut inst, &mut world, 1.0), Completion::Waiting { .. }));
+}
+
+#[test]
+fn retriggerable_delays_restart_their_countdown() {
+    use pulsar_script_vm::Completion;
+    let mut g = Graph::default();
+    g.event("ev", "on_fire");
+    g.node("wait", "retriggerable_delay", &[P::ExecIn, P::In("delay_ms", "i64"), P::ExecOut("Completed")]).prop("wait", "delay_ms", json!(1000));
+    g.log("done", "!");
+    g.exec("ev", "Body", "wait").exec("wait", "Completed", "done");
+    let registry = natives();
+    let built = g.build();
+    let vars = log_vars();
+    let module = compile(&ClassSource { name: "Retrigger", graph: &built, variables: &vars }, &registry).unwrap();
+    let program = Program::link(Arc::new(module), &registry).unwrap();
+    let mut world = World::new();
+    let e = world.spawn();
+    let mut vm = Vm::new();
+    let mut inst = program.instantiate();
+    let fire = program.entry("on_fire").unwrap();
+    let log = program.variable("log").unwrap();
+
+    let mut host = Host::at_time(&mut world, e, 0.0);
+    let Completion::Waiting { seconds, continuation } =
+        vm.start(&program, &mut inst, fire, &[], &mut host, &mut Budget::new(1000)).unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(seconds, 1.0);
+    // Retrigger at t=0.8: the running countdown now ends at 1.8.
+    let mut host = Host::at_time(&mut world, e, 0.8);
+    assert!(matches!(vm.start(&program, &mut inst, fire, &[], &mut host, &mut Budget::new(1000)).unwrap(), Completion::Returned(_)));
+    // Resumed at 1.0 it waits the remaining 0.8s instead of completing.
+    let mut host = Host::at_time(&mut world, e, 1.0);
+    let Completion::Waiting { seconds, continuation } =
+        vm.resume(&program, &mut inst, continuation, &mut host, &mut Budget::new(1000)).unwrap()
+    else {
+        panic!("should keep waiting")
+    };
+    assert!((seconds - 0.8).abs() < 1e-9, "{seconds}");
+    assert_eq!(program.var(&inst, log), Some(&Value::from("")));
+    let mut host = Host::at_time(&mut world, e, 1.8);
+    assert!(matches!(vm.resume(&program, &mut inst, continuation, &mut host, &mut Budget::new(1000)).unwrap(), Completion::Returned(_)));
+    assert_eq!(program.var(&inst, log), Some(&Value::from("!")));
 }
