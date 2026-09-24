@@ -41,6 +41,13 @@ struct BytecodeFileOutput {
 /// times by the editor/serialization path.
 ///
 /// Example: `"\"2\""` -> `2`
+/// Every native the engine registers (pulsar_std, world components,
+/// reflected methods), built once: what compiled modules link against.
+fn script_natives() -> &'static pulsar_script_vm::NativeRegistry {
+    static NATIVES: std::sync::OnceLock<pulsar_script_vm::NativeRegistry> = std::sync::OnceLock::new();
+    NATIVES.get_or_init(pulsar_script_vm::NativeRegistry::with_engine_natives)
+}
+
 fn normalize_property_literal(raw: &str) -> String {
     let mut out = raw.trim().to_string();
 
@@ -610,6 +617,48 @@ impl BlueprintEditorPanel {
         Ok(out_path)
     }
 
+    /// Compile the class to an engine script module and write it to
+    /// `<class_path>/events/.build/module.json`: the language-neutral
+    /// bytecode `pulsar_script_runtime` loads (see `blueprint_compiler`).
+    pub fn compile_to_script_module(&self) -> Result<PathBuf, String> {
+        let class_path = self
+            .current_class_path
+            .as_ref()
+            .ok_or("No class loaded — cannot compile")?;
+        let class_name = class_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unnamed_blueprint")
+            .to_owned();
+        let variables: Vec<blueprint_compiler::VariableSource> = self
+            .class_variables
+            .iter()
+            .map(|v| blueprint_compiler::VariableSource {
+                name: v.name.clone(),
+                type_name: v.var_type.clone(),
+                default: v.default_value.as_deref().map(property_value_from_raw),
+            })
+            .collect();
+        let graph = self.build_graphy_description()?;
+        let source = blueprint_compiler::ClassSource { name: &class_name, graph: &graph, variables: &variables };
+        let build_dir = class_path.join("events").join(".build");
+        let out_path = build_dir.join("module.json");
+        let module = blueprint_compiler::compile(&source, script_natives()).map_err(|diagnostics| {
+            // Never leave a module from an older graph behind: the runtime
+            // prefers module.json over bytecode.json when both exist.
+            let _ = std::fs::remove_file(&out_path);
+            let lines: Vec<String> = diagnostics.iter().map(ToString::to_string).collect();
+            format!("Script module compilation failed:\n{}", lines.join("\n"))
+        })?;
+
+        let json = module.to_json().map_err(|e| format!("Failed to serialise module: {e}"))?;
+        std::fs::create_dir_all(&build_dir)
+            .map_err(|e| format!("Failed to create .build directory: {e}"))?;
+        std::fs::write(&out_path, json).map_err(|e| format!("Failed to write module.json: {e}"))?;
+        tracing::info!("Script module written to {}", out_path.display());
+        Ok(out_path)
+    }
+
     /// Compile current graph to Rust source code
     pub fn compile_to_rust(&self) -> Result<String, String> {
         let graph = self.build_graphy_description()?;
@@ -851,7 +900,26 @@ impl BlueprintEditorPanel {
                     );
                     cx.notify();
                     panel.sync_all_canvases_to_tabs(cx);
-                    panel.compile_to_bytecode_files().map(Some)
+                    let bytecode = panel.compile_to_bytecode_files();
+                    // The engine script module the new runtime loads.
+                    // Written alongside the PBGC bytecode until the game
+                    // runtime switches over; a failure here does not fail
+                    // the build yet, but is recorded.
+                    match panel.compile_to_script_module() {
+                        Ok(path) => panel.push_compilation_history(
+                            CompilationState::Compiling,
+                            "module",
+                            "Script module written",
+                            Some(path.display().to_string()),
+                        ),
+                        Err(message) => panel.push_compilation_history(
+                            CompilationState::Error,
+                            "module",
+                            "Script module compilation failed",
+                            Some(message),
+                        ),
+                    }
+                    bytecode.map(Some)
                 }
             }
         });
