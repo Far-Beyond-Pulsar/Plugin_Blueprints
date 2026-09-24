@@ -178,6 +178,10 @@ impl NodeDefinitions {
         // Then add regular nodes from metadata
         Self::populate_categories_from_metadata(metadata, &mut categories_map);
 
+        // Every other engine native (component and value-type methods and
+        // properties, accessors, the script stdlib) as `native::` nodes.
+        Self::populate_native_categories(&mut categories_map);
+
         // Convert to NodeDefinitions
         Self::categories_to_definitions(categories_map)
     }
@@ -189,6 +193,44 @@ impl NodeDefinitions {
             std::collections::HashMap::new();
         Self::populate_categories_from_metadata(metadata, &mut categories_map);
         Self::categories_to_definitions(categories_map)
+    }
+
+    /// Nodes for every native in the engine's script registry that
+    /// pulsar_std's own nodes don't cover. Shapes come from
+    /// `blueprint_compiler::palette`, which is what the compiler expects.
+    fn populate_native_categories(
+        categories_map: &mut std::collections::HashMap<String, Vec<NodeDefinition>>,
+    ) {
+        let natives = crate::features::compilation::compiler::script_natives();
+        for node in blueprint_compiler::palette::native_nodes(natives) {
+            let pin = |id: &str, ty: &str, pin_type: PinType| PinDefinition {
+                id: id.to_string(),
+                name: id.to_string(),
+                data_type: PinDataType::from_type_str(ui::graph::DataType::from_type_str(ty).to_string()),
+                pin_type,
+            };
+            let mut inputs = Vec::new();
+            let mut outputs = Vec::new();
+            if node.exec {
+                inputs.push(pin("exec", "execution", PinType::Input));
+                outputs.push(pin("exec_out", "execution", PinType::Output));
+            }
+            inputs.extend(node.inputs.iter().map(|(id, ty)| pin(id, ty, PinType::Input)));
+            outputs.extend(node.outputs.iter().map(|(id, ty)| pin(id, ty, PinType::Output)));
+            let description = format!("{} ({})", node.name, node.category);
+            categories_map.entry(node.category.clone()).or_default().push(NodeDefinition {
+                id: node.node_type.clone(),
+                name: node.name.clone(),
+                icon: "⚙️".to_string(),
+                documentation: if node.doc.is_empty() { description.clone() } else { node.doc.clone() },
+                description,
+                inputs,
+                outputs,
+                properties: HashMap::new(),
+                color: None,
+                is_event: false,
+            });
+        }
     }
 
     fn populate_categories_from_metadata(

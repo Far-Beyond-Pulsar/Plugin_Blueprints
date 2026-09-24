@@ -27,10 +27,17 @@
 //!   impure nodes' outputs keep the value from their last execution.
 //! - **Variables**: `get_<name>` / `set_<name>` load and store instance
 //!   variables.
+//! - **`native::<name>`** calls any registered native (component and
+//!   value-type methods, accessors, the VM stdlib): inputs are pins named
+//!   after its parameters, `inout` parameters come back out on the output
+//!   pin of the same name, the return value is `result`, and an
+//!   unconnected method receiver means this entity's component.
 //! - **Component nodes**: `comp_get_prop::C::p`, `comp_set_prop::C::p`,
 //!   `comp_call::C::m` and `get_component_ref::C` call the natives
 //!   `C::get_p`, `C::set_p`, `C::m` and `C::of`. An unconnected component
 //!   input means this entity's component.
+
+pub mod palette;
 
 use std::collections::HashMap;
 
@@ -469,6 +476,10 @@ impl<'a> Compiler<'a> {
             self.emit_custom_event(f, node);
             return self.follow_all_exec(f, id);
         }
+        if let Some(name) = ty.strip_prefix("native::") {
+            self.native_call(f, node, name);
+            return self.follow_all_exec(f, id);
+        }
         if let Some(rest) = ty.strip_prefix("comp_set_prop::") {
             if rest.split_once("::").is_none() {
                 self.error(Some(id), "malformed property node");
@@ -551,6 +562,41 @@ impl<'a> Compiler<'a> {
             .then(|| self.output_reg(f, id, "return_value", native.sig.ret.clone()));
         self.call(f, &native_name, args, dst);
         dst
+    }
+
+    /// A `native::<name>` node: any registered native, pins named after its
+    /// parameters. A method's unconnected receiver (`self`) is this entity's
+    /// component, or the type's default value. `inout` parameters are
+    /// passed as copies and come back out on the output pin of the same
+    /// name; the return value is `result`.
+    fn native_call(&mut self, f: &mut Func, node: &'a NodeInstance, name: &str) -> Option<()> {
+        let id = node.id.as_str();
+        let Some(native) = self.natives.get(name).cloned() else {
+            self.error(Some(id), format!("`{name}` is not available to scripts"));
+            return None;
+        };
+        let mut args = Vec::with_capacity(native.sig.params.len());
+        for (index, (pin, param)) in native.param_names.iter().zip(&native.sig.params).enumerate() {
+            let wired = self.data_in.contains_key(&(id.to_owned(), pin.clone()));
+            let reg = match (&param.ty, index == 0 && native.receiver.is_some() && !wired) {
+                (Type::Component(class), true) => self.self_component(f, id, class)?,
+                _ => self.input(f, node, pin, &param.ty)?,
+            };
+            let reg = if param.inout {
+                // The callee writes the argument back: never into the
+                // register some other node produced.
+                let copy = f.reg(param.ty.clone());
+                f.emit(Instr::Move { dst: copy, src: reg });
+                f.outputs.insert((id.to_owned(), pin.clone()), copy);
+                copy
+            } else {
+                reg
+            };
+            args.push(reg);
+        }
+        let dst = (native.sig.ret != Type::Unit).then(|| self.output_reg(f, id, "result", native.sig.ret.clone()));
+        self.call(f, name, args, dst);
+        Some(())
     }
 
     fn emit_custom_event(&mut self, f: &mut Func, node: &'a NodeInstance) {
@@ -942,6 +988,37 @@ impl<'a> Compiler<'a> {
             };
             let sig = self.native_sig(id, &format!("{class}::{method}"))?;
             self.output_reg(f, id, pin, sig.ret)
+        } else if let Some(name) = ty.strip_prefix("native::") {
+            let Some(native) = self.natives.get(name).cloned() else {
+                self.error(Some(id), format!("`{name}` is not available to scripts"));
+                return None;
+            };
+            let pin_ty = if pin == "result" && native.sig.ret != Type::Unit {
+                native.sig.ret.clone()
+            } else {
+                match native.param_names.iter().zip(&native.sig.params).find(|(n, p)| *n == pin && p.inout) {
+                    Some((_, param)) => param.ty.clone(),
+                    None => {
+                        self.error(Some(id), format!("`{name}` has no output `{pin}`"));
+                        return None;
+                    }
+                }
+            };
+            if node_has_exec_input(node) {
+                // Impure: the value from its last execution.
+                self.output_reg(f, id, pin, pin_ty)
+            } else {
+                self.native_call(f, node, name)?;
+                // Pure: recomputed per consuming node, so move its outputs
+                // from the function-wide map into this node's memo.
+                let outputs: Vec<PinKey> =
+                    f.outputs.keys().filter(|(n, _)| n == id).cloned().collect();
+                for out in outputs {
+                    let reg = f.outputs.remove(&out).expect("listed");
+                    f.memo.insert(out, reg);
+                }
+                *f.memo.get(&key).expect("native_call defines every output")
+            }
         } else if builtin_event(ty).is_some() || self.is_custom_event(node) {
             self.error(Some(id), "event parameters can only be read inside that event");
             return None;

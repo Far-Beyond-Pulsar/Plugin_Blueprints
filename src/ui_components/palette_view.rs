@@ -114,12 +114,9 @@ impl NodePaletteView {
         if let Some(editor_entity) = self.editor.upgrade() {
             let editor_ref = editor_entity.read(cx);
 
-            // Component method nodes
-            let component_categories =
-                NodeDefinitions::generate_component_nodes(&editor_ref.prefab_asset);
-            for category in component_categories {
-                all_items.extend(build_palette_items_for_category(&category));
-            }
+            // Component methods and properties are global `native::` nodes
+            // (`NodeDefinitions::load`), filterable by reference type; the
+            // per-prefab `comp_*` nodes they replace still compile.
 
             // Local macros — filtered to exclude the macro currently being edited
             // (prevents a macro from containing itself).
@@ -267,25 +264,6 @@ fn build_custom_event_dispatch_palette_items_from_panel(
                 is_event: false,
             },
             category_color: "#E67E22".to_string(),
-        });
-    }
-    items
-}
-
-/// Build palette items for a single category
-fn build_palette_items_for_category(
-    category: &crate::core::definitions::NodeCategory,
-) -> Vec<PaletteItem> {
-    let mut items = Vec::new();
-    items.push(PaletteItem::CategoryHeader {
-        name: category.name.clone(),
-        color: category.color.clone(),
-        node_count: category.nodes.len(),
-    });
-    for node in &category.nodes {
-        items.push(PaletteItem::NodeEntry {
-            def: node.clone(),
-            category_color: category.color.clone(),
         });
     }
     items

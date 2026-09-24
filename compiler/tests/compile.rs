@@ -422,3 +422,92 @@ fn diagnostics() {
     let d = errors(&Graph::default(), &[var("v", "Vec<Mystery>", None)]);
     assert!(d[0].message.contains("not available to scripts"), "{d:?}");
 }
+
+// ---- native::<name> nodes ------------------------------------------------------
+
+#[derive(Clone, Debug, Default, PartialEq, Reflectable)]
+pub struct V2 {
+    pub x: f32,
+    pub y: f32,
+}
+
+#[pulsar_reflection::reflect_methods]
+impl V2 {
+    #[reflect_method(pure)]
+    fn length(&self) -> f32 {
+        (self.x * self.x + self.y * self.y).sqrt()
+    }
+}
+
+pulsar_script_vm::script_value_type!(V2);
+
+#[test]
+fn native_nodes_call_any_registered_native() {
+    // begin_play:
+    //   Health.damage(self, 1)          (component method, receiver defaults to self)
+    //   v = V2 default; V2::set_x(v, 3); V2::set_y(v', 4)   (inout, chained through outputs)
+    //   count = FloatToInt(length(v''))  via a pure native chain into set_count
+    let mut g = Graph::default();
+    g.event("bp", "begin_play");
+    g.node("dmg", "native::Health::damage", &[P::ExecIn, P::In("self", "Health"), P::In("amount", "f64"), P::ExecOut("exec_out"), P::Out("result", "f64")]);
+    g.prop("dmg", "amount", json!(1.0));
+    g.node("sx", "native::V2::set_x", &[P::In("self", "V2"), P::In("value", "f64"), P::Out("self", "V2")]);
+    g.prop("sx", "value", json!(3.0));
+    g.node("sy", "native::V2::set_y", &[P::In("self", "V2"), P::In("value", "f64"), P::Out("self", "V2")]);
+    g.prop("sy", "value", json!(4.0)).data("sx", "self", "sy", "self");
+    g.node("len", "native::V2::length", &[P::In("self", "V2"), P::Out("result", "f64")]).data("sy", "self", "len", "self");
+    g.node("round", "to_int", &[P::In("x", "f64"), P::Out("result", "i64")]).data("len", "result", "round", "x");
+    g.set_var("set", "count", "i64").data("round", "result", "set", "value");
+    g.exec("bp", "Body", "dmg").exec("dmg", "exec_out", "set");
+
+    let registry = {
+        let mut r = natives();
+        r.register(NativeFn::builder("std::to_int").pure().params(["x"]).build(|x: f64| x.round() as i64)).unwrap();
+        r
+    };
+    let built = g.build();
+    let vars = log_vars();
+    let module = compile(&ClassSource { name: "Natives", graph: &built, variables: &vars }, &registry)
+        .unwrap_or_else(|d| panic!("{d:?}"));
+    let program = Program::link(Arc::new(module), &registry).unwrap();
+    let mut world = World::new();
+    let e = world.spawn();
+    world.insert(e, Health { value: 10.0 });
+    let mut inst = program.instantiate();
+    let mut host = Host::new(&mut world, e);
+    Vm::new()
+        .call(&program, &mut inst, program.entry("begin_play").unwrap(), &[], &mut host, &mut Budget::new(1000))
+        .unwrap();
+    assert_eq!(world.get::<Health>(e).unwrap().value, 9.0);
+    assert_eq!(program.var(&inst, program.variable("count").unwrap()), Some(&Value::Int(5)));
+}
+
+#[test]
+fn palette_lists_methods_by_reference_type_and_globally() {
+    use blueprint_compiler::palette::{methods_for, native_nodes};
+    let nodes = native_nodes(&natives());
+    // pulsar_std functions keep their own nodes.
+    assert!(nodes.iter().all(|n| !n.node_type.starts_with("native::std::")));
+
+    let health: Vec<_> = methods_for(&nodes, "Health").map(|n| n.node_type.as_str()).collect();
+    assert!(health.contains(&"native::Health::damage"), "{health:?}");
+    assert!(health.contains(&"native::Health::get_value"), "{health:?}");
+
+    let damage = nodes.iter().find(|n| n.node_type == "native::Health::damage").unwrap();
+    assert_eq!(damage.category, "Components/Health");
+    assert_eq!(damage.name, "Damage");
+    assert!(damage.exec);
+    assert_eq!(damage.inputs, [("self".to_string(), "Health".to_string()), ("amount".to_string(), "f64".to_string())]);
+    assert_eq!(damage.outputs, [("result".to_string(), "f64".to_string())]);
+
+    let set_x = nodes.iter().find(|n| n.node_type == "native::V2::set_x").unwrap();
+    assert_eq!(set_x.category, "Types/V2");
+    assert!(!set_x.exec, "value-type setters are pure");
+    assert_eq!(set_x.outputs, [("self".to_string(), "V2".to_string())]);
+
+    // Associated functions and the stdlib are in the global list too.
+    let of = nodes.iter().find(|n| n.node_type == "native::Health::of").unwrap();
+    assert_eq!(of.category, "Components/Health");
+    assert!(of.receiver.is_none());
+    assert!(nodes.iter().any(|n| n.node_type == "native::math::sin" && n.category == "Math"));
+}

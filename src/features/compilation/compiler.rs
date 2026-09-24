@@ -43,7 +43,7 @@ struct BytecodeFileOutput {
 /// Example: `"\"2\""` -> `2`
 /// Every native the engine registers (pulsar_std, world components,
 /// reflected methods), built once: what compiled modules link against.
-fn script_natives() -> &'static pulsar_script_vm::NativeRegistry {
+pub(crate) fn script_natives() -> &'static pulsar_script_vm::NativeRegistry {
     static NATIVES: std::sync::OnceLock<pulsar_script_vm::NativeRegistry> = std::sync::OnceLock::new();
     NATIVES.get_or_init(pulsar_script_vm::NativeRegistry::with_engine_natives)
 }
@@ -891,35 +891,46 @@ impl BlueprintEditorPanel {
                     panel.push_compilation_history(
                         CompilationState::Compiling,
                         "build",
-                        "Compiling to PBGC bytecode",
+                        "Compiling to an engine script module",
                         Some(
-                            "Steps: build graph description, compile to bytecode programs, \
-                             write events/.build/bytecode.json"
+                            "Steps: build graph description, compile to a script module \
+                             (events/.build/module.json) and legacy bytecode \
+                             (events/.build/bytecode.json)"
                                 .to_string(),
                         ),
                     );
                     cx.notify();
                     panel.sync_all_canvases_to_tabs(cx);
+                    // The engine script module is what the game runtime
+                    // runs. PBGC bytecode is still written for classes the
+                    // new compiler cannot handle yet (the runtime uses it
+                    // only when there is no module): the build fails only
+                    // if neither can be produced.
+                    let module = panel.compile_to_script_module();
                     let bytecode = panel.compile_to_bytecode_files();
-                    // The engine script module the new runtime loads.
-                    // Written alongside the PBGC bytecode until the game
-                    // runtime switches over; a failure here does not fail
-                    // the build yet, but is recorded.
-                    match panel.compile_to_script_module() {
-                        Ok(path) => panel.push_compilation_history(
-                            CompilationState::Compiling,
-                            "module",
-                            "Script module written",
-                            Some(path.display().to_string()),
-                        ),
-                        Err(message) => panel.push_compilation_history(
-                            CompilationState::Error,
-                            "module",
-                            "Script module compilation failed",
-                            Some(message),
-                        ),
+                    match (module, bytecode) {
+                        (Ok(path), bytecode) => {
+                            if let Err(message) = bytecode {
+                                panel.push_compilation_history(
+                                    CompilationState::Compiling,
+                                    "bytecode",
+                                    "Legacy bytecode not written (not needed: the module runs)",
+                                    Some(message),
+                                );
+                            }
+                            Ok(Some(path))
+                        }
+                        (Err(message), Ok(path)) => {
+                            panel.push_compilation_history(
+                                CompilationState::Error,
+                                "module",
+                                "Script module compilation failed; the class will run on legacy bytecode",
+                                Some(message),
+                            );
+                            Ok(Some(path))
+                        }
+                        (Err(message), Err(_)) => Err(message),
                     }
-                    bytecode.map(Some)
                 }
             }
         });
