@@ -23,11 +23,91 @@ pub struct PrefabAsset {
     pub prefab_version: u32,
     pub name: String,
     #[serde(default)]
-    pub components: Vec<ComponentInstance>,
+    pub components: Vec<PrefabComponent>,
     #[serde(default)]
     pub blueprint_class: Option<BlueprintClassRef>,
     #[serde(default)]
     pub script_graph: Option<ui::graph::GraphDescription>,
+}
+
+/// One prefab component: the component record plus its **slot id**.
+///
+/// The slot id is a UUID, unique within this class. The class's compiled
+/// script names the component by it (a `get_component_ref` node carries it),
+/// and levels key per-instance overrides by it. It exists only on disk:
+/// placing the class resolves each slot id once into a handle to the placed
+/// instance's real component. It must never change once assigned; files
+/// without one (or with the readable `<Class>_<n>` ids of early builds) get a
+/// fresh UUID on load, saved right away (`pulsar_class` does the same).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PrefabComponent {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub slot_id: String,
+    #[serde(flatten)]
+    pub component: ComponentInstance,
+}
+
+impl std::ops::Deref for PrefabComponent {
+    type Target = ComponentInstance;
+    fn deref(&self) -> &ComponentInstance {
+        &self.component
+    }
+}
+
+impl std::ops::DerefMut for PrefabComponent {
+    fn deref_mut(&mut self) -> &mut ComponentInstance {
+        &mut self.component
+    }
+}
+
+/// Whether `slot_id` is a valid slot id (a UUID).
+pub fn is_slot_uuid(slot_id: &str) -> bool {
+    uuid::Uuid::parse_str(slot_id.trim()).is_ok()
+}
+
+/// Component classes the prefab editor never offers: `ClassInstance` marks a
+/// placed class in a level and only comes from placing one.
+pub fn is_internal_component(class_name: &str) -> bool {
+    class_name == "ClassInstance"
+}
+
+/// Tell the editor and a running game that the class in `class_dir` was
+/// rewritten (#921): the level editor rebuilds its placed instances, a
+/// running game reloads its script module.
+pub fn publish_class_updated(class_dir: &std::path::Path) {
+    let id = std::fs::read_to_string(class_dir.join(CLASS_META_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|meta| meta.get("class_id").and_then(|v| v.as_str()).map(str::to_string));
+    let mut event = plugin_editor_api::AssetUpdated::new(plugin_editor_api::AssetKind::Blueprint)
+        .with_path(class_dir.to_path_buf());
+    event.id = id;
+    plugin_editor_api::publish_asset_updated(event);
+}
+
+/// Class metadata file holding the class GUID (`pulsar_class::ClassMeta`).
+pub const CLASS_META_FILE: &str = "class.json";
+
+/// Make sure `class_dir/class.json` carries a class GUID, generating one on
+/// the class's first save. Other keys in the file are kept.
+pub fn ensure_class_id(class_dir: &std::path::Path) -> Result<String, String> {
+    let path = class_dir.join(CLASS_META_FILE);
+    let mut meta: serde_json::Map<String, serde_json::Value> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    if let Some(id) = meta
+        .get("class_id")
+        .and_then(|v| v.as_str())
+        .filter(|id| !id.trim().is_empty())
+    {
+        return Ok(id.to_string());
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    meta.insert("class_id".into(), serde_json::Value::String(id.clone()));
+    let text = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| format!("Failed to write class.json: {e}"))?;
+    Ok(id)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -47,13 +127,41 @@ impl PrefabAsset {
             script_graph: None,
         }
     }
+
+    /// Give every component whose slot id is missing, duplicated or not a
+    /// UUID a fresh UUID. Returns whether anything changed.
+    pub fn fill_missing_slot_ids(&mut self) -> bool {
+        let mut used = std::collections::HashSet::new();
+        let mut changed = false;
+        for component in &mut self.components {
+            let id = component.slot_id.trim().to_string();
+            if !is_slot_uuid(&id) || !used.insert(id) {
+                let fresh = uuid::Uuid::new_v4().to_string();
+                used.insert(fresh.clone());
+                component.slot_id = fresh;
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    /// A fresh slot id for a new component.
+    pub fn new_slot_id(&self) -> String {
+        uuid::Uuid::new_v4().to_string()
+    }
 }
 
 impl GraphCanvasPanel {
     /// Create a getter node that outputs a runtime reference to a prefab component instance.
+    ///
+    /// The node carries the component's prefab `slot_id`: the compiler
+    /// resolves it to the entity holding that slot on the placed instance
+    /// (the root or a generated child), so a second component of the same
+    /// class is reachable too.
     pub fn create_component_getter_node(
         &mut self,
         component_index: usize,
+        slot_id: String,
         class_name: String,
         position: gpui::Point<f32>,
         cx: &mut Context<Self>,
@@ -76,6 +184,7 @@ impl GraphCanvasPanel {
             properties: HashMap::from([
                 ("component_index".to_string(), component_index.to_string()),
                 ("component_class".to_string(), class_name.clone()),
+                ("slot_id".to_string(), slot_id),
             ]),
             is_selected: false,
             description: format!("Gets a runtime reference to component {}", class_name),
@@ -103,7 +212,13 @@ impl GraphCanvasPanel {
             canvas.y / z - self.graph.pan_offset.y,
         );
 
-        self.create_component_getter_node(drag.component_index, drag.class_name, graph_pos, cx);
+        self.create_component_getter_node(
+            drag.component_index,
+            drag.slot_id,
+            drag.class_name,
+            graph_pos,
+            cx,
+        );
     }
 }
 
@@ -123,7 +238,14 @@ impl BlueprintEditorPanel {
             return Ok(());
         }
 
-        let prefab = crate::io::prefab::load_prefab(&path)?;
+        let mut prefab = crate::io::prefab::load_prefab(&path)?;
+        if prefab.fill_missing_slot_ids() {
+            // Assigned once, saved at once: levels and the compiled script
+            // refer to these ids.
+            if let Err(error) = crate::io::prefab::save_prefab(&path, &prefab) {
+                tracing::warn!("Could not save assigned component slot ids: {error}");
+            }
+        }
 
         self.prefab_asset = prefab;
         self.prefab_property_state.clear();
@@ -137,6 +259,15 @@ impl BlueprintEditorPanel {
         let Some(path) = self.prefab_file_path() else {
             return Err("No class path available for prefab save".to_string());
         };
+
+        // Class identity and slot ids (#921): levels refer to the class by
+        // its GUID and to its components by slot id.
+        self.prefab_asset.fill_missing_slot_ids();
+        if let Some(class_dir) = path.parent() {
+            std::fs::create_dir_all(class_dir)
+                .map_err(|e| format!("Failed to create class directory: {e}"))?;
+            ensure_class_id(class_dir)?;
+        }
 
         crate::io::prefab::save_prefab(&path, &self.prefab_asset)
     }
@@ -208,10 +339,14 @@ impl BlueprintEditorPanel {
             values.insert(prop.name.to_string(), json_value);
         }
 
-        self.prefab_asset.components.push(ComponentInstance {
-            class_name: class_name.to_string(),
-            enabled: true,
-            data: serde_json::Value::Object(values),
+        let slot_id = self.prefab_asset.new_slot_id();
+        self.prefab_asset.components.push(PrefabComponent {
+            slot_id,
+            component: ComponentInstance {
+                class_name: class_name.to_string(),
+                enabled: true,
+                data: serde_json::Value::Object(values),
+            },
         });
         self.selected_prefab_component = Some(self.prefab_asset.components.len().saturating_sub(1));
         self.prefab_property_state.clear();

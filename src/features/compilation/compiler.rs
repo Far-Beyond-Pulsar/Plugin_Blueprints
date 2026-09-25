@@ -848,6 +848,11 @@ impl BlueprintEditorPanel {
                             progress: 1.0,
                             is_compiling: false,
                         };
+                        // The module is written: placed instances and a
+                        // running game reload the class.
+                        if let Some(class_dir) = panel.current_class_path.clone() {
+                            crate::features::prefabs::publish_class_updated(&class_dir);
+                        }
 
                         panel.push_compilation_history(
                             CompilationState::Success,

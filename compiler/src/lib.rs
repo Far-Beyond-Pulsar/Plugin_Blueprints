@@ -41,7 +41,10 @@
 //!   `comp_call::C::m` and `get_component_ref::C[::index]` call the natives
 //!   `C::get_p`, `C::set_p`, `C::m` and `C::of`. An unconnected component
 //!   input means this entity's component; a `get_component_ref` whose
-//!   entity input is wired takes that object's component.
+//!   entity input is wired takes that object's component. A
+//!   `get_component_ref` with a `slot_id` property (a prefab slot UUID)
+//!   reads a hidden `__slot:<uuid>` handle variable instead, which the
+//!   engine fills once when the instance is bound to its placed class.
 //! - **Scene lookups**: `find_object_by_stable_id`, `find_object_by_name` and
 //!   `object_ref_literal` produce an entity through `world::find_by_*`.
 
@@ -55,6 +58,33 @@ use pulsar_script_vm::{
     Type, TypeRegistry, UnOp, Variable,
 };
 use serde_json::Value as Json;
+
+/// Prefix of the hidden per-slot handle variables a module declares (one per
+/// component slot its graph uses): `__slot:<slot uuid>`. The engine fills
+/// them when it binds a script instance to a placed class
+/// (`pulsar_class::SLOT_VARIABLE_PREFIX` is the same spelling).
+pub const SLOT_VARIABLE_PREFIX: &str = "__slot:";
+
+/// The hidden handle variable for component slot `slot_id`.
+pub fn slot_variable_name(slot_id: &str) -> String {
+    format!("{SLOT_VARIABLE_PREFIX}{slot_id}")
+}
+
+/// The component slots a compiled module refers to: `(slot id, component
+/// class)` for every hidden slot variable.
+pub fn module_slots(module: &Module) -> Vec<(String, String)> {
+    module
+        .variables
+        .iter()
+        .filter_map(|v| {
+            let slot = v.name.strip_prefix(SLOT_VARIABLE_PREFIX)?;
+            match &v.ty {
+                Type::Component(class) => Some((slot.to_owned(), class.clone())),
+                _ => None,
+            }
+        })
+        .collect()
+}
 
 /// A class variable as the editor declares it.
 #[derive(Clone, Debug)]
@@ -1088,20 +1118,40 @@ impl<'a> Compiler<'a> {
             self.call(f, &native, vec![component], Some(dst));
             dst
         } else if let Some(rest) = ty.strip_prefix("get_component_ref::") {
-            // `Class` or `Class::index`: SceneDB holds one live component per
-            // type, so the index (duplicate records) does not apply.
+            // `Class` or `Class::index`. A node with a `slot_id` property
+            // names one component slot of this class (a UUID from the
+            // class's prefab). The module declares a hidden variable of the
+            // slot's component type (`__slot:<uuid>`, see
+            // [`slot_variable_name`]); the runtime fills it once, when the
+            // script instance is bound to a placed class, with a handle to
+            // that instance's real component. The node then just reads the
+            // handle. Older nodes have no slot id and resolve by class name
+            // on this entity (the index cannot apply: SceneDB holds one
+            // component per type per entity). A wired entity input means
+            // another object: slot ids are this class's own, so that object's
+            // component is found by class name.
             let class = rest.split("::").next().unwrap_or(rest);
-            match data_inputs(node).into_iter().find(|p| self.data_in.contains_key(&(id.to_owned(), p.clone()))) {
-                // Another object's component.
-                Some(pin) => {
+            let slot = node
+                .properties
+                .get("slot_id")
+                .and_then(Json::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned);
+            let wired = data_inputs(node).into_iter().find(|p| self.data_in.contains_key(&(id.to_owned(), p.clone())));
+            match (wired, slot) {
+                (Some(pin), _) => {
                     let entity = self.input(f, node, &pin, &Type::Entity)?;
-                    let native = format!("{class}::of");
-                    self.native_sig(id, &native)?;
-                    let component = f.reg(Type::Component(class.to_owned()));
-                    self.call(f, &native, vec![entity], Some(component));
-                    component
+                    self.component_of(f, id, class, entity)?
                 }
-                None => self.self_component(f, id, class)?,
+                (None, None) => self.self_component(f, id, class)?,
+                (None, Some(slot)) => {
+                    // The class must be a script-visible component type.
+                    self.native_sig(id, &format!("{class}::of"))?;
+                    let ty = Type::Component(class.to_owned());
+                    let var = self.add_var(&slot_variable_name(&slot), ty.clone(), None);
+                    self.load(f, var, ty)
+                }
             }
         } else if matches!(ty, "find_object_by_stable_id" | "find_object_by_name" | "object_ref_literal") {
             let native = if ty == "find_object_by_name" { "world::find_by_name" } else { "world::find_by_stable_id" };
@@ -1202,6 +1252,15 @@ impl<'a> Compiler<'a> {
             return self.input(f, node, "component_ref", &ty);
         }
         self.self_component(f, &node.id, class)
+    }
+
+    /// `Class::of(entity)`.
+    fn component_of(&mut self, f: &mut Func, node: &str, class: &str, entity: Reg) -> Option<Reg> {
+        let native = format!("{class}::of");
+        self.native_sig(node, &native)?;
+        let component = f.reg(Type::Component(class.to_owned()));
+        self.call(f, &native, vec![entity], Some(component));
+        Some(component)
     }
 
     fn self_component(&mut self, f: &mut Func, node: &str, class: &str) -> Option<Reg> {

@@ -11,6 +11,8 @@ use ui::{menu::popup_menu::PopupMenu, ActiveTheme, HierarchyItem, IconName};
 #[derive(Clone)]
 pub struct ComponentDrag {
     pub component_index: usize,
+    /// The component's prefab slot id (stable across reorders).
+    pub slot_id: String,
     pub class_name: String,
 }
 
@@ -18,6 +20,7 @@ pub struct ComponentDrag {
 #[derive(Clone)]
 pub struct ComponentHierarchyItem {
     pub component: ComponentInstance,
+    pub slot_id: String,
     pub index: usize,
     pub is_selected: bool,
     pub children_indices: Vec<usize>,
@@ -58,6 +61,7 @@ impl HierarchyItem for ComponentHierarchyItem {
     fn create_drag_payload(&self) -> Self::DragPayload {
         ComponentDrag {
             component_index: self.index,
+            slot_id: self.slot_id.clone(),
             class_name: self.component.class_name.clone(),
         }
     }

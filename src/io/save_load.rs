@@ -29,8 +29,15 @@ impl BlueprintEditorPanel {
         if let Some(path) = file_path {
             match self.save_to_path(&path, window, cx) {
                 Ok(()) => {
-                    if let Err(e) = self.save_prefab_sidecar() {
-                        tracing::warn!("Failed to save prefab sidecar: {}", e);
+                    match self.save_prefab_sidecar() {
+                        Ok(()) => {
+                            // prefab.json and class.json are on disk: let
+                            // placed instances and a running game catch up.
+                            if let Some(class_dir) = self.current_class_path.clone() {
+                                crate::features::prefabs::publish_class_updated(&class_dir);
+                            }
+                        }
+                        Err(e) => tracing::warn!("Failed to save prefab sidecar: {}", e),
                     }
 
                     tracing::info!(">>> plugin_save: SUCCESS wrote to {:?}", path);
