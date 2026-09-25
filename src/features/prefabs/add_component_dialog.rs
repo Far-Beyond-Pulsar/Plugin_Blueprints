@@ -27,6 +27,7 @@ impl Focusable for AddPrefabComponentDialog {
 impl AddPrefabComponentDialog {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut engine_classes = REGISTRY.get_class_names();
+        engine_classes.retain(|name| !super::is_internal_component(name));
         engine_classes.sort();
 
         let searchable_list = cx.new(|cx| {

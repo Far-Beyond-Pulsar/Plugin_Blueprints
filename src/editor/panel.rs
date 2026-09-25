@@ -431,6 +431,8 @@ impl BlueprintEditorPanel {
         let editor_weak = cx.entity().downgrade();
         let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
         let mut engine_classes = pulsar_reflection::REGISTRY.get_class_names();
+        // A placed class's own marker component is not a prefab component.
+        engine_classes.retain(|name| !crate::features::prefabs::is_internal_component(name));
         engine_classes.sort();
         let prefab_component_list = cx.new(|cx| {
             SearchableList::new(window, cx, engine_classes, |name| name.to_string())

@@ -30,15 +30,15 @@ pub struct PrefabAsset {
     pub script_graph: Option<ui::graph::GraphDescription>,
 }
 
-/// One prefab component: the component record plus its stable **slot id**.
+/// One prefab component: the component record plus its **slot id**.
 ///
-/// The slot id names this component for placed instances (their per-slot
-/// overrides and generated child objects) and for `get_component_ref`
-/// nodes, so it must never change once assigned. Files written before slot
-/// ids existed get `<Class>_<n>` (the n-th component of that class), the
-/// same rule the engine applies when it reads such a file
-/// (`pulsar_class::PrefabAsset::fill_missing_slot_ids`), so ids the editor
-/// later saves match the ones levels already refer to.
+/// The slot id is a UUID, unique within this class. The class's compiled
+/// script names the component by it (a `get_component_ref` node carries it),
+/// and levels key per-instance overrides by it. It exists only on disk:
+/// placing the class resolves each slot id once into a handle to the placed
+/// instance's real component. It must never change once assigned; files
+/// without one (or with the readable `<Class>_<n>` ids of early builds) get a
+/// fresh UUID on load, saved right away (`pulsar_class` does the same).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrefabComponent {
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -60,16 +60,29 @@ impl std::ops::DerefMut for PrefabComponent {
     }
 }
 
-/// `<class>_<n>` for the smallest `n >= start` not in `used`.
-fn next_free_slot_id(class_name: &str, start: usize, used: &std::collections::HashSet<String>) -> String {
-    let mut n = start;
-    loop {
-        let candidate = format!("{class_name}_{n}");
-        if !used.contains(&candidate) {
-            return candidate;
-        }
-        n += 1;
-    }
+/// Whether `slot_id` is a valid slot id (a UUID).
+pub fn is_slot_uuid(slot_id: &str) -> bool {
+    uuid::Uuid::parse_str(slot_id.trim()).is_ok()
+}
+
+/// Component classes the prefab editor never offers: `ClassInstance` marks a
+/// placed class in a level and only comes from placing one.
+pub fn is_internal_component(class_name: &str) -> bool {
+    class_name == "ClassInstance"
+}
+
+/// Tell the editor and a running game that the class in `class_dir` was
+/// rewritten (#921): the level editor rebuilds its placed instances, a
+/// running game reloads its script module.
+pub fn publish_class_updated(class_dir: &std::path::Path) {
+    let id = std::fs::read_to_string(class_dir.join(CLASS_META_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|meta| meta.get("class_id").and_then(|v| v.as_str()).map(str::to_string));
+    let mut event = plugin_editor_api::AssetUpdated::new(plugin_editor_api::AssetKind::Blueprint)
+        .with_path(class_dir.to_path_buf());
+    event.id = id;
+    plugin_editor_api::publish_asset_updated(event);
 }
 
 /// Class metadata file holding the class GUID (`pulsar_class::ClassMeta`).
@@ -115,38 +128,26 @@ impl PrefabAsset {
         }
     }
 
-    /// Give every component without a slot id (or with a duplicate one) a
-    /// deterministic `<Class>_<n>` id. Returns whether anything changed.
+    /// Give every component whose slot id is missing, duplicated or not a
+    /// UUID a fresh UUID. Returns whether anything changed.
     pub fn fill_missing_slot_ids(&mut self) -> bool {
         let mut used = std::collections::HashSet::new();
-        let mut needs = Vec::new();
-        for (index, component) in self.components.iter().enumerate() {
-            if component.slot_id.trim().is_empty() || !used.insert(component.slot_id.clone()) {
-                needs.push(index);
+        let mut changed = false;
+        for component in &mut self.components {
+            let id = component.slot_id.trim().to_string();
+            if !is_slot_uuid(&id) || !used.insert(id) {
+                let fresh = uuid::Uuid::new_v4().to_string();
+                used.insert(fresh.clone());
+                component.slot_id = fresh;
+                changed = true;
             }
         }
-        for &index in &needs {
-            let class = self.components[index].class_name.clone();
-            let occurrence = self.components[..index]
-                .iter()
-                .filter(|c| c.class_name == class)
-                .count();
-            let id = next_free_slot_id(&class, occurrence, &used);
-            used.insert(id.clone());
-            self.components[index].slot_id = id;
-        }
-        !needs.is_empty()
+        changed
     }
 
-    /// A fresh slot id for a new component of `class_name`.
-    pub fn new_slot_id(&self, class_name: &str) -> String {
-        let used = self.components.iter().map(|c| c.slot_id.clone()).collect();
-        let occurrence = self
-            .components
-            .iter()
-            .filter(|c| c.class_name == class_name)
-            .count();
-        next_free_slot_id(class_name, occurrence, &used)
+    /// A fresh slot id for a new component.
+    pub fn new_slot_id(&self) -> String {
+        uuid::Uuid::new_v4().to_string()
     }
 }
 
@@ -238,7 +239,13 @@ impl BlueprintEditorPanel {
         }
 
         let mut prefab = crate::io::prefab::load_prefab(&path)?;
-        prefab.fill_missing_slot_ids();
+        if prefab.fill_missing_slot_ids() {
+            // Assigned once, saved at once: levels and the compiled script
+            // refer to these ids.
+            if let Err(error) = crate::io::prefab::save_prefab(&path, &prefab) {
+                tracing::warn!("Could not save assigned component slot ids: {error}");
+            }
+        }
 
         self.prefab_asset = prefab;
         self.prefab_property_state.clear();
@@ -332,7 +339,7 @@ impl BlueprintEditorPanel {
             values.insert(prop.name.to_string(), json_value);
         }
 
-        let slot_id = self.prefab_asset.new_slot_id(class_name);
+        let slot_id = self.prefab_asset.new_slot_id();
         self.prefab_asset.components.push(PrefabComponent {
             slot_id,
             component: ComponentInstance {

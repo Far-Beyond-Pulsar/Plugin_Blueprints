@@ -101,37 +101,40 @@ fn converted_legacy_comment(color: LegacyColor) -> BlueprintComment {
     .into()
 }
 
-/// #921: prefab components get stable slot ids. Old files get the same
-/// deterministic `<Class>_<n>` ids the engine assigns when it reads them;
-/// saving writes them and leaves the component data untouched.
+/// #921: prefab component slot ids are UUIDs. Missing, duplicate or
+/// readable (`<Class>_<n>`) ids get fresh UUIDs; valid ones are kept; saving
+/// writes them and leaves the component data untouched.
 #[test]
-fn prefab_components_get_stable_slot_ids() {
+fn prefab_components_get_uuid_slot_ids() {
     let dir = std::env::temp_dir().join(format!("bp_prefab_slots_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("prefab.json");
+    let kept = "6f1c1a52-1d7e-4d7e-9c55-2b7c1f0d7a10";
     std::fs::write(
         &path,
-        r#"{
+        format!(
+            r#"{{
             "prefab_version": 1, "name": "Lamp",
             "components": [
-                { "class_name": "LightComponent", "enabled": true, "data": { "__parent_index": 1 } },
-                { "class_name": "StaticMeshComponent", "enabled": true, "data": {} },
-                { "slot_id": "LightComponent_0", "class_name": "LightComponent", "enabled": false, "data": {} }
+                {{ "class_name": "LightComponent", "enabled": true, "data": {{ "__parent_index": 1 }} }},
+                {{ "slot_id": "StaticMeshComponent_0", "class_name": "StaticMeshComponent", "enabled": true, "data": {{}} }},
+                {{ "slot_id": "{kept}", "class_name": "LightComponent", "enabled": false, "data": {{}} }}
             ]
-        }"#,
+        }}"#
+        ),
     )
     .unwrap();
 
     let mut prefab = blueprint_editor_plugin::io::prefab::load_prefab(&path).unwrap();
     assert!(prefab.fill_missing_slot_ids());
-    let ids: Vec<&str> = prefab.components.iter().map(|c| c.slot_id.as_str()).collect();
-    // The stored id is kept; the others get the next free deterministic ids.
-    assert_eq!(ids, ["LightComponent_1", "StaticMeshComponent_0", "LightComponent_0"]);
-    assert_eq!(prefab.new_slot_id("LightComponent"), "LightComponent_2");
+    let ids: Vec<String> = prefab.components.iter().map(|c| c.slot_id.clone()).collect();
+    assert!(ids.iter().all(|id| uuid::Uuid::parse_str(id).is_ok()), "{ids:?}");
+    assert_eq!(ids[2], kept, "valid UUIDs are kept");
+    assert!(!prefab.fill_missing_slot_ids(), "idempotent");
 
     blueprint_editor_plugin::io::prefab::save_prefab(&path, &prefab).unwrap();
     let saved: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    assert_eq!(saved["components"][0]["slot_id"], "LightComponent_1");
+    assert_eq!(saved["components"][0]["slot_id"], ids[0].as_str());
     assert_eq!(saved["components"][0]["class_name"], "LightComponent");
     assert_eq!(saved["components"][0]["data"]["__parent_index"], 1);
     assert_eq!(saved["components"][2]["enabled"], false);
