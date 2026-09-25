@@ -62,6 +62,9 @@ pub struct PinDefinition {
 // Global Node Definitions
 // ============================================================================
 
+/// pulsar_std nodes no longer offered (see `populate_categories_from_metadata`).
+const RETIRED_NODES: [&str; 3] = ["emit_event", "on_event", "remove_event_listener"];
+
 /// Global node definitions (loaded once at startup)
 use std::sync::OnceLock;
 static NODE_DEFINITIONS: OnceLock<NodeDefinitions> = OnceLock::new();
@@ -260,6 +263,12 @@ impl NodeDefinitions {
 
         // Group nodes by category
         for (id, node_meta) in metadata {
+            // The placeholder event nodes (#872) are replaced by the engine
+            // event nodes ("On <Event>", "Send <Event> to", ...), which the
+            // palette builds per class.
+            if RETIRED_NODES.contains(&id.as_str()) {
+                continue;
+            }
             let mut inputs = Vec::new();
             let mut outputs = Vec::new();
 

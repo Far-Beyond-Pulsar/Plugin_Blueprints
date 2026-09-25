@@ -126,3 +126,104 @@ fn title_case(snake: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+
+// ---- engine events (#924) ------------------------------------------------------
+
+/// An engine event the palette offers nodes for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PaletteEvent {
+    pub signature: pulsar_script_vm::EventSignature,
+    /// e.g. `Physics`, `Lifecycle`, `Custom/Door`.
+    pub category: String,
+    /// Declared by the class being edited (its "On" node listens on the
+    /// object's own channel by default).
+    pub declared_here: bool,
+}
+
+/// One event palette node: an "On <Event>" entry point, or a "Send <Event>
+/// to", "Broadcast <Event>" or "Send <Event> to Class" call.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EventNode {
+    /// `event::on::<name>`, `event::send::<name>`, `event::broadcast::<name>`
+    /// or `event::to_class::<name>`.
+    pub node_type: String,
+    pub name: String,
+    /// `Events/<category>`.
+    pub category: String,
+    pub doc: String,
+    /// An entry point (an "On" node): exec output `Body`, no exec input.
+    pub is_event: bool,
+    /// Data inputs `(pin id, pin type)`.
+    pub inputs: Vec<(String, String)>,
+    /// Data outputs `(pin id, pin type)`.
+    pub outputs: Vec<(String, String)>,
+    /// Default node properties (the "On" node's `scope`).
+    pub properties: Vec<(String, String)>,
+}
+
+/// Every event node for `events`, sorted by category then name. Pins are
+/// named after the event's fields, which is what
+/// [`compile`](crate::compile) reads.
+pub fn event_nodes(events: &[PaletteEvent]) -> Vec<EventNode> {
+    let mut nodes = Vec::new();
+    for event in events {
+        let sig = &event.signature;
+        let category = format!("Events/{}", event.category);
+        let fields: Vec<(String, String)> =
+            sig.fields.iter().map(|f| (f.name.clone(), pin_type_name(&f.ty))).collect();
+        let scope = match crate::default_scope(sig, event.declared_here) {
+            pulsar_script_vm::SubscriptionScope::Self_ => "self",
+            pulsar_script_vm::SubscriptionScope::Global => "global",
+            pulsar_script_vm::SubscriptionScope::Class => "class",
+        };
+        nodes.push(EventNode {
+            node_type: format!("event::on::{}", sig.name),
+            name: format!("On {}", sig.name),
+            category: category.clone(),
+            doc: format!(
+                "Runs when `{}` arrives. Scope (the `scope` property): `self` = sent to this object, `global` = broadcast, `class` = sent to every instance of this class.",
+                sig.name
+            ),
+            is_event: true,
+            inputs: Vec::new(),
+            outputs: fields.clone(),
+            properties: vec![("scope".into(), scope.into())],
+        });
+        let mut to = vec![("target".to_owned(), "Entity".to_owned())];
+        to.extend(fields.iter().cloned());
+        nodes.push(EventNode {
+            node_type: format!("event::send::{}", sig.name),
+            name: format!("Send {} to", sig.name),
+            category: category.clone(),
+            doc: format!("Send `{}` to one object; its \"On {}\" handlers with scope `self` run. Delivered at the next event flush.", sig.name, sig.name),
+            is_event: false,
+            inputs: to,
+            outputs: Vec::new(),
+            properties: Vec::new(),
+        });
+        nodes.push(EventNode {
+            node_type: format!("event::broadcast::{}", sig.name),
+            name: format!("Broadcast {}", sig.name),
+            category: category.clone(),
+            doc: format!("Broadcast `{}` on the global channel. Delivered at the next event flush.", sig.name),
+            is_event: false,
+            inputs: fields.clone(),
+            outputs: Vec::new(),
+            properties: Vec::new(),
+        });
+        let mut to_class = vec![("class".to_owned(), "String".to_owned())];
+        to_class.extend(fields);
+        nodes.push(EventNode {
+            node_type: format!("event::to_class::{}", sig.name),
+            name: format!("Send {} to Class", sig.name),
+            category,
+            doc: format!("Send `{}` to every instance of a class (name or GUID) listening with scope `class`.", sig.name),
+            is_event: false,
+            inputs: to_class,
+            outputs: Vec::new(),
+            properties: Vec::new(),
+        });
+    }
+    nodes.sort_by(|a, b| (&a.category, &a.name).cmp(&(&b.category, &b.name)));
+    nodes
+}

@@ -130,6 +130,35 @@ impl NodePaletteView {
                 &editor_ref.local_event_defs,
             );
             all_items.extend(dispatch_items);
+
+            // Engine events (#924): On / Send / Broadcast nodes for the
+            // built-in events, other classes' events and this class's own,
+            // by category.
+            let class_path = editor_ref.current_class_path.clone();
+            let class_name = class_path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .unwrap_or("unnamed_blueprint")
+                .to_owned();
+            let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> = Default::default();
+            for (category, def) in crate::features::events::engine_events::event_node_definitions(
+                class_path.as_deref(),
+                &class_name,
+                &editor_ref.local_event_defs,
+            ) {
+                by_category.entry(category).or_default().push(def);
+            }
+            for (category, defs) in by_category {
+                all_items.push(PaletteItem::CategoryHeader {
+                    name: category,
+                    color: "#C0392B".to_string(),
+                    node_count: defs.len(),
+                });
+                for def in defs {
+                    all_items.push(PaletteItem::NodeEntry { def, category_color: "#C0392B".to_string() });
+                }
+            }
         }
 
         self.all_items = all_items;

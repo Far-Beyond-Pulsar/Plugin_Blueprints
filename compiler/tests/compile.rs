@@ -172,7 +172,7 @@ impl Run {
     fn new(graph: &Graph, variables: &[VariableSource]) -> Self {
         let registry = natives();
         let g = graph.build();
-        let module = compile(&ClassSource { name: "Test", graph: &g, variables }, &registry)
+        let module = compile(&ClassSource { name: "Test", graph: &g, variables, events: &[], known_events: &[] }, &registry)
             .unwrap_or_else(|d| panic!("compile failed: {d:?}"));
         let program = Program::link(Arc::new(module), &registry).expect("link");
         let mut world = World::new();
@@ -195,7 +195,7 @@ impl Run {
 
 fn errors(graph: &Graph, variables: &[VariableSource]) -> Vec<Diagnostic> {
     let g = graph.build();
-    compile(&ClassSource { name: "Test", graph: &g, variables }, &natives()).expect_err("compile should fail")
+    compile(&ClassSource { name: "Test", graph: &g, variables, events: &[], known_events: &[] }, &natives()).expect_err("compile should fail")
 }
 
 // ---- tests ------------------------------------------------------------------
@@ -228,7 +228,7 @@ fn tick_receives_delta_time() {
         r
     };
     let built = g.build();
-    let module = compile(&ClassSource { name: "Ticker", graph: &built, variables: &vars }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Ticker", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -376,7 +376,7 @@ fn component_nodes_default_to_this_entity() {
         r
     };
     let built = g.build();
-    let module = compile(&ClassSource { name: "Hurt", graph: &built, variables: &[] }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Hurt", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -461,7 +461,7 @@ fn native_nodes_call_any_registered_native() {
     };
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Natives", graph: &built, variables: &vars }, &registry)
+    let module = compile(&ClassSource { name: "Natives", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry)
         .unwrap_or_else(|d| panic!("{d:?}"));
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
@@ -528,7 +528,7 @@ fn component_refs_on_other_objects_and_scene_lookups() {
         r
     };
     let built = g.build();
-    let module = compile(&ClassSource { name: "Hit", graph: &built, variables: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(&ClassSource { name: "Hit", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let me = world.spawn();
@@ -572,7 +572,7 @@ fn component_refs_read_slot_handles() {
 
     let registry = natives();
     let built = g.build();
-    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
 
     // One hidden handle per slot, typed by the slot's component class; no
     // native call by UUID.
@@ -613,7 +613,7 @@ fn unbound_slot_handles_do_not_fall_back() {
     g.prop("hit", "amount", json!(1.0)).data("second", "component", "hit", "component_ref").exec("ev", "Body", "hit");
     let registry = natives();
     let built = g.build();
-    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[] }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let me = world.spawn();
@@ -637,7 +637,7 @@ fn delays_suspend_until_game_time_passes() {
     let registry = natives();
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Delay", graph: &built, variables: &vars }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Delay", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -672,7 +672,7 @@ fn retriggerable_delays_restart_their_countdown() {
     let registry = natives();
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Retrigger", graph: &built, variables: &vars }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Retrigger", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -738,7 +738,7 @@ fn other_flow_nodes_jump_where_their_selector_says() {
     g.set_var("setc", "count", "i64").data("pick", "result", "setc", "value").exec("z", "exec_out", "setc");
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Pick", graph: &built, variables: &vars }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(&ClassSource { name: "Pick", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -750,4 +750,209 @@ fn other_flow_nodes_jump_where_their_selector_says() {
     }
     assert_eq!(program.var(&inst, program.variable("log").unwrap()), Some(&Value::from("yxz")));
     assert_eq!(program.var(&inst, program.variable("count").unwrap()), Some(&Value::Int(50)));
+}
+
+// ---- engine events (#924) ----------------------------------------------------
+
+mod engine_events {
+    use super::*;
+    use blueprint_compiler::palette::{event_nodes, PaletteEvent};
+    use blueprint_compiler::EventSource;
+    use pulsar_script_vm::{
+        EventCatalog, EventField, EventRef, EventSignature, EventSink, EventTarget, SubscriptionScope, Type,
+    };
+    use std::sync::Mutex;
+
+    fn hit() -> EventSignature {
+        EventSignature {
+            id: 7,
+            name: "Hit".into(),
+            fields: vec![
+                EventField::new("entity", Type::Entity),
+                EventField::new("other", Type::Entity),
+                EventField::new("impulse", Type::Float),
+            ],
+        }
+    }
+
+    fn level_loaded() -> EventSignature {
+        EventSignature { id: 8, name: "LevelLoaded".into(), fields: vec![EventField::new("level", Type::Str)] }
+    }
+
+    struct Catalog(Vec<EventSignature>);
+    impl EventCatalog for Catalog {
+        fn event_by_name(&self, name: &str) -> Option<EventSignature> {
+            self.0.iter().find(|e| e.name == name).cloned()
+        }
+        fn event_by_id(&self, id: u64) -> Option<EventSignature> {
+            self.0.iter().find(|e| e.id == id).cloned()
+        }
+    }
+
+    #[derive(Default)]
+    struct Sink(Mutex<Vec<(EventTarget, String, Vec<Value>)>>);
+    impl EventSink for Sink {
+        fn emit(&self, target: EventTarget, name: &str, fields: &[Value]) -> Result<(), String> {
+            self.0.lock().unwrap().push((target, name.into(), fields.to_vec()));
+            Ok(())
+        }
+    }
+
+    /// "On Hit" counts hits and remembers `other`; the class declares
+    /// `Door.Opened(by: Entity, code: i64)` with a handler; `begin_play`
+    /// sends Opened to the last hitter, broadcasts LevelLoaded and sends
+    /// Opened to the Door class.
+    fn door_graph() -> Graph {
+        let mut g = Graph::default();
+        g.node("on_hit", "event::on::Hit", &[
+            P::ExecOut("Body"),
+            P::Out("entity", "Entity"),
+            P::Out("other", "Entity"),
+            P::Out("impulse", "f64"),
+        ]);
+        g.get_var("hits_get", "hits", "i64");
+        g.node("one", "add", &[P::In("a", "i64"), P::In("b", "i64"), P::Out("result", "i64")]);
+        g.prop("one", "b", json!(1));
+        g.data("hits_get", "value", "one", "a");
+        g.set_var("hits_set", "hits", "i64");
+        g.data("one", "result", "hits_set", "value");
+        g.exec("on_hit", "Body", "hits_set");
+        g.set_var("other_set", "last", "Entity");
+        g.data("on_hit", "other", "other_set", "value");
+        g.exec("hits_set", "exec_out", "other_set");
+
+        // The class's own custom event handler (`on_<uid>`).
+        g.node("on_opened", "on_opened_uid", &[P::ExecOut("Body"), P::Out("by", "Entity"), P::Out("code", "i64")]);
+        g.set_var("code_set", "code", "i64");
+        g.data("on_opened", "code", "code_set", "value");
+        g.exec("on_opened", "Body", "code_set");
+
+        g.event("bp", "begin_play");
+        g.get_var("last_get", "last", "Entity");
+        g.node("send", "event::send::Door.Opened", &[P::ExecIn, P::In("target", "Entity"), P::In("by", "Entity"), P::In("code", "i64"), P::ExecOut("exec_out")]);
+        g.data("last_get", "value", "send", "target");
+        g.prop("send", "code", json!(42));
+        g.exec("bp", "Body", "send");
+        g.node("bcast", "event::broadcast::LevelLoaded", &[P::ExecIn, P::In("level", "String"), P::ExecOut("exec_out")]);
+        g.prop("bcast", "level", json!("x.level"));
+        g.exec("send", "exec_out", "bcast");
+        g.node("toclass", "event::to_class::Door.Opened", &[P::ExecIn, P::In("class", "String"), P::In("by", "Entity"), P::In("code", "i64"), P::ExecOut("exec_out")]);
+        g.prop("toclass", "class", json!("Door"));
+        g.prop("toclass", "code", json!(7));
+        g.exec("bcast", "exec_out", "toclass");
+        g
+    }
+
+    fn door_vars() -> Vec<VariableSource> {
+        vec![var("hits", "i64", None), var("last", "Entity", None), var("code", "i64", None)]
+    }
+
+    fn door_events() -> Vec<EventSource> {
+        vec![EventSource {
+            uid: "opened-uid".into(),
+            name: "Opened".into(),
+            fields: vec![("by".into(), "Entity".into()), ("code".into(), "i64".into())],
+        }]
+    }
+
+    #[test]
+    fn event_nodes_compile_to_subscriptions_and_sends() {
+        let registry = natives();
+        let graph = door_graph().build();
+        let vars = door_vars();
+        let events = door_events();
+        let known = [hit(), level_loaded()];
+        let source = ClassSource { name: "Door", graph: &graph, variables: &vars, events: &events, known_events: &known };
+        let module = compile(&source, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+
+        assert_eq!(module.events.len(), 1);
+        assert_eq!(module.events[0].name, "Door.Opened");
+        let subs: Vec<(String, SubscriptionScope, String)> = module
+            .subscriptions
+            .iter()
+            .map(|s| {
+                let EventRef::Name(name) = &s.event else { panic!() };
+                (name.clone(), s.scope, module.functions[s.handler as usize].name.clone())
+            })
+            .collect();
+        assert!(subs.contains(&("Hit".into(), SubscriptionScope::Self_, "on_event__Hit__self".into())), "{subs:?}");
+        assert!(subs.contains(&("Door.Opened".into(), SubscriptionScope::Self_, "on_opened_uid".into())), "{subs:?}");
+
+        // Links against the engine's catalog (the class's own events are
+        // declared by the engine first; here the catalog knows them).
+        let mut catalog = known.to_vec();
+        catalog.push(EventSignature::from(&module.events[0]));
+        let program = pulsar_script_vm::Program::link_with_events(Arc::new(module), &registry, Some(&Catalog(catalog)))
+            .unwrap_or_else(|e| panic!("{e}"));
+
+        // Run the Hit handler, then begin_play.
+        let mut world = World::new();
+        let me = world.spawn();
+        let hitter = world.spawn();
+        let mut instance = program.instantiate();
+        let sink = Sink::default();
+        let mut vm = Vm::new();
+        let on_hit = program.subscriptions()[0].handler;
+        let mut host = Host::new(&mut world, me).with_events(Some(&sink));
+        vm.call(&program, &mut instance, on_hit, &[Value::Entity(me), Value::Entity(hitter), Value::Float(1.0)], &mut host, &mut Budget::new(10_000))
+            .unwrap();
+        assert_eq!(program.var(&instance, program.variable("hits").unwrap()), Some(&Value::Int(1)));
+        let begin = program.entry("begin_play").unwrap();
+        vm.call(&program, &mut instance, begin, &[], &mut host, &mut Budget::new(10_000)).unwrap();
+        let sent = sink.0.lock().unwrap().clone();
+        assert_eq!(sent.len(), 3);
+        assert_eq!(sent[0].0, EventTarget::Entity(hitter), "sent to the last hitter");
+        assert_eq!(sent[0].1, "Door.Opened");
+        assert_eq!(sent[0].2[1], Value::Int(42));
+        assert_eq!((sent[1].0.clone(), sent[1].1.as_str()), (EventTarget::Global, "LevelLoaded"));
+        assert_eq!(sent[1].2, vec![Value::Str("x.level".into())]);
+        assert_eq!(sent[2].0, EventTarget::Class("Door".into()));
+    }
+
+    #[test]
+    fn scope_property_and_unknown_events() {
+        let registry = natives();
+        let vars = door_vars();
+        let known = [hit(), level_loaded()];
+        let mut g = Graph::default();
+        g.node("on_ll", "event::on::LevelLoaded", &[P::ExecOut("Body"), P::Out("level", "String")]);
+        g.node("on_hit_class", "event::on::Hit", &[P::ExecOut("Body")]);
+        g.prop("on_hit_class", "scope", json!("class"));
+        let graph = g.build();
+        let module = compile(&ClassSource { name: "S", graph: &graph, variables: &vars, events: &[], known_events: &known }, &registry)
+            .unwrap_or_else(|d| panic!("{d:?}"));
+        let scopes: Vec<SubscriptionScope> = module.subscriptions.iter().map(|s| s.scope).collect();
+        assert!(scopes.contains(&SubscriptionScope::Global), "LevelLoaded defaults to global");
+        assert!(scopes.contains(&SubscriptionScope::Class), "the scope property wins");
+
+        let mut g = Graph::default();
+        g.node("on_nope", "event::on::Nope", &[P::ExecOut("Body")]);
+        g.node("old", "emit_event", &[P::ExecIn]);
+        let graph = g.build();
+        let errors = compile(&ClassSource { name: "S", graph: &graph, variables: &vars, events: &[], known_events: &known }, &registry)
+            .unwrap_err();
+        let text: Vec<String> = errors.iter().map(ToString::to_string).collect();
+        assert!(text.iter().any(|e| e.contains("no event `Nope`")), "{text:?}");
+        assert!(text.iter().any(|e| e.contains("placeholder")), "{text:?}");
+    }
+
+    #[test]
+    fn palette_lists_event_nodes_by_category() {
+        let events = [
+            PaletteEvent { signature: hit(), category: "Physics".into(), declared_here: false },
+            PaletteEvent { signature: level_loaded(), category: "Lifecycle".into(), declared_here: false },
+        ];
+        let nodes = event_nodes(&events);
+        assert_eq!(nodes.len(), 8);
+        let on_hit = nodes.iter().find(|n| n.node_type == "event::on::Hit").unwrap();
+        assert_eq!(on_hit.category, "Events/Physics");
+        assert!(on_hit.is_event);
+        assert_eq!(on_hit.properties, vec![("scope".to_owned(), "self".to_owned())]);
+        assert_eq!(on_hit.outputs[1], ("other".to_owned(), "Entity".to_owned()));
+        let send = nodes.iter().find(|n| n.node_type == "event::send::Hit").unwrap();
+        assert_eq!(send.name, "Send Hit to");
+        assert_eq!(send.inputs[0], ("target".to_owned(), "Entity".to_owned()));
+        let ll = nodes.iter().find(|n| n.node_type == "event::on::LevelLoaded").unwrap();
+        assert_eq!(ll.properties[0].1, "global");
+    }
 }

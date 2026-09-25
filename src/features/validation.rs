@@ -40,7 +40,7 @@ pub fn validate_project_classes(root: &Path) -> Result<(), String> {
                 .map_err(|e| format!("failed to parse blueprint asset: {e}"))
             })
             .and_then(|asset| {
-                let problems = validate_asset(&asset);
+                let problems = validate_asset(&asset, path.parent());
                 if problems.is_empty() {
                     Ok(())
                 } else {
@@ -197,8 +197,13 @@ fn check_pbgc_graph(graph: &pbgc::GraphDescription, report: &mut ValidationRepor
 
 /// Validate a saved [`crate::io::formats::BlueprintAsset`] end-to-end:
 /// structural checks, macro expansion and a script module compile dry-run.
+///
+/// `class_dir` is the class's directory (`src/classes/<Class>`): its name
+/// qualifies the class's custom events and its siblings' compiled modules
+/// supply the other classes' events.
 pub(crate) fn validate_asset(
     asset: &crate::io::formats::BlueprintAsset,
+    class_dir: Option<&std::path::Path>,
 ) -> Vec<String> {
     let mut report = ValidationReport::default();
     check_ui_graph(&asset.main_graph, &mut report);
@@ -240,7 +245,28 @@ pub(crate) fn validate_asset(
                 default: None,
             })
             .collect();
-        let source = blueprint_compiler::ClassSource { name: "validation", graph: &graph, variables: &variables };
+        let class_name = class_dir
+            .and_then(|d| d.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("validation")
+            .to_owned();
+        let events: Vec<blueprint_compiler::EventSource> = asset
+            .local_events
+            .iter()
+            .map(|e| blueprint_compiler::EventSource {
+                uid: e.uid.clone(),
+                name: e.name.clone(),
+                fields: e.fields.iter().map(|f| (f.name.clone(), f.type_name.clone())).collect(),
+            })
+            .collect();
+        let known_events = crate::features::events::engine_events::known_event_signatures(class_dir);
+        let source = blueprint_compiler::ClassSource {
+            name: &class_name,
+            graph: &graph,
+            variables: &variables,
+            events: &events,
+            known_events: &known_events,
+        };
         if let Err(diagnostics) =
             blueprint_compiler::compile(&source, crate::features::compilation::compiler::script_natives())
         {
