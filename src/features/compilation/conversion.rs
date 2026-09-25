@@ -223,6 +223,16 @@ impl BlueprintEditorPanel {
                     NodeType::MacroInstance,
                     Some("#9B59B6".to_string()),
                 )
+            } else if let Some((title, is_event)) =
+                crate::features::events::engine_events::describe_node_type(&definition_id)
+            {
+                (
+                    title,
+                    if is_event { "📡" } else { "📨" }.to_string(),
+                    String::new(),
+                    if is_event { NodeType::Event } else { NodeType::Logic },
+                    Some(if is_event { "#C0392B" } else { "#00A8E8" }.to_string()),
+                )
             } else if let Some(def) = node_def {
                 // Event entry-points are identified by their underlying Blueprint
                 // node type, not by category — events such as `on_input_key`/

@@ -47,6 +47,21 @@
 //!   engine fills once when the instance is bound to its placed class.
 //! - **Scene lookups**: `find_object_by_stable_id`, `find_object_by_name` and
 //!   `object_ref_literal` produce an entity through `world::find_by_*`.
+//! - **Engine events** (#924): the class's custom events are declared as
+//!   engine events named `<Class>.<Event>` ([`qualified_event_name`]), and
+//!   each one's `on_<uid>` handler also subscribes to it on the object's own
+//!   channel, so other objects can send it. `event::on::<Event>` nodes
+//!   ("On <Event>") compile to handler functions plus a module
+//!   subscription (scope from the node's `scope` property: `self`,
+//!   `global` or `class`; see [`default_scope`]); their data outputs are
+//!   the event's fields. `event::send::<Event>` ("Send <Event> to"),
+//!   `event::broadcast::<Event>` ("Broadcast <Event>") and
+//!   `event::to_class::<Event>` ("Send <Event> to Class") call the
+//!   `event::send` / `event::emit` / `event::emit_to_class` natives with the
+//!   event's fields. Events are looked up in [`ClassSource::events`] and
+//!   [`ClassSource::known_events`]. The old placeholder nodes `emit_event`,
+//!   `on_event` and `remove_event_listener` are rejected with a pointer to
+//!   these.
 
 pub mod palette;
 
@@ -54,8 +69,9 @@ use std::collections::HashMap;
 
 use graphy::{ConnectionType, DataType, GraphDescription, NodeInstance};
 use pulsar_script_vm::{
-    verify, BinOp, Constant, Function, Import, Instr, Module, NativeRegistry, Reg, Signature,
-    Type, TypeRegistry, UnOp, Variable,
+    verify, BinOp, Constant, EventDecl, EventField, EventRef, EventSignature, Function, Import,
+    Instr, Module, NativeRegistry, Param, Reg, Signature, Subscription, SubscriptionScope, Type,
+    TypeRegistry, UnOp, Variable,
 };
 use serde_json::Value as Json;
 
@@ -95,6 +111,17 @@ pub struct VariableSource {
     pub default: Option<Json>,
 }
 
+/// A custom event the class declares (the editor's event definitions).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EventSource {
+    /// The editor's id: its handler node is `on_<uid>`.
+    pub uid: String,
+    /// Display name; the engine event is `<Class>.<name>`.
+    pub name: String,
+    /// `(field name, Blueprint type name)`.
+    pub fields: Vec<(String, String)>,
+}
+
 /// Everything needed to compile one Blueprint class.
 pub struct ClassSource<'a> {
     /// Module (class) name.
@@ -102,7 +129,53 @@ pub struct ClassSource<'a> {
     /// The class graph with macros already expanded.
     pub graph: &'a GraphDescription,
     pub variables: &'a [VariableSource],
+    /// Custom events this class declares.
+    pub events: &'a [EventSource],
+    /// Every other engine event the graph may handle or send: the built-in
+    /// events and other classes' and plugins' declared events.
+    pub known_events: &'a [EventSignature],
 }
+
+/// The engine name of event `event` declared by class `class`.
+pub fn qualified_event_name(class: &str, event: &str) -> String {
+    format!("{class}.{event}")
+}
+
+/// The events a compiled module declares, as signatures (for other
+/// classes' palettes and compiles).
+pub fn declared_events(module: &Module) -> Vec<EventSignature> {
+    module.events.iter().map(EventSignature::from).collect()
+}
+
+/// The scope an "On <Event>" node listens on when its `scope` property is
+/// not set: the object's own channel for events about one object (whose
+/// first field is an entity called `entity` or `target`, like `Hit` and
+/// `Damage`), for `TimerFired`, and for the class's own events; the global
+/// channel otherwise.
+pub fn default_scope(event: &EventSignature, declared_here: bool) -> SubscriptionScope {
+    let about_one_object = event
+        .fields
+        .first()
+        .is_some_and(|f| f.ty == Type::Entity && (f.name == "entity" || f.name == "target"));
+    if declared_here || about_one_object || event.name == "TimerFired" {
+        SubscriptionScope::Self_
+    } else {
+        SubscriptionScope::Global
+    }
+}
+
+/// Parse a node's `scope` property.
+pub fn parse_scope(value: &str) -> Option<SubscriptionScope> {
+    Some(match value.trim().to_ascii_lowercase().as_str() {
+        "self" => SubscriptionScope::Self_,
+        "global" => SubscriptionScope::Global,
+        "class" => SubscriptionScope::Class,
+        _ => return None,
+    })
+}
+
+/// Node types that replaced the placeholder event nodes (#872).
+const RETIRED_EVENT_NODES: [&str; 3] = ["emit_event", "on_event", "remove_event_listener"];
 
 /// A compile error, attached to a node where there is one.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -129,6 +202,7 @@ const MAX_CODE: usize = 200_000;
 pub fn compile(source: &ClassSource<'_>, natives: &NativeRegistry) -> Result<Module, Vec<Diagnostic>> {
     let mut c = Compiler::new(source, natives);
     c.declare_variables();
+    c.declare_engine_events();
     c.declare_events();
     c.compile_events();
     if !c.diagnostics.is_empty() {
@@ -247,6 +321,8 @@ struct EventFn {
     nodes: Vec<String>,
     /// For each parameter: the pin ids that read it.
     param_pins: Vec<Vec<String>>,
+    /// Engine event subscriptions this function handles.
+    subscriptions: Vec<(String, SubscriptionScope)>,
 }
 
 struct Compiler<'a> {
@@ -260,6 +336,10 @@ struct Compiler<'a> {
     /// Exec output (node, pin) → target nodes, in connection order.
     exec_out: HashMap<PinKey, Vec<String>>,
     events: Vec<EventFn>,
+    /// Engine events by name: this class's (qualified) and the known ones.
+    event_sigs: HashMap<String, EventSignature>,
+    /// uid → qualified name of this class's declared events.
+    declared_by_uid: HashMap<String, String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -292,6 +372,8 @@ impl<'a> Compiler<'a> {
             data_in,
             exec_out,
             events: Vec::new(),
+            event_sigs: HashMap::new(),
+            declared_by_uid: HashMap::new(),
             diagnostics: Vec::new(),
         }
     }
@@ -341,12 +423,85 @@ impl<'a> Compiler<'a> {
         self.add_var(&format!("__bp_{purpose}_{node}"), ty, None)
     }
 
+    /// The class's custom events become engine events; index every event
+    /// the graph can use by name.
+    fn declare_engine_events(&mut self) {
+        for known in self.source.known_events {
+            self.event_sigs.insert(known.name.clone(), known.clone());
+        }
+        for event in self.source.events {
+            if event.name.trim().is_empty() {
+                self.error(None, format!("custom event {} has no name", event.uid));
+                continue;
+            }
+            let name = qualified_event_name(self.source.name, &event.name);
+            let mut fields = Vec::new();
+            for (field, type_name) in &event.fields {
+                match script_type(type_name).filter(|t| matches!(t, Type::Bool | Type::Int | Type::Float | Type::Str | Type::Entity)) {
+                    Some(ty) => fields.push(EventField::new(field.clone(), ty)),
+                    None => self.error(None, format!("event `{name}` field `{field}`: type `{type_name}` cannot be an event field (bool, integers, floats, String, Entity)")),
+                }
+            }
+            if self.module.events.iter().any(|e| e.name == name) {
+                self.error(None, format!("event `{name}` declared twice"));
+                continue;
+            }
+            let decl = EventDecl { name: name.clone(), fields };
+            self.event_sigs.insert(name.clone(), EventSignature::from(&decl));
+            self.declared_by_uid.insert(event.uid.replace('-', "_"), name);
+            self.module.events.push(decl);
+        }
+    }
+
+    fn event_sig(&mut self, node: &str, name: &str) -> Option<EventSignature> {
+        match self.event_sigs.get(name) {
+            Some(sig) => Some(sig.clone()),
+            None => {
+                self.error(Some(node), format!("no event `{name}` is declared in this project or by the engine"));
+                None
+            }
+        }
+    }
+
     fn declare_events(&mut self) {
         let mut nodes: Vec<&NodeInstance> = self.source.graph.nodes.values().collect();
         nodes.sort_by(|a, b| a.id.cmp(&b.id));
         let mut by_name: HashMap<String, usize> = HashMap::new();
         for node in nodes {
-            let (name, params, param_pins) = if let Some((name, params)) = builtin_event(&node.node_type) {
+            if RETIRED_EVENT_NODES.contains(&node.node_type.as_str()) {
+                self.error(
+                    Some(&node.id),
+                    format!(
+                        "`{}` was a placeholder and is gone: use the \"On <Event>\", \"Send <Event> to\" and \"Broadcast <Event>\" event nodes",
+                        node.node_type
+                    ),
+                );
+                continue;
+            }
+            let mut subscription = None;
+            let (name, params, param_pins) = if let Some(event) = node.node_type.strip_prefix("event::on::") {
+                let Some(sig) = self.event_sig(&node.id, event) else { continue };
+                let declared_here = self.module.events.iter().any(|e| e.name == event);
+                let scope = match node.properties.get("scope") {
+                    Some(Json::String(s)) if !s.trim().is_empty() => match parse_scope(s) {
+                        Some(scope) => scope,
+                        None => {
+                            self.error(Some(&node.id), format!("scope `{s}` is not self, global or class"));
+                            continue;
+                        }
+                    },
+                    _ => default_scope(&sig, declared_here),
+                };
+                subscription = Some((event.to_owned(), scope));
+                let scope_tag = match scope {
+                    SubscriptionScope::Self_ => "self",
+                    SubscriptionScope::Global => "global",
+                    SubscriptionScope::Class => "class",
+                };
+                let fn_name = format!("on_event__{}__{scope_tag}", sanitize(event));
+                let pins = sig.fields.iter().map(|f| vec![f.name.clone()]).collect();
+                (fn_name, sig.field_types(), pins)
+            } else if let Some((name, params)) = builtin_event(&node.node_type) {
                 // Parameter pins: the declared name, with or without a
                 // leading underscore (pulsar_std spells them `_delta_time`).
                 let pins = params
@@ -372,6 +527,16 @@ impl<'a> Compiler<'a> {
             } else {
                 continue;
             };
+            // A custom event's handler also handles the engine event the
+            // class declares for it, sent to this object.
+            if subscription.is_none() {
+                if let Some(qualified) = node.node_type.strip_prefix("on_").and_then(|uid| self.declared_by_uid.get(uid)) {
+                    let declared = self.event_sigs[qualified].field_types();
+                    if declared == params {
+                        subscription = Some((qualified.clone(), SubscriptionScope::Self_));
+                    }
+                }
+            }
             match by_name.get(&name) {
                 Some(&index) => {
                     if self.events[index].params != params {
@@ -382,12 +547,20 @@ impl<'a> Compiler<'a> {
                 }
                 None => {
                     by_name.insert(name.clone(), self.events.len());
-                    self.events.push(EventFn { name, params, nodes: vec![node.id.clone()], param_pins });
+                    let subscriptions = subscription.into_iter().collect();
+                    self.events.push(EventFn { name, params, nodes: vec![node.id.clone()], param_pins, subscriptions });
                 }
             }
         }
         // Function indices follow `events` order.
-        for event in &self.events {
+        for (index, event) in self.events.iter().enumerate() {
+            for (name, scope) in &event.subscriptions {
+                self.module.subscriptions.push(Subscription {
+                    event: EventRef::Name(name.clone()),
+                    handler: index as u32,
+                    scope: *scope,
+                });
+            }
             self.module.functions.push(Function {
                 name: event.name.clone(),
                 exported: true,
@@ -511,6 +684,12 @@ impl<'a> Compiler<'a> {
             self.emit_custom_event(f, node);
             return self.follow_all_exec(f, id);
         }
+        if let Some((kind, event)) = ty.strip_prefix("event::").and_then(|rest| rest.split_once("::")) {
+            if kind != "on" {
+                self.send_event(f, node, kind, event);
+                return self.follow_all_exec(f, id);
+            }
+        }
         if let Some(name) = ty.strip_prefix("native::") {
             self.native_call(f, node, name);
             return self.follow_all_exec(f, id);
@@ -633,6 +812,36 @@ impl<'a> Compiler<'a> {
         let dst = (native.sig.ret != Type::Unit).then(|| self.output_reg(f, id, "result", native.sig.ret.clone()));
         self.call(f, name, args, dst);
         Some(())
+    }
+
+    /// "Send <Event> to" (`send`), "Broadcast <Event>" (`broadcast`) and
+    /// "Send <Event> to Class" (`to_class`): the event's fields from the
+    /// pins named after them.
+    fn send_event(&mut self, f: &mut Func, node: &'a NodeInstance, kind: &str, event: &str) {
+        let id = node.id.as_str();
+        let (native, leading): (&str, Vec<(&str, Type)>) = match kind {
+            "send" => ("event::send", vec![("target", Type::Entity)]),
+            "broadcast" => ("event::emit", vec![]),
+            "to_class" => ("event::emit_to_class", vec![("class", Type::Str)]),
+            _ => return self.error(Some(id), format!("unknown event node kind `{kind}`")),
+        };
+        let Some(sig) = self.event_sig(id, event) else { return };
+        let mut args = Vec::new();
+        let mut params = Vec::new();
+        for (pin, ty) in &leading {
+            let Some(reg) = self.input(f, node, pin, ty) else { return };
+            args.push(reg);
+            params.push(Param::new(ty.clone()));
+        }
+        args.push(self.konst(f, Constant::Str(event.to_owned())));
+        params.push(Param::new(Type::Str));
+        for field in &sig.fields {
+            let Some(reg) = self.input(f, node, &field.name, &field.ty) else { return };
+            args.push(reg);
+            params.push(Param::new(field.ty.clone()));
+        }
+        let import = format!("{native}@{event}");
+        self.call_with_sig(f, &import, Signature::new(params, Type::Unit), args, None);
     }
 
     fn emit_custom_event(&mut self, f: &mut Func, node: &'a NodeInstance) {
@@ -1283,6 +1492,21 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    /// Call an import with an explicit signature (a polymorphic native
+    /// under a tagged name).
+    fn call_with_sig(&mut self, f: &mut Func, name: &str, sig: Signature, args: Vec<Reg>, dst: Option<Reg>) {
+        let import = match self.imports.get(name) {
+            Some(&index) => index,
+            None => {
+                self.module.imports.push(Import { name: name.to_owned(), sig });
+                let index = (self.module.imports.len() - 1) as u32;
+                self.imports.insert(name.to_owned(), index);
+                index
+            }
+        };
+        f.emit(Instr::CallNative { import, args, dst });
+    }
+
     fn call(&mut self, f: &mut Func, name: &str, args: Vec<Reg>, dst: Option<Reg>) {
         let import = match self.imports.get(name) {
             Some(&index) => index,
@@ -1323,6 +1547,11 @@ enum Case<'p> {
     Eq(Reg, Constant),
     Lt(Reg, Constant),
     Contains(Reg, Reg),
+}
+
+/// An identifier-safe version of an event name.
+fn sanitize(name: &str) -> String {
+    name.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect()
 }
 
 fn data_inputs(node: &NodeInstance) -> Vec<String> {

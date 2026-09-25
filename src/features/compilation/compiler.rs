@@ -533,7 +533,18 @@ impl BlueprintEditorPanel {
             })
             .collect();
         let graph = self.build_graphy_description()?;
-        let source = blueprint_compiler::ClassSource { name: &class_name, graph: &graph, variables: &variables };
+        // Engine events (#924): this class's custom events are declared;
+        // event nodes are checked against the built-in and other classes'.
+        let events = crate::features::events::engine_events::event_sources(&self.local_event_defs);
+        let known_events =
+            crate::features::events::engine_events::known_event_signatures(Some(class_path.as_path()));
+        let source = blueprint_compiler::ClassSource {
+            name: &class_name,
+            graph: &graph,
+            variables: &variables,
+            events: &events,
+            known_events: &known_events,
+        };
         let build_dir = class_path.join("events").join(".build");
         let out_path = build_dir.join("module.json");
         let module = blueprint_compiler::compile(&source, script_natives()).map_err(|diagnostics| {
