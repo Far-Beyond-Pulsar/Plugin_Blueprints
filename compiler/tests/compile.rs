@@ -542,6 +542,81 @@ fn component_refs_on_other_objects_and_scene_lookups() {
     assert_eq!(world.get::<Health>(me).unwrap().value, 1.0);
 }
 
+/// Stand-in for `pulsar_class`'s `class::slot_entity`: slot `Health_1` of
+/// any root lives on the entity at index `root + 1` (its generated child);
+/// every other slot on the root itself.
+fn with_slot_native(mut r: NativeRegistry) -> NativeRegistry {
+    r.register(
+        NativeFn::builder(blueprint_compiler::SLOT_ENTITY_NATIVE)
+            .side_effect_free()
+            .params(["root", "slot_id"])
+            .build(|host: &mut Host<'_>, root: Entity, slot_id: String| {
+                if slot_id == "Health_1" {
+                    host.world.query::<&Health>().map(|(e, _)| e).find(|e| e.index() == root.index() + 1).unwrap_or(root)
+                } else {
+                    root
+                }
+            }),
+    )
+    .unwrap();
+    r
+}
+
+/// #921: a `get_component_ref` with a slot id resolves that prefab slot,
+/// even for a second component of one class (on a generated child); nodes
+/// without one keep resolving by class name.
+#[test]
+fn component_refs_resolve_by_slot_id() {
+    // on_hit: slot Health_1 -> value = 5; slot Health_0 -> value = 7;
+    //         old-style node (no slot) -> damage(1)
+    let mut g = Graph::default();
+    g.event("ev", "on_hit");
+    g.node("second", "get_component_ref::Health::1", &[P::Out("component", "Health")]).prop("second", "slot_id", json!("Health_1"));
+    g.node("first", "get_component_ref::Health::0", &[P::Out("component", "Health")]).prop("first", "slot_id", json!("Health_0"));
+    g.node("old", "get_component_ref::Health::0", &[P::Out("component", "Health")]);
+    g.node("set2", "comp_set_prop::Health::value", &[P::ExecIn, P::In("component_ref", "Health"), P::In("value", "f32"), P::ExecOut("exec_out")]);
+    g.node("set1", "comp_set_prop::Health::value", &[P::ExecIn, P::In("component_ref", "Health"), P::In("value", "f32"), P::ExecOut("exec_out")]);
+    g.node("hit", "comp_call::Health::damage", &[P::ExecIn, P::In("component_ref", "Health"), P::In("amount", "f32"), P::ExecOut("exec_out"), P::Out("result", "f32")]);
+    g.prop("set2", "value", json!(5.0)).prop("set1", "value", json!(7.0)).prop("hit", "amount", json!(1.0));
+    g.data("second", "component", "set2", "component_ref");
+    g.data("first", "component", "set1", "component_ref");
+    g.data("old", "component", "hit", "component_ref");
+    g.exec("ev", "Body", "set2").exec("set2", "exec_out", "set1").exec("set1", "exec_out", "hit");
+
+    let registry = with_slot_native(natives());
+    let built = g.build();
+    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    assert!(
+        module.imports.iter().any(|i| i.name == blueprint_compiler::SLOT_ENTITY_NATIVE),
+        "slot nodes go through the slot lookup"
+    );
+    let program = Program::link(Arc::new(module), &registry).unwrap();
+    let mut world = World::new();
+    let root = world.spawn();
+    let child = world.spawn();
+    world.insert(root, Health { value: 1.0 });
+    world.insert(child, Health { value: 1.0 });
+    let mut inst = program.instantiate();
+    let mut host = Host::new(&mut world, root);
+    Vm::new().call(&program, &mut inst, program.entry("on_hit").unwrap(), &[], &mut host, &mut Budget::new(1000)).unwrap();
+    assert_eq!(world.get::<Health>(child).unwrap().value, 5.0, "slot Health_1 is the child's component");
+    assert_eq!(world.get::<Health>(root).unwrap().value, 6.0, "slot Health_0 set 7, then the old node damaged the root's by 1");
+}
+
+/// A slot-id node needs the engine's slot lookup native; without it the
+/// compile reports that instead of silently resolving by class.
+#[test]
+fn slot_id_refs_need_the_slot_native() {
+    let mut g = Graph::default();
+    g.event("ev", "on_hit");
+    g.node("second", "get_component_ref::Health::1", &[P::Out("component", "Health")]).prop("second", "slot_id", json!("Health_1"));
+    g.node("hit", "comp_call::Health::damage", &[P::ExecIn, P::In("component_ref", "Health"), P::In("amount", "f32"), P::ExecOut("exec_out"), P::Out("result", "f32")]);
+    g.prop("hit", "amount", json!(1.0)).data("second", "component", "hit", "component_ref").exec("ev", "Body", "hit");
+    let built = g.build();
+    let errors = compile(&ClassSource { name: "Slots", graph: &built, variables: &[] }, &natives()).unwrap_err();
+    assert!(errors.iter().any(|d| d.message.contains("class::slot_entity")), "{errors:?}");
+}
+
 #[test]
 fn delays_suspend_until_game_time_passes() {
     use pulsar_script_vm::Completion;

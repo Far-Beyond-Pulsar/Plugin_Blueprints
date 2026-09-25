@@ -41,7 +41,10 @@
 //!   `comp_call::C::m` and `get_component_ref::C[::index]` call the natives
 //!   `C::get_p`, `C::set_p`, `C::m` and `C::of`. An unconnected component
 //!   input means this entity's component; a `get_component_ref` whose
-//!   entity input is wired takes that object's component.
+//!   entity input is wired takes that object's component. A
+//!   `get_component_ref` with a `slot_id` property first resolves that
+//!   prefab slot's entity through `class::slot_entity` (the instance root
+//!   or one of its generated children).
 //! - **Scene lookups**: `find_object_by_stable_id`, `find_object_by_name` and
 //!   `object_ref_literal` produce an entity through `world::find_by_*`.
 
@@ -55,6 +58,11 @@ use pulsar_script_vm::{
     Type, TypeRegistry, UnOp, Variable,
 };
 use serde_json::Value as Json;
+
+/// The native a slot-id `get_component_ref` calls to find the entity
+/// holding a class prefab slot: `(root: Entity, slot_id: String) -> Entity`.
+/// Registered by the engine (`pulsar_class::natives`).
+pub const SLOT_ENTITY_NATIVE: &str = "class::slot_entity";
 
 /// A class variable as the editor declares it.
 #[derive(Clone, Debug)]
@@ -1088,20 +1096,46 @@ impl<'a> Compiler<'a> {
             self.call(f, &native, vec![component], Some(dst));
             dst
         } else if let Some(rest) = ty.strip_prefix("get_component_ref::") {
-            // `Class` or `Class::index`: SceneDB holds one live component per
-            // type, so the index (duplicate records) does not apply.
+            // `Class` or `Class::index`. A node with a `slot_id` property
+            // names one prefab component slot: `class::slot_entity` finds the
+            // entity holding it on the class instance (the root, or the
+            // generated child a second copy of a type lives on), then
+            // `Class::of` takes that entity's component. Older nodes have no
+            // slot id and resolve by class name on the instance itself (the
+            // index cannot apply: SceneDB holds one component per type per
+            // entity).
             let class = rest.split("::").next().unwrap_or(rest);
-            match data_inputs(node).into_iter().find(|p| self.data_in.contains_key(&(id.to_owned(), p.clone()))) {
-                // Another object's component.
-                Some(pin) => {
+            let slot = node
+                .properties
+                .get("slot_id")
+                .and_then(Json::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned);
+            let wired = data_inputs(node).into_iter().find(|p| self.data_in.contains_key(&(id.to_owned(), p.clone())));
+            match (wired, slot) {
+                // Another object's component, by class.
+                (Some(pin), None) => {
                     let entity = self.input(f, node, &pin, &Type::Entity)?;
-                    let native = format!("{class}::of");
-                    self.native_sig(id, &native)?;
-                    let component = f.reg(Type::Component(class.to_owned()));
-                    self.call(f, &native, vec![entity], Some(component));
-                    component
+                    self.component_of(f, id, class, entity)?
                 }
-                None => self.self_component(f, id, class)?,
+                (None, None) => self.self_component(f, id, class)?,
+                // A slot of this instance, or of another instance.
+                (wired, Some(slot)) => {
+                    self.native_sig(id, SLOT_ENTITY_NATIVE)?;
+                    let root = match wired {
+                        Some(pin) => self.input(f, node, &pin, &Type::Entity)?,
+                        None => {
+                            let root = f.reg(Type::Entity);
+                            f.emit(Instr::SelfEntity { dst: root });
+                            root
+                        }
+                    };
+                    let slot = self.konst(f, Constant::Str(slot));
+                    let entity = f.reg(Type::Entity);
+                    self.call(f, SLOT_ENTITY_NATIVE, vec![root, slot], Some(entity));
+                    self.component_of(f, id, class, entity)?
+                }
             }
         } else if matches!(ty, "find_object_by_stable_id" | "find_object_by_name" | "object_ref_literal") {
             let native = if ty == "find_object_by_name" { "world::find_by_name" } else { "world::find_by_stable_id" };
@@ -1202,6 +1236,15 @@ impl<'a> Compiler<'a> {
             return self.input(f, node, "component_ref", &ty);
         }
         self.self_component(f, &node.id, class)
+    }
+
+    /// `Class::of(entity)`.
+    fn component_of(&mut self, f: &mut Func, node: &str, class: &str, entity: Reg) -> Option<Reg> {
+        let native = format!("{class}::of");
+        self.native_sig(node, &native)?;
+        let component = f.reg(Type::Component(class.to_owned()));
+        self.call(f, &native, vec![entity], Some(component));
+        Some(component)
     }
 
     fn self_component(&mut self, f: &mut Func, node: &str, class: &str) -> Option<Reg> {

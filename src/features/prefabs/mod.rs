@@ -23,11 +23,78 @@ pub struct PrefabAsset {
     pub prefab_version: u32,
     pub name: String,
     #[serde(default)]
-    pub components: Vec<ComponentInstance>,
+    pub components: Vec<PrefabComponent>,
     #[serde(default)]
     pub blueprint_class: Option<BlueprintClassRef>,
     #[serde(default)]
     pub script_graph: Option<ui::graph::GraphDescription>,
+}
+
+/// One prefab component: the component record plus its stable **slot id**.
+///
+/// The slot id names this component for placed instances (their per-slot
+/// overrides and generated child objects) and for `get_component_ref`
+/// nodes, so it must never change once assigned. Files written before slot
+/// ids existed get `<Class>_<n>` (the n-th component of that class), the
+/// same rule the engine applies when it reads such a file
+/// (`pulsar_class::PrefabAsset::fill_missing_slot_ids`), so ids the editor
+/// later saves match the ones levels already refer to.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PrefabComponent {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub slot_id: String,
+    #[serde(flatten)]
+    pub component: ComponentInstance,
+}
+
+impl std::ops::Deref for PrefabComponent {
+    type Target = ComponentInstance;
+    fn deref(&self) -> &ComponentInstance {
+        &self.component
+    }
+}
+
+impl std::ops::DerefMut for PrefabComponent {
+    fn deref_mut(&mut self) -> &mut ComponentInstance {
+        &mut self.component
+    }
+}
+
+/// `<class>_<n>` for the smallest `n >= start` not in `used`.
+fn next_free_slot_id(class_name: &str, start: usize, used: &std::collections::HashSet<String>) -> String {
+    let mut n = start;
+    loop {
+        let candidate = format!("{class_name}_{n}");
+        if !used.contains(&candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// Class metadata file holding the class GUID (`pulsar_class::ClassMeta`).
+pub const CLASS_META_FILE: &str = "class.json";
+
+/// Make sure `class_dir/class.json` carries a class GUID, generating one on
+/// the class's first save. Other keys in the file are kept.
+pub fn ensure_class_id(class_dir: &std::path::Path) -> Result<String, String> {
+    let path = class_dir.join(CLASS_META_FILE);
+    let mut meta: serde_json::Map<String, serde_json::Value> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    if let Some(id) = meta
+        .get("class_id")
+        .and_then(|v| v.as_str())
+        .filter(|id| !id.trim().is_empty())
+    {
+        return Ok(id.to_string());
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    meta.insert("class_id".into(), serde_json::Value::String(id.clone()));
+    let text = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| format!("Failed to write class.json: {e}"))?;
+    Ok(id)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -47,13 +114,53 @@ impl PrefabAsset {
             script_graph: None,
         }
     }
+
+    /// Give every component without a slot id (or with a duplicate one) a
+    /// deterministic `<Class>_<n>` id. Returns whether anything changed.
+    pub fn fill_missing_slot_ids(&mut self) -> bool {
+        let mut used = std::collections::HashSet::new();
+        let mut needs = Vec::new();
+        for (index, component) in self.components.iter().enumerate() {
+            if component.slot_id.trim().is_empty() || !used.insert(component.slot_id.clone()) {
+                needs.push(index);
+            }
+        }
+        for &index in &needs {
+            let class = self.components[index].class_name.clone();
+            let occurrence = self.components[..index]
+                .iter()
+                .filter(|c| c.class_name == class)
+                .count();
+            let id = next_free_slot_id(&class, occurrence, &used);
+            used.insert(id.clone());
+            self.components[index].slot_id = id;
+        }
+        !needs.is_empty()
+    }
+
+    /// A fresh slot id for a new component of `class_name`.
+    pub fn new_slot_id(&self, class_name: &str) -> String {
+        let used = self.components.iter().map(|c| c.slot_id.clone()).collect();
+        let occurrence = self
+            .components
+            .iter()
+            .filter(|c| c.class_name == class_name)
+            .count();
+        next_free_slot_id(class_name, occurrence, &used)
+    }
 }
 
 impl GraphCanvasPanel {
     /// Create a getter node that outputs a runtime reference to a prefab component instance.
+    ///
+    /// The node carries the component's prefab `slot_id`: the compiler
+    /// resolves it to the entity holding that slot on the placed instance
+    /// (the root or a generated child), so a second component of the same
+    /// class is reachable too.
     pub fn create_component_getter_node(
         &mut self,
         component_index: usize,
+        slot_id: String,
         class_name: String,
         position: gpui::Point<f32>,
         cx: &mut Context<Self>,
@@ -76,6 +183,7 @@ impl GraphCanvasPanel {
             properties: HashMap::from([
                 ("component_index".to_string(), component_index.to_string()),
                 ("component_class".to_string(), class_name.clone()),
+                ("slot_id".to_string(), slot_id),
             ]),
             is_selected: false,
             description: format!("Gets a runtime reference to component {}", class_name),
@@ -103,7 +211,13 @@ impl GraphCanvasPanel {
             canvas.y / z - self.graph.pan_offset.y,
         );
 
-        self.create_component_getter_node(drag.component_index, drag.class_name, graph_pos, cx);
+        self.create_component_getter_node(
+            drag.component_index,
+            drag.slot_id,
+            drag.class_name,
+            graph_pos,
+            cx,
+        );
     }
 }
 
@@ -123,7 +237,8 @@ impl BlueprintEditorPanel {
             return Ok(());
         }
 
-        let prefab = crate::io::prefab::load_prefab(&path)?;
+        let mut prefab = crate::io::prefab::load_prefab(&path)?;
+        prefab.fill_missing_slot_ids();
 
         self.prefab_asset = prefab;
         self.prefab_property_state.clear();
@@ -137,6 +252,15 @@ impl BlueprintEditorPanel {
         let Some(path) = self.prefab_file_path() else {
             return Err("No class path available for prefab save".to_string());
         };
+
+        // Class identity and slot ids (#921): levels refer to the class by
+        // its GUID and to its components by slot id.
+        self.prefab_asset.fill_missing_slot_ids();
+        if let Some(class_dir) = path.parent() {
+            std::fs::create_dir_all(class_dir)
+                .map_err(|e| format!("Failed to create class directory: {e}"))?;
+            ensure_class_id(class_dir)?;
+        }
 
         crate::io::prefab::save_prefab(&path, &self.prefab_asset)
     }
@@ -208,10 +332,14 @@ impl BlueprintEditorPanel {
             values.insert(prop.name.to_string(), json_value);
         }
 
-        self.prefab_asset.components.push(ComponentInstance {
-            class_name: class_name.to_string(),
-            enabled: true,
-            data: serde_json::Value::Object(values),
+        let slot_id = self.prefab_asset.new_slot_id(class_name);
+        self.prefab_asset.components.push(PrefabComponent {
+            slot_id,
+            component: ComponentInstance {
+                class_name: class_name.to_string(),
+                enabled: true,
+                data: serde_json::Value::Object(values),
+            },
         });
         self.selected_prefab_component = Some(self.prefab_asset.components.len().saturating_sub(1));
         self.prefab_property_state.clear();

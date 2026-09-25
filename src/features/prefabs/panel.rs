@@ -28,7 +28,7 @@ impl PrefabHierarchyRenderer {
 
     /// Get all children indices of a component
     fn get_children(
-        components: &[engine_backend::ComponentInstance],
+        components: &[super::PrefabComponent],
         parent_index: usize,
     ) -> Vec<usize> {
         components
@@ -81,7 +81,8 @@ impl PrefabHierarchyRenderer {
             .map(|(index, component)| {
                 let children_indices = Self::get_children(components, index);
                 ComponentHierarchyItem {
-                    component: component.clone(),
+                    component: component.component.clone(),
+                    slot_id: component.slot_id.clone(),
                     index,
                     is_selected: panel.selected_prefab_component == Some(index),
                     children_indices,
