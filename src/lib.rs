@@ -257,6 +257,14 @@ impl ScriptLanguage for BlueprintLanguage {
     fn validate_project(&self, project_root: &std::path::Path) -> Result<(), String> {
         validation::validate_project_classes(project_root)
     }
+
+    fn compile_project(
+        &self,
+        project_root: &std::path::Path,
+        natives: &plugin_editor_api::NativeRegistry,
+    ) -> Vec<plugin_editor_api::CompileDiagnostic> {
+        validation::compile_project_classes(project_root, natives)
+    }
 }
 
 /// The Blueprint scripting language, for hosts that embed this plugin.
