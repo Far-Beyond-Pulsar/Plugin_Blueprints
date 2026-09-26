@@ -213,6 +213,39 @@ fn begin_play_sets_a_variable_from_a_pure_chain() {
     assert_eq!(run.var(&i, "count"), Value::Int(10));
 }
 
+/// Pulsar-Native#854: every instruction maps to the graph node that
+/// produced it, so a runtime error names the node.
+#[test]
+fn instructions_map_to_their_graph_nodes() {
+    let mut g = Graph::default();
+    g.event("bp", "begin_play").set_var("set", "count", "i64").get_var("get", "count", "i64").add("add");
+    g.prop("add", "b", json!(5)).data("get", "value", "add", "a").data("add", "result", "set", "value");
+    g.exec("bp", "Body", "set");
+    let registry = natives();
+    let built = g.build();
+    let vars = log_vars();
+    let module = compile(&ClassSource { name: "Test", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
+    let (_, f) = module.function("begin_play").unwrap();
+    let debug = f.debug.as_ref().expect("debug info");
+    for pc in 0..f.code.len() {
+        let loc = f.location(pc).unwrap_or_else(|| panic!("pc {pc} has no location"));
+        assert_eq!(loc.file, blueprint_compiler::GRAPH_FILE);
+    }
+    let node_at = |pred: &dyn Fn(&pulsar_script_vm::Instr) -> bool| {
+        let pc = f.code.iter().position(|i| pred(i)).unwrap();
+        f.location(pc).unwrap().node.clone()
+    };
+    assert_eq!(node_at(&|i| matches!(i, pulsar_script_vm::Instr::StoreVar { .. })), "set");
+    assert_eq!(node_at(&|i| matches!(i, pulsar_script_vm::Instr::LoadVar { .. })), "get");
+    assert_eq!(node_at(&|i| matches!(i, pulsar_script_vm::Instr::CallNative { .. })), "add");
+    assert_eq!(node_at(&|i| matches!(i, pulsar_script_vm::Instr::Return { .. })), "bp");
+    assert!(debug.ranges.len() >= 4);
+    // It survives the module file and verification.
+    let back = pulsar_script_vm::Module::from_json(&module.to_json().unwrap()).unwrap();
+    assert_eq!(back, module);
+    pulsar_script_vm::verify(&back).unwrap();
+}
+
 #[test]
 fn tick_receives_delta_time() {
     let mut g = Graph::default();

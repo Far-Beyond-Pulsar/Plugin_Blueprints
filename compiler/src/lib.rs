@@ -69,8 +69,8 @@ use std::collections::HashMap;
 
 use graphy::{ConnectionType, DataType, GraphDescription, NodeInstance};
 use pulsar_script_vm::{
-    verify, BinOp, Constant, EventDecl, EventField, EventRef, EventSignature, Function, Import,
-    Instr, Module, NativeRegistry, Param, Reg, Signature, Subscription, SubscriptionScope, Type,
+    verify, BinOp, Constant, DebugInfo, EventDecl, EventField, EventRef, EventSignature, Function, Import,
+    Instr, Module, NativeRegistry, Param, Reg, Signature, SourceLoc, Subscription, SubscriptionScope, Type,
     TypeRegistry, UnOp, Variable,
 };
 use serde_json::Value as Json;
@@ -255,10 +255,18 @@ const DELTA_TIME: &str = "__bp_delta_time";
 
 type PinKey = (String, String);
 
+/// The graph file debug info names (relative to the class directory).
+pub const GRAPH_FILE: &str = "graph_save.json";
+
 /// One function being compiled.
 struct Func {
     registers: Vec<Type>,
     code: Vec<Instr>,
+    /// pc -> graph node (Pulsar-Native#854): each instruction is recorded
+    /// with the innermost node being lowered when it was emitted.
+    debug: DebugInfo,
+    /// Nodes being lowered, innermost last.
+    lowering: Vec<String>,
     /// Registers holding node outputs that persist across the function:
     /// impure node results, event parameters, loop state.
     outputs: HashMap<PinKey, Reg>,
@@ -273,6 +281,8 @@ impl Func {
         Self {
             registers: params.to_vec(),
             code: Vec::new(),
+            debug: DebugInfo::default(),
+            lowering: Vec::new(),
             outputs: HashMap::new(),
             memo: HashMap::new(),
             path: Vec::new(),
@@ -289,6 +299,9 @@ impl Func {
     }
 
     fn emit(&mut self, instr: Instr) -> usize {
+        if let Some(node) = self.lowering.last() {
+            self.debug.record(self.code.len() as u32, &SourceLoc::node(GRAPH_FILE, node.as_str()));
+        }
         self.code.push(instr);
         self.code.len() - 1
     }
@@ -568,6 +581,7 @@ impl<'a> Compiler<'a> {
                 ret: Type::Unit,
                 registers: event.params.clone(),
                 code: Vec::new(),
+                debug: None,
             });
         }
         if self.events.iter().any(|e| e.name == "tick")
@@ -598,17 +612,22 @@ impl<'a> Compiler<'a> {
                     }
                 }
             }
+            // The prologue and the final return belong to the event node.
+            f.lowering.push(nodes.first().cloned().unwrap_or_default());
             if name == "tick" {
                 let (var, _) = self.vars[DELTA_TIME].clone();
                 f.emit(Instr::StoreVar { var, src: 0 });
             }
             for node in &nodes {
+                f.lowering.push(node.clone());
                 self.follow_all_exec(&mut f, node);
+                f.lowering.pop();
             }
             f.emit(Instr::Return { value: None });
             let function = &mut self.module.functions[index];
             function.registers = f.registers;
             function.code = f.code;
+            function.debug = (!f.debug.ranges.is_empty()).then_some(f.debug);
         }
     }
 
@@ -653,7 +672,9 @@ impl<'a> Compiler<'a> {
         };
         f.path.push(id.to_owned());
         f.memo.clear();
+        f.lowering.push(id.to_owned());
         self.exec_node(f, node);
+        f.lowering.pop();
         f.path.pop();
     }
 
@@ -1290,6 +1311,13 @@ impl<'a> Compiler<'a> {
 
     /// The value of output `pin` of `node`.
     fn value(&mut self, f: &mut Func, id: &str, pin: &str) -> Option<Reg> {
+        f.lowering.push(id.to_owned());
+        let reg = self.value_of(f, id, pin);
+        f.lowering.pop();
+        reg
+    }
+
+    fn value_of(&mut self, f: &mut Func, id: &str, pin: &str) -> Option<Reg> {
         let key = (id.to_owned(), pin.to_owned());
         if let Some(&reg) = f.outputs.get(&key).or_else(|| f.memo.get(&key)) {
             return Some(reg);
