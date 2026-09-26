@@ -311,8 +311,55 @@ fn loops_run_their_body_every_iteration() {
     let mut i = run.program.instantiate();
     run.call(&mut i, "begin_play", &[]);
     assert_eq!(run.var(&i, "log"), Value::from("xxxxxxx"));
-    run.call(&mut i, "on_count", &[]);
+
+    // A while loop runs one iteration per frame: each iteration ends with a
+    // zero-second wait that the runtime resumes on the next tick.
+    use pulsar_script_vm::Completion;
+    let on_count = run.program.entry("on_count").unwrap();
+    let mut step = |run: &mut Run, i: &mut Instance, resume: Option<pulsar_script_vm::Continuation>| {
+        let mut host = Host::new(&mut run.world, run.entity);
+        let mut budget = Budget::new(1000);
+        match resume {
+            None => run.vm.start(&run.program, i, on_count, &[], &mut host, &mut budget),
+            Some(c) => run.vm.resume(&run.program, i, c, &mut host, &mut budget),
+        }
+        .unwrap()
+    };
+    let mut next = step(&mut run, &mut i, None);
+    let mut frames = 1;
+    while let Completion::Waiting { seconds, continuation } = next {
+        assert_eq!(seconds, 0.0);
+        assert_eq!(run.var(&i, "count"), Value::Int(frames), "one iteration per frame");
+        // Triggering again while the loop runs is ignored.
+        assert!(matches!(step(&mut run, &mut i, None), Completion::Returned(_)));
+        next = step(&mut run, &mut i, Some(continuation));
+        frames += 1;
+    }
     assert_eq!(run.var(&i, "count"), Value::Int(3));
+    assert_eq!(frames, 4, "three iterations, then a frame that sees the condition false");
+    // Finished: a new trigger starts a new loop (the condition is false now).
+    assert!(matches!(step(&mut run, &mut i, None), Completion::Returned(_)));
+}
+
+#[test]
+fn an_endless_while_loop_does_not_exhaust_the_budget() {
+    use pulsar_script_vm::Completion;
+    // while true { log "x" }
+    let mut g = Graph::default();
+    g.event("bp", "begin_play");
+    g.node("wh", "while_loop", &[P::ExecIn, P::In("condition", "bool"), P::ExecOut("Body")]).prop("wh", "condition", json!(true));
+    g.log("body", "x");
+    g.exec("bp", "Body", "wh").exec("wh", "Body", "body");
+    let mut run = Run::new(&g, &log_vars());
+    let mut i = run.program.instantiate();
+    let begin = run.program.entry("begin_play").unwrap();
+    let mut host = Host::new(&mut run.world, run.entity);
+    let mut next = run.vm.start(&run.program, &mut i, begin, &[], &mut host, &mut Budget::new(100)).unwrap();
+    for _ in 0..1000 {
+        let Completion::Waiting { continuation, .. } = next else { panic!("the loop ended") };
+        next = run.vm.resume(&run.program, &mut i, continuation, &mut host, &mut Budget::new(100)).unwrap();
+    }
+    assert!(matches!(next, Completion::Waiting { .. }));
 }
 
 #[test]
