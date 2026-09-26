@@ -487,6 +487,9 @@ impl BlueprintEditorPanel {
         })
         .detach();
 
+        // Script errors from Play-in-Editor select the failing node.
+        Self::watch_script_problems(cx);
+
         Self {
             focus_handle: cx.focus_handle(),
             graph: main_graph.clone(),

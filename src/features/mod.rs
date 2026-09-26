@@ -15,6 +15,7 @@ pub mod events;
 pub mod macros;
 pub mod nodes;
 pub mod prefabs;
+pub mod script_problems;
 pub mod undo;
 pub mod validation;
 pub mod variables;
