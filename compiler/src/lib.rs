@@ -964,18 +964,36 @@ impl<'a> Compiler<'a> {
                 let exit = f.here();
                 f.patch(at, exit, true);
             }
+            // Latent: one iteration per frame. Each iteration ends with a
+            // zero-second wait, so the runtime resumes the loop on the next
+            // tick; a loop that never ends costs one iteration per frame
+            // instead of freezing the game. While a loop is running, new
+            // triggers are ignored (like `delay`), so an event that fires
+            // every frame doesn't pile up loops.
             "while_loop" => {
-                let head = f.here();
-                // Re-evaluate the condition every iteration.
-                f.memo.clear();
-                let Some(cond) = self.input(f, node, "condition", &Type::Bool) else { return true };
-                let at = f.emit(Instr::Branch { cond, then: 0, otherwise: 0 });
-                let body = f.here();
-                f.patch(at, body, false);
-                self.follow(f, id, "Body");
-                f.emit(Instr::Jump { target: head });
-                let exit = f.here();
-                f.patch(at, exit, true);
+                let active = self.hidden_var(id, "while_active", Type::Bool);
+                let busy = self.load(f, active, Type::Bool);
+                let idle = f.reg(Type::Bool);
+                f.emit(Instr::Unary { op: UnOp::Not, dst: idle, src: busy });
+                self.if_then(f, idle, |c, f| {
+                    let yes = c.konst(f, Constant::Bool(true));
+                    f.emit(Instr::StoreVar { var: active, src: yes });
+                    let head = f.here();
+                    // Re-evaluate the condition every iteration.
+                    f.memo.clear();
+                    let Some(cond) = c.input(f, node, "condition", &Type::Bool) else { return };
+                    let at = f.emit(Instr::Branch { cond, then: 0, otherwise: 0 });
+                    let body = f.here();
+                    f.patch(at, body, false);
+                    c.follow(f, id, "Body");
+                    let next_frame = c.konst(f, Constant::Float(0.0));
+                    f.emit(Instr::Wait { seconds: next_frame });
+                    f.emit(Instr::Jump { target: head });
+                    let exit = f.here();
+                    f.patch(at, exit, true);
+                    let no = c.konst(f, Constant::Bool(false));
+                    f.emit(Instr::StoreVar { var: active, src: no });
+                });
             }
             "gate" => {
                 let state = self.hidden_var(id, "gate_open", Type::Bool);
