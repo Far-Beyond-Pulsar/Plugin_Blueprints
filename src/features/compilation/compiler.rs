@@ -518,11 +518,8 @@ impl BlueprintEditorPanel {
             .current_class_path
             .as_ref()
             .ok_or("No class loaded — cannot compile")?;
-        let class_name = class_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unnamed_blueprint")
-            .to_owned();
+        let class_name = crate::features::class_dirs::class_name_of(class_path)
+            .unwrap_or_else(|| "unnamed_blueprint".to_owned());
         let variables: Vec<blueprint_compiler::VariableSource> = self
             .class_variables
             .iter()
@@ -567,10 +564,10 @@ impl BlueprintEditorPanel {
         let graph = self.build_graphy_description()?;
         let blueprint_name = self
             .current_class_path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str())
-            .unwrap_or("compiled_blueprint");
+            .as_deref()
+            .and_then(crate::features::class_dirs::class_name_of)
+            .unwrap_or_else(|| "compiled_blueprint".to_owned());
+        let blueprint_name = blueprint_name.as_str();
 
         pbgc::compile_graph_to_actor_source(blueprint_name, &graph)
             .map_err(|e| format!("Compilation failed: {}", e))
@@ -614,10 +611,9 @@ impl BlueprintEditorPanel {
         let generated_logic = pbgc::compile_graph_with_variables(&graph, variables)
             .map_err(|e| format!("Compilation failed: {}", e))?;
 
-        let blueprint_name = class_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("compiled_blueprint");
+        let blueprint_name = crate::features::class_dirs::class_name_of(class_path)
+            .unwrap_or_else(|| "compiled_blueprint".to_owned());
+        let blueprint_name = blueprint_name.as_str();
 
         // Extract component data from the prefab sidecar so the generated actor
         // can initialise and drive its components during begin_play / tick.

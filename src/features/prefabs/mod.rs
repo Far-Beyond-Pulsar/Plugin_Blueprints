@@ -280,11 +280,9 @@ impl BlueprintEditorPanel {
         if self.prefab_asset.name.trim().is_empty() {
             let fallback = self
                 .current_class_path
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str())
-                .unwrap_or("Prefab")
-                .to_string();
+                .as_deref()
+                .and_then(crate::features::class_dirs::class_name_of)
+                .unwrap_or_else(|| "Prefab".to_string());
             self.prefab_asset.name = fallback;
         }
 

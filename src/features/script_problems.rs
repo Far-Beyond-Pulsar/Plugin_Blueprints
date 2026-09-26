@@ -49,8 +49,8 @@ impl BlueprintEditorPanel {
         if let Some(path) = &problem.path {
             return path.starts_with(class_path);
         }
-        let dir = class_path.file_name().and_then(|n| n.to_str());
-        dir.is_some() && problem.class.as_deref() == dir
+        let name = crate::features::class_dirs::class_name_of(class_path);
+        name.is_some() && problem.class.as_deref().map(crate::features::class_dirs::strip_class_ext) == name.as_deref()
     }
 
     fn apply_script_problems(&mut self, events: Vec<ScriptProblemsEvent>, cx: &mut Context<Self>) {
