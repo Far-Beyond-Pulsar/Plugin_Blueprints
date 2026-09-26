@@ -54,23 +54,15 @@ pub fn builtin_events() -> Vec<PaletteEvent> {
         .collect()
 }
 
-/// The directory holding the project's classes, from a class directory
-/// (`<project>/src/classes/<Class>`).
-fn classes_dir(class_path: &Path) -> Option<PathBuf> {
-    class_path.parent().map(Path::to_path_buf)
-}
-
 /// Custom events declared by the compiled modules of every class in the
 /// project except `current` (the class being edited).
 pub fn project_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
-    let Some(dir) = class_path.and_then(classes_dir) else { return Vec::new() };
-    let current = class_path.and_then(|p| p.file_name()).and_then(|n| n.to_str()).map(str::to_owned);
-    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let Some(class_path) = class_path else { return Vec::new() };
+    let current = crate::features::class_dirs::class_name_of(class_path);
+    let classes: Vec<PathBuf> = crate::features::class_dirs::sibling_class_dirs(class_path);
     let mut events = Vec::new();
-    let mut classes: Vec<PathBuf> = entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_dir()).collect();
-    classes.sort();
     for class in classes {
-        let name = class.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_owned();
+        let name = crate::features::class_dirs::class_name_of(&class).unwrap_or_default();
         if Some(&name) == current.as_ref() {
             continue;
         }

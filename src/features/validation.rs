@@ -274,10 +274,8 @@ pub(crate) fn compile_asset(
         })
         .collect();
     let class_name = class_dir
-        .and_then(|d| d.file_name())
-        .and_then(|n| n.to_str())
-        .unwrap_or("validation")
-        .to_owned();
+        .and_then(crate::features::class_dirs::class_name_of)
+        .unwrap_or_else(|| "validation".to_owned());
     let events: Vec<blueprint_compiler::EventSource> = asset
         .local_events
         .iter()
@@ -310,18 +308,7 @@ pub(crate) fn compile_asset(
 /// The class directories under `<root>/src/classes` holding a saved graph
 /// (`graph_save.json`), sorted.
 pub fn project_class_dirs(root: &Path) -> Vec<std::path::PathBuf> {
-    let classes = root.join("src").join("classes");
-    let mut dirs: Vec<std::path::PathBuf> = std::fs::read_dir(&classes)
-        .map(|entries| {
-            entries
-                .flatten()
-                .map(|e| e.path())
-                .filter(|p| p.join(GRAPH_FILE).is_file())
-                .collect()
-        })
-        .unwrap_or_default();
-    dirs.sort();
-    dirs
+    crate::features::class_dirs::project_class_dirs(root)
 }
 
 const GRAPH_FILE: &str = "graph_save.json";
@@ -334,7 +321,7 @@ fn compile_class_dir(
     natives: &pulsar_script_vm::NativeRegistry,
 ) -> Result<(), Vec<plugin_editor_api::CompileDiagnostic>> {
     use plugin_editor_api::CompileDiagnostic;
-    let class = dir.file_name().and_then(|n| n.to_str()).map(str::to_owned);
+    let class = crate::features::class_dirs::class_name_of(dir);
     let graph_file = dir.join(GRAPH_FILE);
     let out_dir = dir.join("events").join(".build");
     let out = out_dir.join("module.json");

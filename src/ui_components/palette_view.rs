@@ -136,11 +136,9 @@ impl NodePaletteView {
             // by category.
             let class_path = editor_ref.current_class_path.clone();
             let class_name = class_path
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str())
-                .unwrap_or("unnamed_blueprint")
-                .to_owned();
+                .as_deref()
+                .and_then(crate::features::class_dirs::class_name_of)
+                .unwrap_or_else(|| "unnamed_blueprint".to_owned());
             let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> = Default::default();
             for (category, def) in crate::features::events::engine_events::event_node_definitions(
                 class_path.as_deref(),
