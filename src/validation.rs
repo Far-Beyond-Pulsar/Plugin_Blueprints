@@ -5,5 +5,6 @@
 //! `blueprint_editor_plugin::validation::validate_project_classes`).
 
 pub use crate::features::validation::{
-    validate_project_classes, ValidationReport, ValidationTarget,
+    compile_project_classes, project_class_dirs, validate_project_classes, ValidationReport,
+    ValidationTarget,
 };

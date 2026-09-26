@@ -205,6 +205,29 @@ pub(crate) fn validate_asset(
     asset: &crate::io::formats::BlueprintAsset,
     class_dir: Option<&std::path::Path>,
 ) -> Vec<String> {
+    compile_asset(asset, class_dir, crate::features::compilation::compiler::script_natives())
+        .problems
+        .into_iter()
+        .map(|(_, message)| message)
+        .collect()
+}
+
+/// What compiling one saved class produced.
+pub(crate) struct AssetCompile {
+    /// The module, when the class compiled with no problem at all.
+    pub module: Option<pulsar_script_vm::Module>,
+    /// Every problem, as `(graph node, message)`.
+    pub problems: Vec<(Option<String>, String)>,
+}
+
+/// Compile a saved class the way Play runs it: structural checks, the
+/// UI -> PBGC conversion, local macro expansion, data-flow analysis and the
+/// script module compile against `natives`. No GPUI state is involved.
+pub(crate) fn compile_asset(
+    asset: &crate::io::formats::BlueprintAsset,
+    class_dir: Option<&std::path::Path>,
+    natives: &pulsar_script_vm::NativeRegistry,
+) -> AssetCompile {
     let mut report = ValidationReport::default();
     check_ui_graph(&asset.main_graph, &mut report);
 
@@ -212,69 +235,165 @@ pub(crate) fn validate_asset(
         crate::features::compilation::compiler::convert_ui_graph_description_to_pbgc(
             &asset.main_graph,
         );
-    {
-        let library: HashMap<String, pbgc::GraphDescription> = asset
-            .local_macros
-            .iter()
-            .map(|macro_def| {
-                (
-                    macro_def.id.clone(),
-                    crate::features::compilation::compiler::convert_ui_graph_description_to_pbgc(
-                        &macro_def.graph,
-                    ),
-                )
-            })
-            .collect();
-        if !library.is_empty() {
-            if let Err(e) =
-                graphy::SubGraphExpander::new().expand_all_flat(&mut graph, &library)
-            {
-                report.push(format!("sub-graph expansion failed: {e}"));
-                return report.diagnostics;
-            }
-        }
-        check_pbgc_graph(&graph, &mut report);
-
-        // Dry-run the script module compiler: exactly what Play will run.
-        let variables: Vec<blueprint_compiler::VariableSource> = asset
-            .variables
-            .iter()
-            .map(|v| blueprint_compiler::VariableSource {
-                name: v.name.clone(),
-                type_name: v.data_type.to_string(),
-                default: None,
-            })
-            .collect();
-        let class_name = class_dir
-            .and_then(|d| d.file_name())
-            .and_then(|n| n.to_str())
-            .unwrap_or("validation")
-            .to_owned();
-        let events: Vec<blueprint_compiler::EventSource> = asset
-            .local_events
-            .iter()
-            .map(|e| blueprint_compiler::EventSource {
-                uid: e.uid.clone(),
-                name: e.name.clone(),
-                fields: e.fields.iter().map(|f| (f.name.clone(), f.type_name.clone())).collect(),
-            })
-            .collect();
-        let known_events = crate::features::events::engine_events::known_event_signatures(class_dir);
-        let source = blueprint_compiler::ClassSource {
-            name: &class_name,
-            graph: &graph,
-            variables: &variables,
-            events: &events,
-            known_events: &known_events,
-        };
-        if let Err(diagnostics) =
-            blueprint_compiler::compile(&source, crate::features::compilation::compiler::script_natives())
-        {
-            for diagnostic in diagnostics {
-                report.push(format!("compile: {diagnostic}"));
-            }
+    let library: HashMap<String, pbgc::GraphDescription> = asset
+        .local_macros
+        .iter()
+        .map(|macro_def| {
+            (
+                macro_def.id.clone(),
+                crate::features::compilation::compiler::convert_ui_graph_description_to_pbgc(
+                    &macro_def.graph,
+                ),
+            )
+        })
+        .collect();
+    if !library.is_empty() {
+        if let Err(e) = graphy::SubGraphExpander::new().expand_all_flat(&mut graph, &library) {
+            report.push(format!("sub-graph expansion failed: {e}"));
+            return AssetCompile {
+                module: None,
+                problems: report.diagnostics.into_iter().map(|m| (None, m)).collect(),
+            };
         }
     }
+    check_pbgc_graph(&graph, &mut report);
+    let mut problems: Vec<(Option<String>, String)> =
+        report.diagnostics.into_iter().map(|m| (None, m)).collect();
 
-    report.diagnostics
+    // Compile exactly what Play will run.
+    let variables: Vec<blueprint_compiler::VariableSource> = asset
+        .variables
+        .iter()
+        .map(|v| blueprint_compiler::VariableSource {
+            name: v.name.clone(),
+            type_name: v.data_type.to_string(),
+            default: v
+                .default_value
+                .as_deref()
+                .map(crate::features::compilation::compiler::property_value_from_raw),
+        })
+        .collect();
+    let class_name = class_dir
+        .and_then(|d| d.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("validation")
+        .to_owned();
+    let events: Vec<blueprint_compiler::EventSource> = asset
+        .local_events
+        .iter()
+        .map(|e| blueprint_compiler::EventSource {
+            uid: e.uid.clone(),
+            name: e.name.clone(),
+            fields: e.fields.iter().map(|f| (f.name.clone(), f.type_name.clone())).collect(),
+        })
+        .collect();
+    let known_events = crate::features::events::engine_events::known_event_signatures(class_dir);
+    let source = blueprint_compiler::ClassSource {
+        name: &class_name,
+        graph: &graph,
+        variables: &variables,
+        events: &events,
+        known_events: &known_events,
+    };
+    let module = match blueprint_compiler::compile(&source, natives) {
+        Ok(module) => Some(module),
+        Err(diagnostics) => {
+            for diagnostic in diagnostics {
+                problems.push((diagnostic.node.clone(), format!("compile: {diagnostic}")));
+            }
+            None
+        }
+    };
+    AssetCompile { module: module.filter(|_| problems.is_empty()), problems }
 }
+
+/// The class directories under `<root>/src/classes` holding a saved graph
+/// (`graph_save.json`), sorted.
+pub fn project_class_dirs(root: &Path) -> Vec<std::path::PathBuf> {
+    let classes = root.join("src").join("classes");
+    let mut dirs: Vec<std::path::PathBuf> = std::fs::read_dir(&classes)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.join(GRAPH_FILE).is_file())
+                .collect()
+        })
+        .unwrap_or_default();
+    dirs.sort();
+    dirs
+}
+
+const GRAPH_FILE: &str = "graph_save.json";
+
+/// Compile one class directory's saved graph and write its module to
+/// `events/.build/module.json`. On failure no module is left behind (a
+/// stale one would run old code).
+fn compile_class_dir(
+    dir: &Path,
+    natives: &pulsar_script_vm::NativeRegistry,
+) -> Result<(), Vec<plugin_editor_api::CompileDiagnostic>> {
+    use plugin_editor_api::CompileDiagnostic;
+    let class = dir.file_name().and_then(|n| n.to_str()).map(str::to_owned);
+    let graph_file = dir.join(GRAPH_FILE);
+    let out_dir = dir.join("events").join(".build");
+    let out = out_dir.join("module.json");
+    let fail = |message: String| {
+        let _ = std::fs::remove_file(&out);
+        vec![CompileDiagnostic::error(class.clone(), Some(graph_file.clone()), message)]
+    };
+    let text = std::fs::read_to_string(&graph_file).map_err(|e| fail(format!("failed to read: {e}")))?;
+    let asset = crate::io::formats::deserialize_blueprint(&crate::io::formats::strip_header_comments(&text))
+        .map_err(|e| fail(format!("failed to parse blueprint asset: {e}")))?;
+    let compiled = compile_asset(&asset, Some(dir), natives);
+    let Some(module) = compiled.module else {
+        let _ = std::fs::remove_file(&out);
+        return Err(compiled
+            .problems
+            .into_iter()
+            .map(|(node, message)| CompileDiagnostic {
+                location: node.map(|n| format!("node {n}")),
+                ..CompileDiagnostic::error(class.clone(), Some(graph_file.clone()), message)
+            })
+            .collect());
+    };
+    let json = module.to_json().map_err(|e| fail(format!("failed to serialise module: {e}")))?;
+    std::fs::create_dir_all(&out_dir).map_err(|e| fail(format!("failed to create {}: {e}", out_dir.display())))?;
+    std::fs::write(&out, json).map_err(|e| fail(format!("failed to write {}: {e}", out.display())))?;
+    Ok(())
+}
+
+/// Compile every Blueprint class of the project at `root` headlessly
+/// (#879): each `src/classes/<Class>/graph_save.json` to its
+/// `events/.build/module.json`, linking native calls against `natives`.
+///
+/// Classes may handle each other's events, which they learn from their
+/// siblings' compiled modules; a class that fails because a sibling was
+/// not compiled yet is retried after the others, for as long as a round
+/// makes progress. Returns the problems of the classes that still fail.
+pub fn compile_project_classes(
+    root: &Path,
+    natives: &pulsar_script_vm::NativeRegistry,
+) -> Vec<plugin_editor_api::CompileDiagnostic> {
+    let mut pending = project_class_dirs(root);
+    let mut failures = Vec::new();
+    while !pending.is_empty() {
+        failures.clear();
+        let mut failed = Vec::new();
+        for dir in &pending {
+            match compile_class_dir(dir, natives) {
+                Ok(()) => tracing::info!(class = %dir.display(), "Blueprint class compiled"),
+                Err(problems) => {
+                    failures.extend(problems);
+                    failed.push(dir.clone());
+                }
+            }
+        }
+        if failed.len() == pending.len() {
+            break;
+        }
+        pending = failed;
+    }
+    failures
+}
+
