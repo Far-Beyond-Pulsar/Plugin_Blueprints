@@ -7,7 +7,7 @@ description = "Compiles Blueprint graphs to Pulsar engine script modules (pulsar
 [dependencies]
 # Same Graphy revision as the plugin; Pulsar-Native patches both to its submodule.
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
-pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6868a0378f85b846a809490617d17404a7b4082c" }
+pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
 serde_json = "1.0"
 
 [dev-dependencies]
