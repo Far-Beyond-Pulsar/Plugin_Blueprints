@@ -1647,8 +1647,50 @@ fn constant(json: &Json, ty: &Type) -> Result<Option<Constant>, String> {
             Json::String(s) => Constant::Str(s.clone()),
             other => Constant::Str(other.to_string()),
         },
-        // References and objects have no literals; they start at their
-        // default and are set through wires.
+        // A value type's literal, e.g. a Vec3 default typed into the node.
+        // The editor may store it as an array, an object keyed by component
+        // name, or text like `(0, 1, 0)`; all become the array form the type
+        // registers a decoder for, checked now so a bad value points at the
+        // node instead of failing at link time.
+        Type::Object(name) => {
+            let Some(components) = object_components(json).map_err(|_| bad())? else {
+                return Ok(None);
+            };
+            let text = Json::Array(components.into_iter().map(Json::from).collect()).to_string();
+            TypeRegistry::global().decode_value(name, &text).map_err(|e| format!("`{json}` is not a valid {ty}: {e}"))?;
+            Constant::Value { ty: name.clone(), json: text }
+        }
+        // References have no literals; they start at their default and are
+        // set through wires.
         _ => return Ok(None),
     }))
+}
+
+/// The numeric components of a value-type literal typed into the editor:
+/// `[x, y, z]`, `{"x": .., "y": .., "z": ..}`, or text such as `(0, 1, 0)`.
+/// `Ok(None)` for empty text (use the default); `Err` for anything else.
+fn object_components(json: &Json) -> Result<Option<Vec<f64>>, ()> {
+    let number = |v: &Json| match v {
+        Json::Number(n) => n.as_f64(),
+        Json::String(s) => s.trim().parse().ok(),
+        _ => None,
+    };
+    let components = match json {
+        Json::Array(items) => items.iter().map(number).collect::<Option<Vec<_>>>(),
+        Json::Object(map) => ["x", "y", "z", "w"]
+            .into_iter()
+            .map_while(|k| map.get(k))
+            .map(number)
+            .collect::<Option<Vec<_>>>()
+            .filter(|c| c.len() == map.len()),
+        Json::String(s) if s.trim().is_empty() => return Ok(None),
+        Json::String(s) => s
+            .trim()
+            .trim_matches(|c| matches!(c, '(' | ')' | '[' | ']'))
+            .split(',')
+            .map(|part| part.trim().parse().ok())
+            .collect::<Option<Vec<_>>>(),
+        _ => None,
+    };
+    components.filter(|c| c.iter().all(|v| v.is_finite())).map(Some).ok_or(())
 }

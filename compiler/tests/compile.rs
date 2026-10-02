@@ -513,7 +513,10 @@ impl V2 {
     }
 }
 
-pulsar_script_vm::script_value_type!(V2);
+pulsar_script_vm::script_value_type!(V2, "V2", decode = |text| {
+    let [x, y]: [f32; 2] = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    Ok(V2 { x, y })
+});
 
 #[test]
 fn native_nodes_call_any_registered_native() {
@@ -1034,5 +1037,71 @@ mod engine_events {
         assert_eq!(send.inputs[0], ("target".to_owned(), "Entity".to_owned()));
         let ll = nodes.iter().find(|n| n.node_type == "event::on::LevelLoaded").unwrap();
         assert_eq!(ll.properties[0].1, "global");
+    }
+}
+
+// ---- value-type literals on unconnected pins ------------------------------------
+
+/// `count = round(V2::length(<literal>))` for each way the editor may store
+/// a value-type default.
+#[test]
+fn unconnected_value_type_pins_use_their_literal() {
+    for literal in [json!([3, 4]), json!({"x": 3, "y": 4}), json!("(3, 4)")] {
+        let mut g = Graph::default();
+        g.event("bp", "begin_play");
+        g.node("len", "native::V2::length", &[P::In("self", "V2"), P::Out("result", "f64")]);
+        g.prop("len", "self", literal.clone());
+        g.node("round", "to_int", &[P::In("x", "f64"), P::Out("result", "i64")]).data("len", "result", "round", "x");
+        g.set_var("set", "count", "i64").data("round", "result", "set", "value");
+        g.exec("bp", "Body", "set");
+
+        let registry = {
+            let mut r = natives();
+            r.register(NativeFn::builder("std::to_int").pure().params(["x"]).build(|x: f64| x.round() as i64)).unwrap();
+            r
+        };
+        let built = g.build();
+        let vars = log_vars();
+        let module = compile(&ClassSource { name: "Literal", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry)
+            .unwrap_or_else(|d| panic!("{literal}: {d:?}"));
+        assert!(
+            module.constants.iter().any(|c| matches!(c, pulsar_script_vm::Constant::Value { ty, .. } if ty == "V2")),
+            "{literal}: literal must be a pooled constant"
+        );
+        let program = Program::link(Arc::new(module), &registry).unwrap();
+        let mut world = World::new();
+        let e = world.spawn();
+        let mut inst = program.instantiate();
+        let mut host = Host::new(&mut world, e);
+        Vm::new()
+            .call(&program, &mut inst, program.entry("begin_play").unwrap(), &[], &mut host, &mut Budget::new(1000))
+            .unwrap();
+        assert_eq!(program.var(&inst, program.variable("count").unwrap()), Some(&Value::Int(5)), "{literal}");
+    }
+}
+
+#[test]
+fn malformed_value_type_literals_are_reported_on_their_node() {
+    for literal in [json!([1]), json!([1, "x"]), json!({"x": 1}), json!("not numbers"), json!(true)] {
+        let mut g = Graph::default();
+        g.event("bp", "begin_play");
+        g.node("len", "native::V2::length", &[P::In("self", "V2"), P::Out("result", "f64")]);
+        g.prop("len", "self", literal.clone());
+        g.node("round", "to_int", &[P::In("x", "f64"), P::Out("result", "i64")]).data("len", "result", "round", "x");
+        g.set_var("set", "count", "i64").data("round", "result", "set", "value");
+        g.exec("bp", "Body", "set");
+        let registry = {
+            let mut r = natives();
+            r.register(NativeFn::builder("std::to_int").pure().params(["x"]).build(|x: f64| x.round() as i64)).unwrap();
+            r
+        };
+        let built = g.build();
+        let vars = log_vars();
+        let diagnostics = compile(&ClassSource { name: "Literal", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry)
+            .expect_err(&literal.to_string());
+        assert!(
+            diagnostics.iter().any(|d| d.node.as_deref() == Some("len") && d.message.contains("is not a valid")),
+            "{literal}: {diagnostics:?}"
+        );
     }
 }

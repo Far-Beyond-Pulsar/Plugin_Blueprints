@@ -82,6 +82,22 @@ impl PinDataType {
         self.runtime_type().map(|info| info.type_id)
     }
 
+    /// Pin colours for the script math value types. Presentation metadata:
+    /// the VM and reflection know nothing about colours, and these types
+    /// have no `#[reflect(color)]` of their own. Vectors share a warm hue
+    /// family; rotations and matrices are
+    /// distinct.
+    fn math_type_color(type_name: &str) -> Option<[f32; 4]> {
+        Some(match type_name {
+            "Vec2" => [0.98, 0.78, 0.18, 1.0],
+            "Vec3" | "DVec3" => [0.98, 0.62, 0.10, 1.0],
+            "Vec4" => [0.95, 0.45, 0.10, 1.0],
+            "Quat" => [0.66, 0.40, 0.95, 1.0],
+            "Mat4" => [0.30, 0.70, 0.78, 1.0],
+            _ => return None,
+        })
+    }
+
     /// Resolve this type's display color as RGBA in `[0.0, 1.0]`.
     ///
     /// The single source of truth for pin/badge color: execution pins are
@@ -91,6 +107,9 @@ impl PinDataType {
     pub fn display_color(&self) -> [f32; 4] {
         if self.is_execution() {
             return [1.0, 0.0, 0.0, 1.0];
+        }
+        if let Some(color) = Self::math_type_color(&self.type_name) {
+            return color;
         }
         match self.runtime_type() {
             Some(info) => info.resolve_color(),
