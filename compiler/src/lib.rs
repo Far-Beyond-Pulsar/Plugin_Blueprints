@@ -70,7 +70,7 @@ use std::collections::HashMap;
 
 use graphy::{ConnectionType, DataType, GraphDescription, NodeInstance};
 use pulsar_script_vm::{
-    verify, BinOp, Constant, DebugInfo, EventDecl, EventField, EventRef, EventSignature, Function, Import,
+    verify, BinOp, CollOp, Constant, DebugInfo, EventDecl, EventField, EventRef, EventSignature, Function, Import,
     Instr, Module, NativeRegistry, Param, Reg, RegisterSource, Signature, SourceLoc, Subscription, SubscriptionScope, Type,
     TypeRegistry, UnOp, Variable,
 };
@@ -792,10 +792,16 @@ impl<'a> Compiler<'a> {
     /// A `std::<node_type>` call: arguments from the pins named after the
     /// native's parameters, the result into the node's `result` pin.
     fn std_call(&mut self, f: &mut Func, node: &'a NodeInstance) -> Option<Reg> {
-        self.std_call_expected(f, node, None)
+        self.std_call_expected(f, node, None, None)
     }
 
-    fn std_call_expected(&mut self, f: &mut Func, node: &'a NodeInstance, expected_output: Option<&Type>) -> Option<Reg> {
+    fn std_call_expected(
+        &mut self,
+        f: &mut Func,
+        node: &'a NodeInstance,
+        expected_output: Option<&Type>,
+        requested_pin: Option<&str>,
+    ) -> Option<Reg> {
         let id = node.id.as_str();
         let native_name = format!("std::{}", node.node_type);
         let native = self.natives.get(&native_name).cloned().or_else(|| {
@@ -870,9 +876,34 @@ impl<'a> Compiler<'a> {
                 .unwrap_or_else(|| name.clone());
             args.push(self.input(f, node, &pin, &param.ty)?);
         }
-        let dst = (native.sig.ret != Type::Unit).then(|| self.output_reg(f, id, "result", native.sig.ret.clone()));
-        self.call_with_signature(f, &native.name, args, dst, native.sig.clone());
-        dst
+        let split_outputs = match (&native.sig.ret, native.attr("outputs")) {
+            (Type::Tuple(types), Some(labels)) => {
+                let labels: Vec<_> = labels.split(',').map(str::trim).collect();
+                (labels.len() == types.len()).then_some((labels, types))
+            }
+            _ => None,
+        };
+        if let Some((labels, types)) = split_outputs {
+            let tuple = f.reg(native.sig.ret.clone());
+            self.call_with_signature(f, &native.name, args, Some(tuple), native.sig.clone());
+            let mut requested = None;
+            for (index, (label, ty)) in labels.iter().zip(types).enumerate() {
+                let output = self.output_reg(f, id, label, ty.clone());
+                f.emit(Instr::Collection { op: CollOp::TupleGet(index as u32), dst: output, args: vec![tuple] });
+                if requested_pin == Some(*label) {
+                    requested = Some(output);
+                }
+            }
+            requested.or_else(|| {
+                requested_pin.is_none().then(|| {
+                    labels.first().map(|label| self.output_reg(f, id, label, types[0].clone()))
+                })?
+            })
+        } else {
+            let dst = (native.sig.ret != Type::Unit).then(|| self.output_reg(f, id, "result", native.sig.ret.clone()));
+            self.call_with_signature(f, &native.name, args, dst, native.sig.clone());
+            dst
+        }
     }
 
     fn component_call(&mut self, f: &mut Func, node: &'a NodeInstance, class: &str, method: &str) -> Option<Reg> {
@@ -1388,7 +1419,7 @@ impl<'a> Compiler<'a> {
             });
             let reg = if generic_output {
                 let source = self.node(&src_node)?;
-                self.std_call_expected(f, source, Some(ty))?
+                self.std_call_expected(f, source, Some(ty), Some(&src_pin))?
             } else {
                 self.value(f, &src_node, &src_pin)?
             };
@@ -1588,7 +1619,7 @@ impl<'a> Compiler<'a> {
                     self.output_reg(f, id, pin, native.sig.ret.clone())
                 }
                 Some(_) => {
-                    let reg = self.std_call(f, node)?;
+                    let reg = self.std_call_expected(f, node, None, Some(pin))?;
                     // Pure results are recomputed per consuming node.
                     f.outputs.remove(&key);
                     reg
@@ -1598,7 +1629,7 @@ impl<'a> Compiler<'a> {
                     *f.outputs.get(&(id.to_owned(), pin.to_owned()))?
                 }
                 None if self.natives.generic(&native_name).is_some() => {
-                    let Some(reg) = self.std_call(f, node) else { return None };
+                    let Some(reg) = self.std_call_expected(f, node, None, Some(pin)) else { return None };
                     f.outputs.remove(&key);
                     reg
                 }
