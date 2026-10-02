@@ -1230,6 +1230,24 @@ mod conformance_fixtures {
         g.exec("pick", "X", "x").exec("pick", "Y", "y").exec("pick", "Z", "z");
         g.set_var("setc", "count", "i64").data("pick", "result", "setc", "value").exec("z", "exec_out", "setc");
         out.push(compiled("bp_pick", &g));
+
+        // The same behaviour as the TypeScript `Beacon` class of `pulsar_script_ts`'s
+        // parity test: do-once, flip-flop, do-n and a delay that ignores re-triggers
+        // while it counts down, each logging a letter.
+        let mut g = Graph::default();
+        g.event("ev", "on_fire");
+        g.node("once", "do_once", &[P::ExecIn, P::In("reset", "bool"), P::ExecOut("Then")]).prop("once", "reset", json!(false));
+        g.node("ff", "flip_flop", &[P::ExecIn, P::ExecOut("A"), P::ExecOut("B")]);
+        g.node("dn", "do_n", &[P::ExecIn, P::In("n", "i64"), P::In("reset", "bool"), P::ExecOut("Then")])
+            .prop("dn", "n", json!(2))
+            .prop("dn", "reset", json!(false));
+        g.node("wait", "delay", &[P::ExecIn, P::In("milliseconds", "i64"), P::ExecOut("Completed")]).prop("wait", "milliseconds", json!(500));
+        g.log("lo", "o").log("la", "a").log("lb", "b").log("ln", "n").log("ld", "d");
+        g.exec("ev", "Body", "once").exec("once", "Then", "lo");
+        g.exec("ev", "Body", "ff").exec("ff", "A", "la").exec("ff", "B", "lb");
+        g.exec("ev", "Body", "dn").exec("dn", "Then", "ln");
+        g.exec("ev", "Body", "wait").exec("wait", "Completed", "ld");
+        out.push(compiled("bp_beacon", &g));
         out
     }
 
