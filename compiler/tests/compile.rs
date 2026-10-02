@@ -1105,3 +1105,163 @@ fn malformed_value_type_literals_are_reported_on_their_node() {
         );
     }
 }
+
+// ---- conformance fixtures --------------------------------------------------------
+//
+// Blueprint graphs compiled to modules for `pulsar_script_conformance`, which
+// runs each interpreted and as generated Rust and compares them. They cover the
+// stateful flow nodes (per-instance hidden state), delays, loops that wait, and
+// selector natives. The checked-in JSON must match what the compiler emits now;
+// regenerate it with
+// `cargo test -p blueprint_compiler regenerate_conformance_fixtures -- --ignored`.
+
+mod conformance_fixtures {
+    use super::*;
+
+    fn compiled(name: &str, g: &Graph) -> pulsar_script_vm::Module {
+        let built = g.build();
+        let vars = log_vars();
+        compile(&ClassSource { name, graph: &built, variables: &vars, events: &[], known_events: &[], version: 0 }, &conformance_natives())
+            .unwrap_or_else(|d| panic!("{name}: {d:?}"))
+    }
+
+    /// The natives the graphs import. `pulsar_script_conformance` registers
+    /// the same ones.
+    fn conformance_natives() -> NativeRegistry {
+        let mut r = natives();
+        r.register(NativeFn::builder("std::to_int").pure().params(["x"]).build(|x: f64| x.round() as i64)).unwrap();
+        r.register(
+            NativeFn::builder("std::pick").attr("exec_outputs", "X,Y,Z").params(["n", "result"]).build_raw(
+                pulsar_script_vm::Signature::new(
+                    [pulsar_script_vm::Param::new(pulsar_script_vm::Type::Int), pulsar_script_vm::Param::inout(pulsar_script_vm::Type::Int)],
+                    pulsar_script_vm::Type::Int,
+                ),
+                Box::new(|_, args| {
+                    let n = args[0].as_int().unwrap();
+                    args[1] = Value::Int(n * 10);
+                    Ok(Value::Int(n % 3))
+                }),
+            ),
+        )
+        .unwrap();
+        r
+    }
+
+    pub fn modules() -> Vec<pulsar_script_vm::Module> {
+        let mut out = Vec::new();
+
+        // Stateful flow nodes: each owns hidden per-instance state.
+        let mut g = Graph::default();
+        g.event("ev", "on_fire");
+        g.node("once", "do_once", &[P::ExecIn, P::In("reset", "bool"), P::ExecOut("Then")]).prop("once", "reset", json!(false));
+        g.node("ff", "flip_flop", &[P::ExecIn, P::ExecOut("A"), P::ExecOut("B")]);
+        g.node("dn", "do_n", &[P::ExecIn, P::In("n", "i64"), P::In("reset", "bool"), P::ExecOut("Then")])
+            .prop("dn", "n", json!(2))
+            .prop("dn", "reset", json!(false));
+        g.node(
+            "mg",
+            "multi_gate",
+            &[P::ExecIn, P::In("reset", "bool"), P::ExecOut("Output0"), P::ExecOut("Output1"), P::ExecOut("Output2"), P::ExecOut("Output3")],
+        )
+        .prop("mg", "reset", json!(false));
+        g.log("lo", "o").log("la", "a").log("lb", "b").log("ln", "n");
+        g.log("m0", "0").log("m1", "1").log("m2", "2").log("m3", "3");
+        g.exec("ev", "Body", "once").exec("once", "Then", "lo");
+        g.exec("ev", "Body", "ff").exec("ff", "A", "la").exec("ff", "B", "lb");
+        g.exec("ev", "Body", "dn").exec("dn", "Then", "ln");
+        g.exec("ev", "Body", "mg");
+        g.exec("mg", "Output0", "m0").exec("mg", "Output1", "m1").exec("mg", "Output2", "m2").exec("mg", "Output3", "m3");
+        // A gate driven by event parameters, and a do_once with a wired reset.
+        g.node("ctl", "on_ctl", &[P::ExecOut("Body"), P::Out("open", "bool"), P::Out("close", "bool")]);
+        g.node("gt", "gate", &[P::ExecIn, P::In("open", "bool"), P::In("close", "bool"), P::ExecOut("Then")]);
+        g.data("ctl", "open", "gt", "open").data("ctl", "close", "gt", "close").exec("ctl", "Body", "gt");
+        g.log("lg", "g").exec("gt", "Then", "lg");
+        g.node("rst", "on_reset", &[P::ExecOut("Body"), P::Out("reset", "bool")]);
+        g.node("once2", "do_once", &[P::ExecIn, P::In("reset", "bool"), P::ExecOut("Then")]);
+        g.data("rst", "reset", "once2", "reset").exec("rst", "Body", "once2");
+        g.log("lr", "r").exec("once2", "Then", "lr");
+        out.push(compiled("bp_state", &g));
+
+        // Delays: one, a retriggerable one, and two in a row (separate state).
+        let mut g = Graph::default();
+        g.event("ev", "on_fire");
+        g.log("a", "a").log("b", "b");
+        g.node("wait", "delay", &[P::ExecIn, P::In("milliseconds", "i64"), P::ExecOut("Completed")]).prop("wait", "milliseconds", json!(500));
+        g.exec("ev", "Body", "a").exec("a", "exec_out", "wait").exec("wait", "Completed", "b");
+        g.event("rt", "on_retrigger");
+        g.node("rwait", "retriggerable_delay", &[P::ExecIn, P::In("delay_ms", "i64"), P::ExecOut("Completed")]).prop("rwait", "delay_ms", json!(1000));
+        g.log("rdone", "!").exec("rt", "Body", "rwait").exec("rwait", "Completed", "rdone");
+        g.event("two", "on_two");
+        g.node("d1", "delay", &[P::ExecIn, P::In("milliseconds", "i64"), P::ExecOut("Completed")]).prop("d1", "milliseconds", json!(200));
+        g.node("d2", "delay", &[P::ExecIn, P::In("milliseconds", "i64"), P::ExecOut("Completed")]).prop("d2", "milliseconds", json!(300));
+        g.log("lx", "x").log("ly", "y");
+        g.exec("two", "Body", "d1").exec("d1", "Completed", "lx").exec("lx", "exec_out", "d2").exec("d2", "Completed", "ly");
+        out.push(compiled("bp_delays", &g));
+
+        // Loops (a while loop waits one frame per iteration), branches, sequences.
+        let mut g = Graph::default();
+        g.event("bp", "begin_play");
+        g.node("for", "for_loop", &[P::ExecIn, P::In("count", "i64"), P::ExecOut("Body")]).prop("for", "count", json!(4));
+        g.log("body", "x").exec("bp", "Body", "for").exec("for", "Body", "body");
+        g.event("bp2", "on_count");
+        g.get_var("c1", "count", "i64").node("lt", "less", &[P::In("a", "i64"), P::In("b", "i64"), P::Out("result", "bool")]);
+        g.prop("lt", "b", json!(3)).data("c1", "value", "lt", "a");
+        g.node("wh", "while_loop", &[P::ExecIn, P::In("condition", "bool"), P::ExecOut("Body")]).data("lt", "result", "wh", "condition");
+        g.get_var("c2", "count", "i64").add("inc").prop("inc", "b", json!(1)).data("c2", "value", "inc", "a");
+        g.set_var("setc", "count", "i64").data("inc", "result", "setc", "value");
+        g.exec("bp2", "Body", "wh").exec("wh", "Body", "setc");
+        g.node("chk", "on_check", &[P::ExecOut("Body"), P::Out("flag", "bool")]);
+        g.node("br", "branch", &[P::ExecIn, P::In("condition", "bool"), P::ExecOut("True"), P::ExecOut("False")]);
+        g.data("chk", "flag", "br", "condition").exec("chk", "Body", "br");
+        g.log("yes", "Y").log("no", "N").exec("br", "True", "yes").exec("br", "False", "no");
+        g.event("sq", "on_seq");
+        g.node("seq", "sequence", &[P::ExecIn, P::ExecOut("Then0"), P::ExecOut("Then1")]);
+        g.log("sa", "A").log("sb", "B").log("st", "!");
+        g.exec("sq", "Body", "seq").exec("seq", "Then0", "sa").exec("seq", "Then1", "sb");
+        g.exec("sa", "exec_out", "st").exec("sb", "exec_out", "st");
+        out.push(compiled("bp_loops", &g));
+
+        // A selector native choosing among exec outputs, with an inout result.
+        let mut g = Graph::default();
+        g.node("ev", "on_pick", &[P::ExecOut("Body"), P::Out("n", "i64")]);
+        g.node("pick", "pick", &[P::ExecIn, P::In("n", "i64"), P::ExecOut("X"), P::ExecOut("Y"), P::ExecOut("Z"), P::Out("result", "i64")]);
+        g.data("ev", "n", "pick", "n").exec("ev", "Body", "pick");
+        g.log("x", "x").log("y", "y").log("z", "z");
+        g.exec("pick", "X", "x").exec("pick", "Y", "y").exec("pick", "Z", "z");
+        g.set_var("setc", "count", "i64").data("pick", "result", "setc", "value").exec("z", "exec_out", "setc");
+        out.push(compiled("bp_pick", &g));
+        out
+    }
+
+    fn dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../crates/core/pulsar_script_conformance/fixtures")
+    }
+
+    #[test]
+    fn conformance_fixtures_are_current() {
+        let dir = dir();
+        if !dir.is_dir() {
+            return; // built outside the Pulsar-Native monorepo
+        }
+        for module in modules() {
+            let path = dir.join(format!("{}.module.json", module.name));
+            let committed = std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("{} is missing", path.display()));
+            assert_eq!(
+                pulsar_script_vm::Module::from_json(&committed).unwrap(),
+                module,
+                "{}: run the ignored `regenerate_conformance_fixtures` test",
+                module.name
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "writes the checked-in conformance fixtures"]
+    fn regenerate_conformance_fixtures() {
+        let dir = dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        for module in modules() {
+            std::fs::write(dir.join(format!("{}.module.json", module.name)), module.to_json().unwrap() + "\n").unwrap();
+        }
+    }
+}
