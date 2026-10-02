@@ -186,7 +186,7 @@ fn check_ui_graph(
 /// Validate an already-converted + expanded PBGC graph with the same
 /// data-flow analysis codegen runs. Errors here are hard failures that
 /// would otherwise abort compilation mid-codegen.
-fn check_pbgc_graph(graph: &pbgc::GraphDescription, report: &mut ValidationReport) {
+fn check_pbgc_graph(graph: &graphy::GraphDescription, report: &mut ValidationReport) {
     let metadata_provider = pbgc::metadata::BlueprintMetadataProvider::new();
     match graphy::DataResolver::build(graph, &metadata_provider) {
         Ok(_) => {}

@@ -44,6 +44,8 @@ pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "8739ed4b9d4ac
 # Graph -> engine script module compiler (this repository's `compiler/`).
 blueprint_compiler = { path = "compiler" }
 pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+# Exports a compiled class as Rust (the Rust compile target).
+pulsar_script_codegen = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"

@@ -59,11 +59,11 @@ impl BlueprintEditorPanel {
             .unwrap_or(&self.open_tabs[0])
     }
 
-    /// Dump the active graph (editor view + the `pbgc::GraphDescription` that gets
+    /// Dump the active graph (editor view + the `graphy::GraphDescription` that gets
     /// sent to the compiler) to `blueprint_graph_debug.json` in the working
     /// directory, so event-node detection mismatches can be diagnosed by
     /// comparing the editor's classification against PBGC's metadata lookup.
-    fn dump_graph_debug_info(&self, graph: &pbgc::GraphDescription) {
+    fn dump_graph_debug_info(&self, graph: &graphy::GraphDescription) {
         #[derive(serde::Serialize)]
         struct EditorNodeDebug {
             id: String,
@@ -137,7 +137,7 @@ impl BlueprintEditorPanel {
         }
     }
 
-    /// Build a `pbgc::GraphDescription` for the whole blueprint file: the main
+    /// Build a `graphy::GraphDescription` for the whole blueprint file: the main
     /// event graph with every `MacroInstance`/`SubgraphCall` node
     /// (`definition_id: "macro:<id>"`) inlined via graphy's
     /// `SubGraphExpander`, using a library assembled from this file's local
@@ -151,7 +151,7 @@ impl BlueprintEditorPanel {
     ///
     /// `pub(crate)` since #656 — the validation stage runs the SAME expanded
     /// graph codegen consumes.
-    pub(crate) fn build_graphy_description(&self) -> Result<pbgc::GraphDescription, String> {
+    pub(crate) fn build_graphy_description(&self) -> Result<graphy::GraphDescription, String> {
         let authored = self.convert_graph_to_description(&self.main_graph_tab().graph)?;
         let graph = blueprint_compiler::authored::expand_graph(&authored, self.collect_macro_library()?)?;
 
@@ -237,10 +237,10 @@ impl BlueprintEditorPanel {
         Ok(library)
     }
 
-    /// Compile the class to an engine script module and write it to
-    /// `<class_path>/events/.build/module.json`: the language-neutral
-    /// bytecode `pulsar_script_runtime` loads (see `blueprint_compiler`).
-    pub fn compile_to_script_module(&self) -> Result<PathBuf, String> {
+    /// Compile the class to an engine script module: the one language-neutral
+    /// result both compile targets are built from (see `blueprint_compiler`).
+    /// `Err` carries every diagnostic.
+    fn compile_module(&self) -> Result<pulsar_script_vm::Module, String> {
         let class_path = self
             .current_class_path
             .as_ref()
@@ -271,13 +271,25 @@ impl BlueprintEditorPanel {
             known_events: &known_events,
             version: 0,
         };
-        let build_dir = class_path.join("events").join(".build");
-        let out_path = build_dir.join("module.json");
-        let module = blueprint_compiler::compile(&source, script_natives()).map_err(|diagnostics| {
-            // Never leave a module from an older graph behind.
-            let _ = std::fs::remove_file(&out_path);
+        blueprint_compiler::compile(&source, script_natives()).map_err(|diagnostics| {
             let lines: Vec<String> = diagnostics.iter().map(ToString::to_string).collect();
             format!("Script module compilation failed:\n{}", lines.join("\n"))
+        })
+    }
+
+    /// Compile the class to an engine script module and write it to
+    /// `<class_path>/events/.build/module.json`: the language-neutral
+    /// bytecode `pulsar_script_runtime` loads (see `blueprint_compiler`).
+    pub fn compile_to_script_module(&self) -> Result<PathBuf, String> {
+        let class_path = self
+            .current_class_path
+            .as_ref()
+            .ok_or("No class loaded — cannot compile")?;
+        let build_dir = class_path.join("events").join(".build");
+        let out_path = build_dir.join("module.json");
+        let module = self.compile_module().inspect_err(|_| {
+            // Never leave a module from an older graph behind.
+            let _ = std::fs::remove_file(&out_path);
         })?;
 
         let json = module.to_json().map_err(|e| format!("Failed to serialise module: {e}"))?;
@@ -288,18 +300,30 @@ impl BlueprintEditorPanel {
         Ok(out_path)
     }
 
-    /// Compile current graph to Rust source code
+    /// The prefab components the exported actor hydrates at `begin_play`.
+    fn export_components(&self) -> Vec<pulsar_script_codegen::actor::ComponentSpec> {
+        self.prefab_asset
+            .components
+            .iter()
+            .map(|c| pulsar_script_codegen::actor::ComponentSpec {
+                class_name: c.class_name.clone(),
+                property_defaults_json: c.data.to_string(),
+                enabled: c.enabled,
+            })
+            .collect()
+    }
+
+    /// Compile current graph to Rust source code: the class's script module,
+    /// exported as an `Actor` (see `pulsar_script_codegen`).
     pub fn compile_to_rust(&self) -> Result<String, String> {
-        let graph = self.build_graphy_description()?;
         let blueprint_name = self
             .current_class_path
             .as_deref()
             .and_then(crate::features::class_dirs::class_name_of)
             .unwrap_or_else(|| "compiled_blueprint".to_owned());
-        let blueprint_name = blueprint_name.as_str();
-
-        pbgc::compile_graph_to_actor_source(blueprint_name, &graph)
-            .map_err(|e| format!("Compilation failed: {}", e))
+        let module = self.compile_module()?;
+        pulsar_script_codegen::actor::generate_actor(&blueprint_name, &module, &self.export_components())
+            .map_err(|e| format!("Compilation failed: {e}"))
     }
 
     /// Compile and save events to class directory structure
@@ -327,41 +351,14 @@ impl BlueprintEditorPanel {
             return Err("No event nodes found in graph".to_string());
         }
 
-        // Build the graph and compile in one pass through PBGC.
-        // Wrap raw generated logic into an Actor class so we always emit
-        // a struct with `#[derive(EngineClass)]`.
-        let graph = self.build_graphy_description()?;
-        let variables: std::collections::HashMap<String, String> = self
-            .class_variables
-            .iter()
-            .map(|v| (v.name.clone(), v.var_type.clone()))
-            .collect();
-
-        let generated_logic = pbgc::compile_graph_with_variables(&graph, variables)
-            .map_err(|e| format!("Compilation failed: {}", e))?;
-
         let blueprint_name = crate::features::class_dirs::class_name_of(class_path)
             .unwrap_or_else(|| "compiled_blueprint".to_owned());
         let blueprint_name = blueprint_name.as_str();
 
-        // Extract component data from the prefab sidecar so the generated actor
-        // can initialise and drive its components during begin_play / tick.
-        let compiled_components: Vec<pbgc::CompiledComponent> = self
-            .prefab_asset
-            .components
-            .iter()
-            .map(|c| pbgc::CompiledComponent {
-                class_name: c.class_name.clone(),
-                property_defaults: c.data.clone(),
-                enabled: c.enabled,
-            })
-            .collect();
-
-        let generated = pbgc::generate_blueprint_actor_source_with_components(
-            blueprint_name,
-            &generated_logic,
-            compiled_components,
-        );
+        // The same module the VM target writes, exported as an Actor class.
+        // Classes the exporter cannot represent are refused with a reason
+        // rather than exported with behaviour silently missing.
+        let generated = self.compile_to_rust()?;
 
         // Write all events into a single file
         let events_file = events_dir.join("events.rs");
