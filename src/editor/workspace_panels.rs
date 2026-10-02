@@ -741,9 +741,30 @@ impl Render for GraphCanvasPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.refresh_comment_color_bindings(window, cx);
         crate::rendering::input::refresh_graph_cursor(window, self);
-        div()
+        let mut root = div()
+            .relative()
             .size_full()
-            .child(NodeGraphRenderer::render(self, cx))
+            .child(NodeGraphRenderer::render(self, cx));
+        if let (Some(tooltip), Some(position)) =
+            (self.hovered_pin_tooltip.clone(), self.hovered_pin_tooltip_pos)
+        {
+            root = root.child(
+                div()
+                    .absolute()
+                    .left(position.x)
+                    .top(position.y)
+                    .px_2()
+                    .py_1()
+                    .rounded_md()
+                    .bg(cx.theme().background)
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .text_sm()
+                    .text_color(cx.theme().foreground)
+                    .child(tooltip),
+            );
+        }
+        root
     }
 }
 

@@ -294,6 +294,33 @@ pub fn on_mouse_down_right(
 
             let cp = to_canvas(event.position, canvas);
             let gp = to_graph(cp, canvas);
+
+            // Show runtime values only when a PIE stop populated this map.
+            // Ordinary editing has an empty map, so pin hover keeps its
+            // existing behavior.
+            let debug_tooltip = hit_output_pin(cp, canvas).and_then(|(node, pin)| {
+                canvas
+                    .debug_pin_values
+                    .get(&(node, pin.clone()))
+                    .map(|value| (format!("{pin}: {value}"), point(px(cp.x + 12.0), px(cp.y + 12.0))))
+            });
+            let changed = match debug_tooltip {
+                Some((tooltip, position)) => {
+                    let changed = canvas.hovered_pin_tooltip.as_deref() != Some(tooltip.as_str())
+                        || canvas.hovered_pin_tooltip_pos != Some(position);
+                    canvas.hovered_pin_tooltip = Some(tooltip);
+                    canvas.hovered_pin_tooltip_pos = Some(position);
+                    changed
+                }
+                None => {
+                    let changed = canvas.hovered_pin_tooltip.take().is_some();
+                    canvas.hovered_pin_tooltip_pos = None;
+                    changed
+                }
+            };
+            if changed {
+                cx.notify();
+            }
             canvas.popup_palette_graph_pos = Some(gp);
 
             if canvas.dragging_connection.is_none() && canvas.dragging_node.is_none() {

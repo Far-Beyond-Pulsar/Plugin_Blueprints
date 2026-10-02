@@ -59,6 +59,14 @@ impl BlueprintEditorPanel {
             match event {
                 ScriptProblemsEvent::Cleared => {
                     self.validation_problems.retain(|p| !p.starts_with(PREFIX));
+                    if let Some(canvas) = self.active_canvas().cloned() {
+                        canvas.update(cx, |canvas, cx| {
+                            canvas.debug_pin_values.clear();
+                            canvas.hovered_pin_tooltip = None;
+                            canvas.hovered_pin_tooltip_pos = None;
+                            cx.notify();
+                        });
+                    }
                     changed = true;
                 }
                 ScriptProblemsEvent::Reported(problem) if self.is_open_class(&problem) => {
@@ -68,10 +76,17 @@ impl BlueprintEditorPanel {
                     }
                     if let (Some(node), Some(canvas)) = (problem.node.clone(), self.active_canvas().cloned()) {
                         canvas.update(cx, |canvas, cx| {
+                            canvas.debug_pin_values = problem
+                                .output_values
+                                .iter()
+                                .map(|output| {
+                                    ((output.node.clone(), output.pin.clone()), output.value.clone())
+                                })
+                                .collect();
                             if canvas.graph.nodes.iter().any(|n| n.id == node) {
                                 canvas.graph.selected_nodes = vec![node];
-                                cx.notify();
                             }
+                            cx.notify();
                         });
                     }
                     changed = true;
