@@ -250,6 +250,7 @@ pub(crate) fn compile_asset(
         .variables
         .iter()
         .map(|v| blueprint_compiler::VariableSource {
+            id: Some(v.id.clone()),
             name: v.name.clone(),
             type_name: v.data_type.to_string(),
             default: v
@@ -277,6 +278,7 @@ pub(crate) fn compile_asset(
         variables: &variables,
         events: &events,
         known_events: &known_events,
+        version: 0,
     };
     let module = match blueprint_compiler::compile(&source, natives) {
         Ok(module) => Some(module),

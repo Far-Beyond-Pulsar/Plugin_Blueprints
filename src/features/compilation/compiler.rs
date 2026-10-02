@@ -251,6 +251,7 @@ impl BlueprintEditorPanel {
             .class_variables
             .iter()
             .map(|v| blueprint_compiler::VariableSource {
+                id: Some(v.id.clone()),
                 name: v.name.clone(),
                 type_name: v.var_type.clone(),
                 default: v.default_value.as_deref().map(property_value_from_raw),
@@ -268,6 +269,7 @@ impl BlueprintEditorPanel {
             variables: &variables,
             events: &events,
             known_events: &known_events,
+            version: 0,
         };
         let build_dir = class_path.join("events").join(".build");
         let out_path = build_dir.join("module.json");

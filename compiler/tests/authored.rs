@@ -13,8 +13,8 @@ fn saved_graph_runs_headlessly_and_macro_state_is_stable_and_independent() {
     assert!(graph.nodes.contains_key("first__once"));
     assert!(graph.nodes.contains_key("second__once"));
     let natives = NativeRegistry::new();
-    let vars = [VariableSource { name: "count".into(), type_name: "i64".into(), default: Some(serde_json::json!(0)) }];
-    let source = ClassSource { name: "Fixture", graph: &graph, variables: &vars, events: &[], known_events: &[] };
+    let vars = [VariableSource { id: Some("count-id".into()), name: "count".into(), type_name: "i64".into(), default: Some(serde_json::json!(0)) }];
+    let source = ClassSource { name: "Fixture", graph: &graph, variables: &vars, events: &[], known_events: &[], version: 0 };
     let module = compile(&source, &natives).unwrap();
     let repeated = expand();
     let again = compile(&ClassSource { graph: &repeated, ..source }, &natives).unwrap();

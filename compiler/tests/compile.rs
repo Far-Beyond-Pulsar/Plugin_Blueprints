@@ -154,7 +154,7 @@ fn natives() -> NativeRegistry {
 }
 
 fn var(name: &str, ty: &str, default: Option<serde_json::Value>) -> VariableSource {
-    VariableSource { name: name.into(), type_name: ty.into(), default }
+    VariableSource { id: Some(format!("var-{name}")), name: name.into(), type_name: ty.into(), default }
 }
 
 fn log_vars() -> Vec<VariableSource> {
@@ -172,7 +172,7 @@ impl Run {
     fn new(graph: &Graph, variables: &[VariableSource]) -> Self {
         let registry = natives();
         let g = graph.build();
-        let module = compile(&ClassSource { name: "Test", graph: &g, variables, events: &[], known_events: &[] }, &registry)
+        let module = compile(&ClassSource { name: "Test", graph: &g, variables, events: &[], known_events: &[], version: 0 }, &registry)
             .unwrap_or_else(|d| panic!("compile failed: {d:?}"));
         let program = Program::link(Arc::new(module), &registry).expect("link");
         let mut world = World::new();
@@ -195,7 +195,7 @@ impl Run {
 
 fn errors(graph: &Graph, variables: &[VariableSource]) -> Vec<Diagnostic> {
     let g = graph.build();
-    compile(&ClassSource { name: "Test", graph: &g, variables, events: &[], known_events: &[] }, &natives()).expect_err("compile should fail")
+    compile(&ClassSource { name: "Test", graph: &g, variables, events: &[], known_events: &[], version: 0 }, &natives()).expect_err("compile should fail")
 }
 
 // ---- tests ------------------------------------------------------------------
@@ -224,7 +224,7 @@ fn instructions_map_to_their_graph_nodes() {
     let registry = natives();
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Test", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Test", graph: &built, variables: &vars, events: &[], known_events: &[], version: 0 }, &registry).unwrap();
     let (_, f) = module.function("begin_play").unwrap();
     let debug = f.debug.as_ref().expect("debug info");
     for pc in 0..f.code.len() {
@@ -261,7 +261,7 @@ fn tick_receives_delta_time() {
         r
     };
     let built = g.build();
-    let module = compile(&ClassSource { name: "Ticker", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Ticker", graph: &built, variables: &vars, events: &[], known_events: &[], version: 0 }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -456,7 +456,7 @@ fn component_nodes_default_to_this_entity() {
         r
     };
     let built = g.build();
-    let module = compile(&ClassSource { name: "Hurt", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Hurt", graph: &built, variables: &[], events: &[], known_events: &[], version: 0 }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -544,7 +544,7 @@ fn native_nodes_call_any_registered_native() {
     };
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Natives", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry)
+    let module = compile(&ClassSource { name: "Natives", graph: &built, variables: &vars, events: &[], known_events: &[], version: 0 }, &registry)
         .unwrap_or_else(|d| panic!("{d:?}"));
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
@@ -611,7 +611,7 @@ fn component_refs_on_other_objects_and_scene_lookups() {
         r
     };
     let built = g.build();
-    let module = compile(&ClassSource { name: "Hit", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(&ClassSource { name: "Hit", graph: &built, variables: &[], events: &[], known_events: &[], version: 0 }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let me = world.spawn();
@@ -655,7 +655,7 @@ fn component_refs_read_slot_handles() {
 
     let registry = natives();
     let built = g.build();
-    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[], events: &[], known_events: &[], version: 0 }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
 
     // One hidden handle per slot, typed by the slot's component class; no
     // native call by UUID.
@@ -696,7 +696,7 @@ fn unbound_slot_handles_do_not_fall_back() {
     g.prop("hit", "amount", json!(1.0)).data("second", "component", "hit", "component_ref").exec("ev", "Body", "hit");
     let registry = natives();
     let built = g.build();
-    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[], events: &[], known_events: &[], version: 0 }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let me = world.spawn();
@@ -720,7 +720,7 @@ fn delays_suspend_until_game_time_passes() {
     let registry = natives();
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Delay", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Delay", graph: &built, variables: &vars, events: &[], known_events: &[], version: 0 }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -755,7 +755,7 @@ fn retriggerable_delays_restart_their_countdown() {
     let registry = natives();
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Retrigger", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(&ClassSource { name: "Retrigger", graph: &built, variables: &vars, events: &[], known_events: &[], version: 0 }, &registry).unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -821,7 +821,7 @@ fn other_flow_nodes_jump_where_their_selector_says() {
     g.set_var("setc", "count", "i64").data("pick", "result", "setc", "value").exec("z", "exec_out", "setc");
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Pick", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(&ClassSource { name: "Pick", graph: &built, variables: &vars, events: &[], known_events: &[], version: 0 }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -945,7 +945,7 @@ mod engine_events {
         let vars = door_vars();
         let events = door_events();
         let known = [hit(), level_loaded()];
-        let source = ClassSource { name: "Door", graph: &graph, variables: &vars, events: &events, known_events: &known };
+        let source = ClassSource { name: "Door", graph: &graph, variables: &vars, events: &events, known_events: &known, version: 0 };
         let module = compile(&source, &registry).unwrap_or_else(|d| panic!("{d:?}"));
 
         assert_eq!(module.events.len(), 1);
@@ -1002,7 +1002,7 @@ mod engine_events {
         g.node("on_hit_class", "event::on::Hit", &[P::ExecOut("Body")]);
         g.prop("on_hit_class", "scope", json!("class"));
         let graph = g.build();
-        let module = compile(&ClassSource { name: "S", graph: &graph, variables: &vars, events: &[], known_events: &known }, &registry)
+        let module = compile(&ClassSource { name: "S", graph: &graph, variables: &vars, events: &[], known_events: &known, version: 0 }, &registry)
             .unwrap_or_else(|d| panic!("{d:?}"));
         let scopes: Vec<SubscriptionScope> = module.subscriptions.iter().map(|s| s.scope).collect();
         assert!(scopes.contains(&SubscriptionScope::Global), "LevelLoaded defaults to global");
@@ -1012,7 +1012,7 @@ mod engine_events {
         g.node("on_nope", "event::on::Nope", &[P::ExecOut("Body")]);
         g.node("old", "emit_event", &[P::ExecIn]);
         let graph = g.build();
-        let errors = compile(&ClassSource { name: "S", graph: &graph, variables: &vars, events: &[], known_events: &known }, &registry)
+        let errors = compile(&ClassSource { name: "S", graph: &graph, variables: &vars, events: &[], known_events: &known, version: 0 }, &registry)
             .unwrap_err();
         let text: Vec<String> = errors.iter().map(ToString::to_string).collect();
         assert!(text.iter().any(|e| e.contains("no event `Nope`")), "{text:?}");
@@ -1062,7 +1062,7 @@ fn unconnected_value_type_pins_use_their_literal() {
         };
         let built = g.build();
         let vars = log_vars();
-        let module = compile(&ClassSource { name: "Literal", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry)
+        let module = compile(&ClassSource { name: "Literal", graph: &built, variables: &vars, events: &[], known_events: &[], version: 0 }, &registry)
             .unwrap_or_else(|d| panic!("{literal}: {d:?}"));
         assert!(
             module.constants.iter().any(|c| matches!(c, pulsar_script_vm::Constant::Value { ty, .. } if ty == "V2")),
@@ -1097,7 +1097,7 @@ fn malformed_value_type_literals_are_reported_on_their_node() {
         };
         let built = g.build();
         let vars = log_vars();
-        let diagnostics = compile(&ClassSource { name: "Literal", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry)
+        let diagnostics = compile(&ClassSource { name: "Literal", graph: &built, variables: &vars, events: &[], known_events: &[], version: 0 }, &registry)
             .expect_err(&literal.to_string());
         assert!(
             diagnostics.iter().any(|d| d.node.as_deref() == Some("len") && d.message.contains("is not a valid")),

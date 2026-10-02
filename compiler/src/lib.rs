@@ -106,6 +106,9 @@ pub fn module_slots(module: &Module) -> Vec<(String, String)> {
 /// A class variable as the editor declares it.
 #[derive(Clone, Debug)]
 pub struct VariableSource {
+    /// The editor's stable id for the variable, kept across renames. State
+    /// carries over a reload by it; `None` falls back to the name.
+    pub id: Option<String>,
     pub name: String,
     /// Rust-style type name, e.g. `"f32"`, `"String"`, `"Health"`.
     pub type_name: String,
@@ -135,6 +138,8 @@ pub struct ClassSource<'a> {
     /// Every other engine event the graph may handle or send: the built-in
     /// events and other classes' and plugins' declared events.
     pub known_events: &'a [EventSignature],
+    /// The class's schema version (see `Module::class_version`).
+    pub version: u32,
 }
 
 /// The engine name of event `event` declared by class `class`.
@@ -380,7 +385,11 @@ impl<'a> Compiler<'a> {
         Self {
             source,
             natives,
-            module: Module::new(source.name),
+            module: {
+                let mut module = Module::new(source.name);
+                module.class_version = source.version;
+                module
+            },
             imports: HashMap::new(),
             vars: HashMap::new(),
             data_in,
@@ -418,23 +427,26 @@ impl<'a> Compiler<'a> {
                 },
                 None => None,
             };
-            self.add_var(&var.name, ty, default);
+            self.add_var(&var.name, var.id.clone(), ty, default);
         }
     }
 
-    fn add_var(&mut self, name: &str, ty: Type, default: Option<Constant>) -> u32 {
+    fn add_var(&mut self, name: &str, id: Option<String>, ty: Type, default: Option<Constant>) -> u32 {
         if let Some((index, _)) = self.vars.get(name) {
             return *index;
         }
         let index = self.module.variables.len() as u32;
-        self.module.variables.push(Variable { name: name.to_owned(), ty: ty.clone(), default });
+        self.module.variables.push(Variable { name: name.to_owned(), ty: ty.clone(), default, id });
         self.vars.insert(name.to_owned(), (index, ty));
         index
     }
 
     /// A per-instance variable backing one node's hidden state.
     fn hidden_var(&mut self, node: &str, purpose: &str, ty: Type) -> u32 {
-        self.add_var(&format!("__bp_{purpose}_{node}"), ty, None)
+        // Hidden state is identified by its purpose and the node that owns it;
+        // expanded macro nodes carry their expansion path in the node id, so
+        // two instances of one macro never share state.
+        self.add_var(&format!("__bp_{purpose}_{node}"), Some(format!("bp-state:{purpose}:{node}")), ty, None)
     }
 
     /// The class's custom events become engine events; index every event
@@ -588,7 +600,7 @@ impl<'a> Compiler<'a> {
         if self.events.iter().any(|e| e.name == "tick")
             || self.source.graph.nodes.values().any(|n| n.node_type == "get_delta_time")
         {
-            self.add_var(DELTA_TIME, Type::Float, None);
+            self.add_var(DELTA_TIME, Some("bp-state:delta_time".into()), Type::Float, None);
         }
     }
 
@@ -1405,7 +1417,7 @@ impl<'a> Compiler<'a> {
                     // The class must be a script-visible component type.
                     self.native_sig(id, &format!("{class}::of"))?;
                     let ty = Type::Component(class.to_owned());
-                    let var = self.add_var(&slot_variable_name(&slot), ty.clone(), None);
+                    let var = self.add_var(&slot_variable_name(&slot), Some(format!("bp-slot:{slot}")), ty.clone(), None);
                     self.load(f, var, ty)
                 }
             }
