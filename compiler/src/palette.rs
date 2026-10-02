@@ -44,6 +44,9 @@ pub fn pin_type_name(ty: &Type) -> String {
         Type::Str => "String".into(),
         Type::Entity => "Entity".into(),
         Type::Component(name) | Type::Object(name) => name.clone(),
+        Type::List(element) => format!("Vec<{}>", pin_type_name(element)),
+        Type::Map(key, value) => format!("HashMap<{}, {}>", pin_type_name(key), pin_type_name(value)),
+        Type::Tuple(items) => format!("({})", items.iter().map(pin_type_name).collect::<Vec<_>>().join(", ")),
     }
 }
 

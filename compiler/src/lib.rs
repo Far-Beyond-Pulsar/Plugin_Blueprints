@@ -773,10 +773,72 @@ impl<'a> Compiler<'a> {
     /// A `std::<node_type>` call: arguments from the pins named after the
     /// native's parameters, the result into the node's `result` pin.
     fn std_call(&mut self, f: &mut Func, node: &'a NodeInstance) -> Option<Reg> {
+        self.std_call_expected(f, node, None)
+    }
+
+    fn std_call_expected(&mut self, f: &mut Func, node: &'a NodeInstance, expected_output: Option<&Type>) -> Option<Reg> {
         let id = node.id.as_str();
         let native_name = format!("std::{}", node.node_type);
-        let Some(native) = self.natives.get(&native_name).cloned() else {
-            self.error(Some(id), format!("`{}` is not available to scripts", node.node_type));
+        let native = self.natives.get(&native_name).cloned().or_else(|| {
+            let generic = self.natives.generic(&native_name)?.clone();
+            // A generic node's connected input values are concrete script
+            // types. Try those types (and their nested list/map/tuple types)
+            // against the template; the VM linker will independently check
+            // the resulting import signature.
+            let mut candidates = Vec::new();
+            if let Some(expected) = expected_output {
+                collect_script_types(expected, &mut candidates);
+            }
+            for pin in data_inputs(node) {
+                let Some((source_node, source_pin)) = self.data_in.get(&(id.to_owned(), pin.clone())).cloned() else {
+                    continue;
+                };
+                let Some(reg) = self.value(f, &source_node, &source_pin) else {
+                    continue;
+                };
+                collect_script_types(f.ty(reg), &mut candidates);
+            }
+            candidates.sort_by_key(ToString::to_string);
+            candidates.dedup();
+            candidates.into_iter().find_map(|element| {
+                let sig = generic.signature(&element);
+                if expected_output.is_some_and(|expected| expected != &sig.ret) {
+                    return None;
+                }
+                let matches = generic.param_names.iter().zip(&sig.params).all(|(name, param)| {
+                    let pin = node.inputs.iter().find(|p| p.id == *name || p.id.trim_start_matches('_') == name);
+                    let source = pin.and_then(|pin| self.data_in.get(&(id.to_owned(), pin.id.clone())).cloned());
+                    match source {
+                        Some((source_node, source_pin)) => {
+                            let upstream_generic = self.node(&source_node).is_some_and(|source| {
+                                self.natives.generic(&format!("std::{}", source.node_type)).is_some()
+                            });
+                            upstream_generic || self.value(f, &source_node, &source_pin).is_some_and(|reg| f.ty(reg) == &param.ty)
+                        }
+                        None => true,
+                    }
+                });
+                if !matches {
+                    return None;
+                }
+                generic.instantiate(&sig).ok().map(|mut native| {
+                    // Imports are keyed by name in a Module, so distinguish
+                    // concrete instantiations even when one graph uses more
+                    // than one element type for this node.
+                    native.name = format!("{native_name}@{element}");
+                    std::sync::Arc::new(native)
+                })
+            })
+        });
+        let Some(native) = native else {
+            if self.natives.generic(&native_name).is_some() {
+                self.error(
+                    Some(id),
+                    format!("cannot infer the type parameter for generic node `{}` from its connected inputs", node.node_type),
+                );
+            } else {
+                self.error(Some(id), format!("`{}` is not available to scripts", node.node_type));
+            }
             return None;
         };
         let mut args = Vec::with_capacity(native.sig.params.len());
@@ -790,7 +852,7 @@ impl<'a> Compiler<'a> {
             args.push(self.input(f, node, &pin, &param.ty)?);
         }
         let dst = (native.sig.ret != Type::Unit).then(|| self.output_reg(f, id, "result", native.sig.ret.clone()));
-        self.call(f, &native_name, args, dst);
+        self.call_with_signature(f, &native.name, args, dst, native.sig.clone());
         dst
     }
 
@@ -1301,7 +1363,15 @@ impl<'a> Compiler<'a> {
     fn input(&mut self, f: &mut Func, node: &'a NodeInstance, pin: &str, ty: &Type) -> Option<Reg> {
         let key = (node.id.clone(), pin.to_owned());
         if let Some((src_node, src_pin)) = self.data_in.get(&key).cloned() {
-            let reg = self.value(f, &src_node, &src_pin)?;
+            let generic_output = self.node(&src_node).is_some_and(|source| {
+                self.natives.generic(&format!("std::{}", source.node_type)).is_some()
+            });
+            let reg = if generic_output {
+                let source = self.node(&src_node)?;
+                self.std_call_expected(f, source, Some(ty))?
+            } else {
+                self.value(f, &src_node, &src_pin)?
+            };
             return self.coerce(f, &node.id, reg, ty);
         }
         if let Some(json) = node.properties.get(pin) {
@@ -1490,7 +1560,8 @@ impl<'a> Compiler<'a> {
             self.error(Some(id), "event parameters can only be read inside that event");
             return None;
         } else {
-            let native = self.natives.get(&format!("std::{ty}")).cloned();
+            let native_name = format!("std::{ty}");
+            let native = self.natives.get(&native_name).cloned();
             match native {
                 Some(native) if node_has_exec_input(node) => {
                     // Impure: the value from its last execution.
@@ -1499,6 +1570,15 @@ impl<'a> Compiler<'a> {
                 Some(_) => {
                     let reg = self.std_call(f, node)?;
                     // Pure results are recomputed per consuming node.
+                    f.outputs.remove(&key);
+                    reg
+                }
+                None if self.natives.generic(&native_name).is_some() && node_has_exec_input(node) => {
+                    self.std_call(f, node)?;
+                    *f.outputs.get(&(id.to_owned(), pin.to_owned()))?
+                }
+                None if self.natives.generic(&native_name).is_some() => {
+                    let Some(reg) = self.std_call(f, node) else { return None };
                     f.outputs.remove(&key);
                     reg
                 }
@@ -1567,10 +1647,14 @@ impl<'a> Compiler<'a> {
     }
 
     fn call(&mut self, f: &mut Func, name: &str, args: Vec<Reg>, dst: Option<Reg>) {
+        let sig = self.natives.get(name).map(|n| n.sig.clone()).expect("checked by callers");
+        self.call_with_signature(f, name, args, dst, sig);
+    }
+
+    fn call_with_signature(&mut self, f: &mut Func, name: &str, args: Vec<Reg>, dst: Option<Reg>, sig: Signature) {
         let import = match self.imports.get(name) {
             Some(&index) => index,
             None => {
-                let sig = self.natives.get(name).map(|n| n.sig.clone()).expect("checked by callers");
                 self.module.imports.push(Import { name: name.to_owned(), sig });
                 let index = (self.module.imports.len() - 1) as u32;
                 self.imports.insert(name.to_owned(), index);
@@ -1597,6 +1681,21 @@ impl<'a> Compiler<'a> {
         let dst = f.reg(ty);
         f.emit(Instr::LoadVar { dst, var });
         dst
+    }
+}
+
+/// Collect a concrete type and any type nested inside it. Generic templates
+/// such as `array_push<T>(list<T>, T)` can be inferred from either pin.
+fn collect_script_types(ty: &Type, out: &mut Vec<Type>) {
+    out.push(ty.clone());
+    match ty {
+        Type::List(element) => collect_script_types(element, out),
+        Type::Map(key, value) => {
+            collect_script_types(key, out);
+            collect_script_types(value, out);
+        }
+        Type::Tuple(items) => items.iter().for_each(|item| collect_script_types(item, out)),
+        _ => {}
     }
 }
 
