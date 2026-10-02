@@ -12,5 +12,5 @@ pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native",
 serde_json = "1.0"
 
 [dev-dependencies]
-pulsar_reflection = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "3daa98e" }
+pulsar_reflection = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "091eae569b4dce9de7def958e8a77ff620b07047" }
 pulsar_scenedb = { git = "https://github.com/Far-Beyond-Pulsar/SceneDB", rev = "0801d2638a66b81692df6a03130c3dcf1b3f1dbf" }
