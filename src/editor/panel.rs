@@ -22,7 +22,7 @@ use ui::dropdown::{SearchableList, SearchableListEvent};
 use crate::features::variables::ClassVariable;
 use crate::ui_components::palette_view::NodePaletteView;
 use ui::dock::{DockItem, DockPlacement};
-use ui::graph::{LibraryManager, SubGraphDefinition};
+use blueprint_graph::{LibraryManager, SubGraphDefinition};
 
 /// Which item is being renamed inline in a hierarchy panel.
 #[derive(Clone, Debug, PartialEq)]
@@ -556,7 +556,7 @@ impl BlueprintEditorPanel {
             find_output_scrollbar_state: ScrollbarState::default(),
             library_manager: {
                 let mut lib_manager = LibraryManager::default();
-                if let Err(e) = lib_manager.load_all_libraries() {
+                if let Err(e) = lib_manager.load_all_libraries(crate::io::libraries::load_directory) {
                     eprintln!("Failed to load sub-graph libraries: {}", e);
                 }
                 lib_manager
@@ -851,7 +851,7 @@ impl BlueprintEditorPanel {
                 source_pin: "Body".to_string(),
                 target_node: "branch_node".to_string(),
                 target_pin: "exec".to_string(),
-                connection_type: ui::graph::ConnectionType::Execution,
+                connection_type: blueprint_graph::ConnectionType::Execution,
             },
             // Data: add -> greater_than
             Connection {
@@ -860,7 +860,7 @@ impl BlueprintEditorPanel {
                 source_pin: "result".to_string(),
                 target_node: "greater_node".to_string(),
                 target_pin: "a".to_string(),
-                connection_type: ui::graph::ConnectionType::Data,
+                connection_type: blueprint_graph::ConnectionType::Data,
             },
             // Data: greater_than -> branch
             Connection {
@@ -869,7 +869,7 @@ impl BlueprintEditorPanel {
                 source_pin: "result".to_string(),
                 target_node: "branch_node".to_string(),
                 target_pin: "condition".to_string(),
-                connection_type: ui::graph::ConnectionType::Data,
+                connection_type: blueprint_graph::ConnectionType::Data,
             },
             // Execution: branch(True) -> print_true
             Connection {
@@ -878,7 +878,7 @@ impl BlueprintEditorPanel {
                 source_pin: "True".to_string(),
                 target_node: "print_true".to_string(),
                 target_pin: "exec".to_string(),
-                connection_type: ui::graph::ConnectionType::Execution,
+                connection_type: blueprint_graph::ConnectionType::Execution,
             },
             // Execution: branch(False) -> print_false
             Connection {
@@ -887,7 +887,7 @@ impl BlueprintEditorPanel {
                 source_pin: "False".to_string(),
                 target_node: "print_false".to_string(),
                 target_pin: "exec".to_string(),
-                connection_type: ui::graph::ConnectionType::Execution,
+                connection_type: blueprint_graph::ConnectionType::Execution,
             },
         ];
 
@@ -1435,8 +1435,8 @@ impl BlueprintEditorPanel {
         );
 
         // Reload library manager so any library macros are available.
-        self.library_manager = ui::graph::LibraryManager::default();
-        if let Err(e) = self.library_manager.load_all_libraries() {
+        self.library_manager = blueprint_graph::LibraryManager::default();
+        if let Err(e) = self.library_manager.load_all_libraries(crate::io::libraries::load_directory) {
             eprintln!("Failed to reload sub-graph libraries: {}", e);
         }
 
@@ -1453,7 +1453,7 @@ impl BlueprintEditorPanel {
 
         let content = std::fs::read_to_string(&macros_file)
             .map_err(|e| format!("Failed to read macros.json: {}", e))?;
-        let macros: Vec<ui::graph::SubGraphDefinition> = serde_json::from_str(&content)
+        let macros: Vec<blueprint_graph::SubGraphDefinition> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse macros.json: {}", e))?;
 
         self.local_macros = macros;

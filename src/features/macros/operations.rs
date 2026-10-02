@@ -185,22 +185,22 @@ impl BlueprintEditorPanel {
         let macro_name = format!("Macro {}", self.local_macros.len() + 1);
         let macro_id = uuid::Uuid::new_v4().to_string();
 
-        let macro_def = ui::graph::SubGraphDefinition {
+        let macro_def = blueprint_graph::SubGraphDefinition {
             id: macro_id.clone(),
             name: macro_name.clone(),
             description: "New macro".to_string(),
-            graph: ui::graph::GraphDescription::new(&macro_name),
-            interface: ui::graph::SubGraphInterface {
+            graph: blueprint_graph::GraphDescription::new(&macro_name),
+            interface: blueprint_graph::SubGraphInterface {
                 inputs: Vec::new(),
                 outputs: Vec::new(),
             },
-            metadata: ui::graph::SubGraphMetadata {
+            metadata: blueprint_graph::SubGraphMetadata {
                 created_at: chrono::Utc::now().to_rfc3339(),
                 modified_at: chrono::Utc::now().to_rfc3339(),
                 author: Some(String::new()),
                 tags: Vec::new(),
             },
-            macro_config: ui::graph::MacroConfiguration::default(),
+            macro_config: blueprint_graph::MacroConfiguration::default(),
         };
 
         self.local_macros.push(macro_def);
@@ -249,10 +249,10 @@ impl BlueprintEditorPanel {
         is_input: bool,
         cx: &mut Context<Self>,
     ) {
-        let pin = ui::graph::SubGraphPin {
+        let pin = blueprint_graph::SubGraphPin {
             id: uuid::Uuid::new_v4().to_string(),
             name: pin_name,
-            data_type: ui::graph::DataType::from_type_str(&type_str),
+            data_type: blueprint_graph::DataType::from_type_str(&type_str),
             description: None,
             default_value: None,
             is_instance_editable: false,

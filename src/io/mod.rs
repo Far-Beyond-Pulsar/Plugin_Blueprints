@@ -8,6 +8,7 @@
 
 pub mod formats;
 pub mod legacy;
+pub mod libraries;
 pub mod prefab;
 pub mod save_load;
 

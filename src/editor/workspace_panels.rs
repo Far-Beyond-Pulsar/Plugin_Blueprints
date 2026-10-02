@@ -642,7 +642,7 @@ impl GraphCanvasPanel {
     }
 
     /// Read the shell editor's library manager (shared data).
-    pub fn library_manager(&self, cx: &App) -> Option<ui::graph::LibraryManager> {
+    pub fn library_manager(&self, cx: &App) -> Option<blueprint_graph::LibraryManager> {
         self.panel
             .upgrade()
             .map(|p| p.read(cx).library_manager.clone())

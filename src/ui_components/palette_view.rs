@@ -167,7 +167,7 @@ impl NodePaletteView {
 /// Build palette items for all local macros, excluding `editing_macro_id` to
 /// prevent a macro from being placed inside itself.
 fn build_local_macro_palette_items(
-    macros: &[ui::graph::SubGraphDefinition],
+    macros: &[blueprint_graph::SubGraphDefinition],
     editing_macro_id: Option<&str>,
 ) -> Vec<PaletteItem> {
     use crate::core::definitions::{NodeDefinition, PinDefinition};
@@ -194,7 +194,7 @@ fn build_local_macro_palette_items(
             .inputs
             .iter()
             .map(|p| {
-                let canonical = ui::graph::DataType::from_type_str(&p.data_type.to_string());
+                let canonical = blueprint_graph::DataType::from_type_str(&p.data_type.to_string());
                 PinDefinition {
                     id: p.id.clone(),
                     name: p.name.clone(),
@@ -208,7 +208,7 @@ fn build_local_macro_palette_items(
             .outputs
             .iter()
             .map(|p| {
-                let canonical = ui::graph::DataType::from_type_str(&p.data_type.to_string());
+                let canonical = blueprint_graph::DataType::from_type_str(&p.data_type.to_string());
                 PinDefinition {
                     id: p.id.clone(),
                     name: p.name.clone(),

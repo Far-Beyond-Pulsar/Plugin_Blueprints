@@ -25,6 +25,8 @@ test = false
 builtin = []
 
 [dependencies]
+engine_fs = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6868a0378f85b846a809490617d17404a7b4082c" }
+blueprint_graph = { path = "graph" }
 # Resolve every public UI and engine type through one current Pulsar revision.
 # Mixing the standalone WGPUI repositories with Pulsar's re-exports creates
 # distinct Cargo package identities for otherwise identical GPUI types.

@@ -9,7 +9,7 @@ use std::time::Instant;
 use tool_registry::{PluginToolRegistry, ToolContext, ToolRegistry};
 use tool_registry_macros::tool;
 use tracing::debug;
-use ui::graph::ConnectionType;
+use blueprint_graph::ConnectionType;
 
 use crate::core::definitions::NodeDefinitions;
 use crate::core::graph::BlueprintGraph;

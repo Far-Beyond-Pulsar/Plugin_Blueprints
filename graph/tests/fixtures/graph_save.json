@@ -1,0 +1,380 @@
+{
+  "format_version": 1,
+  "main_graph": {
+    "nodes": {
+      "begin": {
+        "id": "begin",
+        "node_type": "begin_play",
+        "position": {
+          "x": 12.5,
+          "y": -24.25
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "first": {
+        "id": "first",
+        "node_type": "macro:once-macro",
+        "position": {
+          "x": 12.5,
+          "y": -24.25
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "second": {
+        "id": "second",
+        "node_type": "macro:once-macro",
+        "position": {
+          "x": 12.5,
+          "y": -24.25
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "set": {
+        "id": "set",
+        "node_type": "set_count",
+        "position": {
+          "x": 12.5,
+          "y": -24.25
+        },
+        "properties": {
+          "value": 42
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": []
+          },
+          {
+            "id": "value",
+            "name": "value",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "begin",
+        "source_pin": "Body",
+        "target_node": "first",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "first",
+        "source_pin": "exec",
+        "target_node": "second",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c3",
+        "source_node": "second",
+        "source_pin": "exec",
+        "target_node": "set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "Persisted v1 baseline",
+      "version": "1.0.0",
+      "created_at": "2026-09-24T00:00:00Z",
+      "modified_at": "2026-09-24T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "Run two independent once nodes",
+        "position": [
+          1.0,
+          2.0
+        ],
+        "size": [
+          400.0,
+          180.0
+        ],
+        "color": [
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "contained_node_ids": [
+          "first",
+          "second"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "local_macros": [
+    {
+      "id": "once-macro",
+      "name": "Once",
+      "description": "Stateful fixture",
+      "graph": {
+        "nodes": {
+          "entry": {
+            "id": "entry",
+            "node_type": "macro_entry",
+            "position": {
+              "x": 12.5,
+              "y": -24.25
+            },
+            "properties": {},
+            "inputs": [],
+            "outputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Output",
+                "data_type": "Execution",
+                "connected_to": []
+              }
+            ]
+          },
+          "once": {
+            "id": "once",
+            "node_type": "do_once",
+            "position": {
+              "x": 12.5,
+              "y": -24.25
+            },
+            "properties": {
+              "reset": false
+            },
+            "inputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Input",
+                "data_type": "Execution",
+                "connected_to": []
+              },
+              {
+                "id": "reset",
+                "name": "reset",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "bool",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": []
+              }
+            ],
+            "outputs": [
+              {
+                "id": "Then",
+                "name": "Then",
+                "pin_type": "Output",
+                "data_type": "Execution",
+                "connected_to": []
+              }
+            ]
+          },
+          "exit": {
+            "id": "exit",
+            "node_type": "macro_exit",
+            "position": {
+              "x": 12.5,
+              "y": -24.25
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Input",
+                "data_type": "Execution",
+                "connected_to": []
+              }
+            ],
+            "outputs": []
+          }
+        },
+        "connections": [
+          {
+            "id": "m1",
+            "source_node": "entry",
+            "source_pin": "exec",
+            "target_node": "once",
+            "target_pin": "exec",
+            "connection_type": "Execution"
+          },
+          {
+            "id": "m2",
+            "source_node": "once",
+            "source_pin": "Then",
+            "target_node": "exit",
+            "target_pin": "exec",
+            "connection_type": "Execution"
+          }
+        ],
+        "metadata": {
+          "name": "Once",
+          "description": "Persisted v1 baseline",
+          "version": "1.0.0",
+          "created_at": "2026-09-24T00:00:00Z",
+          "modified_at": "2026-09-24T00:00:00Z"
+        },
+        "comments": [],
+        "custom_event_defs": {}
+      },
+      "interface": {
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          }
+        ]
+      },
+      "metadata": {
+        "created_at": "2026-09-24T00:00:00Z",
+        "modified_at": "2026-09-24T00:00:00Z",
+        "tags": []
+      },
+      "macro_config": {
+        "is_pure": false,
+        "category": "Fixtures",
+        "keywords": [],
+        "instance_editable_pins": [],
+        "parent_class_filter": [],
+        "hide_in_palette": false
+      }
+    }
+  ],
+  "local_events": [
+    {
+      "uid": "hit-uid",
+      "name": "Hit",
+      "fields": [
+        {
+          "name": "damage",
+          "type_name": "i64"
+        }
+      ],
+      "return_type": "()"
+    }
+  ],
+  "variables": [
+    {
+      "id": "var_0",
+      "name": "count",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "Keep this legacy ID when renamed"
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main",
+      "once-macro"
+    ],
+    "active_tab_index": 1,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 23.5,
+        "pan_offset_y": -15,
+        "zoom": 0.75
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Generic",
+    "parent_class": null,
+    "description": "Authored schema compatibility fixture",
+    "category": "Tests",
+    "tags": [
+      "baseline"
+    ]
+  }
+}

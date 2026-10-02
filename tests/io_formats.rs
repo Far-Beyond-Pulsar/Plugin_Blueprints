@@ -5,7 +5,7 @@ use blueprint_editor_plugin::io::legacy::{
     LegacyBlueprintComment, LegacyColor, LegacyConnection, LegacyPosition, LegacySize,
 };
 use blueprint_editor_plugin::parse_hex_color;
-use ui::graph::{BlueprintComment, Connection, ConnectionType};
+use blueprint_graph::{BlueprintComment, Connection, ConnectionType};
 
 #[test]
 fn blueprint_asset_creation_uses_current_defaults() {

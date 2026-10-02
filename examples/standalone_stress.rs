@@ -15,7 +15,7 @@ use blueprint_editor_plugin::{
 };
 use gpui::*;
 use std::collections::HashMap;
-use ui::graph::ConnectionType;
+use blueprint_graph::ConnectionType;
 use ui::{Assets, Root, Theme, ThemeMode};
 
 // ── tuning knobs ─────────────────────────────────────────────────────────────

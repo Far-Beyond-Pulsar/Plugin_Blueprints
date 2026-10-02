@@ -286,9 +286,9 @@ impl ClipboardData {
 
                 // Parse connection type
                 let connection_type = if sconn.connection_type.contains("Execution") {
-                    ui::graph::ConnectionType::Execution
+                    blueprint_graph::ConnectionType::Execution
                 } else {
-                    ui::graph::ConnectionType::Data
+                    blueprint_graph::ConnectionType::Data
                 };
 
                 Some(Connection {

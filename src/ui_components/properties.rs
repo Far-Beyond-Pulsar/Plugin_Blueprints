@@ -578,7 +578,7 @@ impl PropertiesRenderer {
         panel: &mut BlueprintEditorPanel,
         macro_id: &str,
         pin_index: usize,
-        pin: &ui::graph::SubGraphPin,
+        pin: &blueprint_graph::SubGraphPin,
         is_input: bool,
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
@@ -630,7 +630,7 @@ impl PropertiesRenderer {
                         if let Some(m) = this.local_macros.iter_mut().find(|m| m.id == sub_mid) {
                             let pins = if sub_input { &mut m.interface.inputs } else { &mut m.interface.outputs };
                             if let Some(p) = pins.iter_mut().find(|p| p.id == sub_pid) {
-                                p.data_type = ui::graph::DataType::from_type_str(&new_type);
+                                p.data_type = blueprint_graph::DataType::from_type_str(&new_type);
                             }
                         }
                         this.sync_entry_exit_in_active_graph(&sub_mid, cx);

@@ -78,16 +78,16 @@ pub(crate) fn extract_canonical_node_metadata(
 
     for node_meta in metadata.values_mut() {
         for param in node_meta.params.iter_mut() {
-            param.param_type = ui::graph::DataType::from_type_str(&param.param_type).to_string();
+            param.param_type = blueprint_graph::DataType::from_type_str(&param.param_type).to_string();
         }
 
         if let Some(return_type) = node_meta.return_type.as_mut() {
             return_type.type_string =
-                ui::graph::DataType::from_type_str(&return_type.type_string).to_string();
+                blueprint_graph::DataType::from_type_str(&return_type.type_string).to_string();
         }
 
         for out in node_meta.output_params.iter_mut() {
-            out.param_type = ui::graph::DataType::from_type_str(&out.param_type).to_string();
+            out.param_type = blueprint_graph::DataType::from_type_str(&out.param_type).to_string();
         }
     }
 
@@ -102,8 +102,8 @@ impl NodeDefinitions {
             let metadata = extract_canonical_node_metadata();
 
             // Load sub-graph libraries
-            let mut lib_manager = ui::graph::LibraryManager::default();
-            if let Err(e) = lib_manager.load_all_libraries() {
+            let mut lib_manager = blueprint_graph::LibraryManager::default();
+            if let Err(e) = lib_manager.load_all_libraries(crate::io::libraries::load_directory) {
                 eprintln!("Failed to load sub-graph libraries: {}", e);
             }
 
@@ -114,7 +114,7 @@ impl NodeDefinitions {
 
     fn from_node_metadata_and_libraries(
         metadata: std::collections::HashMap<String, graphy::NodeMetadata>,
-        lib_manager: ui::graph::LibraryManager,
+        lib_manager: blueprint_graph::LibraryManager,
     ) -> NodeDefinitions {
         let mut categories_map: std::collections::HashMap<String, Vec<NodeDefinition>> =
             std::collections::HashMap::new();
@@ -131,7 +131,7 @@ impl NodeDefinitions {
                     .iter()
                     .map(|pin| {
                         let canonical =
-                            ui::graph::DataType::from_type_str(&pin.data_type.to_string());
+                            blueprint_graph::DataType::from_type_str(&pin.data_type.to_string());
                         PinDefinition {
                             id: pin.id.clone(),
                             name: pin.name.clone(),
@@ -148,7 +148,7 @@ impl NodeDefinitions {
                     .iter()
                     .map(|pin| {
                         let canonical =
-                            ui::graph::DataType::from_type_str(&pin.data_type.to_string());
+                            blueprint_graph::DataType::from_type_str(&pin.data_type.to_string());
                         PinDefinition {
                             id: pin.id.clone(),
                             name: pin.name.clone(),
@@ -209,7 +209,7 @@ impl NodeDefinitions {
             let pin = |id: &str, ty: &str, pin_type: PinType| PinDefinition {
                 id: id.to_string(),
                 name: id.to_string(),
-                data_type: PinDataType::from_type_str(ui::graph::DataType::from_type_str(ty).to_string()),
+                data_type: PinDataType::from_type_str(blueprint_graph::DataType::from_type_str(ty).to_string()),
                 pin_type,
             };
             let mut inputs = Vec::new();
@@ -287,7 +287,7 @@ impl NodeDefinitions {
 
             // Add regular inputs
             for param in node_meta.params.iter() {
-                let canonical = ui::graph::DataType::from_type_str(&param.param_type).to_string();
+                let canonical = blueprint_graph::DataType::from_type_str(&param.param_type).to_string();
                 inputs.push(PinDefinition {
                     id: param.name.to_string(),
                     name: param.name.to_string(),
@@ -308,7 +308,7 @@ impl NodeDefinitions {
 
             // Add multi-output params (Break nodes, etc.)
             for out in &node_meta.output_params {
-                let canonical = ui::graph::DataType::from_type_str(&out.param_type).to_string();
+                let canonical = blueprint_graph::DataType::from_type_str(&out.param_type).to_string();
                 outputs.push(PinDefinition {
                     id: out.name.clone(),
                     name: out.name.clone(),
@@ -322,7 +322,7 @@ impl NodeDefinitions {
             if node_meta.output_params.is_empty() {
                 if let Some(return_type) = &node_meta.return_type {
                     let canonical =
-                        ui::graph::DataType::from_type_str(&return_type.type_string).to_string();
+                        blueprint_graph::DataType::from_type_str(&return_type.type_string).to_string();
                     if canonical != "()" && canonical != "execution" {
                         outputs.push(PinDefinition {
                             id: "result".to_string(),

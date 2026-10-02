@@ -265,16 +265,15 @@ impl BlueprintEditorPanel {
         }
 
         // Convert local ClassVariable to ui::ClassVariable
-        let variables: Vec<ui::graph::ClassVariable> = self
+        let variables: Vec<blueprint_graph::ClassVariable> = self
             .class_variables
             .iter()
-            .enumerate()
-            .map(|(i, v)| ui::graph::ClassVariable {
-                id: format!("var_{}", i),
+            .map(|v| blueprint_graph::ClassVariable {
+                id: v.id.clone(),
                 name: v.name.clone(),
-                data_type: ui::graph::DataType::from_type_str(&v.var_type),
+                data_type: blueprint_graph::DataType::from_type_str(&v.var_type),
                 default_value: v.default_value.clone(),
-                description: String::new(),
+                description: v.description.clone(),
             })
             .collect();
 
@@ -303,7 +302,7 @@ impl BlueprintEditorPanel {
             .map(|tab| {
                 (
                     tab.id.clone(),
-                    ui::graph::GraphViewState {
+                    blueprint_graph::GraphViewState {
                         pan_offset_x: tab.graph.pan_offset.x,
                         pan_offset_y: tab.graph.pan_offset.y,
                         zoom: tab.graph.zoom_level,
@@ -384,6 +383,8 @@ impl BlueprintEditorPanel {
         self.class_variables = variables
             .iter()
             .map(|v| crate::features::variables::ClassVariable {
+                id: v.id.clone(),
+                description: v.description.clone(),
                 name: v.name.clone(),
                 var_type: v.data_type.to_string(),
                 default_value: v.default_value.clone(),

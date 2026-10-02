@@ -75,9 +75,9 @@ impl GraphCanvasPanel {
             );
 
             let connection_type = if pin_data_type == GraphDataType::execution() {
-                ui::graph::ConnectionType::Execution
+                blueprint_graph::ConnectionType::Execution
             } else {
-                ui::graph::ConnectionType::Data
+                blueprint_graph::ConnectionType::Data
             };
 
             let connection = Connection {

@@ -7,7 +7,7 @@ use crate::{
     PinType,
 };
 use gpui::*;
-use ui::graph::{self as graph_types, GraphDescription, NodeInstance, PinInstance, Position};
+use blueprint_graph::{self as graph_types, GraphDescription, NodeInstance, PinInstance, Position};
 
 impl BlueprintEditorPanel {
     /// Convert current blueprint graph to graph description
@@ -61,13 +61,7 @@ impl BlueprintEditorPanel {
 
             // Convert properties
             for (key, value) in &bp_node.properties {
-                let prop_value = if let Ok(n) = value.parse::<f64>() {
-                    serde_json::json!(n)
-                } else if let Ok(b) = value.parse::<bool>() {
-                    serde_json::json!(b)
-                } else {
-                    serde_json::json!(value)
-                };
+                let prop_value = blueprint_compiler::authored::property_value_from_raw(value);
                 node_instance.set_property(key, prop_value);
             }
 

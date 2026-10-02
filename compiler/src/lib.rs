@@ -64,6 +64,7 @@
 //!   these.
 
 pub mod palette;
+pub mod authored;
 
 use std::collections::HashMap;
 

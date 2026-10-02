@@ -27,7 +27,7 @@ pub struct PrefabAsset {
     #[serde(default)]
     pub blueprint_class: Option<BlueprintClassRef>,
     #[serde(default)]
-    pub script_graph: Option<ui::graph::GraphDescription>,
+    pub script_graph: Option<blueprint_graph::GraphDescription>,
 }
 
 /// One prefab component: the component record plus its **slot id**.

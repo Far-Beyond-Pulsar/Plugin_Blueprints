@@ -132,7 +132,7 @@ impl ValidationReport {
 
 /// Structural diagnostics for a UI-level graph description.
 pub(crate) fn check_ui_graph_diagnostics(
-    graph: &ui::graph::GraphDescription,
+    graph: &blueprint_graph::GraphDescription,
 ) -> Vec<String> {
     let mut report = ValidationReport::default();
     check_ui_graph(graph, &mut report);
@@ -142,7 +142,7 @@ pub(crate) fn check_ui_graph_diagnostics(
 /// Structural checks on the raw UI graph — the checks conversion silently
 /// skips (dangling endpoints) are reported loudly here instead.
 fn check_ui_graph(
-    graph: &ui::graph::GraphDescription,
+    graph: &blueprint_graph::GraphDescription,
     report: &mut ValidationReport,
 ) {
     for (id, node) in &graph.nodes {
@@ -231,31 +231,16 @@ pub(crate) fn compile_asset(
     let mut report = ValidationReport::default();
     check_ui_graph(&asset.main_graph, &mut report);
 
-    let mut graph =
-        crate::features::compilation::compiler::convert_ui_graph_description_to_pbgc(
-            &asset.main_graph,
-        );
-    let library: HashMap<String, pbgc::GraphDescription> = asset
-        .local_macros
-        .iter()
-        .map(|macro_def| {
-            (
-                macro_def.id.clone(),
-                crate::features::compilation::compiler::convert_ui_graph_description_to_pbgc(
-                    &macro_def.graph,
-                ),
-            )
-        })
-        .collect();
-    if !library.is_empty() {
-        if let Err(e) = graphy::SubGraphExpander::new().expand_all_flat(&mut graph, &library) {
-            report.push(format!("sub-graph expansion failed: {e}"));
-            return AssetCompile {
-                module: None,
-                problems: report.diagnostics.into_iter().map(|m| (None, m)).collect(),
-            };
+    let graph = match blueprint_compiler::authored::expand_graph(
+        &asset.main_graph,
+        asset.local_macros.iter().map(|m| (m.id.clone(), m.graph.clone())),
+    ) {
+        Ok(graph) => graph,
+        Err(error) => {
+            report.push(error);
+            return AssetCompile { module: None, problems: report.diagnostics.into_iter().map(|m| (None, m)).collect() };
         }
-    }
+    };
     check_pbgc_graph(&graph, &mut report);
     let mut problems: Vec<(Option<String>, String)> =
         report.diagnostics.into_iter().map(|m| (None, m)).collect();
