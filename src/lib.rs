@@ -41,6 +41,11 @@ pub use core::types::*;
 pub use editor::panel::BlueprintEditorPanel;
 pub use features::viewport::parse_hex_color;
 
+#[cfg(feature = "builtin")]
+mod builtin_provider;
+#[cfg(feature = "builtin")]
+pub use builtin_provider::BlueprintEditorBuiltinProvider;
+
 pub fn upsert_ai_session(file_path: PathBuf, graph: BlueprintGraph) {
     ai_tools::upsert_session(file_path, graph);
 }

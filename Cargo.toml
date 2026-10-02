@@ -22,7 +22,7 @@ test = false
 [features]
 # Pulsar statically links this crate when it is used as a built-in editor.
 # Dynamic plugin builds keep the loader ABI exports by default.
-builtin = []
+builtin = ["dep:plugin_manager"]
 
 [dependencies]
 engine_fs = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6868a0378f85b846a809490617d17404a7b4082c" }
@@ -34,6 +34,8 @@ gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3
 ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
 
 plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+# Only for the built-in provider (feature `builtin`): registers this editor at link time.
+plugin_manager = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b", optional = true }
 ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
 engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
 pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
