@@ -91,6 +91,38 @@ pub fn sibling_class_dirs(class_dir: &Path) -> Vec<PathBuf> {
     dirs
 }
 
+/// This language's id, as written next to the artifacts it produces.
+pub const LANGUAGE_ID: &str = "blueprint";
+
+/// The file under `events/.build/` that names the language that produced
+/// the class's compiled module.
+const LANGUAGE_MARKER: &str = "language";
+
+/// Whether this language may compile `dir`. A class has exactly one language:
+/// a class that also has TypeScript source, or whose compiled module was
+/// written by another language, is refused rather than overwritten.
+pub fn check_language(dir: &Path) -> Result<(), String> {
+    if dir.join("class.ts").is_file() {
+        return Err("this class has both `graph_save.json` (Blueprint) and `class.ts` (TypeScript): \
+                    a class has one language, so remove one of them"
+            .to_owned());
+    }
+    match std::fs::read_to_string(dir.join("events").join(".build").join(LANGUAGE_MARKER)) {
+        Ok(other) if other.trim() != LANGUAGE_ID && !other.trim().is_empty() => Err(format!(
+            "its compiled module was written by the `{}` language; delete `events/.build` to compile it as a Blueprint",
+            other.trim()
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// Record that this language produced `dir`'s compiled module.
+pub fn mark_language(dir: &Path) -> std::io::Result<()> {
+    let build = dir.join("events").join(".build");
+    std::fs::create_dir_all(&build)?;
+    std::fs::write(build.join(LANGUAGE_MARKER), LANGUAGE_ID)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

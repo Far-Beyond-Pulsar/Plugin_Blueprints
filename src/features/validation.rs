@@ -312,6 +312,10 @@ fn compile_class_dir(
     let graph_file = dir.join(GRAPH_FILE);
     let out_dir = dir.join("events").join(".build");
     let out = out_dir.join("module.json");
+    // A refusal must not delete the other language's artifact, so it comes before `fail`.
+    if let Err(message) = crate::features::class_dirs::check_language(dir) {
+        return Err(vec![CompileDiagnostic::error(class.clone(), Some(graph_file.clone()), message)]);
+    }
     let fail = |message: String| {
         let _ = std::fs::remove_file(&out);
         vec![CompileDiagnostic::error(class.clone(), Some(graph_file.clone()), message)]
@@ -334,6 +338,7 @@ fn compile_class_dir(
     let json = module.to_json().map_err(|e| fail(format!("failed to serialise module: {e}")))?;
     std::fs::create_dir_all(&out_dir).map_err(|e| fail(format!("failed to create {}: {e}", out_dir.display())))?;
     std::fs::write(&out, json).map_err(|e| fail(format!("failed to write {}: {e}", out.display())))?;
+    crate::features::class_dirs::mark_language(dir).map_err(|e| fail(format!("failed to record the language: {e}")))?;
     Ok(())
 }
 

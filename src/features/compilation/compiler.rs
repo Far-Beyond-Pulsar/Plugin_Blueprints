@@ -287,6 +287,7 @@ impl BlueprintEditorPanel {
             .ok_or("No class loaded — cannot compile")?;
         let build_dir = class_path.join("events").join(".build");
         let out_path = build_dir.join("module.json");
+        crate::features::class_dirs::check_language(class_path)?;
         let module = self.compile_module().inspect_err(|_| {
             // Never leave a module from an older graph behind.
             let _ = std::fs::remove_file(&out_path);
@@ -296,6 +297,7 @@ impl BlueprintEditorPanel {
         std::fs::create_dir_all(&build_dir)
             .map_err(|e| format!("Failed to create .build directory: {e}"))?;
         std::fs::write(&out_path, json).map_err(|e| format!("Failed to write module.json: {e}"))?;
+        crate::features::class_dirs::mark_language(class_path).map_err(|e| format!("Failed to record the language: {e}"))?;
         tracing::info!("Script module written to {}", out_path.display());
         Ok(out_path)
     }
