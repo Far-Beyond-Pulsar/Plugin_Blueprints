@@ -604,7 +604,7 @@ fn component_refs_on_other_objects_and_scene_lookups() {
         r.register(NativeFn::builder("world::find_by_name").side_effect_free().params(["name"]).build(
             |host: &mut Host<'_>, name: String| {
                 assert_eq!(name, "target");
-                host.world.query::<&Health>().map(|(e, _)| e).find(|e| e.index() == 1).unwrap_or(Entity::DANGLING)
+                host.world().query::<&Health>().map(|(e, _)| e).find(|e| e.index() == 1).unwrap_or(Entity::DANGLING)
             },
         ))
         .unwrap();

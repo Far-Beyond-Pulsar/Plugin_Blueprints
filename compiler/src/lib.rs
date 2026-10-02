@@ -71,7 +71,7 @@ use std::collections::HashMap;
 use graphy::{ConnectionType, DataType, GraphDescription, NodeInstance};
 use pulsar_script_vm::{
     verify, BinOp, Constant, DebugInfo, EventDecl, EventField, EventRef, EventSignature, Function, Import,
-    Instr, Module, NativeRegistry, Param, Reg, Signature, SourceLoc, Subscription, SubscriptionScope, Type,
+    Instr, Module, NativeRegistry, Param, Reg, RegisterSource, Signature, SourceLoc, Subscription, SubscriptionScope, Type,
     TypeRegistry, UnOp, Variable,
 };
 use serde_json::Value as Json;
@@ -276,6 +276,9 @@ struct Func {
     /// Registers holding node outputs that persist across the function:
     /// impure node results, event parameters, loop state.
     outputs: HashMap<PinKey, Reg>,
+    /// Every data output ever lowered, including pure values that are moved
+    /// into the per-node memo and later cleared.
+    register_sources: HashMap<PinKey, Reg>,
     /// Pure values computed for the node currently being emitted.
     memo: HashMap<PinKey, Reg>,
     /// Exec path from the event to the node being emitted.
@@ -290,6 +293,7 @@ impl Func {
             debug: DebugInfo::default(),
             lowering: Vec::new(),
             outputs: HashMap::new(),
+            register_sources: HashMap::new(),
             memo: HashMap::new(),
             path: Vec::new(),
         }
@@ -620,8 +624,9 @@ impl<'a> Compiler<'a> {
             let mut f = Func::new(&params);
             for (param, pins) in param_pins.iter().enumerate() {
                 for node in &nodes {
-                    for pin in pins {
-                        f.outputs.insert((node.clone(), pin.clone()), param as Reg);
+                for pin in pins {
+                    f.outputs.insert((node.clone(), pin.clone()), param as Reg);
+                    f.register_sources.insert((node.clone(), pin.clone()), param as Reg);
                     }
                 }
             }
@@ -638,9 +643,23 @@ impl<'a> Compiler<'a> {
             }
             f.emit(Instr::Return { value: None });
             let function = &mut self.module.functions[index];
+            let mut register_sources: Vec<_> = f
+                .register_sources
+                .iter()
+                .map(|((node, pin), register)| RegisterSource {
+                    register: *register,
+                    node: node.clone(),
+                    pin: pin.clone(),
+                })
+                .collect();
+                register_sources.sort_by(|a, b| {
+                (a.register, &a.node, &a.pin).cmp(&(b.register, &b.node, &b.pin))
+            });
+            let mut debug = f.debug;
+            debug.register_sources = register_sources;
             function.registers = f.registers;
             function.code = f.code;
-            function.debug = (!f.debug.ranges.is_empty()).then_some(f.debug);
+            function.debug = (!debug.ranges.is_empty() || !debug.register_sources.is_empty()).then_some(debug);
         }
     }
 
@@ -1354,7 +1373,8 @@ impl<'a> Compiler<'a> {
             return reg;
         }
         let reg = f.reg(ty);
-        f.outputs.insert(key, reg);
+        f.outputs.insert(key.clone(), reg);
+        f.register_sources.insert(key, reg);
         reg
     }
 
@@ -1588,6 +1608,7 @@ impl<'a> Compiler<'a> {
                 }
             }
         };
+        f.register_sources.insert(key.clone(), reg);
         f.memo.insert(key, reg);
         Some(reg)
     }
