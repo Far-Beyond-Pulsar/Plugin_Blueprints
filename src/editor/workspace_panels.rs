@@ -454,6 +454,8 @@ pub struct GraphCanvasPanel {
     // ── Pin hover tooltip ──────────────────────────────────────────────────
     pub hovered_pin_tooltip: Option<String>,
     pub hovered_pin_tooltip_pos: Option<Point<Pixels>>,
+    /// Latest Play-in-Editor values keyed by opaque source node and pin ids.
+    pub debug_pin_values: HashMap<(String, String), String>,
     pub hovered_connection: Option<String>,
 
     // ── Clipboard ──────────────────────────────────────────────────────────
@@ -596,6 +598,7 @@ impl GraphCanvasPanel {
             quick_palette_view,
             hovered_pin_tooltip: None,
             hovered_pin_tooltip_pos: None,
+            debug_pin_values: HashMap::new(),
             hovered_connection: None,
             node_clipboard: None,
             dragging_node: None,
