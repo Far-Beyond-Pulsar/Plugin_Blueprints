@@ -86,7 +86,7 @@ fn native_node(native: &NativeFn) -> NativeNode {
     }
     NativeNode {
         node_type: format!("native::{}", native.name),
-        name: title_case(member),
+        name: native.attr("display_name").map_or_else(|| title_case(member), str::to_owned),
         category: category(native, owner),
         doc: native.doc.clone(),
         exec: !native.flags.side_effect_free,
