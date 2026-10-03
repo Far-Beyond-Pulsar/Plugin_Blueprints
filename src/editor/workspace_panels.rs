@@ -426,8 +426,7 @@ pub struct GraphCanvasPanel {
     pub canvas_origin: Rc<RefCell<Point<f32>>>,
     pub element_bounds: Option<Bounds<Pixels>>,
     pub graph_anim_start: std::time::Instant,
-    /// A throttled animation redraw is already scheduled.
-    pub anim_notify_pending: bool,
+    pub surface_animation: plugin_editor_api::surface_animation::SurfaceAnimation,
 
     // ── Runtime / debug ────────────────────────────────────────────────────
     pub running_nodes: HashSet<String>,
@@ -579,7 +578,7 @@ impl GraphCanvasPanel {
             canvas_origin: Rc::new(RefCell::new(Point::new(0.0, 0.0))),
             element_bounds: None,
             graph_anim_start: std::time::Instant::now(),
-            anim_notify_pending: false,
+            surface_animation: Default::default(),
             running_nodes: HashSet::new(),
             breakpoints: HashSet::new(),
             debug_session: None,
