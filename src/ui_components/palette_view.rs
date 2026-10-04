@@ -26,8 +26,8 @@ use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::node_library::{
-    build_item_sizes, build_palette_items, count_nodes, filter_compatible_palette_items,
-    filter_palette_items, PaletteItem, CATEGORY_HEADER_H, NODE_ENTRY_H,
+    build_item_sizes, build_palette_items, filter_compatible_palette_items, matching_node_count,
+    visible_items, PaletteItem, CATEGORY_HEADER_H, NODE_ENTRY_H,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,6 +54,9 @@ pub struct NodePaletteView {
     scrollbar_state: ScrollbarState,
     /// Tracks whether component nodes have been loaded
     component_nodes_loaded: bool,
+    /// Categories the user opened by hand. They show every node, even while a
+    /// search is narrowing the others to their matches.
+    expanded: std::collections::HashSet<String>,
 }
 
 impl NodePaletteView {
@@ -95,6 +98,7 @@ impl NodePaletteView {
             scroll_handle: VirtualListScrollHandle::new(),
             scrollbar_state: ScrollbarState::default(),
             component_nodes_loaded: false,
+            expanded: Default::default(),
         }
     }
 
@@ -148,11 +152,7 @@ impl NodePaletteView {
                 by_category.entry(category).or_default().push(def);
             }
             for (category, defs) in by_category {
-                all_items.push(PaletteItem::CategoryHeader {
-                    name: category,
-                    color: "#C0392B".to_string(),
-                    node_count: defs.len(),
-                });
+                all_items.push(PaletteItem::category(category, "#C0392B".to_string(), defs.len()));
                 for def in defs {
                     all_items.push(PaletteItem::NodeEntry { def, category_color: "#C0392B".to_string() });
                 }
@@ -182,11 +182,7 @@ fn build_local_macro_palette_items(
         return Vec::new();
     }
 
-    let mut items = vec![PaletteItem::CategoryHeader {
-        name: "Local Macros".to_string(),
-        color: "#9B59B6".to_string(),
-        node_count: visible.len(),
-    }];
+    let mut items = vec![PaletteItem::category("Local Macros".to_string(), "#9B59B6".to_string(), visible.len())];
 
     for m in visible {
         let inputs = m
@@ -246,11 +242,7 @@ fn build_custom_event_dispatch_palette_items_from_panel(
         return Vec::new();
     }
 
-    let mut items = vec![PaletteItem::CategoryHeader {
-        name: "Custom Events".to_string(),
-        color: "#E67E22".to_string(),
-        node_count: defs.len(),
-    }];
+    let mut items = vec![PaletteItem::category("Custom Events".to_string(), "#E67E22".to_string(), defs.len())];
 
     for def in defs {
         let mut dispatch_inputs = vec![PinDefinition {
@@ -347,8 +339,15 @@ impl Render for NodePaletteView {
                 Hsla::from(Rgba { r, g, b, a })
             })
             .unwrap_or_else(|| cx.theme().border);
-        let visible = filter_palette_items(&items, &query);
-        let node_count = count_nodes(&visible);
+        // Folded by category: see `visible_items`. A list already narrowed to the
+        // nodes that fit a dragged wire opens every category.
+        let visible = visible_items(
+            &items,
+            &query,
+            &self.expanded,
+            connection_filter_type.is_some(),
+        );
+        let node_count = matching_node_count(&items, &query);
         let item_sizes = build_item_sizes(&visible);
 
         // Owned snapshot for the 'static virtual-list closure.
@@ -462,10 +461,15 @@ impl Render for NodePaletteView {
                                                 name,
                                                 color,
                                                 node_count,
+                                                expanded,
+                                                matched,
                                             } => palette_category_header(
+                                                ix,
                                                 name,
                                                 color,
                                                 *node_count,
+                                                *expanded,
+                                                *matched,
                                                 cx,
                                             )
                                             .into_any_element(),
@@ -527,30 +531,52 @@ pub fn hex_color(hex: &str) -> Rgba {
     }
 }
 
-/// Compact non-interactive category-header row.
+/// Category-header row: click to fold or unfold the category.
+///
+/// The look is the old non-interactive header (coloured accent bar, upper-case
+/// name, count on the right) plus a chevron and hover feedback. While a search
+/// narrows the category the count reads `matched / total`.
 fn palette_category_header(
+    ix: usize,
     name: &str,
     color: &str,
     node_count: usize,
+    expanded: bool,
+    matched: Option<usize>,
     cx: &mut Context<NodePaletteView>,
 ) -> impl IntoElement {
     let cat_color: Hsla = hex_color(color).into();
+    let toggle_name = name.to_string();
+    let count = match matched {
+        Some(matched) if matched < node_count => format!("{matched} / {node_count}"),
+        _ => node_count.to_string(),
+    };
+    let muted = cx.theme().muted_foreground;
 
     h_flex()
+        .id(("node-palette-view-category", ix as u64))
         .w_full()
         .h(px(CATEGORY_HEADER_H))
         .items_center()
         .justify_between()
-        .bg(cx.theme().muted.opacity(0.15))
+        .cursor_pointer()
+        .bg(cx.theme().muted.opacity(if expanded { 0.22 } else { 0.15 }))
         .border_b_1()
         .border_color(cx.theme().border.opacity(0.3))
+        .hover(|s| s.bg(cx.theme().muted.opacity(0.3)))
         // Coloured left-edge accent bar
         .child(
             div()
                 .w(px(3.0))
                 .h(px(CATEGORY_HEADER_H))
                 .flex_shrink_0()
-                .bg(cat_color.opacity(0.7)),
+                .bg(cat_color.opacity(if expanded { 0.9 } else { 0.7 })),
+        )
+        .child(
+            Icon::new(if expanded { IconName::ChevronDown } else { IconName::ChevronRight })
+                .size(px(12.0))
+                .text_color(muted)
+                .ml_2(),
         )
         .child(
             div()
@@ -558,15 +584,15 @@ fn palette_category_header(
                 .px_2()
                 .text_xs()
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(cx.theme().muted_foreground)
+                .text_color(if expanded { cx.theme().foreground } else { muted })
                 .child(name.to_uppercase()),
         )
-        .child(
-            div()
-                .px_3()
-                .text_xs()
-                .text_color(cx.theme().muted_foreground)
-                .child(node_count.to_string()),
+        .child(div().px_3().text_xs().text_color(muted).child(count))
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |view, _event, _window, cx| {
+                view.toggle_category(&toggle_name, cx);
+            }),
         )
 }
 
@@ -718,4 +744,18 @@ fn palette_node_row(
                 }
             }),
         )
+}
+
+impl NodePaletteView {
+    /// Open the category if it was folded, fold it if the user had opened it.
+    ///
+    /// A category a search opened by itself is not "opened by hand": clicking its
+    /// header opens it fully (every node, not just the matches); clicking again
+    /// hands control back to the search.
+    fn toggle_category(&mut self, name: &str, cx: &mut Context<Self>) {
+        if !self.expanded.remove(name) {
+            self.expanded.insert(name.to_string());
+        }
+        cx.notify();
+    }
 }

@@ -10,6 +10,7 @@
 use crate::core::definitions::{NodeDefinition, NodeDefinitions, PinDefinition};
 use crate::core::types::{PinDataType, PinType};
 use gpui::{px, size, Pixels, Size};
+use std::collections::HashSet;
 use std::rc::Rc;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,7 +34,13 @@ pub enum PaletteItem {
     CategoryHeader {
         name: String,
         color: String,
+        /// Nodes in the category.
         node_count: usize,
+        /// Whether the category's rows are showing (set by [`visible_items`]).
+        expanded: bool,
+        /// While a search is narrowing the list: how many nodes in this
+        /// category match. `None` when nothing is filtering.
+        matched: Option<usize>,
     },
     /// A draggable / clickable node entry.
     NodeEntry {
@@ -43,6 +50,12 @@ pub enum PaletteItem {
 }
 
 impl PaletteItem {
+    /// A category header, collapsed. How it is shown is decided later by
+    /// [`visible_items`].
+    pub fn category(name: String, color: String, node_count: usize) -> Self {
+        Self::CategoryHeader { name, color, node_count, expanded: false, matched: None }
+    }
+
     /// Pixel height for this row type.
     #[inline]
     pub fn height(&self) -> f32 {
@@ -66,11 +79,7 @@ impl PaletteItem {
 pub fn build_palette_items(defs: &NodeDefinitions) -> Vec<PaletteItem> {
     let mut items = Vec::new();
     for category in &defs.categories {
-        items.push(PaletteItem::CategoryHeader {
-            name: category.name.clone(),
-            color: category.color.clone(),
-            node_count: category.nodes.len(),
-        });
+        items.push(PaletteItem::category(category.name.clone(), category.color.clone(), category.nodes.len()));
         for def in &category.nodes {
             items.push(PaletteItem::NodeEntry {
                 def: def.clone(),
@@ -134,27 +143,97 @@ pub fn build_item_sizes(items: &[PaletteItem]) -> Rc<Vec<Size<Pixels>>> {
     )
 }
 
-/// Return a filtered copy of `all_items`.
+/// Whether a node matches a search query (already lowercase, non-empty): its
+/// name or description contains it.
+fn node_matches(def: &NodeDefinition, query: &str) -> bool {
+    def.name.to_lowercase().contains(query) || def.description.to_lowercase().contains(query)
+}
+
+/// The rows to show for `all_items`.
 ///
-/// - **Empty query** → returns a clone of the full list (category headers
-///   included).
-/// - **Non-empty query** → strips all category headers and returns only node
-///   entries whose `name` or `description` match the query (case-insensitive).
-pub fn filter_palette_items(all_items: &[PaletteItem], query: &str) -> Vec<PaletteItem> {
-    if query.is_empty() {
-        return all_items.to_vec();
+/// Categories are collapsed by default; what a category shows depends on
+/// three things:
+///
+/// - **Searching** (`query` not empty): a category with matches opens by
+///   itself and shows *only* its matching nodes; a category without matches is
+///   hidden altogether.
+/// - **Manually expanded** (`expanded` holds its name): it shows *all* its
+///   nodes, search or not, as long as it has a match when searching.
+/// - **`open_all`**: every category opens, as when the list is already
+///   narrowed to the nodes that can take a dragged wire.
+///
+/// Each header carries whether it is open and, while searching, how many of its
+/// nodes matched.
+pub fn visible_items(
+    all_items: &[PaletteItem],
+    query: &str,
+    expanded: &HashSet<String>,
+    open_all: bool,
+) -> Vec<PaletteItem> {
+    let query = query.trim().to_lowercase();
+    let searching = !query.is_empty();
+
+    // Group each header with the nodes after it.
+    let mut groups: Vec<(Option<&PaletteItem>, Vec<&PaletteItem>)> = Vec::new();
+    for item in all_items {
+        match item {
+            PaletteItem::CategoryHeader { .. } => groups.push((Some(item), Vec::new())),
+            PaletteItem::NodeEntry { .. } => match groups.last_mut() {
+                Some((_, nodes)) => nodes.push(item),
+                None => groups.push((None, vec![item])),
+            },
+        }
     }
-    let q = query.to_lowercase();
+
+    let mut out = Vec::new();
+    for (header, nodes) in groups {
+        let matching: Vec<&PaletteItem> = if searching {
+            nodes
+                .iter()
+                .copied()
+                .filter(|n| matches!(n, PaletteItem::NodeEntry { def, .. } if node_matches(def, &query)))
+                .collect()
+        } else {
+            nodes.clone()
+        };
+        if searching && matching.is_empty() {
+            continue;
+        }
+
+        let Some(PaletteItem::CategoryHeader { name, color, node_count, .. }) = header else {
+            // Nodes with no category are always shown.
+            out.extend(matching.into_iter().cloned());
+            continue;
+        };
+        let manual = expanded.contains(name);
+        let auto = searching || open_all;
+        let open = manual || auto;
+        out.push(PaletteItem::CategoryHeader {
+            name: name.clone(),
+            color: color.clone(),
+            node_count: *node_count,
+            expanded: open,
+            matched: searching.then_some(matching.len()),
+        });
+        if open {
+            let shown = if manual { &nodes } else { &matching };
+            out.extend(shown.iter().map(|n| (*n).clone()));
+        }
+    }
+    out
+}
+
+/// How many nodes match `query` (every node when it is empty), however the
+/// categories are folded.
+pub fn matching_node_count(all_items: &[PaletteItem], query: &str) -> usize {
+    let query = query.trim().to_lowercase();
     all_items
         .iter()
         .filter(|item| match item {
+            PaletteItem::NodeEntry { def, .. } => query.is_empty() || node_matches(def, &query),
             PaletteItem::CategoryHeader { .. } => false,
-            PaletteItem::NodeEntry { def, .. } => {
-                def.name.to_lowercase().contains(&q) || def.description.to_lowercase().contains(&q)
-            }
         })
-        .cloned()
-        .collect()
+        .count()
 }
 
 /// Build a palette list containing only nodes that have at least one compatible input pin
@@ -183,11 +262,7 @@ pub fn build_compatible_palette_items(
             continue;
         }
 
-        items.push(PaletteItem::CategoryHeader {
-            name: category.name.clone(),
-            color: category.color.clone(),
-            node_count: compatible_nodes.len(),
-        });
+        items.push(PaletteItem::category(category.name.clone(), category.color.clone(), compatible_nodes.len()));
 
         for def in compatible_nodes {
             items.push(PaletteItem::NodeEntry {
@@ -219,11 +294,7 @@ pub fn filter_compatible_palette_items(
             }
 
             if let Some((name, color)) = header {
-                out.push(PaletteItem::CategoryHeader {
-                    name: name.clone(),
-                    color: color.clone(),
-                    node_count: nodes.len(),
-                });
+                out.push(PaletteItem::category(name.clone(), color.clone(), nodes.len()));
             }
 
             out.append(nodes);
@@ -322,7 +393,7 @@ mod tests {
     }
 
     fn header(name: &str) -> PaletteItem {
-        PaletteItem::CategoryHeader { name: name.into(), color: String::new(), node_count: 0 }
+        PaletteItem::category(name.into(), String::new(), 0)
     }
 
     fn ids(items: &[PaletteItem]) -> Vec<String> {
@@ -357,5 +428,121 @@ mod tests {
 
         let exec = filter_compatible_palette_items(&all, &PinDataType::execution());
         assert_eq!(ids(&exec), ["[Flow 1]", "branch", "[Debug 2]", "print", "print_any"]);
+    }
+}
+
+#[cfg(test)]
+mod fold_tests {
+    use super::*;
+
+    fn node(id: &str, name: &str, description: &str) -> PaletteItem {
+        PaletteItem::NodeEntry {
+            def: NodeDefinition {
+                id: id.into(),
+                name: name.into(),
+                icon: String::new(),
+                description: description.into(),
+                documentation: String::new(),
+                inputs: Vec::new(),
+                outputs: Vec::new(),
+                properties: Default::default(),
+                color: None,
+                is_event: false,
+            },
+            category_color: String::new(),
+        }
+    }
+
+    fn library() -> Vec<PaletteItem> {
+        vec![
+            PaletteItem::category("Math".into(), String::new(), 3),
+            node("add", "Add", "sum two numbers"),
+            node("sub", "Subtract", "difference"),
+            node("sin", "Sine", "trigonometry"),
+            PaletteItem::category("Flow".into(), String::new(), 2),
+            node("branch", "Branch", "if / else"),
+            node("loop", "For Loop", "repeat"),
+        ]
+    }
+
+    /// `[Name open matched]` for headers, ids for nodes.
+    fn shape(items: &[PaletteItem]) -> Vec<String> {
+        items
+            .iter()
+            .map(|item| match item {
+                PaletteItem::CategoryHeader { name, expanded, matched, .. } => {
+                    format!("[{name} {} {matched:?}]", if *expanded { "open" } else { "shut" })
+                }
+                PaletteItem::NodeEntry { def, .. } => def.id.clone(),
+            })
+            .collect()
+    }
+
+    fn none() -> HashSet<String> {
+        HashSet::new()
+    }
+
+    #[test]
+    fn everything_starts_folded() {
+        let rows = visible_items(&library(), "", &none(), false);
+        assert_eq!(shape(&rows), ["[Math shut None]", "[Flow shut None]"]);
+    }
+
+    #[test]
+    fn a_category_the_user_opened_shows_all_its_nodes() {
+        let open: HashSet<String> = ["Math".to_string()].into();
+        let rows = visible_items(&library(), "", &open, false);
+        assert_eq!(shape(&rows), ["[Math open None]", "add", "sub", "sin", "[Flow shut None]"]);
+    }
+
+    #[test]
+    fn a_search_opens_matching_categories_to_their_matches_only() {
+        let rows = visible_items(&library(), "s", &none(), false);
+        // Matches by name or description: Add (sum), Subtract, Sine / Branch (else).
+        assert_eq!(
+            shape(&rows),
+            ["[Math open Some(3)]", "add", "sub", "sin", "[Flow open Some(1)]", "branch"]
+        );
+
+        let rows = visible_items(&library(), "loop", &none(), false);
+        assert_eq!(shape(&rows), ["[Flow open Some(1)]", "loop"], "Math has no match and is hidden");
+    }
+
+    #[test]
+    fn a_hand_opened_category_stays_complete_during_a_search() {
+        let open: HashSet<String> = ["Flow".to_string()].into();
+        let rows = visible_items(&library(), "loop", &open, false);
+        assert_eq!(shape(&rows), ["[Flow open Some(1)]", "branch", "loop"]);
+    }
+
+    #[test]
+    fn a_hand_opened_category_without_a_match_is_still_hidden_while_searching() {
+        let open: HashSet<String> = ["Math".to_string()].into();
+        let rows = visible_items(&library(), "loop", &open, false);
+        assert_eq!(shape(&rows), ["[Flow open Some(1)]", "loop"]);
+    }
+
+    #[test]
+    fn searching_is_case_insensitive_and_ignores_surrounding_space() {
+        let a = visible_items(&library(), "  SINE ", &none(), false);
+        assert_eq!(shape(&a), ["[Math open Some(1)]", "sin"]);
+    }
+
+    #[test]
+    fn a_search_with_no_hits_shows_nothing() {
+        assert!(visible_items(&library(), "zzz", &none(), false).is_empty());
+    }
+
+    #[test]
+    fn open_all_unfolds_every_category_without_a_search() {
+        let rows = visible_items(&library(), "", &none(), true);
+        assert_eq!(rows.len(), library().len());
+        assert!(shape(&rows)[0].contains("open"));
+    }
+
+    #[test]
+    fn the_node_count_ignores_folding() {
+        assert_eq!(matching_node_count(&library(), ""), 5);
+        assert_eq!(matching_node_count(&library(), "loop"), 1);
     }
 }
