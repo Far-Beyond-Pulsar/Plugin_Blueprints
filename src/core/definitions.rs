@@ -191,20 +191,43 @@ impl NodeDefinitions {
         Self::categories_to_definitions(categories_map)
     }
 
-    fn populate_conversion_category(categories: &mut std::collections::HashMap<String, Vec<NodeDefinition>>) {
-        let conversions: Vec<NodeDefinition> = pulsar_reflection::CONVERSION_REGISTRY.iter().map(|conversion| NodeDefinition {
-            id: format!("conversion:{}", conversion.id),
-            name: format!("{} {} → {}", conversion.label, conversion.source_type_name, conversion.target_type_name),
-            icon: String::new(),
-            description: format!("Convert {} to {}", conversion.source_type_name, conversion.target_type_name),
-            documentation: format!("Reflection registered conversion `{}`.", conversion.id),
-            inputs: vec![PinDefinition { id: "from".to_string(), name: String::new(), data_type: PinDataType::from_type_str(conversion.source_type_name), pin_type: PinType::Input }],
-            outputs: vec![PinDefinition { id: "into".to_string(), name: String::new(), data_type: PinDataType::from_type_str(conversion.target_type_name), pin_type: PinType::Output }],
-            properties: HashMap::from([("conversion_id".to_string(), conversion.id.to_string())]),
-            color: Some("#3D78A6".to_string()),
-            is_event: false,
-        }).collect();
-        if !conversions.is_empty() { categories.insert("Conversions".to_string(), conversions); }
+    fn populate_conversion_category(
+        categories: &mut std::collections::HashMap<String, Vec<NodeDefinition>>,
+    ) {
+        let conversions: Vec<NodeDefinition> = pulsar_reflection::CONVERSION_REGISTRY
+            .iter()
+            .map(|conversion| NodeDefinition {
+                id: format!("conversion:{}", conversion.id),
+                name: format!(
+                    "{} {} → {}",
+                    conversion.label, conversion.source_type_name, conversion.target_type_name
+                ),
+                icon: String::new(),
+                description: format!(
+                    "Convert {} to {}",
+                    conversion.source_type_name, conversion.target_type_name
+                ),
+                documentation: format!("Reflection registered conversion `{}`.", conversion.id),
+                inputs: vec![PinDefinition {
+                    id: "from".to_string(),
+                    name: String::new(),
+                    data_type: PinDataType::from_type_str(conversion.source_type_name),
+                    pin_type: PinType::Input,
+                }],
+                outputs: vec![PinDefinition {
+                    id: "into".to_string(),
+                    name: String::new(),
+                    data_type: PinDataType::from_type_str(conversion.target_type_name),
+                    pin_type: PinType::Output,
+                }],
+                properties: HashMap::from([("conversion_id".to_string(), conversion.id.to_string())]),
+                color: Some("#3D78A6".to_string()),
+                is_event: false,
+            })
+            .collect();
+        if !conversions.is_empty() {
+            categories.insert("Conversions".to_string(), conversions);
+        }
     }
 
     fn from_node_metadata(
