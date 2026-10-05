@@ -117,6 +117,16 @@ impl BlueprintEditorPanel {
 
     /// Get node type from blueprint node
     fn get_node_type_from_blueprint(&self, bp_node: &BlueprintNode) -> Result<String, String> {
+        if bp_node.node_type == NodeType::Conversion {
+            let conversion_id = bp_node
+                .properties
+                .get("conversion_id")
+                .map(String::as_str)
+                .or_else(|| bp_node.definition_id.strip_prefix("conversion:"))
+                .filter(|id| !id.is_empty())
+                .ok_or_else(|| format!("conversion node `{}` has no registered conversion id", bp_node.id))?;
+            return Ok(format!("conversion:{conversion_id}"));
+        }
         Ok(bp_node.definition_id.clone())
     }
 
@@ -143,6 +153,18 @@ impl BlueprintEditorPanel {
                     "•".to_string(),
                     "Reroute node for organizing connections".to_string(),
                     NodeType::Reroute,
+                    None,
+                )
+            } else if let Some(conversion_id) = definition_id.strip_prefix("conversion:") {
+                let conversion = pulsar_reflection::CONVERSION_REGISTRY.get(conversion_id);
+                (
+                    conversion.map_or_else(|| "Conversion".to_owned(), |info| info.label.to_owned()),
+                    String::new(),
+                    conversion.map_or_else(
+                        || format!("Registered conversion `{conversion_id}`"),
+                        |info| format!("Convert {} to {}", info.source_type_name, info.target_type_name),
+                    ),
+                    NodeType::Conversion,
                     None,
                 )
             } else if let Some(uid) = definition_id.strip_prefix("custom_event:") {
@@ -296,6 +318,7 @@ impl BlueprintEditorPanel {
                     },
                 );
             }
+            let is_conversion = node_type == NodeType::Conversion;
             let bp_node = BlueprintNode {
                 id: node_id.clone(),
                 definition_id,
@@ -304,9 +327,13 @@ impl BlueprintEditorPanel {
                 node_type,
                 position: Point::new(node_instance.position.x, node_instance.position.y),
                 size: {
-                    let max_pins = node_instance.inputs.len().max(node_instance.outputs.len());
-                    let height = layout::node_height_for_pin_rows(max_pins);
-                    crate::Size::new(240.0, height)
+                    if is_conversion {
+                        crate::Size::new(116.0, 20.0)
+                    } else {
+                        let max_pins = node_instance.inputs.len().max(node_instance.outputs.len());
+                        let height = layout::node_height_for_pin_rows(max_pins);
+                        crate::Size::new(240.0, height)
+                    }
                 },
                 inputs: node_inputs,
                 outputs: node_instance

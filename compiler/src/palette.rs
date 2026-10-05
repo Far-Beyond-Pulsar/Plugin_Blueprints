@@ -55,6 +55,7 @@ pub fn native_nodes(natives: &NativeRegistry) -> Vec<NativeNode> {
     let mut nodes: Vec<NativeNode> = natives
         .functions()
         .filter(|n| !n.name.starts_with("std::"))
+        .filter(|n| n.attr("blueprint_conversion") != Some("true"))
         .map(|n| native_node(n))
         .collect();
     nodes.sort_by(|a, b| (&a.category, &a.name).cmp(&(&b.category, &b.name)));
