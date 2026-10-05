@@ -1847,6 +1847,11 @@ fn component_event_name(node_type: &str) -> Option<String> {
     if let Some(event) = node_type.strip_prefix("event::on_component::") {
         return Some(event.to_owned());
     }
+    // An intermediate editor version wrote a single colon after `event`, but
+    // retained the canonical `Component.event` suffix.
+    if let Some(event) = node_type.strip_prefix("event:on_component::") {
+        return Some(event.to_owned());
+    }
 
     let legacy = node_type.strip_prefix("event:on_component:")?;
     let (component, event) = legacy.split_once(':')?;
