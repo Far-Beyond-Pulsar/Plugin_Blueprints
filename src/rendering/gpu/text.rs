@@ -263,6 +263,7 @@ pub struct TextVertex {
 
 // ─── text renderer ────────────────────────────────────────────────────────────
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextAlign {
     Left,
     Center,

@@ -24,7 +24,7 @@ use crate::core::graph::BlueprintGraph;
 use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType, Pin};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
-use crate::rendering::gpu::{GraphUniforms, NodeInstance, PinInstance, WireInstance, WireVertex};
+use crate::rendering::gpu::{GraphUniforms, NodeInstance, PinInstance, TextAlign, WireInstance, WireVertex};
 use crate::rendering::layout;
 
 // shared with hit-testing in input.rs
@@ -434,7 +434,7 @@ fn tessellate_line(
 
 // ─── main render ──────────────────────────────────────────────────────────────
 
-type TextCall = (String, f32, f32, f32, [f32; 4], bool); // (text, x, y, size, color, center)
+type TextCall = (String, f32, f32, f32, [f32; 4], TextAlign);
 
 impl NodeGraphRenderer {
     pub fn render(
@@ -556,7 +556,7 @@ impl NodeGraphRenderer {
                     scr.y + 16.0 * zoom,
                     12.5 * zoom,
                     text_rgba,
-                    false,
+                    TextAlign::Left,
                 ));
             }
         }
@@ -635,7 +635,7 @@ impl NodeGraphRenderer {
                     scr.y + HEADER_H * zoom * 0.5 + HEADER_FONT * zoom * 0.35,
                     HEADER_FONT * zoom,
                     [0.88, 0.90, 0.95, 0.98],
-                    false,
+                    TextAlign::Left,
                 ));
             }
 
@@ -688,7 +688,7 @@ impl NodeGraphRenderer {
                                 scr_y + PIN_FONT * zoom * 0.45,
                                 PIN_FONT * zoom,
                                 [0.78, 0.81, 0.87, 0.98],
-                                !is_input,
+                                if is_input { TextAlign::Left } else { TextAlign::Right },
                             ));
                         }
                     }

@@ -102,7 +102,7 @@ impl BpRenderer {
     /// - `comment_instances`: one per visible comment box
     /// - `wire_instances`: one per bezier connection — GPU evaluates the curve
     /// - `line_verts`:     pre-tessellated straight quads (selection box only)
-    /// - `text_calls`:     (text, screen_x, screen_y, size_px, rgba, center)
+    /// - `text_calls`:     (text, screen_x, screen_y, size_px, rgba, alignment)
     pub fn render_frame(
         &mut self,
         device: &wgpu::Device,
@@ -117,7 +117,7 @@ impl BpRenderer {
         wire_instances: &[WireInstance],
         line_verts: &[WireVertex],
         pins: &[PinInstance],
-        text_calls: &[(String, f32, f32, f32, [f32; 4], bool)],
+        text_calls: &[(String, f32, f32, f32, [f32; 4], TextAlign)],
     ) {
         if self.grid.is_none() {
             self.grid = Some(Self::create_grid(device, fmt));
@@ -269,13 +269,8 @@ impl BpRenderer {
 
             // ── 7. Text ─────────────────────────────────────────────────────────
             // Queue all text calls, then flush into this render pass.
-            for (text, sx, sy, size, color, center) in text_calls {
-                let align = if *center {
-                    TextAlign::Center
-                } else {
-                    TextAlign::Left
-                };
-                self.text.queue(text, *sx, *sy, *size, *color, align);
+            for (text, sx, sy, size, color, align) in text_calls {
+                self.text.queue(text, *sx, *sy, *size, *color, *align);
             }
             // Need a shared uniform buffer/BGL for the text pipeline.
             // Lazily use the grid pipeline's uni_buf since it has the same layout.
