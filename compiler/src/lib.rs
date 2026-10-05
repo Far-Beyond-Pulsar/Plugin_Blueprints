@@ -1893,14 +1893,19 @@ fn component_event_name(node_type: &str) -> Option<String> {
     if let Some(event) = node_type.strip_prefix("event::on_component::") {
         return Some(event.to_owned());
     }
-    // Saved graphs exist with both the old `event:on_component:` prefix and
-    // both `Component:event` and `Component.event` suffix separators. One
-    // intermediate version also wrote a doubled separator after the prefix.
-    let legacy = node_type.strip_prefix("event:on_component:")?.trim_start_matches(':');
-    if let Some((component, event)) = legacy.split_once(':') {
-        return (!component.is_empty() && !event.is_empty()).then(|| format!("{component}.{event}"));
-    }
-    let (component, event) = legacy.split_once('.')?;
+    // Saved graphs exist with several historical spellings, including
+    // `event:on_component:Class:event`, `event:on_component::Class.event`,
+    // and `event:on_component::Class::event`. Normalize at the compiler
+    // boundary so these nodes enter the same typed event-registration path
+    // as current `event::on_component::Class.event` nodes.
+    let legacy = node_type.strip_prefix("event:on_component")?;
+    let legacy = legacy.trim_start_matches([':', '.']);
+    let (component, event) = legacy
+        .rsplit_once("::")
+        .or_else(|| legacy.rsplit_once(':'))
+        .or_else(|| legacy.rsplit_once('.'))?;
+    let component = component.trim_matches([':', '.']);
+    let event = event.trim_matches([':', '.']);
     (!component.is_empty() && !event.is_empty()).then(|| format!("{component}.{event}"))
 }
 
