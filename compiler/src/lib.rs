@@ -521,21 +521,47 @@ impl<'a> Compiler<'a> {
                 let Some(variable) = self.component_subscription_variable(node, component_type) else { continue };
                 subscription = Some((event.to_owned(), SubscriptionScope::Component(variable)));
                 let fn_name = format!("on_component_event__{}", sanitize(&event));
-                // The canonical port id is the event field name. Older saved
-                // nodes may still carry port ids from their original palette
-                // definition, so also bind those by declaration order when
-                // the old node has the same number of data outputs.
-                let old_output_ids = data_outputs(node);
+                // The canonical port id is the event field name. Saved nodes
+                // can retain pin ids from an older palette definition (and
+                // some versions serialized extra non-payload outputs), so
+                // bind legacy ids by their declared pin name first, then by
+                // position. A single-field event can safely alias every data
+                // output: it has only one payload register to expose.
+                let old_output_pins: Vec<_> = node
+                    .outputs
+                    .iter()
+                    .filter(|pin| !matches!(pin.pin.data_type, DataType::Exec))
+                    .collect();
+                let mut old_output_ids: Vec<String> = old_output_pins.iter().map(|pin| pin.id.clone()).collect();
+                // Legacy graph files can keep a data connection after the
+                // node's serialized output-pin list has gone stale or empty.
+                // The source pin on that connection is still the stable id
+                // the compiler will later be asked to resolve.
+                for connection in self.source.graph.connections.iter().filter(|connection| {
+                    connection.source_node == node.id && connection.connection_type == ConnectionType::Data
+                }) {
+                    if !old_output_ids.contains(&connection.source_pin) {
+                        old_output_ids.push(connection.source_pin.clone());
+                    }
+                }
                 let pins = sig
                     .fields
                     .iter()
                     .enumerate()
                     .map(|(index, field)| {
                         let mut ids = vec![field.name.clone()];
-                        if old_output_ids.len() == sig.fields.len() {
-                            let old_id = &old_output_ids[index];
-                            if !ids.contains(old_id) {
-                                ids.push(old_id.clone());
+                        for (old_index, old_id) in old_output_ids.iter().enumerate() {
+                            let is_named_match = old_id == &field.name
+                                || old_output_pins
+                                    .iter()
+                                    .find(|pin| pin.id == *old_id)
+                                    .is_some_and(|pin| pin.pin.name == field.name);
+                            let is_positional_match = old_index == index;
+                            let is_single_payload_alias = sig.fields.len() == 1;
+                            if is_named_match || is_positional_match || is_single_payload_alias {
+                                if !ids.contains(old_id) {
+                                    ids.push(old_id.clone());
+                                }
                             }
                         }
                         ids
