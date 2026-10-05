@@ -509,8 +509,8 @@ impl<'a> Compiler<'a> {
                 continue;
             }
             let mut subscription = None;
-            let (name, params, param_pins) = if let Some(event) = node.node_type.strip_prefix("event::on_component::") {
-                let Some(sig) = self.event_sig(&node.id, event) else { continue };
+            let (name, params, param_pins) = if let Some(event) = component_event_name(&node.node_type) {
+                let Some(sig) = self.event_sig(&node.id, &event) else { continue };
                 let component_type = match node.properties.get("component_type") {
                     Some(Json::String(name)) if !name.trim().is_empty() => name.as_str(),
                     _ => {
@@ -520,7 +520,7 @@ impl<'a> Compiler<'a> {
                 };
                 let Some(variable) = self.component_subscription_variable(node, component_type) else { continue };
                 subscription = Some((event.to_owned(), SubscriptionScope::Component(variable)));
-                let fn_name = format!("on_component_event__{}", sanitize(event));
+                let fn_name = format!("on_component_event__{}", sanitize(&event));
                 let pins = sig.fields.iter().map(|f| vec![f.name.clone()]).collect();
                 (fn_name, sig.field_types(), pins)
             } else if let Some(event) = node.node_type.strip_prefix("event::on::") {
@@ -1838,6 +1838,22 @@ impl<'a> Compiler<'a> {
         f.emit(Instr::LoadVar { dst, var });
         dst
     }
+}
+
+/// Return the canonical `ComponentType.event_name` for a component event node.
+/// Older saved graphs used `event:on_component:ComponentType:event_name`, while
+/// current graphs use `event::on_component::ComponentType.event_name`.
+fn component_event_name(node_type: &str) -> Option<String> {
+    if let Some(event) = node_type.strip_prefix("event::on_component::") {
+        return Some(event.to_owned());
+    }
+
+    let legacy = node_type.strip_prefix("event:on_component:")?;
+    let (component, event) = legacy.split_once(':')?;
+    if component.is_empty() || event.is_empty() {
+        return None;
+    }
+    Some(format!("{component}.{event}"))
 }
 
 /// Collect a concrete type and any type nested inside it. Generic templates
