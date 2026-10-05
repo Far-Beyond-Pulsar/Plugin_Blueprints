@@ -97,6 +97,11 @@ impl BpRenderer {
         }
     }
 
+    /// Measure text with the same glyph metrics used by the graph renderer.
+    pub fn measure_text_width(&mut self, text: &str, size_px: f32) -> f32 {
+        self.text.atlas.measure_width(text, size_px)
+    }
+
     /// Called every frame by `graph.rs`.
     ///
     /// - `comment_instances`: one per visible comment box

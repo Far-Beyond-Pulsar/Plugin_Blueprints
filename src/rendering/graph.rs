@@ -39,7 +39,7 @@ const WIRE_SEGS: usize = 32;
 const WIRE_THICKNESS: f32 = 2.8;
 const HEADER_FONT: f32 = 12.5;
 const PIN_FONT: f32 = 10.5;
-const HEADER_PAD_X: f32 = 9.0;
+const HEADER_PAD_X: f32 = layout::HEADER_PAD_X;
 const COMMENT_TITLE_PAD_X: f32 = 12.0;
 const COMMENT_TITLE_PAD_Y: f32 = 6.0;
 
@@ -436,6 +436,21 @@ fn tessellate_line(
 
 type TextCall = (String, f32, f32, f32, [f32; 4], TextAlign);
 
+fn cached_text_width(
+    renderer: &mut crate::rendering::gpu::BpRenderer,
+    cache: &mut std::collections::HashMap<(String, u32), f32>,
+    text: &str,
+    size: f32,
+) -> f32 {
+    let key = (text.to_owned(), size.to_bits());
+    if let Some(width) = cache.get(&key) {
+        return *width;
+    }
+    let width = renderer.measure_text_width(text, size);
+    cache.insert(key, width);
+    width
+}
+
 impl NodeGraphRenderer {
     pub fn render(
         canvas: &mut GraphCanvasPanel,
@@ -489,6 +504,41 @@ impl NodeGraphRenderer {
                 || n.position.y > vb
                 || n.position.y + n.size.height < vt)
         };
+
+        // Grow authored/default widths to fit the actual rendered text. The
+        // cache avoids raster metric work for repeated titles and pin names.
+        let mut text_width_cache = std::collections::HashMap::new();
+        let renderer = &mut canvas.renderer;
+        for node in &mut canvas.graph.nodes {
+            if node.node_type == NodeType::Reroute {
+                continue;
+            }
+            let title_width = cached_text_width(renderer, &mut text_width_cache, &node.title, HEADER_FONT);
+            let header_output = node.outputs.iter().find(|pin| pin.id == "__return__").map(|pin| {
+                if pin.name.is_empty() {
+                    0.0
+                } else {
+                    cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
+                }
+            });
+            let rows = node.inputs.len().max(node.outputs.len());
+            let mut pin_label_rows = Vec::with_capacity(rows);
+            for row in 0..rows {
+                let input_width = node.inputs.get(row).filter(|pin| !pin.name.is_empty()).map_or(0.0, |pin| {
+                    cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
+                });
+                let output_width = node.outputs.get(row)
+                    .filter(|pin| pin.id != "__return__" && !pin.name.is_empty())
+                    .map_or(0.0, |pin| cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT));
+                pin_label_rows.push((input_width, output_width));
+            }
+            node.size.width = layout::node_width_for_labels(
+                node.size.width,
+                title_width,
+                header_output,
+                &pin_label_rows,
+            );
+        }
 
         let dragging_conn = canvas.dragging_connection.clone();
         let selected_nodes: std::collections::HashSet<&str> = canvas
