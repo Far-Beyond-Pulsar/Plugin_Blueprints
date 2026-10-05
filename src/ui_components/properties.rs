@@ -1637,6 +1637,7 @@ impl PropertiesRenderer {
             NodeType::Math => cx.theme().success,
             NodeType::Object => cx.theme().warning,
             NodeType::Reroute => cx.theme().accent,
+            NodeType::Conversion => cx.theme().primary,
             NodeType::MacroEntry => gpui::Hsla {
                 h: 0.75,
                 s: 0.7,

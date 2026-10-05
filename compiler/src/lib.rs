@@ -1564,7 +1564,26 @@ impl<'a> Compiler<'a> {
             return None;
         };
         let ty = node.node_type.as_str();
-        let reg = if ty == "reroute" {
+        let reg = if let Some(conversion_id) = ty.strip_prefix("conversion:") {
+            let source = data_inputs(node).into_iter().find(|input| self.data_in.contains_key(&(id.to_owned(), input.clone())));
+            let Some(source) = source else {
+                self.error(Some(id), "conversion node has no connected input");
+                return None;
+            };
+            let source_value = self.input(f, node, &source, &Type::Int)?;
+            match conversion_id {
+                "numeric.i32_to_i64" => source_value,
+                "numeric.i64_to_i32_checked" => {
+                    let dst = f.reg(Type::Int);
+                    f.emit(Instr::Unary { op: UnOp::IntToI32Checked, dst, src: source_value });
+                    dst
+                }
+                _ => {
+                    self.error(Some(id), format!("conversion `{conversion_id}` is not supported by the script VM"));
+                    return None;
+                }
+            }
+        } else if ty == "reroute" {
             let source = data_inputs(node)
                 .into_iter()
                 .next()

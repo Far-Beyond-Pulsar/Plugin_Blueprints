@@ -185,9 +185,26 @@ impl NodeDefinitions {
         // Every other engine native (component and value-type methods and
         // properties, accessors, the script stdlib) as `native::` nodes.
         Self::populate_native_categories(&mut categories_map);
+        Self::populate_conversion_category(&mut categories_map);
 
         // Convert to NodeDefinitions
         Self::categories_to_definitions(categories_map)
+    }
+
+    fn populate_conversion_category(categories: &mut std::collections::HashMap<String, Vec<NodeDefinition>>) {
+        let conversions: Vec<NodeDefinition> = pulsar_reflection::CONVERSION_REGISTRY.iter().map(|conversion| NodeDefinition {
+            id: format!("conversion:{}", conversion.id),
+            name: format!("{} {} → {}", conversion.label, conversion.source_type_name, conversion.target_type_name),
+            icon: String::new(),
+            description: format!("Convert {} to {}", conversion.source_type_name, conversion.target_type_name),
+            documentation: format!("Reflection registered conversion `{}`.", conversion.id),
+            inputs: vec![PinDefinition { id: "from".to_string(), name: String::new(), data_type: PinDataType::from_type_str(conversion.source_type_name), pin_type: PinType::Input }],
+            outputs: vec![PinDefinition { id: "into".to_string(), name: String::new(), data_type: PinDataType::from_type_str(conversion.target_type_name), pin_type: PinType::Output }],
+            properties: HashMap::from([("conversion_id".to_string(), conversion.id.to_string())]),
+            color: Some("#3D78A6".to_string()),
+            is_event: false,
+        }).collect();
+        if !conversions.is_empty() { categories.insert("Conversions".to_string(), conversions); }
     }
 
     fn from_node_metadata(
@@ -397,6 +414,7 @@ impl NodeDefinitions {
 
     fn get_category_color(category: &str) -> String {
         match category {
+            "Conversions" => "#3D78A6".to_string(),
             "Math" | "Math/Vector" => "#4A90E2".to_string(),
             "Logic" => "#E2A04A".to_string(),
             "String" => "#7ED321".to_string(),

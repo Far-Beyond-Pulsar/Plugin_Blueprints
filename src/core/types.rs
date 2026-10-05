@@ -235,6 +235,7 @@ pub enum NodeType {
     Math,
     Object,
     Reroute,             // Visual pass-through node for organizing connections
+    Conversion,          // Typed conversion node rendered as a FROM/INTO pill
     MacroEntry,          // Entry point for macro graphs (replaces generic subgraph_input)
     MacroExit,           // Exit point for macro graphs (replaces generic subgraph_output)
     MacroInstance,       // Instance of a macro in parent graph
@@ -388,10 +389,34 @@ pub struct VirtualizationStats {
 // ============================================================================
 
 impl BlueprintNode {
+    /// Construct a graph node for one reflection-registered conversion.
+    pub fn from_conversion(conversion: &pulsar_reflection::ConversionInfo, position: Point<f32>) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            definition_id: format!("conversion:{}", conversion.id),
+            title: conversion.label.to_string(),
+            icon: String::new(),
+            node_type: NodeType::Conversion,
+            position,
+            size: Size::new(116.0, 46.0),
+            inputs: vec![Pin { id: "from".to_string(), name: String::new(), pin_type: PinType::Input, data_type: PinDataType::from_type_str(conversion.source_type_name) }],
+            outputs: vec![Pin { id: "into".to_string(), name: String::new(), pin_type: PinType::Output, data_type: PinDataType::from_type_str(conversion.target_type_name) }],
+            properties: HashMap::from([("conversion_id".to_string(), conversion.id.to_string())]),
+            is_selected: false,
+            description: format!("Convert {} to {}", conversion.source_type_name, conversion.target_type_name),
+            color: None,
+        }
+    }
+
     pub fn from_definition(
         definition: &crate::core::definitions::NodeDefinition,
         position: Point<f32>,
     ) -> Self {
+        if let Some(conversion_id) = definition.id.strip_prefix("conversion:") {
+            if let Some(conversion) = pulsar_reflection::CONVERSION_REGISTRY.get(conversion_id) {
+                return Self::from_conversion(conversion, position);
+            }
+        }
         let inputs: Vec<Pin> = definition
             .inputs
             .iter()

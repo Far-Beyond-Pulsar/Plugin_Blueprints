@@ -92,6 +92,9 @@ impl NodeGraphRenderer {
         pin_id: Option<&str>,
         graph: &BlueprintGraph,
     ) -> Point<f32> {
+        if node.node_type == NodeType::Conversion {
+            return Self::graph_to_screen_pos(Point::new(node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5), graph);
+        }
         if node.node_type == NodeType::Reroute {
             let cx = node.position.x + node.size.width * 0.5;
             let cy = node.position.y + node.size.height * 0.5;
@@ -124,6 +127,9 @@ impl NodeGraphRenderer {
         is_input: bool,
         graph: &BlueprintGraph,
     ) -> Option<Point<f32>> {
+        if node.node_type == NodeType::Conversion {
+            return Some(Self::graph_to_screen_pos(Point::new(node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5), graph));
+        }
         if node.node_type == NodeType::Reroute {
             let cx = node.position.x + node.size.width * 0.5;
             let cy = node.position.y + node.size.height * 0.5;
@@ -149,6 +155,9 @@ impl NodeGraphRenderer {
         row: usize,
         _graph: &BlueprintGraph,
     ) -> Point<f32> {
+        if node.node_type == NodeType::Conversion {
+            return Point::new(node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5);
+        }
         let py = node.position.y
             + HEADER_H
             + SEP_H
@@ -228,6 +237,7 @@ fn category_color(node: &BlueprintNode) -> [f32; 4] {
         NodeType::Math => [0.16, 0.62, 0.28, 1.0],
         NodeType::Object => [0.78, 0.42, 0.08, 1.0],
         NodeType::Reroute => [0.40, 0.40, 0.42, 1.0],
+        NodeType::Conversion => [0.24, 0.47, 0.65, 1.0],
         NodeType::MacroEntry | NodeType::MacroExit => [0.44, 0.18, 0.72, 1.0],
         NodeType::MacroInstance => [0.32, 0.12, 0.52, 1.0],
         NodeType::CustomEvent => [0.90, 0.50, 0.10, 1.0], // orange
@@ -262,6 +272,7 @@ fn wire_phase(conn: &Connection) -> f32 {
 /// Graph-space pin centre for a given node row (input or output side).
 /// No pan or zoom applied — the GPU shader handles the transform.
 fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) {
+    if node.node_type == NodeType::Conversion { return (node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5); }
     if node.node_type == NodeType::Reroute {
         let cx = node.position.x + node.size.width * 0.5;
         let cy = node.position.y + node.size.height * 0.5;
@@ -283,6 +294,7 @@ fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) 
 
 /// Graph-space pin centre addressed by pin ID.
 fn pin_gpos_id(node: &BlueprintNode, pin_id: &str, is_input: bool) -> Option<(f32, f32)> {
+    if node.node_type == NodeType::Conversion { return Some((node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5)); }
     if node.node_type == NodeType::Reroute {
         let cx = node.position.x + node.size.width * 0.5;
         let cy = node.position.y + node.size.height * 0.5;
@@ -622,6 +634,7 @@ impl NodeGraphRenderer {
 
             let is_sel = selected_nodes.contains(node.id.as_str());
             let is_reroute = node.node_type == NodeType::Reroute;
+            let is_conversion = node.node_type == NodeType::Conversion;
             let cat = category_color(node);
             let hdr = [
                 (cat[0] * 0.85 + 0.12).min(1.0),
@@ -642,7 +655,7 @@ impl NodeGraphRenderer {
             };
             let sep = [0.086, 0.098, 0.116, 1.0];
 
-            let (gw, gh) = if is_reroute {
+            let (gw, gh) = if is_reroute || is_conversion {
                 (
                     layout::snap_to_grid(node.size.width),
                     layout::snap_to_grid(node.size.height),
@@ -654,9 +667,9 @@ impl NodeGraphRenderer {
                     layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)),
                 )
             };
-            let hdr_frac = (HEADER_H + SEP_H) / gh;
+            let hdr_frac = if is_conversion { 0.0 } else { (HEADER_H + SEP_H) / gh };
             let is_running = node_is_active(node.id.as_str());
-            let flags = (is_reroute as u32) | ((is_sel as u32) << 1) | ((is_running as u32) << 2);
+            let flags = (is_reroute as u32) | ((is_sel as u32) << 1) | ((is_running as u32) << 2) | ((is_conversion as u32) << 3);
 
             node_instances.push(NodeInstance {
                 pos: [node.position.x, node.position.y],
@@ -666,7 +679,7 @@ impl NodeGraphRenderer {
                 border_color: bord,
                 sep_color: sep,
                 header_h_frac: hdr_frac,
-                corner_r: 6.8 / zoom,
+                corner_r: if is_conversion { gh * 0.5 } else { 6.8 / zoom },
                 flags,
                 _pad: 0,
             });
@@ -677,7 +690,14 @@ impl NodeGraphRenderer {
             const LOD_TITLES: f32 = 0.18; // show title text but still no pins
 
             // Node title
-            if zoom >= LOD_TITLES && !is_reroute {
+            if zoom >= LOD_TITLES && is_conversion {
+                let scr = Self::graph_to_screen_pos(node.position, &canvas.graph);
+                let label = node.title.to_ascii_uppercase();
+                let x = scr.x + gw * zoom * 0.5;
+                let y = scr.y + gh * zoom * 0.5 + 6.0 * zoom;
+                text_calls.push((label.clone(), x, y, 18.0 * zoom, [0.96, 0.98, 1.0, 1.0], TextAlign::Center));
+                text_calls.push((label, x + 0.8 * zoom, y, 18.0 * zoom, [0.96, 0.98, 1.0, 1.0], TextAlign::Center));
+            } else if zoom >= LOD_TITLES && !is_reroute {
                 let scr = Self::graph_to_screen_pos(node.position, &canvas.graph);
                 text_calls.push((
                     node.title.clone(),
@@ -724,7 +744,7 @@ impl NodeGraphRenderer {
                             compatible: compat as u32,
                             _pad1: 0,
                         });
-                        if !pin.name.is_empty() && !is_reroute {
+                        if !pin.name.is_empty() && !is_reroute && !is_conversion {
                             let scr_x = (cgx + pan_x) * zoom;
                             let scr_y = (cgy + pan_y) * zoom;
                             let lx = if is_input {
