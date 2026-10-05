@@ -398,7 +398,8 @@ impl BlueprintNode {
             icon: String::new(),
             node_type: NodeType::Conversion,
             position,
-            size: Size::new(116.0, 46.0),
+            // Two 10px graph-grid units; the renderer snaps this to 20px.
+            size: Size::new(116.0, 20.0),
             inputs: vec![Pin { id: "from".to_string(), name: String::new(), pin_type: PinType::Input, data_type: PinDataType::from_type_str(conversion.source_type_name) }],
             outputs: vec![Pin { id: "into".to_string(), name: String::new(), pin_type: PinType::Output, data_type: PinDataType::from_type_str(conversion.target_type_name) }],
             properties: HashMap::from([("conversion_id".to_string(), conversion.id.to_string())]),
