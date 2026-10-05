@@ -180,9 +180,9 @@ pub fn event_node_definitions(
     event_nodes(&events).iter().map(|n| (n.category.clone(), node_definition(n))).collect()
 }
 
-/// Build typed Blueprint entry points for host-owned component events. Each
-/// node requires a reference to the emitting component and exposes the
-/// declaration's original typed fields as outputs.
+/// Build typed Blueprint entry points for host-owned component events. The
+/// entry point subscribes to the component on the script instance's root
+/// entity and exposes the declaration's original typed fields as outputs.
 pub fn component_event_node_definitions(
     events: &[plugin_editor_api::ComponentEventMetadata],
 ) -> Vec<(String, NodeDefinition)> {
@@ -218,12 +218,12 @@ pub fn component_event_node_definitions(
                 id: format!("event::on_component::{}", event.event.name),
                 name: title.clone(),
                 icon: "📡".to_string(),
-                description: format!("{title} — subscribe to `{}` on a component instance", event.event.name),
+                description: format!("{title} — subscribe to `{}` on this entity's component", event.event.name),
                 documentation: format!(
-                    "Runs when `{}` is emitted by the connected `{}` component instance. The component reference must come from a matching `Get {}` node.",
-                    event.event.name, event.component_class, event.component_class
+                    "Runs when `{}` is emitted by this entity's `{}` component. The component reference is resolved from the owning entity at runtime.",
+                    event.event.name, event.component_class
                 ),
-                inputs: vec![pin("component_ref", &event.component_class, PinType::Input)],
+                inputs: Vec::new(),
                 outputs,
                 properties: std::collections::HashMap::from([(
                     "component_type".to_owned(),

@@ -82,6 +82,16 @@ use serde_json::Value as Json;
 /// (`pulsar_class::SLOT_VARIABLE_PREFIX` is the same spelling).
 pub const SLOT_VARIABLE_PREFIX: &str = "__slot:";
 
+/// Prefix for a hidden handle to this script instance's component of a
+/// given class. Unlike `__slot:` variables, these resolve directly on the
+/// instance root entity and do not depend on prefab placement metadata.
+pub const SELF_COMPONENT_VARIABLE_PREFIX: &str = "__component:";
+
+/// The hidden handle variable for this instance's component of `class`.
+pub fn self_component_variable_name(class: &str) -> String {
+    format!("{SELF_COMPONENT_VARIABLE_PREFIX}{class}")
+}
+
 /// The hidden handle variable for component slot `slot_id`.
 pub fn slot_variable_name(slot_id: &str) -> String {
     format!("{SLOT_VARIABLE_PREFIX}{slot_id}")
@@ -867,8 +877,12 @@ impl<'a> Compiler<'a> {
         let node_id = node.id.as_str();
         let key = (node.id.clone(), "component_ref".to_owned());
         let Some((mut source_id, mut source_pin)) = self.data_in.get(&key).cloned() else {
-            self.error(Some(node_id), "component event requires a wired `component_ref` input");
-            return None;
+            return Some(self.add_var(
+                &self_component_variable_name(expected),
+                Some(format!("bp-component:{expected}")),
+                Type::Component(expected.to_owned()),
+                None,
+            ));
         };
         let mut visited = HashSet::new();
         loop {
@@ -898,10 +912,23 @@ impl<'a> Compiler<'a> {
                     self.error(Some(node_id), format!("component_ref is `{source_type}`, expected `{expected}`"));
                     return None;
                 }
-                let Some(slot) = source.properties.get("slot_id").and_then(Json::as_str).map(str::trim).filter(|s| !s.is_empty()) else {
-                    self.error(Some(node_id), "component event source must be a slot-backed component reference");
+                let slot = source.properties.get("slot_id").and_then(Json::as_str).map(str::trim).filter(|s| !s.is_empty());
+                let has_entity_input = data_inputs(source).into_iter().any(|pin| {
+                    self.data_in.contains_key(&(source_id.clone(), pin))
+                });
+                if slot.is_none() && has_entity_input {
+                    self.error(Some(node_id), "component event subscription cannot use a component reference resolved from a runtime entity input; use a root component or a prefab slot");
                     return None;
-                };
+                }
+                if slot.is_none() {
+                    return Some(self.add_var(
+                        &self_component_variable_name(expected),
+                        Some(format!("bp-component:{expected}")),
+                        Type::Component(expected.to_owned()),
+                        None,
+                    ));
+                }
+                let slot = slot.unwrap_or_default();
                 let ty = Type::Component(expected.to_owned());
                 let variable = self.add_var(
                     &slot_variable_name(slot),
