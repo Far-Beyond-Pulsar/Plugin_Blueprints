@@ -150,7 +150,8 @@ impl BlueprintEditorPanel {
                 node.inputs = on_inputs;
                 node.outputs = outputs;
                 node.description = format!("Custom event listener for '{}'", uid);
-                node.properties.insert("event_uid".to_string(), uid.to_string());
+                node.properties
+                    .insert("event_uid".to_string(), uid.to_string());
             }
             existing_id
         } else {
@@ -189,10 +190,13 @@ impl BlueprintEditorPanel {
         let inputs = Self::event_dispatch_input_pins(def);
 
         for node in graph.nodes.iter_mut() {
-            if node.definition_id == dispatch_def_id && node.node_type == NodeType::CustomEventDispatch {
+            if node.definition_id == dispatch_def_id
+                && node.node_type == NodeType::CustomEventDispatch
+            {
                 node.inputs = inputs.clone();
                 node.title = format!("Dispatch {}", def.name);
-                node.properties.insert("event_uid".to_string(), uid.to_string());
+                node.properties
+                    .insert("event_uid".to_string(), uid.to_string());
             }
         }
     }
@@ -228,8 +232,16 @@ impl BlueprintEditorPanel {
             for canvas in &canvases {
                 canvas.update(cx, |canvas_panel, _cx| {
                     for def in &defs2 {
-                        BlueprintEditorPanel::sync_event_on_node_for_def(def, &def.uid, &mut canvas_panel.graph);
-                        BlueprintEditorPanel::sync_dispatch_nodes_for_def(def, &def.uid, &mut canvas_panel.graph);
+                        BlueprintEditorPanel::sync_event_on_node_for_def(
+                            def,
+                            &def.uid,
+                            &mut canvas_panel.graph,
+                        );
+                        BlueprintEditorPanel::sync_dispatch_nodes_for_def(
+                            def,
+                            &def.uid,
+                            &mut canvas_panel.graph,
+                        );
                     }
                     canvas_panel.graph.nodes.retain(|n| {
                         if n.node_type == NodeType::CustomEvent {
@@ -266,7 +278,9 @@ impl BlueprintEditorPanel {
         uid: &str,
         graph: &mut crate::core::graph::BlueprintGraph,
     ) {
-        let Some(def) = self.find_event_def(uid) else { return };
+        let Some(def) = self.find_event_def(uid) else {
+            return;
+        };
         Self::sync_dispatch_nodes_for_def(def, uid, graph);
     }
 
@@ -301,7 +315,9 @@ impl GraphCanvasPanel {
         };
 
         let dispatch_def_id = format!("custom_event_dispatch:{}", uid);
-        let event_name = self.panel.upgrade()
+        let event_name = self
+            .panel
+            .upgrade()
             .and_then(|p| p.read(cx).find_event_def(&uid))
             .map(|d| d.name.clone())
             .unwrap_or_else(|| uid.clone());

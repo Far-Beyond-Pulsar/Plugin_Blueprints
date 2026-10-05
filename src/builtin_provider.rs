@@ -33,7 +33,9 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
             color: gpui::rgb(0x9C27B0).into(),
             structure: FileStructure::FolderBased {
                 marker_file: "graph_save.json".to_string(),
-                template_structure: vec![PathTemplate::Folder { path: "events".into() }],
+                template_structure: vec![PathTemplate::Folder {
+                    path: "events".into(),
+                }],
             },
             default_content: json!({
                 "format_version": 1,
@@ -103,11 +105,13 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<Arc<dyn PanelView>, PluginError> {
-        let panel = cx.new(|cx| match crate::BlueprintEditorPanel::new_with_path(file_path.clone(), window, cx) {
-            Ok(panel) => panel,
-            Err(e) => {
-                tracing::error!("Failed to create blueprint panel: {}", e);
-                crate::BlueprintEditorPanel::new(window, cx)
+        let panel = cx.new(|cx| {
+            match crate::BlueprintEditorPanel::new_with_path(file_path.clone(), window, cx) {
+                Ok(panel) => panel,
+                Err(e) => {
+                    tracing::error!("Failed to create blueprint panel: {}", e);
+                    crate::BlueprintEditorPanel::new(window, cx)
+                }
             }
         });
 

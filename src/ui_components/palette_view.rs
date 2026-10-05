@@ -157,6 +157,26 @@ impl NodePaletteView {
                     all_items.push(PaletteItem::NodeEntry { def, category_color: "#C0392B".to_string() });
                 }
             }
+
+            // Use the host's snapshot rather than this editor DLL's local
+            // inventory, which can differ from the registrations in the host.
+            // The typed EventDecl preserves structured payload pins hidden by
+            // Gamma's opaque byte descriptor.
+            if let Some(catalog) = cx.try_global::<plugin_editor_api::ComponentEventCatalog>() {
+                let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> =
+                    Default::default();
+                for (category, def) in
+                    crate::features::events::engine_events::component_event_node_definitions(&catalog.events)
+                {
+                    by_category.entry(category).or_default().push(def);
+                }
+                for (category, defs) in by_category {
+                    all_items.push(PaletteItem::category(category, "#C0392B".to_string(), defs.len()));
+                    for def in defs {
+                        all_items.push(PaletteItem::NodeEntry { def, category_color: "#C0392B".to_string() });
+                    }
+                }
+            }
         }
 
         self.all_items = all_items;

@@ -263,12 +263,33 @@ impl ScriptLanguage for BlueprintLanguage {
         validation::validate_project_classes(project_root)
     }
 
+    fn validate_project_with_component_events(
+        &self,
+        project_root: &std::path::Path,
+        component_events: &[plugin_editor_api::ComponentEventMetadata],
+    ) -> Result<(), String> {
+        validation::validate_project_classes_with_component_events(project_root, component_events)
+    }
+
     fn compile_project(
         &self,
         project_root: &std::path::Path,
         natives: &plugin_editor_api::NativeRegistry,
     ) -> Vec<plugin_editor_api::CompileDiagnostic> {
         validation::compile_project_classes(project_root, natives)
+    }
+
+    fn compile_project_with_component_events(
+        &self,
+        project_root: &std::path::Path,
+        natives: &plugin_editor_api::NativeRegistry,
+        component_events: &[plugin_editor_api::ComponentEventMetadata],
+    ) -> Vec<plugin_editor_api::CompileDiagnostic> {
+        validation::compile_project_classes_with_component_events(
+            project_root,
+            natives,
+            component_events,
+        )
     }
 }
 

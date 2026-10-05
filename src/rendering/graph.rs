@@ -14,9 +14,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::core::types::PinDataType as DataType;
 use gpui::prelude::*;
 use gpui::*;
-use crate::core::types::PinDataType as DataType;
 use ui::ActiveTheme;
 use ui::PixelsExt;
 
@@ -24,8 +24,7 @@ use crate::core::graph::BlueprintGraph;
 use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType, Pin};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
-use crate::rendering::gpu::{ GraphUniforms, NodeInstance, PinInstance, WireInstance, WireVertex,
-};
+use crate::rendering::gpu::{GraphUniforms, NodeInstance, PinInstance, WireInstance, WireVertex};
 use crate::rendering::layout;
 
 // shared with hit-testing in input.rs
@@ -135,7 +134,13 @@ impl NodeGraphRenderer {
         } else {
             node.outputs.iter().position(|p| p.id == pin_id)?
         };
-        Some(Self::pin_canvas_pos(node, is_input, row, Some(pin_id), graph))
+        Some(Self::pin_canvas_pos(
+            node,
+            is_input,
+            row,
+            Some(pin_id),
+            graph,
+        ))
     }
 
     pub fn calculate_pin_position_graph_space(
@@ -225,7 +230,7 @@ fn category_color(node: &BlueprintNode) -> [f32; 4] {
         NodeType::Reroute => [0.40, 0.40, 0.42, 1.0],
         NodeType::MacroEntry | NodeType::MacroExit => [0.44, 0.18, 0.72, 1.0],
         NodeType::MacroInstance => [0.32, 0.12, 0.52, 1.0],
-        NodeType::CustomEvent => [0.90, 0.50, 0.10, 1.0],       // orange
+        NodeType::CustomEvent => [0.90, 0.50, 0.10, 1.0], // orange
         NodeType::CustomEventDispatch => [0.10, 0.60, 0.85, 1.0], // cyan
     }
 }
@@ -515,7 +520,9 @@ impl NodeGraphRenderer {
         comment_refs.sort_by(|a, b| {
             let area_a = a.size.width * a.size.height;
             let area_b = b.size.width * b.size.height;
-            area_b.partial_cmp(&area_a).unwrap_or(std::cmp::Ordering::Equal)
+            area_b
+                .partial_cmp(&area_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         for comment in comment_refs {
@@ -586,10 +593,16 @@ impl NodeGraphRenderer {
             let sep = [0.086, 0.098, 0.116, 1.0];
 
             let (gw, gh) = if is_reroute {
-                (layout::snap_to_grid(node.size.width), layout::snap_to_grid(node.size.height))
+                (
+                    layout::snap_to_grid(node.size.width),
+                    layout::snap_to_grid(node.size.height),
+                )
             } else {
                 let max_rows = node.inputs.len().max(node.outputs.len()).max(1);
-                (layout::snap_to_grid(node.size.width), layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)))
+                (
+                    layout::snap_to_grid(node.size.width),
+                    layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)),
+                )
             };
             let hdr_frac = (HEADER_H + SEP_H) / gh;
             let is_running = node_is_active(node.id.as_str());
@@ -655,11 +668,7 @@ impl NodeGraphRenderer {
                             center: [cgx, cgy],
                             size: PIN_SIZE,
                             _pad0: 0.0,
-                            color: if is_special {
-                                [1.0, 0.2, 0.2, 1.0]
-                            } else {
-                                pc
-                            },
+                            color: if is_special { [1.0, 0.2, 0.2, 1.0] } else { pc },
                             kind: if is_special { 2 } else { exe as u32 },
                             is_input: is_input as u32,
                             compatible: compat as u32,
@@ -683,7 +692,6 @@ impl NodeGraphRenderer {
                             ));
                         }
                     }
-
                 }
             }
         }
@@ -1111,16 +1119,12 @@ impl NodeGraphRenderer {
                 .snap_to_window_with_margin(px(4.0))
                 .anchor(gpui::Corner::TopLeft)
                 .child(
-                    div()
-                        .occlude()
-                        .w(px(title_w))
-                        .h(px(title_h * 0.68))
-                        .child(
-                            ui::input::TextInput::new(&canvas.comment_text_input)
-                                .appearance(false)
-                                .bordered(false)
-                                .focus_bordered(false),
-                        ),
+                    div().occlude().w(px(title_w)).h(px(title_h * 0.68)).child(
+                        ui::input::TextInput::new(&canvas.comment_text_input)
+                            .appearance(false)
+                            .bordered(false)
+                            .focus_bordered(false),
+                    ),
                 ),
         )
         .with_priority(2)
@@ -1162,11 +1166,13 @@ impl NodeGraphRenderer {
             .upgrade()
             .map(|p| {
                 let r = p.read(cx);
-                (r.variable_name_input.clone(), r.variable_type_dropdown.clone())
+                (
+                    r.variable_name_input.clone(),
+                    r.variable_type_dropdown.clone(),
+                )
             })
             .unzip();
-        let (Some(name_input_shared), Some(type_dd_shared)) = (name_input_opt, type_dd_opt)
-        else {
+        let (Some(name_input_shared), Some(type_dd_shared)) = (name_input_opt, type_dd_opt) else {
             return div().into_any_element();
         };
 
@@ -1223,11 +1229,7 @@ impl NodeGraphRenderer {
                                     .panel
                                     .upgrade()
                                     .map(|p| {
-                                        p.read(cx)
-                                            .variable_name_input
-                                            .read(cx)
-                                            .text()
-                                            .to_string()
+                                        p.read(cx).variable_name_input.read(cx).text().to_string()
                                     })
                                     .unwrap_or_default()
                                     .trim()
@@ -1245,7 +1247,9 @@ impl NodeGraphRenderer {
                                     .unwrap_or_else(|| "f32".to_string());
                                 if !name.is_empty() {
                                     if let Some(p) = canvas.panel.upgrade() {
-                                        p.update(cx, |panel, cx| panel.add_macro_pin(&mid2, name, type_str, is_input, cx));
+                                        p.update(cx, |panel, cx| {
+                                            panel.add_macro_pin(&mid2, name, type_str, is_input, cx)
+                                        });
                                     }
                                 }
                                 canvas.macro_pin_add_mode = None;
@@ -1304,7 +1308,11 @@ impl NodeGraphRenderer {
                             .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
                                 pe_add.update(cx, |canvas, cx| {
                                     canvas.macro_pin_add_mode = Some(true);
-                                    if let Some(p) = canvas.panel.upgrade() { p.update(cx, |panel, cx| panel.start_creating_variable(window, cx)); };
+                                    if let Some(p) = canvas.panel.upgrade() {
+                                        p.update(cx, |panel, cx| {
+                                            panel.start_creating_variable(window, cx)
+                                        });
+                                    };
                                     cx.notify();
                                 });
                             })
@@ -1356,7 +1364,9 @@ impl NodeGraphRenderer {
                                 .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
                                     pe2.update(cx, |canvas, cx| {
                                         if let Some(p) = canvas.panel.upgrade() {
-                                            p.update(cx, |panel, cx| panel.remove_macro_pin(&mid2, &pin_id, true, cx));
+                                            p.update(cx, |panel, cx| {
+                                                panel.remove_macro_pin(&mid2, &pin_id, true, cx)
+                                            });
                                         }
                                     });
                                 })
@@ -1393,7 +1403,11 @@ impl NodeGraphRenderer {
                             .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
                                 pe_add.update(cx, |canvas, cx| {
                                     canvas.macro_pin_add_mode = Some(false);
-                                    if let Some(p) = canvas.panel.upgrade() { p.update(cx, |panel, cx| panel.start_creating_variable(window, cx)); };
+                                    if let Some(p) = canvas.panel.upgrade() {
+                                        p.update(cx, |panel, cx| {
+                                            panel.start_creating_variable(window, cx)
+                                        });
+                                    };
                                     cx.notify();
                                 });
                             })
@@ -1445,7 +1459,9 @@ impl NodeGraphRenderer {
                                 .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
                                     pe2.update(cx, |canvas, cx| {
                                         if let Some(p) = canvas.panel.upgrade() {
-                                            p.update(cx, |panel, cx| panel.remove_macro_pin(&mid2, &pin_id, false, cx));
+                                            p.update(cx, |panel, cx| {
+                                                panel.remove_macro_pin(&mid2, &pin_id, false, cx)
+                                            });
                                         }
                                     });
                                 })

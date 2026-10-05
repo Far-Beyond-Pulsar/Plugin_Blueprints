@@ -345,7 +345,10 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         // so we can identify true entry points.
         let mut has_exec_input = vec![false; node_ids.len()];
         for conn in &self.graph.connections {
-            if matches!(conn.connection_type, blueprint_graph::ConnectionType::Execution) {
+            if matches!(
+                conn.connection_type,
+                blueprint_graph::ConnectionType::Execution
+            ) {
                 if let (Some(&src), Some(&dst)) = (
                     node_index.get(&conn.source_node),
                     node_index.get(&conn.target_node),

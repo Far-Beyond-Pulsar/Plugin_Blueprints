@@ -1,5 +1,7 @@
 //! Blueprint persistence uses the shared, headless schema.
-pub use blueprint_graph::{BlueprintAsset, BlueprintEditorState, EventDefDescription, EventFieldDescription};
+pub use blueprint_graph::{
+    BlueprintAsset, BlueprintEditorState, EventDefDescription, EventFieldDescription,
+};
 
 // ============================================================================
 // Serialization Helpers
@@ -31,7 +33,9 @@ pub fn generate_file_header() -> String {
     )
 }
 
-pub use blueprint_graph::codec::{strip_header_comments, deserialize_blueprint, is_version_supported, current_format_version};
+pub use blueprint_graph::codec::{
+    current_format_version, deserialize_blueprint, is_version_supported, strip_header_comments,
+};
 
 /// Serialize a blueprint asset to JSON string with header
 pub fn serialize_blueprint_with_header(asset: &BlueprintAsset) -> Result<String, String> {
@@ -40,4 +44,3 @@ pub fn serialize_blueprint_with_header(asset: &BlueprintAsset) -> Result<String,
 
     Ok(format!("{}{}", generate_file_header(), json))
 }
-

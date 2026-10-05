@@ -52,7 +52,8 @@ impl DropdownItem for TypeItem {
 
     fn display_title(&self) -> Option<AnyElement> {
         // Get the color for this type
-        let pin_color = crate::core::types::PinDataType::from_type_str(self.type_str.clone()).display_color();
+        let pin_color =
+            crate::core::types::PinDataType::from_type_str(self.type_str.clone()).display_color();
 
         Some(
             ui::h_flex()

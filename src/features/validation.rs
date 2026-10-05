@@ -14,6 +14,16 @@ use std::path::Path;
 /// returns `Err(summary)` listing each failing class otherwise. Used by PiE's
 /// build preflight so bad graphs stop Play before the project dylib builds.
 pub fn validate_project_classes(root: &Path) -> Result<(), String> {
+    validate_project_classes_with_component_events(root, &[])
+}
+
+/// Validate saved classes against the host-owned component event catalog.
+/// Headless validation receives this snapshot explicitly so it works when the
+/// Blueprint language runs from a dynamic plugin.
+pub fn validate_project_classes_with_component_events(
+    root: &Path,
+    component_events: &[plugin_editor_api::ComponentEventMetadata],
+) -> Result<(), String> {
     let mut class_files = Vec::new();
     let classes_dir = root.join("src").join("classes");
     let scan_root = if classes_dir.is_dir() {
@@ -40,7 +50,7 @@ pub fn validate_project_classes(root: &Path) -> Result<(), String> {
                 .map_err(|e| format!("failed to parse blueprint asset: {e}"))
             })
             .and_then(|asset| {
-                let problems = validate_asset(&asset, path.parent());
+                let problems = validate_asset_with_component_events(&asset, path.parent(), component_events);
                 if problems.is_empty() {
                     Ok(())
                 } else {
@@ -201,11 +211,17 @@ fn check_pbgc_graph(graph: &graphy::GraphDescription, report: &mut ValidationRep
 /// `class_dir` is the class's directory (`src/classes/<Class>`): its name
 /// qualifies the class's custom events and its siblings' compiled modules
 /// supply the other classes' events.
-pub(crate) fn validate_asset(
+fn validate_asset_with_component_events(
     asset: &crate::io::formats::BlueprintAsset,
     class_dir: Option<&std::path::Path>,
+    component_events: &[plugin_editor_api::ComponentEventMetadata],
 ) -> Vec<String> {
-    compile_asset(asset, class_dir, crate::features::compilation::compiler::script_natives())
+    compile_asset(
+        asset,
+        class_dir,
+        crate::features::compilation::compiler::script_natives(),
+        component_events,
+    )
         .problems
         .into_iter()
         .map(|(_, message)| message)
@@ -227,6 +243,7 @@ pub(crate) fn compile_asset(
     asset: &crate::io::formats::BlueprintAsset,
     class_dir: Option<&std::path::Path>,
     natives: &pulsar_script_vm::NativeRegistry,
+    component_events: &[plugin_editor_api::ComponentEventMetadata],
 ) -> AssetCompile {
     let mut report = ValidationReport::default();
     check_ui_graph(&asset.main_graph, &mut report);
@@ -271,7 +288,10 @@ pub(crate) fn compile_asset(
             fields: e.fields.iter().map(|f| (f.name.clone(), f.type_name.clone())).collect(),
         })
         .collect();
-    let known_events = crate::features::events::engine_events::known_event_signatures(class_dir);
+    let known_events = crate::features::events::engine_events::known_event_signatures_with_components(
+        class_dir,
+        component_events,
+    );
     let source = blueprint_compiler::ClassSource {
         name: &class_name,
         graph: &graph,
@@ -306,6 +326,7 @@ const GRAPH_FILE: &str = "graph_save.json";
 fn compile_class_dir(
     dir: &Path,
     natives: &pulsar_script_vm::NativeRegistry,
+    component_events: &[plugin_editor_api::ComponentEventMetadata],
 ) -> Result<(), Vec<plugin_editor_api::CompileDiagnostic>> {
     use plugin_editor_api::CompileDiagnostic;
     let class = crate::features::class_dirs::class_name_of(dir);
@@ -323,7 +344,7 @@ fn compile_class_dir(
     let text = std::fs::read_to_string(&graph_file).map_err(|e| fail(format!("failed to read: {e}")))?;
     let asset = crate::io::formats::deserialize_blueprint(&crate::io::formats::strip_header_comments(&text))
         .map_err(|e| fail(format!("failed to parse blueprint asset: {e}")))?;
-    let compiled = compile_asset(&asset, Some(dir), natives);
+    let compiled = compile_asset(&asset, Some(dir), natives, component_events);
     let Some(module) = compiled.module else {
         let _ = std::fs::remove_file(&out);
         return Err(compiled
@@ -354,13 +375,22 @@ pub fn compile_project_classes(
     root: &Path,
     natives: &pulsar_script_vm::NativeRegistry,
 ) -> Vec<plugin_editor_api::CompileDiagnostic> {
+    compile_project_classes_with_component_events(root, natives, &[])
+}
+
+/// Compile each class with the component event catalog supplied by the host.
+pub fn compile_project_classes_with_component_events(
+    root: &Path,
+    natives: &pulsar_script_vm::NativeRegistry,
+    component_events: &[plugin_editor_api::ComponentEventMetadata],
+) -> Vec<plugin_editor_api::CompileDiagnostic> {
     let mut pending = project_class_dirs(root);
     let mut failures = Vec::new();
     while !pending.is_empty() {
         failures.clear();
         let mut failed = Vec::new();
         for dir in &pending {
-            match compile_class_dir(dir, natives) {
+            match compile_class_dir(dir, natives, component_events) {
                 Ok(()) => tracing::info!(class = %dir.display(), "Blueprint class compiled"),
                 Err(problems) => {
                     failures.extend(problems);

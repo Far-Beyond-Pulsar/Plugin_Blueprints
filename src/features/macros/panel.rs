@@ -44,10 +44,10 @@ impl MacrosRenderer {
             .iter()
             .enumerate()
             .map(|(index, subgraph)| {
-                let is_renaming = panel
-                    .renaming_target
-                    .as_ref()
-                    .map_or(false, |t| matches!(t, RenameTarget::Macro(id) if *id == subgraph.id));
+                let is_renaming = panel.renaming_target.as_ref().map_or(
+                    false,
+                    |t| matches!(t, RenameTarget::Macro(id) if *id == subgraph.id),
+                );
                 MacroHierarchyItem {
                     subgraph: subgraph.clone(),
                     index,

@@ -2,11 +2,11 @@
 //!
 //! All operations related to node manipulation in the graph.
 
+use crate::core::types::PinDataType as GraphDataType;
 use crate::core::types::{BlueprintNode, Connection, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use gpui::*;
-use crate::core::types::PinDataType as GraphDataType;
 
 impl GraphCanvasPanel {
     /// Add a node to the graph

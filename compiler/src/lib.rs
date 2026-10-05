@@ -66,7 +66,7 @@
 pub mod palette;
 pub mod authored;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use graphy::{ConnectionType, DataType, GraphDescription, NodeInstance};
 use pulsar_script_vm::{
@@ -509,7 +509,21 @@ impl<'a> Compiler<'a> {
                 continue;
             }
             let mut subscription = None;
-            let (name, params, param_pins) = if let Some(event) = node.node_type.strip_prefix("event::on::") {
+            let (name, params, param_pins) = if let Some(event) = node.node_type.strip_prefix("event::on_component::") {
+                let Some(sig) = self.event_sig(&node.id, event) else { continue };
+                let component_type = match node.properties.get("component_type") {
+                    Some(Json::String(name)) if !name.trim().is_empty() => name.as_str(),
+                    _ => {
+                        self.error(Some(&node.id), "component event node has no component_type");
+                        continue;
+                    }
+                };
+                let Some(variable) = self.component_subscription_variable(node, component_type) else { continue };
+                subscription = Some((event.to_owned(), SubscriptionScope::Component(variable)));
+                let fn_name = format!("on_component_event__{}", sanitize(event));
+                let pins = sig.fields.iter().map(|f| vec![f.name.clone()]).collect();
+                (fn_name, sig.field_types(), pins)
+            } else if let Some(event) = node.node_type.strip_prefix("event::on::") {
                 let Some(sig) = self.event_sig(&node.id, event) else { continue };
                 let declared_here = self.module.events.iter().any(|e| e.name == event);
                 let scope = match node.properties.get("scope") {
@@ -527,6 +541,7 @@ impl<'a> Compiler<'a> {
                     SubscriptionScope::Self_ => "self",
                     SubscriptionScope::Global => "global",
                     SubscriptionScope::Class => "class",
+                    SubscriptionScope::Component(_) => "component",
                 };
                 let fn_name = format!("on_event__{}__{scope_tag}", sanitize(event));
                 let pins = sig.fields.iter().map(|f| vec![f.name.clone()]).collect();
@@ -574,6 +589,9 @@ impl<'a> Compiler<'a> {
                         continue;
                     }
                     self.events[index].nodes.push(node.id.clone());
+                    if let Some(subscription) = subscription {
+                        self.events[index].subscriptions.push(subscription);
+                    }
                 }
                 None => {
                     by_name.insert(name.clone(), self.events.len());
@@ -793,6 +811,73 @@ impl<'a> Compiler<'a> {
     /// native's parameters, the result into the node's `result` pin.
     fn std_call(&mut self, f: &mut Func, node: &'a NodeInstance) -> Option<Reg> {
         self.std_call_expected(f, node, None, None)
+    }
+
+    /// Resolve the typed component-ref pin on an `event::on_component` node
+    /// to the per-instance module variable that already stores that live
+    /// reference. Prefab slot references use the same hidden `__slot:<uuid>`
+    /// variables populated by the class binder; component-typed Blueprint
+    /// variables can also be used directly.
+    fn component_subscription_variable(&mut self, node: &NodeInstance, expected: &str) -> Option<u32> {
+        let node_id = node.id.as_str();
+        let key = (node.id.clone(), "component_ref".to_owned());
+        let Some((mut source_id, mut source_pin)) = self.data_in.get(&key).cloned() else {
+            self.error(Some(node_id), "component event requires a wired `component_ref` input");
+            return None;
+        };
+        let mut visited = HashSet::new();
+        loop {
+            if !visited.insert((source_id.clone(), source_pin.clone())) {
+                self.error(Some(node_id), "component_ref input contains a data-wire cycle");
+                return None;
+            }
+            let Some(source) = self.node(&source_id) else {
+                self.error(Some(node_id), "component_ref input comes from a missing node");
+                return None;
+            };
+            if source.node_type == "reroute" {
+                let upstream = data_inputs(source)
+                    .into_iter()
+                    .find_map(|pin| self.data_in.get(&(source_id.clone(), pin)).cloned());
+                let Some((next_id, next_pin)) = upstream else {
+                    self.error(Some(node_id), "component_ref reroute has no input");
+                    return None;
+                };
+                source_id = next_id;
+                source_pin = next_pin;
+                continue;
+            }
+            if let Some(rest) = source.node_type.strip_prefix("get_component_ref::") {
+                let source_type = rest.split("::").next().unwrap_or(rest);
+                if source_type != expected {
+                    self.error(Some(node_id), format!("component_ref is `{source_type}`, expected `{expected}`"));
+                    return None;
+                }
+                let Some(slot) = source.properties.get("slot_id").and_then(Json::as_str).map(str::trim).filter(|s| !s.is_empty()) else {
+                    self.error(Some(node_id), "component event source must be a slot-backed component reference");
+                    return None;
+                };
+                let ty = Type::Component(expected.to_owned());
+                let variable = self.add_var(
+                    &slot_variable_name(slot),
+                    Some(format!("bp-slot:{slot}")),
+                    ty,
+                    None,
+                );
+                return Some(variable);
+            }
+            if let Some(name) = source.node_type.strip_prefix("get_") {
+                if let Some((variable, Type::Component(source_type))) = self.vars.get(name).cloned() {
+                    if source_type == expected {
+                        return Some(variable);
+                    }
+                    self.error(Some(node_id), format!("component_ref is `{source_type}`, expected `{expected}`"));
+                    return None;
+                }
+            }
+            self.error(Some(node_id), "component_ref must come from a component reference or component variable");
+            return None;
+        }
     }
 
     fn std_call_expected(

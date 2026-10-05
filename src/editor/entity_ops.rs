@@ -67,20 +67,36 @@ impl GraphCanvasPanel {
             }
 
             for id in node_ids {
-                if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
+                if let Some(node) = self
+                    .graph
+                    .nodes
+                    .iter()
+                    .find(|n| n.id.as_str() == id.as_str())
+                {
                     self.initial_drag_positions.insert(id, node.position);
                 }
             }
             for id in comment_ids {
-                if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
-                    self.initial_comment_drag_positions.insert(id, comment.position);
+                if let Some(comment) = self
+                    .graph
+                    .comments
+                    .iter()
+                    .find(|c| c.id.as_str() == id.as_str())
+                {
+                    self.initial_comment_drag_positions
+                        .insert(id, comment.position);
                 }
             }
         } else {
             // Single drag
             match &dragged_entity {
                 EntitySelection::Node(id) => {
-                    if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
+                    if let Some(node) = self
+                        .graph
+                        .nodes
+                        .iter()
+                        .find(|n| n.id.as_str() == id.as_str())
+                    {
                         self.initial_drag_positions
                             .insert(id.clone(), node.position);
                     }
@@ -95,14 +111,24 @@ impl GraphCanvasPanel {
         // Set drag offset
         match &dragged_entity {
             EntitySelection::Node(id) => {
-                if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
+                if let Some(node) = self
+                    .graph
+                    .nodes
+                    .iter()
+                    .find(|n| n.id.as_str() == id.as_str())
+                {
                     let pos = node.position;
                     self.drag_offset = Point::new(mouse_pos.x - pos.x, mouse_pos.y - pos.y);
                     self.dragging_node = Some(id.clone());
                 }
             }
             EntitySelection::Comment(id) => {
-                if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
+                if let Some(comment) = self
+                    .graph
+                    .comments
+                    .iter()
+                    .find(|c| c.id.as_str() == id.as_str())
+                {
                     let pos = comment.position;
                     self.drag_offset = Point::new(mouse_pos.x - pos.x, mouse_pos.y - pos.y);
                     self.dragging_comment = Some(id.clone());
@@ -149,7 +175,12 @@ impl GraphCanvasPanel {
 
                 // Move all nodes in the selection
                 for (node_id, initial_position) in &self.initial_drag_positions.clone() {
-                    if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id.as_str() == node_id) {
+                    if let Some(node) = self
+                        .graph
+                        .nodes
+                        .iter_mut()
+                        .find(|n| n.id.as_str() == node_id)
+                    {
                         let new_pos =
                             Point::new(initial_position.x + delta.x, initial_position.y + delta.y);
                         node.position = NodeGraphRenderer::snap_to_grid(new_pos);

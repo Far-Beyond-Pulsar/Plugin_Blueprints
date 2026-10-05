@@ -1,9 +1,9 @@
 //! Connection operations - dragging and managing connections between nodes
 
+use crate::core::types::PinDataType as GraphDataType;
 use crate::core::types::{BlueprintNode, Connection, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
-use crate::core::types::PinDataType as GraphDataType;
 
 /// Connection drag state
 #[derive(Clone, Debug)]
@@ -28,7 +28,10 @@ impl GraphCanvasPanel {
             // Allow dragging from special header/fn-ptr pins even though they're in inputs
             let is_special = pin_id == "__return__" || pin_id == "__fn_ptr__";
             let pin = if is_special {
-                node.inputs.iter().chain(node.outputs.iter()).find(|p| p.id == pin_id)
+                node.inputs
+                    .iter()
+                    .chain(node.outputs.iter())
+                    .find(|p| p.id == pin_id)
             } else {
                 node.outputs.iter().find(|p| p.id == pin_id)
             };
@@ -331,10 +334,19 @@ impl GraphCanvasPanel {
     }
 
     fn connection_endpoints(&self, connection: &Connection) -> Option<(Point<f32>, Point<f32>)> {
-        let from_node = self.graph.nodes.iter().find(|n| n.id == connection.source_node)?;
-        let to_node = self.graph.nodes.iter().find(|n| n.id == connection.target_node)?;
+        let from_node = self
+            .graph
+            .nodes
+            .iter()
+            .find(|n| n.id == connection.source_node)?;
+        let to_node = self
+            .graph
+            .nodes
+            .iter()
+            .find(|n| n.id == connection.target_node)?;
 
-        let from_pos = self.pin_graph_position(from_node, &connection.source_pin, false)
+        let from_pos = self
+            .pin_graph_position(from_node, &connection.source_pin, false)
             .unwrap_or_else(|| {
                 Point::new(
                     from_node.position.x + from_node.size.width,
@@ -342,7 +354,8 @@ impl GraphCanvasPanel {
                 )
             });
 
-        let to_pos = self.pin_graph_position(to_node, &connection.target_pin, true)
+        let to_pos = self
+            .pin_graph_position(to_node, &connection.target_pin, true)
             .unwrap_or_else(|| {
                 Point::new(
                     to_node.position.x,
@@ -353,18 +366,14 @@ impl GraphCanvasPanel {
         Some((from_pos, to_pos))
     }
 
-    fn bezier_control_points(
-        from_pos: Point<f32>,
-        to_pos: Point<f32>,
-    ) -> (Point<f32>, Point<f32>) {
+    fn bezier_control_points(from_pos: Point<f32>, to_pos: Point<f32>) -> (Point<f32>, Point<f32>) {
         const CONTROL_POINT_DISTANCE_RATIO: f32 = 0.45;
         const MIN_CONTROL_POINT_OFFSET: f32 = 55.0;
         const MAX_CONTROL_POINT_OFFSET: f32 = 220.0;
 
         let horizontal_distance = (to_pos.x - from_pos.x).abs();
-        let control_point_offset =
-            (horizontal_distance * CONTROL_POINT_DISTANCE_RATIO)
-                .clamp(MIN_CONTROL_POINT_OFFSET, MAX_CONTROL_POINT_OFFSET);
+        let control_point_offset = (horizontal_distance * CONTROL_POINT_DISTANCE_RATIO)
+            .clamp(MIN_CONTROL_POINT_OFFSET, MAX_CONTROL_POINT_OFFSET);
 
         (
             Point::new(from_pos.x + control_point_offset, from_pos.y),
@@ -393,17 +402,10 @@ impl GraphCanvasPanel {
             ((point.x - start.0) * dx + (point.y - start.1) * dy) / segment_length_sq;
         let projection = unbounded_projection.clamp(0.0, 1.0);
 
-        (
-            start.0 + projection * dx,
-            start.1 + projection * dy,
-        )
+        (start.0 + projection * dx, start.1 + projection * dy)
     }
 
-    fn point_distance_to_segment(
-        point: Point<f32>,
-        start: (f32, f32),
-        end: (f32, f32),
-    ) -> f32 {
+    fn point_distance_to_segment(point: Point<f32>, start: (f32, f32), end: (f32, f32)) -> f32 {
         let (closest_x, closest_y) = Self::closest_point_on_segment(point, start, end);
         Self::distance_between_points(point, Point::new(closest_x, closest_y))
     }
@@ -464,8 +466,7 @@ impl GraphCanvasPanel {
 
         for connection in &self.graph.connections {
             if let Some((from_pos, to_pos)) = self.connection_endpoints(connection) {
-                if self.is_point_near_bezier_curve(point, from_pos, to_pos, SAMPLES, THRESHOLD)
-                {
+                if self.is_point_near_bezier_curve(point, from_pos, to_pos, SAMPLES, THRESHOLD) {
                     return Some(connection.clone());
                 }
             }

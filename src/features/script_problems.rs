@@ -26,7 +26,9 @@ impl BlueprintEditorPanel {
         let inbox: Arc<Mutex<Vec<ScriptProblemsEvent>>> = Arc::default();
         let sink = Arc::clone(&inbox);
         let subscription = pulsar_events::subscribe_script_problems(move |event| {
-            sink.lock().unwrap_or_else(|p| p.into_inner()).push(event.clone());
+            sink.lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(event.clone());
         });
         cx.spawn(async move |this, cx| {
             let _subscription = subscription;
@@ -36,7 +38,10 @@ impl BlueprintEditorPanel {
                 if events.is_empty() {
                     continue;
                 }
-                if this.update(cx, |panel, cx| panel.apply_script_problems(events, cx)).is_err() {
+                if this
+                    .update(cx, |panel, cx| panel.apply_script_problems(events, cx))
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -45,12 +50,19 @@ impl BlueprintEditorPanel {
     }
 
     fn is_open_class(&self, problem: &ScriptProblem) -> bool {
-        let Some(class_path) = &self.current_class_path else { return false };
+        let Some(class_path) = &self.current_class_path else {
+            return false;
+        };
         if let Some(path) = &problem.path {
             return path.starts_with(class_path);
         }
         let name = crate::features::class_dirs::class_name_of(class_path);
-        name.is_some() && problem.class.as_deref().map(crate::features::class_dirs::strip_class_ext) == name.as_deref()
+        name.is_some()
+            && problem
+                .class
+                .as_deref()
+                .map(crate::features::class_dirs::strip_class_ext)
+                == name.as_deref()
     }
 
     fn apply_script_problems(&mut self, events: Vec<ScriptProblemsEvent>, cx: &mut Context<Self>) {
@@ -74,13 +86,18 @@ impl BlueprintEditorPanel {
                     if !self.validation_problems.contains(&line) {
                         self.validation_problems.push(line);
                     }
-                    if let (Some(node), Some(canvas)) = (problem.node.clone(), self.active_canvas().cloned()) {
+                    if let (Some(node), Some(canvas)) =
+                        (problem.node.clone(), self.active_canvas().cloned())
+                    {
                         canvas.update(cx, |canvas, cx| {
                             canvas.debug_pin_values = problem
                                 .output_values
                                 .iter()
                                 .map(|output| {
-                                    ((output.node.clone(), output.pin.clone()), output.value.clone())
+                                    (
+                                        (output.node.clone(), output.pin.clone()),
+                                        output.value.clone(),
+                                    )
                                 })
                                 .collect();
                             if canvas.graph.nodes.iter().any(|n| n.id == node) {

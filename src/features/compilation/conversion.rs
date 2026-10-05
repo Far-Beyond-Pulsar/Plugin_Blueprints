@@ -6,12 +6,15 @@ use crate::{
     BlueprintComment, BlueprintGraph, BlueprintNode, Connection, NodeDefinitions, NodeType, Pin,
     PinType,
 };
-use gpui::*;
 use blueprint_graph::{self as graph_types, GraphDescription, NodeInstance, PinInstance, Position};
+use gpui::*;
 
 impl BlueprintEditorPanel {
     /// Convert current blueprint graph to graph description
-    pub(crate) fn convert_to_graph_description(&self, graph: &crate::core::graph::BlueprintGraph) -> Result<GraphDescription, String> {
+    pub(crate) fn convert_to_graph_description(
+        &self,
+        graph: &crate::core::graph::BlueprintGraph,
+    ) -> Result<GraphDescription, String> {
         self.convert_graph_to_description(graph)
     }
 
@@ -144,21 +147,19 @@ impl BlueprintEditorPanel {
                 )
             } else if let Some(uid) = definition_id.strip_prefix("custom_event:") {
                 let event_def = self.local_event_defs.iter().find(|d| d.uid == uid);
-                let name = event_def
-                    .map(|d| d.name.clone())
-                    .unwrap_or_else(|| {
-                        uid.replace('-', " ")
-                            .split_whitespace()
-                            .map(|w| {
-                                let mut c = w.chars();
-                                match c.next() {
-                                    None => String::new(),
-                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    });
+                let name = event_def.map(|d| d.name.clone()).unwrap_or_else(|| {
+                    uid.replace('-', " ")
+                        .split_whitespace()
+                        .map(|w| {
+                            let mut c = w.chars();
+                            match c.next() {
+                                None => String::new(),
+                                Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                });
                 (
                     format!("On {}", name),
                     "📡".to_string(),
@@ -168,21 +169,19 @@ impl BlueprintEditorPanel {
                 )
             } else if let Some(uid) = definition_id.strip_prefix("custom_event_dispatch:") {
                 let event_def = self.local_event_defs.iter().find(|d| d.uid == uid);
-                let name = event_def
-                    .map(|d| d.name.clone())
-                    .unwrap_or_else(|| {
-                        uid.replace('-', " ")
-                            .split_whitespace()
-                            .map(|w| {
-                                let mut c = w.chars();
-                                match c.next() {
-                                    None => String::new(),
-                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    });
+                let name = event_def.map(|d| d.name.clone()).unwrap_or_else(|| {
+                    uid.replace('-', " ")
+                        .split_whitespace()
+                        .map(|w| {
+                            let mut c = w.chars();
+                            match c.next() {
+                                None => String::new(),
+                                Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                });
                 (
                     format!("Dispatch {}", name),
                     "📡".to_string(),
@@ -224,7 +223,11 @@ impl BlueprintEditorPanel {
                     title,
                     if is_event { "📡" } else { "📨" }.to_string(),
                     String::new(),
-                    if is_event { NodeType::Event } else { NodeType::Logic },
+                    if is_event {
+                        NodeType::Event
+                    } else {
+                        NodeType::Logic
+                    },
                     Some(if is_event { "#C0392B" } else { "#00A8E8" }.to_string()),
                 )
             } else if let Some(def) = node_def {
@@ -259,35 +262,41 @@ impl BlueprintEditorPanel {
                 )
             };
 
-                // Ensure custom event On nodes always have the __return__ header pin
-                let mut node_inputs: Vec<Pin> = node_instance
-                    .inputs
-                    .iter()
-                    .map(|pin_inst| {
-                        let pin = &pin_inst.pin;
-                        let canonical = graph_types::DataType::from_type_str(&pin.data_type.to_string());
-                        Pin {
-                            id: pin_inst.id.clone(),
-                            name: pin.name.clone(),
-                            pin_type: match pin.pin_type {
-                                graph_types::PinType::Input => PinType::Input,
-                                graph_types::PinType::Output => PinType::Output,
-                            },
-                            data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
-                        }
-                    })
-                    .collect();
-                if node_type == NodeType::CustomEvent
-                    && !node_inputs.iter().any(|p| p.id == "__return__")
-                {
-                    node_inputs.insert(0, Pin {
+            // Ensure custom event On nodes always have the __return__ header pin
+            let mut node_inputs: Vec<Pin> = node_instance
+                .inputs
+                .iter()
+                .map(|pin_inst| {
+                    let pin = &pin_inst.pin;
+                    let canonical =
+                        graph_types::DataType::from_type_str(&pin.data_type.to_string());
+                    Pin {
+                        id: pin_inst.id.clone(),
+                        name: pin.name.clone(),
+                        pin_type: match pin.pin_type {
+                            graph_types::PinType::Input => PinType::Input,
+                            graph_types::PinType::Output => PinType::Output,
+                        },
+                        data_type: crate::core::types::PinDataType::from_type_str(
+                            canonical.to_string(),
+                        ),
+                    }
+                })
+                .collect();
+            if node_type == NodeType::CustomEvent
+                && !node_inputs.iter().any(|p| p.id == "__return__")
+            {
+                node_inputs.insert(
+                    0,
+                    Pin {
                         id: "__return__".to_string(),
                         name: String::new(),
                         pin_type: PinType::Input,
                         data_type: crate::core::types::PinDataType::from_type_str("?"),
-                    });
-                }
-                let bp_node = BlueprintNode {
+                    },
+                );
+            }
+            let bp_node = BlueprintNode {
                 id: node_id.clone(),
                 definition_id,
                 title,
@@ -305,7 +314,8 @@ impl BlueprintEditorPanel {
                     .iter()
                     .map(|pin_inst| {
                         let pin = &pin_inst.pin;
-                        let canonical = graph_types::DataType::from_type_str(&pin.data_type.to_string());
+                        let canonical =
+                            graph_types::DataType::from_type_str(&pin.data_type.to_string());
                         Pin {
                             id: pin_inst.id.clone(),
                             name: pin.name.clone(),
@@ -313,7 +323,9 @@ impl BlueprintEditorPanel {
                                 graph_types::PinType::Input => PinType::Input,
                                 graph_types::PinType::Output => PinType::Output,
                             },
-                            data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
+                            data_type: crate::core::types::PinDataType::from_type_str(
+                                canonical.to_string(),
+                            ),
                         }
                     })
                     .collect(),

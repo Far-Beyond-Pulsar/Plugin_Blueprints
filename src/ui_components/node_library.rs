@@ -53,7 +53,13 @@ impl PaletteItem {
     /// A category header, collapsed. How it is shown is decided later by
     /// [`visible_items`].
     pub fn category(name: String, color: String, node_count: usize) -> Self {
-        Self::CategoryHeader { name, color, node_count, expanded: false, matched: None }
+        Self::CategoryHeader {
+            name,
+            color,
+            node_count,
+            expanded: false,
+            matched: None,
+        }
     }
 
     /// Pixel height for this row type.
@@ -79,7 +85,11 @@ impl PaletteItem {
 pub fn build_palette_items(defs: &NodeDefinitions) -> Vec<PaletteItem> {
     let mut items = Vec::new();
     for category in &defs.categories {
-        items.push(PaletteItem::category(category.name.clone(), category.color.clone(), category.nodes.len()));
+        items.push(PaletteItem::category(
+            category.name.clone(),
+            category.color.clone(),
+            category.nodes.len(),
+        ));
         for def in &category.nodes {
             items.push(PaletteItem::NodeEntry {
                 def: def.clone(),
@@ -200,7 +210,13 @@ pub fn visible_items(
             continue;
         }
 
-        let Some(PaletteItem::CategoryHeader { name, color, node_count, .. }) = header else {
+        let Some(PaletteItem::CategoryHeader {
+            name,
+            color,
+            node_count,
+            ..
+        }) = header
+        else {
             // Nodes with no category are always shown.
             out.extend(matching.into_iter().cloned());
             continue;
@@ -262,7 +278,11 @@ pub fn build_compatible_palette_items(
             continue;
         }
 
-        items.push(PaletteItem::category(category.name.clone(), category.color.clone(), compatible_nodes.len()));
+        items.push(PaletteItem::category(
+            category.name.clone(),
+            category.color.clone(),
+            compatible_nodes.len(),
+        ));
 
         for def in compatible_nodes {
             items.push(PaletteItem::NodeEntry {
@@ -287,18 +307,23 @@ pub fn filter_compatible_palette_items(
     let mut current_header: Option<(String, String)> = None;
     let mut current_nodes: Vec<PaletteItem> = Vec::new();
 
-    let mut flush_category =
-        |header: &Option<(String, String)>, nodes: &mut Vec<PaletteItem>, out: &mut Vec<PaletteItem>| {
-            if nodes.is_empty() {
-                return;
-            }
+    let mut flush_category = |header: &Option<(String, String)>,
+                              nodes: &mut Vec<PaletteItem>,
+                              out: &mut Vec<PaletteItem>| {
+        if nodes.is_empty() {
+            return;
+        }
 
-            if let Some((name, color)) = header {
-                out.push(PaletteItem::category(name.clone(), color.clone(), nodes.len()));
-            }
+        if let Some((name, color)) = header {
+            out.push(PaletteItem::category(
+                name.clone(),
+                color.clone(),
+                nodes.len(),
+            ));
+        }
 
-            out.append(nodes);
-        };
+        out.append(nodes);
+    };
 
     // Within each category, nodes with an input of exactly the dragged type
     // come before nodes that only take it through a wildcard pin.
@@ -311,7 +336,10 @@ pub fn filter_compatible_palette_items(
                 flush_category(&current_header, &mut current_nodes, &mut result);
                 current_header = Some((name.clone(), color.clone()));
             }
-            PaletteItem::NodeEntry { def, category_color } => {
+            PaletteItem::NodeEntry {
+                def,
+                category_color,
+            } => {
                 let entry = || PaletteItem::NodeEntry {
                     def: def.clone(),
                     category_color: category_color.clone(),
@@ -342,7 +370,10 @@ enum InputMatch {
 fn input_match(def: &NodeDefinition, source_type: &PinDataType) -> Option<InputMatch> {
     let mut best = None;
     for pin in &def.inputs {
-        if !crate::features::connections::compatibility::are_types_compatible(source_type, &pin.data_type) {
+        if !crate::features::connections::compatibility::are_types_compatible(
+            source_type,
+            &pin.data_type,
+        ) {
             continue;
         }
         if source_type.is_wildcard() || !pin.data_type.is_wildcard() {
@@ -400,7 +431,9 @@ mod tests {
         items
             .iter()
             .map(|item| match item {
-                PaletteItem::CategoryHeader { name, node_count, .. } => format!("[{name} {node_count}]"),
+                PaletteItem::CategoryHeader {
+                    name, node_count, ..
+                } => format!("[{name} {node_count}]"),
                 PaletteItem::NodeEntry { def, .. } => def.id.clone(),
             })
             .collect()
@@ -421,13 +454,29 @@ mod tests {
         ];
 
         let strings = filter_compatible_palette_items(&all, &PinDataType::from_type_str("String"));
-        assert_eq!(ids(&strings), ["[Math 2]", "concat", "generic", "[Debug 2]", "print", "print_any"]);
+        assert_eq!(
+            ids(&strings),
+            [
+                "[Math 2]",
+                "concat",
+                "generic",
+                "[Debug 2]",
+                "print",
+                "print_any"
+            ]
+        );
 
         let ints = filter_compatible_palette_items(&all, &PinDataType::from_type_str("i64"));
-        assert_eq!(ids(&ints), ["[Math 2]", "add_int", "generic", "[Debug 1]", "print_any"]);
+        assert_eq!(
+            ids(&ints),
+            ["[Math 2]", "add_int", "generic", "[Debug 1]", "print_any"]
+        );
 
         let exec = filter_compatible_palette_items(&all, &PinDataType::execution());
-        assert_eq!(ids(&exec), ["[Flow 1]", "branch", "[Debug 2]", "print", "print_any"]);
+        assert_eq!(
+            ids(&exec),
+            ["[Flow 1]", "branch", "[Debug 2]", "print", "print_any"]
+        );
     }
 }
 
@@ -470,8 +519,16 @@ mod fold_tests {
         items
             .iter()
             .map(|item| match item {
-                PaletteItem::CategoryHeader { name, expanded, matched, .. } => {
-                    format!("[{name} {} {matched:?}]", if *expanded { "open" } else { "shut" })
+                PaletteItem::CategoryHeader {
+                    name,
+                    expanded,
+                    matched,
+                    ..
+                } => {
+                    format!(
+                        "[{name} {} {matched:?}]",
+                        if *expanded { "open" } else { "shut" }
+                    )
                 }
                 PaletteItem::NodeEntry { def, .. } => def.id.clone(),
             })
@@ -492,7 +549,10 @@ mod fold_tests {
     fn a_category_the_user_opened_shows_all_its_nodes() {
         let open: HashSet<String> = ["Math".to_string()].into();
         let rows = visible_items(&library(), "", &open, false);
-        assert_eq!(shape(&rows), ["[Math open None]", "add", "sub", "sin", "[Flow shut None]"]);
+        assert_eq!(
+            shape(&rows),
+            ["[Math open None]", "add", "sub", "sin", "[Flow shut None]"]
+        );
     }
 
     #[test]
@@ -501,11 +561,22 @@ mod fold_tests {
         // Matches by name or description: Add (sum), Subtract, Sine / Branch (else).
         assert_eq!(
             shape(&rows),
-            ["[Math open Some(3)]", "add", "sub", "sin", "[Flow open Some(1)]", "branch"]
+            [
+                "[Math open Some(3)]",
+                "add",
+                "sub",
+                "sin",
+                "[Flow open Some(1)]",
+                "branch"
+            ]
         );
 
         let rows = visible_items(&library(), "loop", &none(), false);
-        assert_eq!(shape(&rows), ["[Flow open Some(1)]", "loop"], "Math has no match and is hidden");
+        assert_eq!(
+            shape(&rows),
+            ["[Flow open Some(1)]", "loop"],
+            "Math has no match and is hidden"
+        );
     }
 
     #[test]

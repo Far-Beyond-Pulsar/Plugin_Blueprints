@@ -67,7 +67,10 @@ impl BlueprintEditorPanel {
 
     /// Reload the blueprint from its file path
     pub fn plugin_reload(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        tracing::info!(">>> plugin_reload called: current_class_path={:?}", self.current_class_path);
+        tracing::info!(
+            ">>> plugin_reload called: current_class_path={:?}",
+            self.current_class_path
+        );
         if let Some(path) = self.get_graph_file_path() {
             match self.load_from_path(&path, window, cx) {
                 Ok(()) => {
@@ -112,13 +115,23 @@ impl BlueprintEditorPanel {
         // Log what's in the graph panels before sync
         for (tid, canvas) in &self.graph_panels {
             let cg = canvas.read(cx);
-            tracing::info!(">>> save_to_path: canvas tab={} nodes={} connections={}", tid, cg.graph.nodes.len(), cg.graph.connections.len());
+            tracing::info!(
+                ">>> save_to_path: canvas tab={} nodes={} connections={}",
+                tid,
+                cg.graph.nodes.len(),
+                cg.graph.connections.len()
+            );
         }
 
         // Log what's in open_tabs before sync
         for tab in &self.open_tabs {
-            tracing::info!(">>> save_to_path: pre-sync tab={} is_main={} nodes={} connections={}",
-                tab.id, tab.is_main, tab.graph.nodes.len(), tab.graph.connections.len());
+            tracing::info!(
+                ">>> save_to_path: pre-sync tab={} is_main={} nodes={} connections={}",
+                tab.id,
+                tab.is_main,
+                tab.graph.nodes.len(),
+                tab.graph.connections.len()
+            );
         }
 
         // Flush every open canvas's live graph into its tab snapshot before
@@ -127,8 +140,13 @@ impl BlueprintEditorPanel {
 
         // Log what's in open_tabs after sync
         for tab in &self.open_tabs {
-            tracing::info!(">>> save_to_path: post-sync tab={} is_main={} nodes={} connections={}",
-                tab.id, tab.is_main, tab.graph.nodes.len(), tab.graph.connections.len());
+            tracing::info!(
+                ">>> save_to_path: post-sync tab={} is_main={} nodes={} connections={}",
+                tab.id,
+                tab.is_main,
+                tab.graph.nodes.len(),
+                tab.graph.connections.len()
+            );
         }
 
         // Convert current graph state to BlueprintAsset
@@ -155,7 +173,11 @@ impl BlueprintEditorPanel {
         std::fs::write(&target_path, &content)
             .map_err(|e| format!("Failed to write file: {}", e))?;
 
-        tracing::info!(">>> save_to_path: wrote {} bytes to {:?}", content.len(), target_path);
+        tracing::info!(
+            ">>> save_to_path: wrote {} bytes to {:?}",
+            content.len(),
+            target_path
+        );
         Ok(())
     }
 
@@ -169,14 +191,19 @@ impl BlueprintEditorPanel {
         let source_path = Self::resolve_blueprint_path(path);
         tracing::info!(
             ">>> load_from_path: path={:?} resolved={:?}, current open_tabs={}",
-            path, source_path,
+            path,
+            source_path,
             self.open_tabs.len(),
         );
 
         // Read file content
         let content = std::fs::read_to_string(&source_path)
             .map_err(|e| format!("Failed to read file: {}", e))?;
-        tracing::info!(">>> load_from_path: read {} bytes from {:?}", content.len(), source_path);
+        tracing::info!(
+            ">>> load_from_path: read {} bytes from {:?}",
+            content.len(),
+            source_path
+        );
 
         // Try to deserialize as current format first
         let asset = match formats::deserialize_blueprint(&content) {
@@ -437,7 +464,8 @@ impl BlueprintEditorPanel {
 
             if let Some(main_view) = editor_state.graph_view_states.get("main") {
                 if let Some(main_tab) = self.open_tabs.get_mut(0) {
-                    main_tab.graph.pan_offset = Point::new(main_view.pan_offset_x, main_view.pan_offset_y);
+                    main_tab.graph.pan_offset =
+                        Point::new(main_view.pan_offset_x, main_view.pan_offset_y);
                     main_tab.graph.zoom_level = main_view.zoom;
                 }
             }
@@ -479,9 +507,7 @@ impl BlueprintEditorPanel {
         // initialize_workspace() which reads open_tabs directly.
         // For reload (workspace already exists) we rebuild panels in-place.
         self.graph_workspace_tabs_dirty = true;
-        tracing::info!(
-            ">>> load_blueprint_asset: refreshing workspace tabs",
-        );
+        tracing::info!(">>> load_blueprint_asset: refreshing workspace tabs",);
         self.refresh_graph_workspace_tabs(window, cx);
 
         tracing::info!(
@@ -601,7 +627,11 @@ impl BlueprintEditorPanel {
         std::fs::write(export_path, &content)
             .map_err(|e| format!("Failed to export blueprint: {}", e))?;
 
-        tracing::info!(">>> export_blueprint: wrote {} bytes to {:?}", content.len(), export_path);
+        tracing::info!(
+            ">>> export_blueprint: wrote {} bytes to {:?}",
+            content.len(),
+            export_path
+        );
         Ok(())
     }
 }

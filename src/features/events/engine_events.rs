@@ -108,6 +108,19 @@ pub fn known_event_signatures(class_path: Option<&Path>) -> Vec<EventSignature> 
     builtin_events().into_iter().chain(project_events(class_path)).map(|e| e.signature).collect()
 }
 
+/// Typed component event signatures from the host catalog, combined with
+/// built-in and project-defined events for graph validation/linking. The
+/// host snapshot is authoritative across editor DLL boundaries.
+pub fn known_event_signatures_with_components(
+    class_path: Option<&Path>,
+    component_events: &[plugin_editor_api::ComponentEventMetadata],
+) -> Vec<EventSignature> {
+    known_event_signatures(class_path)
+        .into_iter()
+        .chain(component_event_signatures(component_events))
+        .collect()
+}
+
 /// The editor's event definitions as compiler input.
 pub fn event_sources(defs: &[crate::core::graph::EventDefinition]) -> Vec<blueprint_compiler::EventSource> {
     defs.iter()
@@ -167,9 +180,80 @@ pub fn event_node_definitions(
     event_nodes(&events).iter().map(|n| (n.category.clone(), node_definition(n))).collect()
 }
 
+/// Build typed Blueprint entry points for host-owned component events. Each
+/// node requires a reference to the emitting component and exposes the
+/// declaration's original typed fields as outputs.
+pub fn component_event_node_definitions(
+    events: &[plugin_editor_api::ComponentEventMetadata],
+) -> Vec<(String, NodeDefinition)> {
+    let mut nodes = Vec::with_capacity(events.len());
+    for event in events {
+        let Some((owner, member)) = event.event.name.split_once('.') else {
+            tracing::warn!(event = %event.event.name, "component event name is not class-qualified");
+            continue;
+        };
+        if owner != event.component_class {
+            tracing::warn!(
+                event = %event.event.name,
+                registered_component = %event.component_class,
+                event_component = owner,
+                "component event owner does not match its stable name"
+            );
+            continue;
+        }
+
+        let title = format!("On {} ({})", title_case(member), event.component_class);
+        let mut outputs = vec![pin("Body", "execution", PinType::Output)];
+        outputs.extend(event.event.fields.iter().map(|field| {
+            pin(
+                &field.name,
+                &blueprint_compiler::palette::pin_type_name(&field.ty),
+                PinType::Output,
+            )
+        }));
+
+        nodes.push((
+            format!("Events/Components/{}", event.component_class),
+            NodeDefinition {
+                id: format!("event::on_component::{}", event.event.name),
+                name: title.clone(),
+                icon: "📡".to_string(),
+                description: format!("{title} — subscribe to `{}` on a component instance", event.event.name),
+                documentation: format!(
+                    "Runs when `{}` is emitted by the connected `{}` component instance. The component reference must come from a matching `Get {}` node.",
+                    event.event.name, event.component_class, event.component_class
+                ),
+                inputs: vec![pin("component_ref", &event.component_class, PinType::Input)],
+                outputs,
+                properties: std::collections::HashMap::from([(
+                    "component_type".to_owned(),
+                    event.component_class.clone(),
+                )]),
+                color: Some("#C0392B".to_string()),
+                is_event: true,
+            },
+        ));
+    }
+    nodes.sort_by(|a, b| (&a.0, &a.1.name).cmp(&(&b.0, &b.1.name)));
+    nodes
+}
+
+/// Preserve local field types, including structured `Type::Object` values;
+/// Gamma's `Bytes` descriptor does not contain enough information to rebuild
+/// those Blueprint pins.
+pub fn component_event_signatures(
+    events: &[plugin_editor_api::ComponentEventMetadata],
+) -> Vec<EventSignature> {
+    events.iter().map(|event| EventSignature::from(&event.event)).collect()
+}
+
 /// Title and whether it is an entry point, for an `event::<kind>::<name>`
 /// node loaded from a file.
 pub fn describe_node_type(node_type: &str) -> Option<(String, bool)> {
+    if let Some(event_name) = node_type.strip_prefix("event::on_component::") {
+        let (component, member) = event_name.split_once('.')?;
+        return Some((format!("On {} ({component})", title_case(member)), true));
+    }
     let rest = node_type.strip_prefix("event::")?;
     let (kind, name) = rest.split_once("::")?;
     Some(match kind {
@@ -179,4 +263,16 @@ pub fn describe_node_type(node_type: &str) -> Option<(String, bool)> {
         "to_class" => (format!("Send {name} to Class"), false),
         _ => return None,
     })
+}
+
+fn title_case(snake: &str) -> String {
+    snake
+        .split('_')
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }

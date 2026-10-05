@@ -178,6 +178,7 @@ pub fn event_nodes(events: &[PaletteEvent]) -> Vec<EventNode> {
             pulsar_script_vm::SubscriptionScope::Self_ => "self",
             pulsar_script_vm::SubscriptionScope::Global => "global",
             pulsar_script_vm::SubscriptionScope::Class => "class",
+            pulsar_script_vm::SubscriptionScope::Component(_) => "component",
         };
         nodes.push(EventNode {
             node_type: format!("event::on::{}", sig.name),

@@ -136,6 +136,8 @@ pub struct BlueprintEditorPanel {
     pub selected_macro: Option<usize>,
     // Event system (mirrors macro storage pattern)
     pub local_event_defs: Vec<crate::core::graph::EventDefinition>,
+    /// Host-owned event signatures used by the palette and graph linker.
+    pub(crate) component_event_metadata: Vec<plugin_editor_api::ComponentEventMetadata>,
     pub selected_event: Option<usize>,
 
     // Rename state — shared across event/macro/variable panels
@@ -564,6 +566,10 @@ impl BlueprintEditorPanel {
             local_macros: Vec::new(),
             selected_macro: None,
             local_event_defs: Vec::new(),
+            component_event_metadata: cx
+                .try_global::<plugin_editor_api::ComponentEventCatalog>()
+                .map(|catalog| catalog.events.clone())
+                .unwrap_or_default(),
             selected_event: None,
             renaming_target: None,
             rename_input,

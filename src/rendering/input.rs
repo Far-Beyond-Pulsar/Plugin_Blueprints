@@ -10,13 +10,13 @@
 // constants as the GPU renderer, so click targets exactly match what's drawn.
 
 use crate::core::types::NodeType;
+use crate::core::types::PinDataType as DataType;
 use crate::editor::panel::ResizeHandle;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::{
     NodeGraphRenderer, BODY_PAD, HEADER_H, PIN_GAP, PIN_ROW_H, PIN_SIZE, SEP_H,
 };
 use gpui::{CursorStyle, *};
-use crate::core::types::PinDataType as DataType;
 use ui::PixelsExt;
 
 // ─── coordinate conversion ────────────────────────────────────────────────────
@@ -52,7 +52,13 @@ fn delete_hovered_connection(
     }
 
     if let Some(conn_id) = canvas.hovered_connection.clone() {
-        if let Some(conn) = canvas.graph.connections.iter().find(|c| c.id == conn_id).cloned() {
+        if let Some(conn) = canvas
+            .graph
+            .connections
+            .iter()
+            .find(|c| c.id == conn_id)
+            .cloned()
+        {
             let mut cmd = crate::features::undo::DeleteConnectionCommand::new(conn);
             cmd.execute(canvas, cx);
             canvas.push_undo_command(crate::features::undo::Command::DeleteConnection(cmd));
@@ -86,7 +92,13 @@ fn hit_output_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, 
             pin_hit_radius(canvas, 0.9, 6.0)
         };
         for (i, pin) in node.outputs.iter().enumerate() {
-            let c = NodeGraphRenderer::pin_canvas_pos(node, false, i, Some(pin.id.as_str()), &canvas.graph);
+            let c = NodeGraphRenderer::pin_canvas_pos(
+                node,
+                false,
+                i,
+                Some(pin.id.as_str()),
+                &canvas.graph,
+            );
             if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
@@ -114,7 +126,13 @@ fn hit_input_pin(
             if !src_type.is_compatible_with(&pin.data_type) {
                 continue;
             }
-            let c = NodeGraphRenderer::pin_canvas_pos(node, true, i, Some(pin.id.as_str()), &canvas.graph);
+            let c = NodeGraphRenderer::pin_canvas_pos(
+                node,
+                true,
+                i,
+                Some(pin.id.as_str()),
+                &canvas.graph,
+            );
             if point_distance(cp, c) <= r {
                 return Some((node.id.clone(), pin.id.clone()));
             }
@@ -133,7 +151,11 @@ fn hit_any_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, Str
         for (is_input, pins) in [(true, &node.inputs), (false, &node.outputs)] {
             for (i, pin) in pins.iter().enumerate() {
                 let c = NodeGraphRenderer::pin_canvas_pos(
-                    node, is_input, i, Some(pin.id.as_str()), &canvas.graph,
+                    node,
+                    is_input,
+                    i,
+                    Some(pin.id.as_str()),
+                    &canvas.graph,
                 );
                 if point_distance(cp, c) <= r {
                     return Some((node.id.clone(), pin.id.clone()));
@@ -194,7 +216,11 @@ fn comment_resize_edge(canvas: &GraphCanvasPanel) -> f32 {
     (6.0 / canvas.graph.zoom_level.max(0.25)).clamp(3.0, 12.0)
 }
 
-fn hit_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel, comment_id: &str) -> Option<ResizeHandle> {
+fn hit_comment_resize(
+    gp: Point<f32>,
+    canvas: &GraphCanvasPanel,
+    comment_id: &str,
+) -> Option<ResizeHandle> {
     let comment = canvas.graph.comments.iter().find(|c| c.id == comment_id)?;
     let left = comment.position.x;
     let top = comment.position.y;
@@ -219,7 +245,10 @@ fn hit_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel, comment_id: &st
     }
 }
 
-fn hit_any_comment_resize(gp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, ResizeHandle)> {
+fn hit_any_comment_resize(
+    gp: Point<f32>,
+    canvas: &GraphCanvasPanel,
+) -> Option<(String, ResizeHandle)> {
     let edge = comment_resize_edge(canvas);
     for comment in canvas.graph.comments.iter().rev() {
         let left = comment.position.x - edge;
@@ -245,10 +274,18 @@ fn cursor_for_resize_handle(handle: &ResizeHandle) -> CursorStyle {
     }
 }
 
-fn update_graph_cursor(window: &mut Window, canvas: &GraphCanvasPanel, cp: Point<f32>, gp: Point<f32>) {
+fn update_graph_cursor(
+    window: &mut Window,
+    canvas: &GraphCanvasPanel,
+    cp: Point<f32>,
+    gp: Point<f32>,
+) {
     let cursor = if let Some((_, handle)) = &canvas.resizing_comment {
         cursor_for_resize_handle(handle)
-    } else if canvas.dragging_comment.is_some() || canvas.dragging_node.is_some() || canvas.is_panning() {
+    } else if canvas.dragging_comment.is_some()
+        || canvas.dragging_node.is_some()
+        || canvas.is_panning()
+    {
         CursorStyle::ClosedHand
     } else if canvas.dragging_connection.is_some() {
         CursorStyle::DragLink
@@ -302,7 +339,12 @@ pub fn on_mouse_down_right(
                 canvas
                     .debug_pin_values
                     .get(&(node, pin.clone()))
-                    .map(|value| (format!("{pin}: {value}"), point(px(cp.x + 12.0), px(cp.y + 12.0))))
+                    .map(|value| {
+                        (
+                            format!("{pin}: {value}"),
+                            point(px(cp.x + 12.0), px(cp.y + 12.0)),
+                        )
+                    })
             });
             let changed = match debug_tooltip {
                 Some((tooltip, position)) => {
@@ -447,15 +489,14 @@ pub fn on_mouse_down_left(
                 canvas.last_comment_click_id = None;
                 // ── Double-click detection ────────────────────────────────────
                 let now = std::time::Instant::now();
-                let is_double_click = if let (Some(t), Some(p)) =
-                    (canvas.last_click_time, canvas.last_click_pos)
-                {
-                    let ms = now.duration_since(t).as_millis();
-                    let d = ((gp.x - p.x).powi(2) + (gp.y - p.y).powi(2)).sqrt();
-                    ms < 500 && d < 50.0
-                } else {
-                    false
-                };
+                let is_double_click =
+                    if let (Some(t), Some(p)) = (canvas.last_click_time, canvas.last_click_pos) {
+                        let ms = now.duration_since(t).as_millis();
+                        let d = ((gp.x - p.x).powi(2) + (gp.y - p.y).powi(2)).sqrt();
+                        ms < 500 && d < 50.0
+                    } else {
+                        false
+                    };
 
                 if is_double_click {
                     if let Some(node) = canvas.graph.nodes.iter().find(|n| n.id == node_id) {
@@ -471,9 +512,7 @@ pub fn on_mouse_down_left(
                                         if let Some(p) = panel_weak.upgrade() {
                                             p.update(cx, |panel, cx| {
                                                 panel.open_macro_from_instance(
-                                                    &macro_id,
-                                                    window,
-                                                    cx,
+                                                    &macro_id, window, cx,
                                                 );
                                             });
                                         }
@@ -486,7 +525,12 @@ pub fn on_mouse_down_left(
                         if node.node_type == NodeType::CustomEventDispatch {
                             if let Some(uid) = node.properties.get("event_uid") {
                                 let handler_def_id = format!("custom_event:{}", uid);
-                                if canvas.graph.nodes.iter().any(|n| n.definition_id == handler_def_id) {
+                                if canvas
+                                    .graph
+                                    .nodes
+                                    .iter()
+                                    .any(|n| n.definition_id == handler_def_id)
+                                {
                                     canvas.animate_pan_to_node_by_def_id(&handler_def_id);
                                 }
                             }
@@ -496,12 +540,15 @@ pub fn on_mouse_down_left(
                         }
 
                         // Double-click on custom event node – select in events sidebar
-                        if node.node_type == NodeType::CustomEvent
-                        {
+                        if node.node_type == NodeType::CustomEvent {
                             if let Some(uid) = node.properties.get("event_uid") {
                                 if let Some(panel) = canvas.panel.upgrade() {
                                     panel.update(cx, |panel, cx| {
-                                        if let Some(idx) = panel.local_event_defs.iter().position(|d| d.uid == *uid) {
+                                        if let Some(idx) = panel
+                                            .local_event_defs
+                                            .iter()
+                                            .position(|d| d.uid == *uid)
+                                        {
                                             panel.selected_event = Some(idx);
                                             cx.notify();
                                         }
@@ -598,8 +645,7 @@ pub fn on_mouse_move(
 
             // Threshold-detect right-drag → pan
             if let Some(right_start) = canvas.right_click_start {
-                let dist =
-                    ((mp.x - right_start.x).powi(2) + (mp.y - right_start.y).powi(2)).sqrt();
+                let dist = ((mp.x - right_start.x).powi(2) + (mp.y - right_start.y).powi(2)).sqrt();
                 if dist > canvas.right_click_threshold {
                     canvas.start_panning(right_start, cx);
                     canvas.right_click_start = None;
@@ -629,7 +675,9 @@ pub fn on_mouse_move(
             {
                 None
             } else {
-                canvas.find_connection_near_point_precise(gp).map(|conn| conn.id)
+                canvas
+                    .find_connection_near_point_precise(gp)
+                    .map(|conn| conn.id)
             };
 
             if canvas.dragging_comment.is_some() {
@@ -679,8 +727,9 @@ pub fn on_mouse_up_left(
                 canvas.finish_dragging_variable(gp, cx);
             } else if let Some(drag) = canvas.dragging_connection.clone() {
                 // Try dropping on any pin (input or output) before falling through to palette
-                let drop_target = hit_input_pin(cp, canvas, &drag.source_node, &drag.source_pin_type)
-                    .or_else(|| hit_any_pin(cp, canvas));
+                let drop_target =
+                    hit_input_pin(cp, canvas, &drag.source_node, &drag.source_pin_type)
+                        .or_else(|| hit_any_pin(cp, canvas));
                 if let Some((nid, pid)) = drop_target {
                     canvas.complete_connection_on_pin(nid, pid, cx);
                 } else {

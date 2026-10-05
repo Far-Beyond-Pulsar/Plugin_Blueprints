@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use blueprint_graph::ConnectionType;
 use gpui::{Point, Size};
 use plugin_editor_api::{AiToolDefinition, PluginError};
 use serde_json::{json, Value};
@@ -9,7 +10,6 @@ use std::time::Instant;
 use tool_registry::{PluginToolRegistry, ToolContext, ToolRegistry};
 use tool_registry_macros::tool;
 use tracing::debug;
-use blueprint_graph::ConnectionType;
 
 use crate::core::definitions::NodeDefinitions;
 use crate::core::graph::BlueprintGraph;

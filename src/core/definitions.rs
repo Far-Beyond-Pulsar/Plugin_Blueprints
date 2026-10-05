@@ -78,7 +78,8 @@ pub(crate) fn extract_canonical_node_metadata(
 
     for node_meta in metadata.values_mut() {
         for param in node_meta.params.iter_mut() {
-            param.param_type = blueprint_graph::DataType::from_type_str(&param.param_type).to_string();
+            param.param_type =
+                blueprint_graph::DataType::from_type_str(&param.param_type).to_string();
         }
 
         if let Some(return_type) = node_meta.return_type.as_mut() {
@@ -209,7 +210,9 @@ impl NodeDefinitions {
             let pin = |id: &str, ty: &str, pin_type: PinType| PinDefinition {
                 id: id.to_string(),
                 name: id.to_string(),
-                data_type: PinDataType::from_type_str(blueprint_graph::DataType::from_type_str(ty).to_string()),
+                data_type: PinDataType::from_type_str(
+                    blueprint_graph::DataType::from_type_str(ty).to_string(),
+                ),
                 pin_type,
             };
             let mut inputs = Vec::new();
@@ -218,21 +221,36 @@ impl NodeDefinitions {
                 inputs.push(pin("exec", "execution", PinType::Input));
                 outputs.push(pin("exec_out", "execution", PinType::Output));
             }
-            inputs.extend(node.inputs.iter().map(|(id, ty)| pin(id, ty, PinType::Input)));
-            outputs.extend(node.outputs.iter().map(|(id, ty)| pin(id, ty, PinType::Output)));
+            inputs.extend(
+                node.inputs
+                    .iter()
+                    .map(|(id, ty)| pin(id, ty, PinType::Input)),
+            );
+            outputs.extend(
+                node.outputs
+                    .iter()
+                    .map(|(id, ty)| pin(id, ty, PinType::Output)),
+            );
             let description = format!("{} ({})", node.name, node.category);
-            categories_map.entry(node.category.clone()).or_default().push(NodeDefinition {
-                id: node.node_type.clone(),
-                name: node.name.clone(),
-                icon: "⚙️".to_string(),
-                documentation: if node.doc.is_empty() { description.clone() } else { node.doc.clone() },
-                description,
-                inputs,
-                outputs,
-                properties: HashMap::new(),
-                color: None,
-                is_event: false,
-            });
+            categories_map
+                .entry(node.category.clone())
+                .or_default()
+                .push(NodeDefinition {
+                    id: node.node_type.clone(),
+                    name: node.name.clone(),
+                    icon: "⚙️".to_string(),
+                    documentation: if node.doc.is_empty() {
+                        description.clone()
+                    } else {
+                        node.doc.clone()
+                    },
+                    description,
+                    inputs,
+                    outputs,
+                    properties: HashMap::new(),
+                    color: None,
+                    is_event: false,
+                });
         }
     }
 
@@ -287,7 +305,8 @@ impl NodeDefinitions {
 
             // Add regular inputs
             for param in node_meta.params.iter() {
-                let canonical = blueprint_graph::DataType::from_type_str(&param.param_type).to_string();
+                let canonical =
+                    blueprint_graph::DataType::from_type_str(&param.param_type).to_string();
                 inputs.push(PinDefinition {
                     id: param.name.to_string(),
                     name: param.name.to_string(),
@@ -308,7 +327,8 @@ impl NodeDefinitions {
 
             // Add multi-output params (Break nodes, etc.)
             for out in &node_meta.output_params {
-                let canonical = blueprint_graph::DataType::from_type_str(&out.param_type).to_string();
+                let canonical =
+                    blueprint_graph::DataType::from_type_str(&out.param_type).to_string();
                 outputs.push(PinDefinition {
                     id: out.name.clone(),
                     name: out.name.clone(),
@@ -322,7 +342,8 @@ impl NodeDefinitions {
             if node_meta.output_params.is_empty() {
                 if let Some(return_type) = &node_meta.return_type {
                     let canonical =
-                        blueprint_graph::DataType::from_type_str(&return_type.type_string).to_string();
+                        blueprint_graph::DataType::from_type_str(&return_type.type_string)
+                            .to_string();
                     if canonical != "()" && canonical != "execution" {
                         outputs.push(PinDefinition {
                             id: "result".to_string(),

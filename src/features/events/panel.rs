@@ -71,10 +71,10 @@ impl EventsRenderer {
             .iter()
             .enumerate()
             .map(|(index, def)| {
-                let is_renaming = panel
-                    .renaming_target
-                    .as_ref()
-                    .map_or(false, |t| matches!(t, RenameTarget::Event(uid) if *uid == def.uid));
+                let is_renaming = panel.renaming_target.as_ref().map_or(
+                    false,
+                    |t| matches!(t, RenameTarget::Event(uid) if *uid == def.uid),
+                );
                 EventHierarchyItem {
                     def: def.clone(),
                     index,

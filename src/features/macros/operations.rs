@@ -1,13 +1,13 @@
 //! Macro operations — creating, opening, editing, and placing macro instances.
 
 use crate::core::graph::BlueprintGraph;
+use crate::core::types::PinDataType as DataType;
 use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::GraphTab;
 use crate::rendering::layout;
 use gpui::*;
 use std::collections::HashMap;
-use crate::core::types::PinDataType as DataType;
 use ui::PixelsExt;
 
 impl BlueprintEditorPanel {
@@ -45,7 +45,10 @@ impl BlueprintEditorPanel {
         }
 
         // Flush the current active canvas into its tab before leaving.
-        let active_tab_id = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone());
+        let active_tab_id = self
+            .open_tabs
+            .get(self.active_tab_index)
+            .map(|t| t.id.clone());
         if let Some(tab_id) = active_tab_id {
             if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
                 let live = canvas.read(cx).graph.clone();
@@ -424,31 +427,50 @@ impl BlueprintEditorPanel {
             cx.defer(move |cx| {
                 canvas.update(cx, |canvas_panel, cx| {
                     // Entry sentinel
-                    if let Some(node) = canvas_panel.graph.nodes.iter_mut().find(|n| n.id == entry_id_d) {
+                    if let Some(node) = canvas_panel
+                        .graph
+                        .nodes
+                        .iter_mut()
+                        .find(|n| n.id == entry_id_d)
+                    {
                         node.title = macro_name_d.clone();
                         node.outputs = entry_outputs_d.clone();
                         let rows = node.outputs.len().max(1);
                         node.size.height = layout::node_height_for_pin_rows(rows);
                     } else {
                         let rows = entry_outputs_d.len().max(1);
-                        canvas_panel.graph.nodes.insert(0, BlueprintNode {
-                            id: entry_id_d.clone(),
-                            definition_id: "macro_entry".to_string(),
-                            title: macro_name_d.clone(),
-                            icon: "▶".to_string(),
-                            node_type: NodeType::MacroEntry,
-                            position: Point::new(60.0, 180.0),
-                            size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
-                            inputs: vec![],
-                            outputs: entry_outputs_d.clone(),
-                            properties: HashMap::new(),
-                            is_selected: false,
-                            description: format!("Entry — provides inputs into '{}'", macro_name_d),
-                            color: Some("#7C3AED".to_string()),
-                        });
+                        canvas_panel.graph.nodes.insert(
+                            0,
+                            BlueprintNode {
+                                id: entry_id_d.clone(),
+                                definition_id: "macro_entry".to_string(),
+                                title: macro_name_d.clone(),
+                                icon: "▶".to_string(),
+                                node_type: NodeType::MacroEntry,
+                                position: Point::new(60.0, 180.0),
+                                size: gpui::Size::new(
+                                    180.0,
+                                    layout::node_height_for_pin_rows(rows),
+                                ),
+                                inputs: vec![],
+                                outputs: entry_outputs_d.clone(),
+                                properties: HashMap::new(),
+                                is_selected: false,
+                                description: format!(
+                                    "Entry — provides inputs into '{}'",
+                                    macro_name_d
+                                ),
+                                color: Some("#7C3AED".to_string()),
+                            },
+                        );
                     }
                     // Exit sentinel
-                    if let Some(node) = canvas_panel.graph.nodes.iter_mut().find(|n| n.id == exit_id_d) {
+                    if let Some(node) = canvas_panel
+                        .graph
+                        .nodes
+                        .iter_mut()
+                        .find(|n| n.id == exit_id_d)
+                    {
                         node.title = format!("{} (Return)", macro_name_d);
                         node.inputs = exit_inputs_d.clone();
                         let rows = node.inputs.len().max(1);
@@ -555,19 +577,31 @@ impl BlueprintEditorPanel {
             cx.defer(move |cx| {
                 canvas.update(cx, |canvas_panel, cx| {
                     for node in canvas_panel.graph.nodes.iter_mut() {
-                        if node.definition_id == def_prefix_d && node.node_type == NodeType::MacroInstance {
-                            node.inputs = macro_def_d.interface.inputs.iter().map(|p| Pin {
-                                id: p.id.clone(),
-                                name: p.name.clone(),
-                                pin_type: PinType::Input,
-                                data_type: DataType::from_type_str(p.data_type.to_string()),
-                            }).collect();
-                            node.outputs = macro_def_d.interface.outputs.iter().map(|p| Pin {
-                                id: p.id.clone(),
-                                name: p.name.clone(),
-                                pin_type: PinType::Output,
-                                data_type: DataType::from_type_str(p.data_type.to_string()),
-                            }).collect();
+                        if node.definition_id == def_prefix_d
+                            && node.node_type == NodeType::MacroInstance
+                        {
+                            node.inputs = macro_def_d
+                                .interface
+                                .inputs
+                                .iter()
+                                .map(|p| Pin {
+                                    id: p.id.clone(),
+                                    name: p.name.clone(),
+                                    pin_type: PinType::Input,
+                                    data_type: DataType::from_type_str(p.data_type.to_string()),
+                                })
+                                .collect();
+                            node.outputs = macro_def_d
+                                .interface
+                                .outputs
+                                .iter()
+                                .map(|p| Pin {
+                                    id: p.id.clone(),
+                                    name: p.name.clone(),
+                                    pin_type: PinType::Output,
+                                    data_type: DataType::from_type_str(p.data_type.to_string()),
+                                })
+                                .collect();
                             let rows = node.inputs.len().max(node.outputs.len()).max(1);
                             node.size.height = layout::node_height_for_pin_rows(rows);
                         }
