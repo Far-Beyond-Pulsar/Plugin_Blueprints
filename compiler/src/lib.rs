@@ -1841,24 +1841,21 @@ impl<'a> Compiler<'a> {
 }
 
 /// Return the canonical `ComponentType.event_name` for a component event node.
-/// Older saved graphs used `event:on_component:ComponentType:event_name`, while
-/// current graphs use `event::on_component::ComponentType.event_name`.
+/// Older saved graphs used `event:on_component:` with either `:` or `.` before
+/// the event name; current graphs use `event::on_component::Component.event`.
 fn component_event_name(node_type: &str) -> Option<String> {
     if let Some(event) = node_type.strip_prefix("event::on_component::") {
         return Some(event.to_owned());
     }
-    // An intermediate editor version wrote a single colon after `event`, but
-    // retained the canonical `Component.event` suffix.
-    if let Some(event) = node_type.strip_prefix("event:on_component::") {
-        return Some(event.to_owned());
+    // Saved graphs exist with both the old `event:on_component:` prefix and
+    // both `Component:event` and `Component.event` suffix separators. One
+    // intermediate version also wrote a doubled separator after the prefix.
+    let legacy = node_type.strip_prefix("event:on_component:")?.trim_start_matches(':');
+    if let Some((component, event)) = legacy.split_once(':') {
+        return (!component.is_empty() && !event.is_empty()).then(|| format!("{component}.{event}"));
     }
-
-    let legacy = node_type.strip_prefix("event:on_component:")?;
-    let (component, event) = legacy.split_once(':')?;
-    if component.is_empty() || event.is_empty() {
-        return None;
-    }
-    Some(format!("{component}.{event}"))
+    let (component, event) = legacy.split_once('.')?;
+    (!component.is_empty() && !event.is_empty()).then(|| format!("{component}.{event}"))
 }
 
 /// Collect a concrete type and any type nested inside it. Generic templates

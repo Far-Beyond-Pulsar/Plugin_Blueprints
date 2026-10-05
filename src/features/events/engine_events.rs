@@ -254,14 +254,11 @@ pub fn describe_node_type(node_type: &str) -> Option<(String, bool)> {
         let (component, member) = event_name.split_once('.')?;
         return Some((format!("On {} ({component})", title_case(member)), true));
     }
-    if let Some(event_name) = node_type.strip_prefix("event:on_component::") {
-        let (component, member) = event_name.split_once('.')?;
-        return Some((format!("On {} ({component})", title_case(member)), true));
-    }
-    // Keep old serialized component event nodes readable. Their IDs used
-    // colons as separators before the canonical double-colon format shipped.
+    // Keep legacy serialized component event node IDs readable. Versions in
+    // the wild used either a colon or a dot between component and event names.
     if let Some(legacy) = node_type.strip_prefix("event:on_component:") {
-        let (component, member) = legacy.split_once(':')?;
+        let legacy = legacy.trim_start_matches(':');
+        let (component, member) = legacy.split_once(':').or_else(|| legacy.split_once('.'))?;
         if component.is_empty() || member.is_empty() {
             return None;
         }
