@@ -695,8 +695,9 @@ impl NodeGraphRenderer {
                 let label = node.title.to_ascii_uppercase();
                 let x = scr.x + gw * zoom * 0.5;
                 let y = scr.y + gh * zoom * 0.5 + 6.0 * zoom;
-                text_calls.push((label.clone(), x, y, 18.0 * zoom, [0.96, 0.98, 1.0, 1.0], TextAlign::Center));
-                text_calls.push((label, x + 0.8 * zoom, y, 18.0 * zoom, [0.96, 0.98, 1.0, 1.0], TextAlign::Center));
+                let label_color = [0.76, 0.78, 0.82, 1.0];
+                text_calls.push((label.clone(), x, y, 18.0 * zoom, label_color, TextAlign::Center));
+                text_calls.push((label, x + 0.8 * zoom, y, 18.0 * zoom, label_color, TextAlign::Center));
             } else if zoom >= LOD_TITLES && !is_reroute {
                 let scr = Self::graph_to_screen_pos(node.position, &canvas.graph);
                 text_calls.push((

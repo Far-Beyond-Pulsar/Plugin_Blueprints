@@ -118,7 +118,8 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         if aa <= 0.0 { discard; }
         let border = smoothstep(-BORDER_PX - 0.5, -BORDER_PX + 0.5, d)
                    * smoothstep(-0.5, 0.5, -d);
-        var base = mix(in.body_color, in.header_color, 0.25);
+        // Conversion pills use the same slate fill as regular node bodies.
+        var base = in.body_color;
         base = mix(base, in.border_color, border);
         if is_selected {
             let glow = smoothstep(SELECT_GLOW_PX, 0.0, d) * smoothstep(-0.5, 0.5, d);
