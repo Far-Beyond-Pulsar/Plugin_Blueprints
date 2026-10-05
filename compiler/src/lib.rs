@@ -521,7 +521,26 @@ impl<'a> Compiler<'a> {
                 let Some(variable) = self.component_subscription_variable(node, component_type) else { continue };
                 subscription = Some((event.to_owned(), SubscriptionScope::Component(variable)));
                 let fn_name = format!("on_component_event__{}", sanitize(&event));
-                let pins = sig.fields.iter().map(|f| vec![f.name.clone()]).collect();
+                // The canonical port id is the event field name. Older saved
+                // nodes may still carry port ids from their original palette
+                // definition, so also bind those by declaration order when
+                // the old node has the same number of data outputs.
+                let old_output_ids = data_outputs(node);
+                let pins = sig
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .map(|(index, field)| {
+                        let mut ids = vec![field.name.clone()];
+                        if old_output_ids.len() == sig.fields.len() {
+                            let old_id = &old_output_ids[index];
+                            if !ids.contains(old_id) {
+                                ids.push(old_id.clone());
+                            }
+                        }
+                        ids
+                    })
+                    .collect();
                 (fn_name, sig.field_types(), pins)
             } else if let Some(event) = node.node_type.strip_prefix("event::on::") {
                 let Some(sig) = self.event_sig(&node.id, event) else { continue };
