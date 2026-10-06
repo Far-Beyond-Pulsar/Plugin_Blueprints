@@ -1137,11 +1137,44 @@ impl GraphCanvasPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let new_comment = crate::core::types::BlueprintComment::new(
+        let mut new_comment = crate::core::types::BlueprintComment::new(
             self.snap_comment_position(position),
             window,
             cx,
         );
+        let selected_nodes: Vec<_> = self
+            .graph
+            .nodes
+            .iter()
+            .filter(|node| self.graph.selected_nodes.contains(&node.id))
+            .collect();
+        if !selected_nodes.is_empty() {
+            const COMMENT_PADDING: f32 = 30.0;
+            let left = selected_nodes
+                .iter()
+                .map(|node| node.position.x)
+                .fold(f32::INFINITY, f32::min);
+            let top = selected_nodes
+                .iter()
+                .map(|node| node.position.y)
+                .fold(f32::INFINITY, f32::min);
+            let right = selected_nodes
+                .iter()
+                .map(|node| node.position.x + node.size.width)
+                .fold(f32::NEG_INFINITY, f32::max);
+            let bottom = selected_nodes
+                .iter()
+                .map(|node| node.position.y + node.size.height)
+                .fold(f32::NEG_INFINITY, f32::max);
+            new_comment.position = self
+                .snap_comment_position(Point::new(left - COMMENT_PADDING, top - COMMENT_PADDING));
+            new_comment.size = gpui::Size::new(
+                right - left + COMMENT_PADDING * 2.0,
+                bottom - top + COMMENT_PADDING * 2.0,
+            );
+            Self::snap_comment_bounds(&mut new_comment);
+            new_comment.update_contained_nodes(&self.graph.nodes);
+        }
         let mut cmd = crate::features::undo::AddCommentCommand::new(new_comment.clone());
         cmd.execute(self, cx);
         self.push_undo_command(crate::features::undo::Command::AddComment(cmd));

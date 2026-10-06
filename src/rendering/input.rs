@@ -829,6 +829,13 @@ pub fn on_key_down(
                 return;
             }
 
+            // Key events bubble through the graph even when a text input in a
+            // sibling/overlay panel owns focus. Keep shortcuts scoped to the
+            // graph so typing "c" in an editor cannot add a comment.
+            if !canvas.focus_handle().is_focused(window) {
+                return;
+            }
+
             match key.as_str() {
                 "escape" => {
                     canvas.node_context_menu = None;

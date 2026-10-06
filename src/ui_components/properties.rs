@@ -1395,7 +1395,7 @@ impl PropertiesRenderer {
     fn render_comment_properties(
         panel: &BlueprintEditorPanel,
         comment: &BlueprintComment,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
         let active_canvas = panel.active_canvas().cloned();
@@ -1414,6 +1414,13 @@ impl PropertiesRenderer {
             {
                 comment_color = selected.color;
                 color_picker = selected.color_picker_state.clone();
+            }
+        }
+
+        // Keep the picker controls initialized from the selected comment.
+        if let Some(picker) = color_picker.as_ref() {
+            if picker.read(cx).value() != Some(comment_color) {
+                picker.update(cx, |picker, cx| picker.set_value(comment_color, window, cx));
             }
         }
 
@@ -1522,7 +1529,12 @@ impl PropertiesRenderer {
                                         .child(
                                             color_picker
                                                 .map(|picker| {
-                                                    div().w_full().child(picker).into_any_element()
+                                                    div()
+                                                        .w_full()
+                                                        .child(ui::color_picker::ColorPicker::new(
+                                                            &picker,
+                                                        ))
+                                                        .into_any_element()
                                                 })
                                                 .unwrap_or_else(|| {
                                                     div()
