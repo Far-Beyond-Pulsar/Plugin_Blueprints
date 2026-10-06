@@ -309,6 +309,15 @@ fn build_custom_event_dispatch_palette_items_from_panel(
 }
 
 impl NodePaletteView {
+    /// Clear the query when the quick palette opens; the dock palette keeps its query.
+    pub fn clear_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.search_input.read(cx).value().is_empty() {
+            self.search_input
+                .update(cx, |input, cx| input.set_value("", window, cx));
+        }
+        self.scroll_handle.scroll_to_item(0, gpui::ScrollStrategy::Top);
+    }
+
     /// Return the focus handle of the search input so callers can focus it.
     pub fn search_focus_handle(&self, cx: &App) -> FocusHandle {
         self.search_input.read(cx).focus_handle(cx)

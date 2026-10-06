@@ -735,6 +735,9 @@ pub fn on_mouse_up_left(
                 } else {
                     canvas.popup_palette_graph_pos = Some(gp);
                     canvas.quick_palette_connection_source = Some(drag);
+                    canvas.quick_palette_view.update(cx, |palette, cx| {
+                        palette.clear_search(window, cx)
+                    });
                     canvas.quick_palette_open = true;
                     canvas.quick_palette_focus_pending = true;
                     canvas.quick_palette_screen_pos = event.position;
@@ -756,7 +759,7 @@ pub fn on_mouse_up_right(
     cx: &mut Context<GraphCanvasPanel>,
 ) -> impl Fn(&MouseUpEvent, &mut Window, &mut App) {
     let entity = cx.entity().clone();
-    move |event: &MouseUpEvent, _window, cx| {
+    move |event: &MouseUpEvent, window, cx| {
         entity.update(cx, |canvas, cx| {
             let was_click = canvas.right_click_start.is_some() && !canvas.is_panning();
 
@@ -778,6 +781,9 @@ pub fn on_mouse_up_right(
                     canvas.node_context_menu = Some((node_id, event.position));
                     canvas.quick_palette_open = false;
                 } else {
+                    canvas.quick_palette_view.update(cx, |palette, cx| {
+                        palette.clear_search(window, cx)
+                    });
                     canvas.quick_palette_open = true;
                     canvas.quick_palette_focus_pending = true;
                     canvas.quick_palette_screen_pos = event.position;
