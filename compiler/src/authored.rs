@@ -45,17 +45,21 @@ pub fn property_value_from_raw(raw: &str) -> graphy::JsonValue {
 }
 
 fn to_graphy_datatype(dt: &blueprint_graph::DataType) -> graphy::DataType {
-    use graphy::DataType as GD;
     use blueprint_graph::DataType as PG;
+    use graphy::DataType as GD;
     match dt {
         PG::Execution => GD::Exec,
         PG::Data(ti) => GD::typed(ti.to_string()),
     }
 }
 
-pub fn lower_graph(ui_graph: &authored::GraphDescription) -> Result<graphy::GraphDescription, String> {
+pub fn lower_graph(
+    ui_graph: &authored::GraphDescription,
+) -> Result<graphy::GraphDescription, String> {
     use graphy::Connection as GConnection;
-    use graphy::{ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position};
+    use graphy::{
+        ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
+    };
     use std::collections::{HashMap, HashSet};
 
     let mut graph = GraphDescription::new(&ui_graph.metadata.name);
@@ -64,18 +68,27 @@ pub fn lower_graph(ui_graph: &authored::GraphDescription) -> Result<graphy::Grap
 
     for (node_id, node_instance) in &ui_graph.nodes {
         if node_id != &node_instance.id {
-            return Err(format!("node key {node_id} does not match its id {}", node_instance.id));
+            return Err(format!(
+                "node key {node_id} does not match its id {}",
+                node_instance.id
+            ));
         }
         for pins in [&node_instance.inputs, &node_instance.outputs] {
             let mut ids = HashSet::new();
-            if pins.iter().any(|pin| pin.id.is_empty() || !ids.insert(&pin.id)) {
+            if pins
+                .iter()
+                .any(|pin| pin.id.is_empty() || !ids.insert(&pin.id))
+            {
                 return Err(format!("node {node_id} has empty or duplicate pin ids"));
             }
         }
         let node_type = match node_instance.node_type.as_str() {
             "macro_entry" => "subgraph_entry".to_string(),
             "macro_exit" => "subgraph_exit".to_string(),
-            other if other.starts_with("custom_event:") => format!("on_{}", other.trim_start_matches("custom_event:").replace('-', "_")),
+            other if other.starts_with("custom_event:") => format!(
+                "on_{}",
+                other.trim_start_matches("custom_event:").replace('-', "_")
+            ),
             other if other.starts_with("custom_event_dispatch:") => "emit_custom_event".to_owned(),
             other => other.to_string(),
         };
@@ -156,9 +169,11 @@ pub fn lower_graph(ui_graph: &authored::GraphDescription) -> Result<graphy::Grap
     Ok(graph)
 }
 
-
 /// Lower and expand macros using the same path in editor and headless compilation.
-pub fn expand_graph(graph: &authored::GraphDescription, macros: impl IntoIterator<Item = (String, authored::GraphDescription)>) -> Result<graphy::GraphDescription, String> {
+pub fn expand_graph(
+    graph: &authored::GraphDescription,
+    macros: impl IntoIterator<Item = (String, authored::GraphDescription)>,
+) -> Result<graphy::GraphDescription, String> {
     let mut graph = lower_graph(graph)?;
     let mut library = std::collections::HashMap::new();
     for (id, body) in macros {
@@ -166,7 +181,9 @@ pub fn expand_graph(graph: &authored::GraphDescription, macros: impl IntoIterato
             return Err(format!("duplicate macro id {id}"));
         }
     }
-    graphy::SubGraphExpander::new().expand_all_flat(&mut graph, &library).map_err(|e| format!("Sub-graph expansion failed: {e}"))?;
+    graphy::SubGraphExpander::new()
+        .expand_all_flat(&mut graph, &library)
+        .map_err(|e| format!("Sub-graph expansion failed: {e}"))?;
     collapse_interfaces(&mut graph)?;
     Ok(graph)
 }
@@ -174,27 +191,50 @@ pub fn expand_graph(graph: &authored::GraphDescription, macros: impl IntoIterato
 /// Graphy retains macro interface nodes as routing points. Execution backends
 /// consume a flat graph: splice each interface pin through to its consumers.
 fn collapse_interfaces(graph: &mut graphy::GraphDescription) -> Result<(), String> {
-    let mut interfaces: Vec<_> = graph.nodes.values()
+    let mut interfaces: Vec<_> = graph
+        .nodes
+        .values()
         .filter(|n| matches!(n.node_type.as_str(), "subgraph_entry" | "subgraph_exit"))
-        .map(|n| n.id.clone()).collect();
+        .map(|n| n.id.clone())
+        .collect();
     interfaces.sort();
     for id in interfaces {
-        let outgoing: Vec<_> = graph.connections.iter().filter(|c| c.source_node == id).cloned().collect();
-        let incoming: Vec<_> = graph.connections.iter().filter(|c| c.target_node == id).cloned().collect();
+        let outgoing: Vec<_> = graph
+            .connections
+            .iter()
+            .filter(|c| c.source_node == id)
+            .cloned()
+            .collect();
+        let incoming: Vec<_> = graph
+            .connections
+            .iter()
+            .filter(|c| c.target_node == id)
+            .cloned()
+            .collect();
         for output in outgoing {
-            let sources: Vec<_> = incoming.iter().filter(|c| c.target_pin == output.source_pin).collect();
+            let sources: Vec<_> = incoming
+                .iter()
+                .filter(|c| c.target_pin == output.source_pin)
+                .collect();
             if matches!(output.connection_type, graphy::ConnectionType::Data) && sources.len() > 1 {
-                return Err(format!("macro interface {id}:{} has multiple data sources", output.source_pin));
+                return Err(format!(
+                    "macro interface {id}:{} has multiple data sources",
+                    output.source_pin
+                ));
             }
             for input in sources {
                 graph.connections.push(graphy::Connection {
-                    source_node: input.source_node.clone(), source_pin: input.source_pin.clone(),
-                    target_node: output.target_node.clone(), target_pin: output.target_pin.clone(),
+                    source_node: input.source_node.clone(),
+                    source_pin: input.source_pin.clone(),
+                    target_node: output.target_node.clone(),
+                    target_pin: output.target_pin.clone(),
                     connection_type: output.connection_type,
                 });
             }
         }
-        graph.connections.retain(|c| c.source_node != id && c.target_node != id);
+        graph
+            .connections
+            .retain(|c| c.source_node != id && c.target_node != id);
         graph.nodes.remove(&id);
     }
     Ok(())

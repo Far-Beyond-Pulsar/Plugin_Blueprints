@@ -45,8 +45,17 @@ pub fn pin_type_name(ty: &Type) -> String {
         Type::Entity => "Entity".into(),
         Type::Component(name) | Type::Object(name) => name.clone(),
         Type::List(element) => format!("Vec<{}>", pin_type_name(element)),
-        Type::Map(key, value) => format!("HashMap<{}, {}>", pin_type_name(key), pin_type_name(value)),
-        Type::Tuple(items) => format!("({})", items.iter().map(pin_type_name).collect::<Vec<_>>().join(", ")),
+        Type::Map(key, value) => {
+            format!("HashMap<{}, {}>", pin_type_name(key), pin_type_name(value))
+        }
+        Type::Tuple(items) => format!(
+            "({})",
+            items
+                .iter()
+                .map(pin_type_name)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     }
 }
 
@@ -64,8 +73,13 @@ pub fn native_nodes(natives: &NativeRegistry) -> Vec<NativeNode> {
 
 /// The palette nodes callable on a value or reference of pin type
 /// `type_name`.
-pub fn methods_for<'n>(nodes: &'n [NativeNode], type_name: &'n str) -> impl Iterator<Item = &'n NativeNode> {
-    nodes.iter().filter(move |n| n.receiver.as_deref() == Some(type_name))
+pub fn methods_for<'n>(
+    nodes: &'n [NativeNode],
+    type_name: &'n str,
+) -> impl Iterator<Item = &'n NativeNode> {
+    nodes
+        .iter()
+        .filter(move |n| n.receiver.as_deref() == Some(type_name))
 }
 
 fn native_node(native: &NativeFn) -> NativeNode {
@@ -87,7 +101,9 @@ fn native_node(native: &NativeFn) -> NativeNode {
     }
     NativeNode {
         node_type: format!("native::{}", native.name),
-        name: native.attr("display_name").map_or_else(|| title_case(member), str::to_owned),
+        name: native
+            .attr("display_name")
+            .map_or_else(|| title_case(member), str::to_owned),
         category: category(native, owner),
         doc: native.doc.clone(),
         exec: !native.flags.side_effect_free,
@@ -103,7 +119,9 @@ fn category(native: &NativeFn, owner: &str) -> String {
         Some(Type::Component(name)) => Some(Type::Component(name.clone())),
         Some(Type::Object(name)) => Some(Type::Object(name.clone())),
         _ if types.component(owner).is_some() => Some(Type::Component(owner.to_owned())),
-        _ if types.is_known(&Type::Object(owner.to_owned())) => Some(Type::Object(owner.to_owned())),
+        _ if types.is_known(&Type::Object(owner.to_owned())) => {
+            Some(Type::Object(owner.to_owned()))
+        }
         _ => None,
     };
     match owner_type {
@@ -173,8 +191,11 @@ pub fn event_nodes(events: &[PaletteEvent]) -> Vec<EventNode> {
     for event in events {
         let sig = &event.signature;
         let category = format!("Events/{}", event.category);
-        let fields: Vec<(String, String)> =
-            sig.fields.iter().map(|f| (f.name.clone(), pin_type_name(&f.ty))).collect();
+        let fields: Vec<(String, String)> = sig
+            .fields
+            .iter()
+            .map(|f| (f.name.clone(), pin_type_name(&f.ty)))
+            .collect();
         let scope = match crate::default_scope(sig, event.declared_here) {
             pulsar_script_vm::SubscriptionScope::Self_ => "self",
             pulsar_script_vm::SubscriptionScope::Global => "global",
@@ -210,7 +231,10 @@ pub fn event_nodes(events: &[PaletteEvent]) -> Vec<EventNode> {
             node_type: format!("event::broadcast::{}", sig.name),
             name: format!("Broadcast {}", sig.name),
             category: category.clone(),
-            doc: format!("Broadcast `{}` on the global channel. Delivered at the next event flush.", sig.name),
+            doc: format!(
+                "Broadcast `{}` on the global channel. Delivered at the next event flush.",
+                sig.name
+            ),
             is_event: false,
             inputs: fields.clone(),
             outputs: Vec::new(),

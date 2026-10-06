@@ -4,9 +4,9 @@
 //! It defines legacy structures and conversion logic to migrate old files to the
 //! current format.
 
+use crate::{Connection, ConnectionType, GraphDescription, NodeInstance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::{Connection, ConnectionType, GraphDescription, NodeInstance};
 
 // ============================================================================
 // Legacy Graph Format

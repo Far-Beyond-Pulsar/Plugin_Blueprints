@@ -1,4 +1,4 @@
-use crate::{SubGraphLibrary, SubGraphDefinition};
+use crate::{SubGraphDefinition, SubGraphLibrary};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -21,9 +21,16 @@ impl LibraryManager {
         self.search_paths.push(path.into());
     }
 
-    pub fn load_all_libraries(&mut self, mut load: impl FnMut(&std::path::Path) -> Result<Vec<SubGraphLibrary>, Box<dyn std::error::Error>>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn load_all_libraries(
+        &mut self,
+        mut load: impl FnMut(
+            &std::path::Path,
+        ) -> Result<Vec<SubGraphLibrary>, Box<dyn std::error::Error>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         for search_path in self.search_paths.clone() {
-            for library in load(&search_path)? { self.register_library(library); }
+            for library in load(&search_path)? {
+                self.register_library(library);
+            }
         }
         Ok(())
     }
@@ -57,8 +64,7 @@ impl LibraryManager {
     }
 
     pub fn default_stdlib_path() -> std::path::PathBuf {
-        std::path::PathBuf::from("libraries")
-            .join("std")
+        std::path::PathBuf::from("libraries").join("std")
     }
 
     pub fn default_user_library_path() -> std::path::PathBuf {

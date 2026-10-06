@@ -1,16 +1,16 @@
 //! Canonical authored Blueprint schema. No GPUI or engine dependencies.
 
+pub mod codec;
+pub mod legacy;
+pub mod library;
 pub mod prefab;
 pub mod type_system;
-pub mod library;
-pub mod legacy;
-pub mod codec;
-pub use prefab::{BlueprintClassRef, ComponentInstance as PrefabComponentInstance, PrefabAsset};
-pub use type_system::*;
 pub use library::LibraryManager;
+pub use prefab::{BlueprintClassRef, ComponentInstance as PrefabComponentInstance, PrefabAsset};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+pub use type_system::*;
 
 /// Blueprint metadata for context sensitivity and organisation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -366,11 +366,20 @@ impl<'de> Deserialize<'de> for NodeInstance {
         fn parse_pins(val: &serde_json::Value) -> Result<Vec<PinInstance>, String> {
             match val {
                 JsonValue::Null => Ok(Vec::new()),
-                JsonValue::Array(arr) => arr.iter().map(|v| serde_json::from_value(v.clone()).map_err(|e| e.to_string())).collect(),
-                JsonValue::Object(obj) => obj.iter().map(|(id, v)| {
-                    let pin = serde_json::from_value(v.clone()).map_err(|e| e.to_string())?;
-                    Ok(PinInstance { id: id.clone(), pin })
-                }).collect(),
+                JsonValue::Array(arr) => arr
+                    .iter()
+                    .map(|v| serde_json::from_value(v.clone()).map_err(|e| e.to_string()))
+                    .collect(),
+                JsonValue::Object(obj) => obj
+                    .iter()
+                    .map(|(id, v)| {
+                        let pin = serde_json::from_value(v.clone()).map_err(|e| e.to_string())?;
+                        Ok(PinInstance {
+                            id: id.clone(),
+                            pin,
+                        })
+                    })
+                    .collect(),
                 _ => Err("pins must be an array or an object".to_owned()),
             }
         }
@@ -478,8 +487,6 @@ impl DataType {
             _ => false,
         }
     }
-
-
 }
 
 impl PartialEq<&str> for DataType {
@@ -1082,7 +1089,11 @@ impl SubGraphLibrary {
         self.subgraphs.iter().find(|sg| sg.id == id)
     }
 
-    pub fn to_json(&self) -> serde_json::Result<String> { serde_json::to_string_pretty(self) }
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        serde_json::to_string_pretty(self)
+    }
 
-    pub fn from_json(json: &str) -> serde_json::Result<Self> { serde_json::from_str(json) }
+    pub fn from_json(json: &str) -> serde_json::Result<Self> {
+        serde_json::from_str(json)
+    }
 }

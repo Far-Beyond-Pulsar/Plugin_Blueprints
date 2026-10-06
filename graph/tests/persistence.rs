@@ -9,9 +9,11 @@ fn numbers_as_f64(value: &Value) -> Value {
     match value {
         Value::Number(n) => json!(n.as_f64()),
         Value::Array(items) => Value::Array(items.iter().map(numbers_as_f64).collect()),
-        Value::Object(map) => {
-            Value::Object(map.iter().map(|(k, v)| (k.clone(), numbers_as_f64(v))).collect())
-        }
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), numbers_as_f64(v)))
+                .collect(),
+        ),
         other => other.clone(),
     }
 }
@@ -26,11 +28,18 @@ fn authored_v1_round_trip_preserves_identity_defaults_macros_events_and_layout()
     let back = deserialize_blueprint(&saved.to_string()).unwrap();
     assert_eq!(serde_json::to_value(back).unwrap(), saved);
     for key in ["main_graph", "variables", "local_events", "editor_state"] {
-        assert_eq!(numbers_as_f64(&saved[key]), numbers_as_f64(&original[key]), "{key}");
+        assert_eq!(
+            numbers_as_f64(&saved[key]),
+            numbers_as_f64(&original[key]),
+            "{key}"
+        );
     }
     assert_eq!(asset.local_macros[0].id, "once-macro");
     assert_eq!(asset.local_macros[0].graph.connections.len(), 2);
-    assert_eq!(asset.local_macros[0].graph.nodes["once"].properties["reset"], false);
+    assert_eq!(
+        asset.local_macros[0].graph.nodes["once"].properties["reset"],
+        false
+    );
 }
 
 #[test]
@@ -45,7 +54,10 @@ fn rename_and_reorder_do_not_reassign_variable_ids() {
     let back = deserialize_blueprint(&serde_json::to_string(&asset).unwrap()).unwrap();
     assert_eq!(back.variables[1].id, "var_0");
     assert_eq!(back.variables[1].name, "renamed");
-    assert_eq!(back.variables[1].description, "Keep this legacy ID when renamed");
+    assert_eq!(
+        back.variables[1].description,
+        "Keep this legacy ID when renamed"
+    );
 }
 
 #[test]
@@ -71,9 +83,13 @@ fn malformed_pins_versions_and_variable_ids_are_reported() {
     assert!(deserialize_blueprint(&value.to_string()).is_err());
     value = original.clone();
     value["format_version"] = json!(999);
-    assert!(deserialize_blueprint(&value.to_string()).unwrap_err().contains("version 999"));
+    assert!(deserialize_blueprint(&value.to_string())
+        .unwrap_err()
+        .contains("version 999"));
     value = original;
     let duplicate = value["variables"][0].clone();
     value["variables"].as_array_mut().unwrap().push(duplicate);
-    assert!(deserialize_blueprint(&value.to_string()).unwrap_err().contains("duplicate id"));
+    assert!(deserialize_blueprint(&value.to_string())
+        .unwrap_err()
+        .contains("duplicate id"));
 }

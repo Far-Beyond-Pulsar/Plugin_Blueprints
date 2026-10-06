@@ -132,8 +132,6 @@ impl TypeInfo {
             _ => false,
         }
     }
-
-
 }
 
 impl std::fmt::Display for TypeInfo {
