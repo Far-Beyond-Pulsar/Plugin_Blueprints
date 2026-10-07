@@ -43,6 +43,7 @@ pub struct BlueprintEditorPanel {
     pub implemented_trait_catalog_error: Option<String>,
     pub implemented_trait_catalog_loaded: bool,
     pub implemented_trait_catalog_loading: bool,
+    pub implemented_trait_catalog_refresh_pending: bool,
     pub implemented_trait_status: Option<String>,
     pub implemented_trait_picker: Entity<SearchableList<crate::features::traits::TraitAssetSummary>>,
 
@@ -472,7 +473,7 @@ impl BlueprintEditorPanel {
                 Vec::<crate::features::traits::TraitAssetSummary>::new(),
                 |asset| format!("{} · {} · {}", asset.display_name, asset.name, asset.path),
             )
-            .with_empty_text("No unassigned traits match your search")
+            .with_empty_text("No additional traits are available for this Blueprint")
             .with_max_width(px(380.0))
             .with_max_height(px(360.0))
             .with_icon_getter(|_| ui::IconName::Code)
@@ -486,6 +487,17 @@ impl BlueprintEditorPanel {
                 }
             },
         )
+        .detach();
+
+        let mut trait_events = engine_fs::subscribe();
+        cx.spawn(async move |this, cx| {
+            while let Ok(event) = trait_events.recv().await {
+                let path = event.path;
+                let _ = this.update(cx, |editor, cx| {
+                    editor.refresh_for_trait_asset_event(&path, cx);
+                });
+            }
+        })
         .detach();
 
         let rename_input: Entity<InputState> =
@@ -534,6 +546,7 @@ impl BlueprintEditorPanel {
             implemented_trait_catalog_error: None,
             implemented_trait_catalog_loaded: false,
             implemented_trait_catalog_loading: false,
+            implemented_trait_catalog_refresh_pending: false,
             implemented_trait_status: None,
             implemented_trait_picker,
             workspace: None, // Will be initialized in render

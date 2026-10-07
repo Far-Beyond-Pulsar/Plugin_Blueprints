@@ -8,8 +8,10 @@ impl BlueprintEditorPanel {
     /// virtual filesystem provider.
     pub fn refresh_implemented_trait_catalog(&mut self, cx: &mut Context<Self>) {
         if self.implemented_trait_catalog_loading {
+            self.implemented_trait_catalog_refresh_pending = true;
             return;
         }
+        self.implemented_trait_catalog_refresh_pending = false;
         let root = self.project_root.clone().or_else(|| {
             self.current_class_path
                 .as_deref()
@@ -47,9 +49,22 @@ impl BlueprintEditorPanel {
                 }
                 editor.sync_implemented_trait_picker(cx);
                 cx.notify();
+                if std::mem::take(&mut editor.implemented_trait_catalog_refresh_pending) {
+                    editor.refresh_implemented_trait_catalog(cx);
+                }
             });
         })
         .detach();
+    }
+
+    /// Refresh the catalog after a virtual filesystem event that can change
+    /// trait discovery. Events outside the canonical trait directory are ignored.
+    pub fn refresh_for_trait_asset_event(&mut self, path: &Path, cx: &mut Context<Self>) {
+        if !is_trait_catalog_event_path(path, self.project_root.as_deref()) {
+            return;
+        }
+        self.implemented_trait_catalog_loaded = false;
+        self.refresh_implemented_trait_catalog(cx);
     }
 
     pub fn add_implemented_trait(
@@ -137,6 +152,28 @@ impl BlueprintEditorPanel {
         }
         cx.notify();
     }
+}
+
+fn is_trait_catalog_event_path(path: &Path, project_root: Option<&Path>) -> bool {
+    let normalized = path.to_string_lossy().replace('\\', "/");
+    let normalized = normalized.trim_end_matches('/');
+    if let Some(root) = project_root {
+        let root = root.to_string_lossy().replace('\\', "/");
+        let root = root.trim_end_matches('/');
+        let Some(relative) = normalized.strip_prefix(root) else {
+            return false;
+        };
+        let relative = relative.trim_start_matches('/');
+        return relative.eq_ignore_ascii_case("types/traits")
+            || relative
+                .to_ascii_lowercase()
+                .starts_with("types/traits/");
+    }
+
+    normalized.eq_ignore_ascii_case("types/traits")
+        || normalized
+            .to_ascii_lowercase()
+            .starts_with("types/traits/")
 }
 
 fn load_trait_catalog(

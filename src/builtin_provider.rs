@@ -61,6 +61,8 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
                     "tags": []
                 }
             }),
+            creation_directory: None,
+
             categories: vec!["Blueprints".to_string()],
         }]
     }

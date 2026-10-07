@@ -37,6 +37,7 @@ impl ImplementedTraitsRenderer {
         let catalog_error = editor.implemented_trait_catalog_error.clone();
         let status = editor.implemented_trait_status.clone();
         let picker = editor.implemented_trait_picker.clone();
+        let editor_entity = cx.entity().clone();
         let add_trait =
             Popover::<SearchableList<TraitAssetSummary>>::new("implemented-trait-picker")
                 .anchor(Corner::BottomRight)
@@ -47,7 +48,12 @@ impl ImplementedTraitsRenderer {
                         .small()
                         .dropdown_caret(true),
                 )
-                .content(move |_window, _cx| picker.clone());
+                .content(move |_window, cx| {
+                    let _ = editor_entity.update(cx, |editor, cx| {
+                        editor.refresh_implemented_trait_catalog(cx);
+                    });
+                    picker.clone()
+                });
         let refresh = Button::new("refresh-trait-catalog")
             .label("Refresh")
             .ghost()
@@ -84,7 +90,7 @@ impl ImplementedTraitsRenderer {
                 element.child(div().text_sm().text_color(theme.muted_foreground).child("Loading trait assets…"))
             })
             .child(div().text_xs().text_color(theme.muted_foreground).child(
-                "Trait assignments are stored as normalized project-relative paths and saved with this Blueprint.",
+                "Assignments are per Blueprint; any trait can be reused across multiple Blueprints.",
             ))
             .child(
                 h_flex()

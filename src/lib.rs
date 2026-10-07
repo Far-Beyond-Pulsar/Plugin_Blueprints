@@ -128,6 +128,8 @@ impl EditorPlugin for BlueprintEditorPlugin {
                     "tags": []
                 }
             }),
+            creation_directory: None,
+
             categories: vec!["Blueprints".to_string()],
         }]
     }
