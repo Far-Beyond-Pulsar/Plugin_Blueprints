@@ -15,7 +15,8 @@ use std::path::PathBuf;
 /// Every native the engine registers (pulsar_std, world components,
 /// reflected methods), built once: what compiled modules link against.
 pub(crate) fn script_natives() -> &'static pulsar_script_vm::NativeRegistry {
-    static NATIVES: std::sync::OnceLock<pulsar_script_vm::NativeRegistry> = std::sync::OnceLock::new();
+    static NATIVES: std::sync::OnceLock<pulsar_script_vm::NativeRegistry> =
+        std::sync::OnceLock::new();
     NATIVES.get_or_init(pulsar_script_vm::NativeRegistry::with_engine_natives)
 }
 
@@ -153,7 +154,8 @@ impl BlueprintEditorPanel {
     /// graph codegen consumes.
     pub(crate) fn build_graphy_description(&self) -> Result<graphy::GraphDescription, String> {
         let authored = self.convert_graph_to_description(&self.main_graph_tab().graph)?;
-        let graph = blueprint_compiler::authored::expand_graph(&authored, self.collect_macro_library()?)?;
+        let graph =
+            blueprint_compiler::authored::expand_graph(&authored, self.collect_macro_library()?)?;
 
         self.dump_graph_debug_info(&graph);
 
@@ -209,7 +211,9 @@ impl BlueprintEditorPanel {
     /// this blueprint file can reference: local macros — overlaid with any
     /// open-tab edits not yet flushed back to `local_macros` (mirroring
     /// `to_blueprint_asset`'s save snapshot) — plus shared library macros.
-    fn collect_macro_library(&self) -> Result<HashMap<String, blueprint_graph::GraphDescription>, String> {
+    fn collect_macro_library(
+        &self,
+    ) -> Result<HashMap<String, blueprint_graph::GraphDescription>, String> {
         let mut macros = self.local_macros.clone();
         for tab in self
             .open_tabs
@@ -223,10 +227,7 @@ impl BlueprintEditorPanel {
 
         let mut library = HashMap::new();
         for macro_def in &macros {
-            library.insert(
-                macro_def.id.clone(),
-                macro_def.graph.clone(),
-            );
+            library.insert(macro_def.id.clone(), macro_def.graph.clone());
         }
         for subgraph in self.library_manager.get_all_subgraphs() {
             library
@@ -261,10 +262,11 @@ impl BlueprintEditorPanel {
         // Engine events (#924): this class's custom events are declared;
         // event nodes are checked against the built-in and other classes'.
         let events = crate::features::events::engine_events::event_sources(&self.local_event_defs);
-        let known_events = crate::features::events::engine_events::known_event_signatures_with_components(
-            Some(class_path.as_path()),
-            &self.component_event_metadata,
-        );
+        let known_events =
+            crate::features::events::engine_events::known_event_signatures_with_components(
+                Some(class_path.as_path()),
+                &self.component_event_metadata,
+            );
         let source = blueprint_compiler::ClassSource {
             name: &class_name,
             graph: &graph,
@@ -295,11 +297,14 @@ impl BlueprintEditorPanel {
             let _ = std::fs::remove_file(&out_path);
         })?;
 
-        let json = module.to_json().map_err(|e| format!("Failed to serialise module: {e}"))?;
+        let json = module
+            .to_json()
+            .map_err(|e| format!("Failed to serialise module: {e}"))?;
         std::fs::create_dir_all(&build_dir)
             .map_err(|e| format!("Failed to create .build directory: {e}"))?;
         std::fs::write(&out_path, json).map_err(|e| format!("Failed to write module.json: {e}"))?;
-        crate::features::class_dirs::mark_language(class_path).map_err(|e| format!("Failed to record the language: {e}"))?;
+        crate::features::class_dirs::mark_language(class_path)
+            .map_err(|e| format!("Failed to record the language: {e}"))?;
         tracing::info!("Script module written to {}", out_path.display());
         Ok(out_path)
     }
@@ -326,8 +331,30 @@ impl BlueprintEditorPanel {
             .and_then(crate::features::class_dirs::class_name_of)
             .unwrap_or_else(|| "compiled_blueprint".to_owned());
         let module = self.compile_module()?;
-        pulsar_script_codegen::actor::generate_actor(&blueprint_name, &module, &self.export_components())
-            .map_err(|e| format!("Compilation failed: {e}"))
+        let mut source = pulsar_script_codegen::actor::generate_actor(
+            &blueprint_name,
+            &module,
+            &self.export_components(),
+        )
+        .map_err(|e| format!("Compilation failed: {e}"))?;
+        if !self.blueprint_metadata.implemented_traits.is_empty() {
+            let class_path = self
+                .current_class_path
+                .as_deref()
+                .ok_or("No class loaded — cannot resolve Blueprint traits")?;
+            let project_root = self
+                .project_root
+                .clone()
+                .or_else(|| crate::features::class_dirs::project_root_of(class_path))
+                .ok_or("Could not determine project root to resolve Blueprint traits")?;
+            let declarations = crate::features::compilation::trait_contracts::generate_module(
+                &project_root,
+                &self.blueprint_metadata.implemented_traits,
+            )?;
+            source.push('\n');
+            source.push_str(&declarations);
+        }
+        Ok(source)
     }
 
     /// Compile and save events to class directory structure

@@ -2,7 +2,10 @@ use gpui::prelude::*;
 use gpui::*;
 use ui::{
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme, StyledExt,
+    dropdown::SearchableList,
+    h_flex,
+    popover::Popover,
+    v_flex, ActiveTheme, IconName, Sizable, StyledExt,
 };
 
 use crate::editor::panel::BlueprintEditorPanel;
@@ -33,11 +36,18 @@ impl ImplementedTraitsRenderer {
         let catalog = editor.implemented_trait_catalog.clone();
         let catalog_error = editor.implemented_trait_catalog_error.clone();
         let status = editor.implemented_trait_status.clone();
-        let available: Vec<_> = catalog
-            .iter()
-            .filter(|asset| !selected.iter().any(|path| path == &asset.path))
-            .cloned()
-            .collect();
+        let picker = editor.implemented_trait_picker.clone();
+        let add_trait =
+            Popover::<SearchableList<TraitAssetSummary>>::new("implemented-trait-picker")
+                .anchor(Corner::BottomRight)
+                .trigger(
+                    Button::new("implemented-trait-add")
+                        .label("Add Trait")
+                        .icon(IconName::Plus)
+                        .small()
+                        .dropdown_caret(true),
+                )
+                .content(move |_window, _cx| picker.clone());
         let refresh = Button::new("refresh-trait-catalog")
             .label("Refresh")
             .ghost()
@@ -76,7 +86,13 @@ impl ImplementedTraitsRenderer {
             .child(div().text_xs().text_color(theme.muted_foreground).child(
                 "Trait assignments are stored as normalized project-relative paths and saved with this Blueprint.",
             ))
-            .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Assigned"))
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Assigned"))
+                    .child(add_trait),
+            )
             .when(selected.is_empty(), |element| {
                 element.child(
                     div()
@@ -114,45 +130,6 @@ impl ImplementedTraitsRenderer {
                             .child(remove),
                     )
                     .child(div().text_xs().text_color(theme.muted_foreground).child(detail))
-            }))
-            .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Available traits"))
-            .when(available.is_empty(), |element| {
-                element.child(
-                    div()
-                        .text_sm()
-                        .text_color(theme.muted_foreground)
-                        .child(if catalog.is_empty() {
-                            "No valid .trait.json assets were found under types/traits.".to_owned()
-                        } else {
-                            "All available traits are already assigned.".to_owned()
-                        }),
-                )
-            })
-            .children(available.into_iter().map(|asset| {
-                let path = asset.path.clone();
-                let add = Button::new(format!("add-trait-{}", stable_button_key(&path)))
-                    .label("Add")
-                    .primary()
-                    .on_click(cx.listener(move |editor, _, window, cx| {
-                        editor.add_implemented_trait(&path, window, cx);
-                    }));
-                v_flex()
-                    .gap_1()
-                    .p_2()
-                    .rounded_md()
-                    .border_1()
-                    .border_color(theme.border)
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .justify_between()
-                            .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(asset.display_name))
-                            .child(add),
-                    )
-                    .child(div().text_xs().text_color(theme.muted_foreground).child(format!("{} · {}", asset.name, asset.path)))
-                    .when(!asset.description.is_empty(), |element| {
-                        element.child(div().text_xs().text_color(theme.muted_foreground).child(asset.description))
-                    })
             }))
             .when_some(status, |element, status| {
                 let color = if status.starts_with("Could not") || status.starts_with("Cannot") {

@@ -124,7 +124,12 @@ impl BlueprintEditorPanel {
                 .map(String::as_str)
                 .or_else(|| bp_node.definition_id.strip_prefix("conversion:"))
                 .filter(|id| !id.is_empty())
-                .ok_or_else(|| format!("conversion node `{}` has no registered conversion id", bp_node.id))?;
+                .ok_or_else(|| {
+                    format!(
+                        "conversion node `{}` has no registered conversion id",
+                        bp_node.id
+                    )
+                })?;
             return Ok(format!("conversion:{conversion_id}"));
         }
         Ok(bp_node.definition_id.clone())
@@ -158,11 +163,17 @@ impl BlueprintEditorPanel {
             } else if let Some(conversion_id) = definition_id.strip_prefix("conversion:") {
                 let conversion = pulsar_reflection::CONVERSION_REGISTRY.get(conversion_id);
                 (
-                    conversion.map_or_else(|| "Conversion".to_owned(), |info| info.label.to_owned()),
+                    conversion
+                        .map_or_else(|| "Conversion".to_owned(), |info| info.label.to_owned()),
                     String::new(),
                     conversion.map_or_else(
                         || format!("Registered conversion `{conversion_id}`"),
-                        |info| format!("Convert {} to {}", info.source_type_name, info.target_type_name),
+                        |info| {
+                            format!(
+                                "Convert {} to {}",
+                                info.source_type_name, info.target_type_name
+                            )
+                        },
                     ),
                     NodeType::Conversion,
                     None,

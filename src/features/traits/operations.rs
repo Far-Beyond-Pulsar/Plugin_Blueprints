@@ -20,6 +20,7 @@ impl BlueprintEditorPanel {
             self.implemented_trait_catalog_error =
                 Some("The project root is not available for trait discovery".to_owned());
             self.implemented_trait_catalog_loaded = true;
+            self.sync_implemented_trait_picker(cx);
             return;
         };
         self.implemented_trait_catalog_loading = true;
@@ -44,6 +45,7 @@ impl BlueprintEditorPanel {
                         editor.implemented_trait_catalog_error = Some(error);
                     }
                 }
+                editor.sync_implemented_trait_picker(cx);
                 cx.notify();
             });
         })
@@ -81,6 +83,7 @@ impl BlueprintEditorPanel {
         }
         selected.push(trait_path);
         selected.sort();
+        self.sync_implemented_trait_picker(cx);
         self.persist_trait_assignments(window, cx);
     }
 
@@ -98,7 +101,20 @@ impl BlueprintEditorPanel {
         self.blueprint_metadata
             .implemented_traits
             .retain(|path| path != &trait_path);
+        self.sync_implemented_trait_picker(cx);
         self.persist_trait_assignments(window, cx);
+    }
+
+    fn sync_implemented_trait_picker(&self, cx: &mut Context<Self>) {
+        let selected = &self.blueprint_metadata.implemented_traits;
+        let available = self
+            .implemented_trait_catalog
+            .iter()
+            .filter(|asset| !selected.iter().any(|path| path == &asset.path))
+            .cloned()
+            .collect();
+        self.implemented_trait_picker
+            .update(cx, |picker, cx| picker.set_items(available, cx));
     }
 
     fn persist_trait_assignments(&mut self, window: &mut Window, cx: &mut Context<Self>) {

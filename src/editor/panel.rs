@@ -44,6 +44,7 @@ pub struct BlueprintEditorPanel {
     pub implemented_trait_catalog_loaded: bool,
     pub implemented_trait_catalog_loading: bool,
     pub implemented_trait_status: Option<String>,
+    pub implemented_trait_picker: Entity<SearchableList<crate::features::traits::TraitAssetSummary>>,
 
     // Workspace with full docking support
     pub(super) workspace: Option<Entity<ui::workspace::Workspace>>,
@@ -464,6 +465,29 @@ impl BlueprintEditorPanel {
         )
         .detach();
 
+        let implemented_trait_picker = cx.new(|cx| {
+            SearchableList::new(
+                window,
+                cx,
+                Vec::<crate::features::traits::TraitAssetSummary>::new(),
+                |asset| format!("{} · {} · {}", asset.display_name, asset.name, asset.path),
+            )
+            .with_empty_text("No unassigned traits match your search")
+            .with_max_width(px(380.0))
+            .with_max_height(px(360.0))
+            .with_icon_getter(|_| ui::IconName::Code)
+        });
+        cx.subscribe_in(
+            &implemented_trait_picker,
+            window,
+            |editor, _picker, event: &SearchableListEvent<crate::features::traits::TraitAssetSummary>, window, cx| {
+                if let SearchableListEvent::Select(asset) = event {
+                    editor.add_implemented_trait(&asset.path, window, cx);
+                }
+            },
+        )
+        .detach();
+
         let rename_input: Entity<InputState> =
             cx.new(|cx| InputState::new(window, cx).placeholder("Rename..."));
         // Commit rename on blur or Enter
@@ -511,6 +535,7 @@ impl BlueprintEditorPanel {
             implemented_trait_catalog_loaded: false,
             implemented_trait_catalog_loading: false,
             implemented_trait_status: None,
+            implemented_trait_picker,
             workspace: None, // Will be initialized in render
             current_class_path: None,
             tab_title: None,
