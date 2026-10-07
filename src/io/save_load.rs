@@ -165,13 +165,16 @@ impl BlueprintEditorPanel {
         );
 
         if let Some(parent) = target_path.parent() {
-            std::fs::create_dir_all(parent)
+            engine_fs::virtual_fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create directory: {}", e))?;
         }
 
-        // Write to file
-        std::fs::write(&target_path, &content)
+        engine_fs::virtual_fs::write_file(&target_path, content.as_bytes())
             .map_err(|e| format!("Failed to write file: {}", e))?;
+
+        // The project index is derived from authored Blueprint metadata. Keep
+        // it current for toolbar saves, assignment-panel saves and autosaves.
+        self.refresh_blueprint_trait_index();
 
         tracing::info!(
             ">>> save_to_path: wrote {} bytes to {:?}",
@@ -197,8 +200,10 @@ impl BlueprintEditorPanel {
         );
 
         // Read file content
-        let content = std::fs::read_to_string(&source_path)
+        let bytes = engine_fs::virtual_fs::read_file(&source_path)
             .map_err(|e| format!("Failed to read file: {}", e))?;
+        let content = String::from_utf8(bytes)
+            .map_err(|e| format!("Blueprint file is not valid UTF-8: {}", e))?;
         tracing::info!(
             ">>> load_from_path: read {} bytes from {:?}",
             content.len(),
@@ -247,6 +252,23 @@ impl BlueprintEditorPanel {
         );
 
         Ok(())
+    }
+
+    fn refresh_blueprint_trait_index(&self) {
+        let project_root = self.project_root.clone().or_else(|| {
+            self.current_class_path
+                .as_deref()
+                .and_then(crate::features::class_dirs::project_root_of)
+        });
+        if let Some(project_root) = project_root {
+            if let Err(error) = engine_fs::BlueprintTraitIndex::rebuild(&project_root) {
+                tracing::warn!(
+                    project_root = %project_root.display(),
+                    %error,
+                    "Failed to refresh Blueprint trait index after save"
+                );
+            }
+        }
     }
 
     /// Convert current editor state to BlueprintAsset
@@ -349,7 +371,7 @@ impl BlueprintEditorPanel {
                 active_tab_index: self.active_tab_index,
                 graph_view_states,
             }),
-            blueprint_metadata: Default::default(),
+            blueprint_metadata: self.blueprint_metadata.clone(),
         })
     }
 
@@ -383,8 +405,10 @@ impl BlueprintEditorPanel {
             variables,
             editor_state,
             format_version: _,
-            blueprint_metadata: _,
+            blueprint_metadata,
         } = asset;
+
+        self.blueprint_metadata = blueprint_metadata;
 
         self.local_macros = local_macros;
 
@@ -653,7 +677,7 @@ impl BlueprintEditorPanel {
         path.to_path_buf()
     }
 
-    fn get_graph_file_path(&self) -> Option<PathBuf> {
+    pub(crate) fn get_graph_file_path(&self) -> Option<PathBuf> {
         self.current_class_path
             .as_ref()
             .map(|class_path| class_path.join(GRAPH_SAVE_FILE_NAME))

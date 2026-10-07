@@ -9,8 +9,8 @@ use ui::workspace::Workspace;
 
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::{
-    CompilerPanel, EventsPanel, FindPanel, GraphCanvasPanel, MacrosPanel, PrefabHierarchyPanel,
-    PropertiesPanel, VariablesPanel,
+    CompilerPanel, EventsPanel, FindPanel, GraphCanvasPanel, ImplementedTraitsPanel, MacrosPanel,
+    PrefabHierarchyPanel, PropertiesPanel, VariablesPanel,
 };
 
 impl BlueprintEditorPanel {
@@ -54,6 +54,8 @@ impl BlueprintEditorPanel {
             let dock_area_weak = workspace.dock_area().downgrade();
 
             let variables_panel = cx.new(|cx| VariablesPanel::new(editor_weak.clone(), cx));
+            let implemented_traits_panel =
+                cx.new(|cx| ImplementedTraitsPanel::new(editor_weak.clone(), cx));
             let macros_panel = cx.new(|cx| MacrosPanel::new(editor_weak.clone(), cx));
             let events_panel = cx.new(|cx| EventsPanel::new(editor_weak.clone(), cx));
             let prefab_hierarchy_panel =
@@ -131,7 +133,10 @@ impl BlueprintEditorPanel {
                         cx,
                     ),
                     DockItem::tabs(
-                        vec![Arc::new(variables_panel)],
+                        vec![
+                            Arc::new(variables_panel) as Arc<dyn ui::dock::PanelView>,
+                            Arc::new(implemented_traits_panel) as Arc<dyn ui::dock::PanelView>,
+                        ],
                         None,
                         &dock_area_weak,
                         window,

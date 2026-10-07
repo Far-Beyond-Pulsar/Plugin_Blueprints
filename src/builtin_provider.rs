@@ -101,7 +101,7 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
     fn create_editor(
         &self,
         file_path: PathBuf,
-        _editor_context: &EditorContext,
+        editor_context: &EditorContext,
         window: &mut Window,
         cx: &mut App,
     ) -> Result<Arc<dyn PanelView>, PluginError> {
@@ -114,6 +114,11 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
                 }
             }
         });
+        if let Some(project_root) = editor_context.project_root.clone() {
+            panel.update(cx, |panel, _cx| {
+                panel.project_root = Some(project_root);
+            });
+        }
 
         // Keep plugin AI tools aligned with the currently opened blueprint panel state.
         let graph_snapshot = panel.read(cx).graph.clone();

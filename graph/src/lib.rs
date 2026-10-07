@@ -29,6 +29,11 @@ pub struct BlueprintMetadata {
 
     #[serde(default)]
     pub tags: Vec<String>,
+
+    /// Normalized project-relative `.trait.json` assets implemented by this
+    /// Blueprint. Legacy assets omit this field and deserialize as empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub implemented_traits: Vec<String>,
 }
 
 impl Default for BlueprintMetadata {
@@ -39,6 +44,7 @@ impl Default for BlueprintMetadata {
             description: String::new(),
             category: "Uncategorized".to_string(),
             tags: Vec::new(),
+            implemented_traits: Vec::new(),
         }
     }
 }

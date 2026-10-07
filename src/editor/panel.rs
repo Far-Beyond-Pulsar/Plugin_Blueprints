@@ -35,6 +35,15 @@ pub enum RenameTarget {
 pub struct BlueprintEditorPanel {
     pub(super) focus_handle: FocusHandle,
     pub graph: BlueprintGraph,
+    /// Asset metadata is kept intact across UI edits and serialization.
+    pub blueprint_metadata: blueprint_graph::BlueprintMetadata,
+    /// Project root used for VFS-backed trait discovery and index refresh.
+    pub project_root: Option<std::path::PathBuf>,
+    pub implemented_trait_catalog: Vec<crate::features::traits::TraitAssetSummary>,
+    pub implemented_trait_catalog_error: Option<String>,
+    pub implemented_trait_catalog_loaded: bool,
+    pub implemented_trait_catalog_loading: bool,
+    pub implemented_trait_status: Option<String>,
 
     // Workspace with full docking support
     pub(super) workspace: Option<Entity<ui::workspace::Workspace>>,
@@ -495,6 +504,13 @@ impl BlueprintEditorPanel {
         Self {
             focus_handle: cx.focus_handle(),
             graph: main_graph.clone(),
+            blueprint_metadata: blueprint_graph::BlueprintMetadata::default(),
+            project_root: None,
+            implemented_trait_catalog: Vec::new(),
+            implemented_trait_catalog_error: None,
+            implemented_trait_catalog_loaded: false,
+            implemented_trait_catalog_loading: false,
+            implemented_trait_status: None,
             workspace: None, // Will be initialized in render
             current_class_path: None,
             tab_title: None,

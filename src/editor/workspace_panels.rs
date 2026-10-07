@@ -22,6 +22,7 @@ use crate::features::macros::panel::MacrosRenderer;
 use crate::features::prefabs::panel::PrefabHierarchyRenderer;
 use crate::features::undo::UndoManager;
 use crate::features::variables::rendering::VariablesRenderer;
+use crate::features::traits::ImplementedTraitsRenderer;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::palette_view::NodePaletteView;
 use crate::ui_components::properties::PropertiesRenderer;
@@ -70,6 +71,54 @@ impl Panel for VariablesPanel {
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         "Variables".into_any_element()
+    }
+}
+
+/// Trait implementation assignments for the current Blueprint class.
+pub struct ImplementedTraitsPanel {
+    editor: WeakEntity<BlueprintEditorPanel>,
+    focus_handle: FocusHandle,
+}
+
+impl ImplementedTraitsPanel {
+    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+        Self {
+            editor,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+}
+
+impl EventEmitter<PanelEvent> for ImplementedTraitsPanel {}
+
+impl Render for ImplementedTraitsPanel {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(editor) = self.editor.upgrade() {
+            div()
+                .size_full()
+                .bg(cx.theme().sidebar)
+                .child(editor.update(cx, |editor, cx| {
+                    ImplementedTraitsRenderer::render(editor, window, cx)
+                }))
+        } else {
+            div().child("Editor not available")
+        }
+    }
+}
+
+impl Focusable for ImplementedTraitsPanel {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Panel for ImplementedTraitsPanel {
+    fn panel_name(&self) -> &'static str {
+        "implemented-traits"
+    }
+
+    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+        "Traits".into_any_element()
     }
 }
 
