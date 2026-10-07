@@ -23,13 +23,22 @@ impl BlueprintEditorPanel {
         &self,
         graph: &BlueprintGraph,
     ) -> Result<GraphDescription, String> {
+        Self::convert_graph_to_description_for_subgraphs(graph, &self.subgraphs)
+    }
+
+    /// Convert a graph using only its captured subgraph definitions.
+    /// This path is pure so save tasks can prepare the serialized graph off the UI thread.
+    pub(crate) fn convert_graph_to_description_for_subgraphs(
+        graph: &BlueprintGraph,
+        subgraphs: &[blueprint_graph::SubGraph],
+    ) -> Result<GraphDescription, String> {
         let mut graph_desc = GraphDescription::new("Blueprint Graph");
 
         // Convert nodes
         for bp_node in &graph.nodes {
             let mut node_instance = NodeInstance::new(
                 &bp_node.id,
-                &self.get_node_type_from_blueprint(bp_node)?,
+                &Self::get_node_type_from_blueprint(bp_node, subgraphs)?,
                 Position {
                     x: bp_node.position.x,
                     y: bp_node.position.y,
@@ -116,7 +125,10 @@ impl BlueprintEditorPanel {
     }
 
     /// Get node type from blueprint node
-    fn get_node_type_from_blueprint(&self, bp_node: &BlueprintNode) -> Result<String, String> {
+    fn get_node_type_from_blueprint(
+        bp_node: &BlueprintNode,
+        subgraphs: &[blueprint_graph::SubGraph],
+    ) -> Result<String, String> {
         if bp_node.node_type == NodeType::Conversion {
             let conversion_id = bp_node
                 .properties
@@ -132,12 +144,11 @@ impl BlueprintEditorPanel {
                 })?;
             return Ok(format!("conversion:{conversion_id}"));
         }
-        Ok(crate::core::subgraph_ref::SubGraphReference::decode(
-            &bp_node.definition_id,
-            &self.subgraphs,
+        Ok(
+            crate::core::subgraph_ref::SubGraphReference::decode(&bp_node.definition_id, subgraphs)
+                .map(|reference| reference.encode_for_compiler())
+                .unwrap_or_else(|| bp_node.definition_id.clone()),
         )
-        .map(|reference| reference.encode_for_compiler())
-        .unwrap_or_else(|| bp_node.definition_id.clone()))
     }
 
     /// Convert graph description to blueprint graph

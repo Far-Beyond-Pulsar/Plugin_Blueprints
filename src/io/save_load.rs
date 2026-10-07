@@ -12,6 +12,123 @@ use std::path::{Path, PathBuf};
 
 const GRAPH_SAVE_FILE_NAME: &str = "graph_save.json";
 
+struct BlueprintSaveSnapshot {
+    open_tabs: Vec<GraphTab>,
+    subgraphs: Vec<blueprint_graph::SubGraph>,
+    local_event_defs: Vec<crate::core::graph::EventDefinition>,
+    class_variables: Vec<crate::features::variables::ClassVariable>,
+    active_tab_index: usize,
+    blueprint_metadata: blueprint_graph::BlueprintMetadata,
+}
+
+impl BlueprintSaveSnapshot {
+    fn capture(panel: &BlueprintEditorPanel) -> Self {
+        Self {
+            open_tabs: panel.open_tabs.clone(),
+            subgraphs: panel.subgraphs.clone(),
+            local_event_defs: panel.local_event_defs.clone(),
+            class_variables: panel.class_variables.clone(),
+            active_tab_index: panel.active_tab_index,
+            blueprint_metadata: panel.blueprint_metadata.clone(),
+        }
+    }
+
+    fn into_asset(mut self) -> Result<formats::BlueprintAsset, String> {
+        let main_tab = self
+            .open_tabs
+            .iter()
+            .find(|tab| tab.is_main)
+            .ok_or("No main graph tab found")?;
+        let main_graph = BlueprintEditorPanel::convert_graph_to_description_for_subgraphs(
+            &main_tab.graph,
+            &self.subgraphs,
+        )?;
+
+        let subgraph_updates = self
+            .open_tabs
+            .iter()
+            .filter(|tab| {
+                !tab.is_main
+                    && !tab.is_library_macro
+                    && self.subgraphs.iter().any(|subgraph| subgraph.id == tab.id)
+            })
+            .map(|tab| {
+                Ok((
+                    tab.id.clone(),
+                    BlueprintEditorPanel::convert_graph_to_description_for_subgraphs(
+                        &tab.graph,
+                        &self.subgraphs,
+                    )?,
+                ))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        for (id, graph) in subgraph_updates {
+            if let Some(subgraph) = self.subgraphs.iter_mut().find(|subgraph| subgraph.id == id) {
+                subgraph.graph = graph;
+            }
+        }
+
+        let variables = self
+            .class_variables
+            .iter()
+            .map(|variable| blueprint_graph::ClassVariable {
+                id: variable.id.clone(),
+                name: variable.name.clone(),
+                data_type: blueprint_graph::DataType::from_type_str(&variable.var_type),
+                default_value: variable.default_value.clone(),
+                description: variable.description.clone(),
+            })
+            .collect();
+
+        let local_events = self
+            .local_event_defs
+            .into_iter()
+            .map(|definition| formats::EventDefDescription {
+                uid: definition.uid,
+                name: definition.name,
+                fields: definition
+                    .fields
+                    .into_iter()
+                    .map(|field| formats::EventFieldDescription {
+                        name: field.name,
+                        type_name: field.type_name,
+                    })
+                    .collect(),
+                return_type: definition.return_type,
+            })
+            .collect();
+
+        let graph_view_states = self
+            .open_tabs
+            .iter()
+            .map(|tab| {
+                (
+                    tab.id.clone(),
+                    blueprint_graph::GraphViewState {
+                        pan_offset_x: tab.graph.pan_offset.x,
+                        pan_offset_y: tab.graph.pan_offset.y,
+                        zoom: tab.graph.zoom_level,
+                    },
+                )
+            })
+            .collect();
+
+        Ok(formats::BlueprintAsset {
+            format_version: formats::current_format_version(),
+            main_graph,
+            subgraphs: self.subgraphs,
+            local_events,
+            variables,
+            editor_state: Some(formats::BlueprintEditorState {
+                open_tab_ids: self.open_tabs.iter().map(|tab| tab.id.clone()).collect(),
+                active_tab_index: self.active_tab_index,
+                graph_view_states,
+            }),
+            blueprint_metadata: self.blueprint_metadata,
+        })
+    }
+}
+
 fn serialize_blueprint_asset(asset: &formats::BlueprintAsset) -> Result<String, String> {
     formats::serialize_blueprint_with_header(asset)
 }
@@ -56,9 +173,9 @@ impl BlueprintEditorPanel {
     fn snapshot_blueprint_for_save(
         &mut self,
         cx: &mut Context<Self>,
-    ) -> Result<formats::BlueprintAsset, String> {
+    ) -> Result<BlueprintSaveSnapshot, String> {
         self.sync_all_canvases_to_tabs(cx);
-        self.to_blueprint_asset()
+        Ok(BlueprintSaveSnapshot::capture(self))
     }
 
     fn snapshot_prefab_sidecar_for_save(&mut self) -> Result<(PathBuf, String), String> {
@@ -99,8 +216,8 @@ impl BlueprintEditorPanel {
 
         // Snapshot live canvases and convert UI state before handing work off.
         // Serialization and all file writes then happen on a long-running task.
-        let asset = match self.snapshot_blueprint_for_save(cx) {
-            Ok(asset) => asset,
+        let snapshot = match self.snapshot_blueprint_for_save(cx) {
+            Ok(snapshot) => snapshot,
             Err(error) => {
                 self.report_save_preparation_error(error, cx);
                 return;
@@ -168,6 +285,7 @@ impl BlueprintEditorPanel {
                         return Err("Blueprint save cancelled".to_string());
                     }
 
+                    let asset = snapshot.into_asset()?;
                     let content = serialize_blueprint_asset(&asset)?;
                     task.report_progress(0.45, "Writing Blueprint graph");
                     persist_blueprint_content(&task_path, &content)?;
@@ -293,7 +411,8 @@ impl BlueprintEditorPanel {
         let target_path = Self::resolve_blueprint_path(path);
         tracing::info!(
             ">>> save_to_path: path={:?} resolved={:?}, graph_panels={}, open_tabs={}, self.graph.nodes={}",
-            path, target_path,
+            path,
+            target_path,
             self.graph_panels.len(),
             self.open_tabs.len(),
             self.graph.nodes.len(),
@@ -323,7 +442,7 @@ impl BlueprintEditorPanel {
 
         // Flush every open canvas's live graph into its tab snapshot before
         // serializing. Toolbar and synchronous saves share this snapshot path.
-        let asset = self.snapshot_blueprint_for_save(cx)?;
+        let asset = self.snapshot_blueprint_for_save(cx)?.into_asset()?;
 
         // Log what's in open_tabs after sync
         for tab in &self.open_tabs {
@@ -432,106 +551,7 @@ impl BlueprintEditorPanel {
 
     /// Convert current editor state to BlueprintAsset
     pub(crate) fn to_blueprint_asset(&self) -> Result<formats::BlueprintAsset, String> {
-        tracing::info!(
-            ">>> to_blueprint_asset: open_tabs={}, self.graph.nodes={}, self.graph.connections={}",
-            self.open_tabs.len(),
-            self.graph.nodes.len(),
-            self.graph.connections.len(),
-        );
-
-        // Always serialize the main event graph from the main tab snapshot,
-        // not from `self.graph` (which may currently be a macro tab).
-        let main_tab = self
-            .open_tabs
-            .iter()
-            .find(|tab| tab.is_main)
-            .ok_or("No main graph tab found")?;
-        tracing::info!(
-            ">>> to_blueprint_asset: main tab id={} nodes={} connections={}",
-            main_tab.id,
-            main_tab.graph.nodes.len(),
-            main_tab.graph.connections.len(),
-        );
-        let main_graph = self.convert_graph_to_description(&main_tab.graph)?;
-
-        // Serialize local macros from the open tab snapshots when those tabs are
-        // present, so each graph is persisted independently.
-        let mut subgraphs = self.subgraphs.clone();
-        for tab in self
-            .open_tabs
-            .iter()
-            .filter(|tab| !tab.is_main && !tab.is_library_macro)
-        {
-            if let Some(macro_def) = subgraphs.iter_mut().find(|m| m.id == tab.id) {
-                tracing::info!(
-                    ">>> to_blueprint_asset: saving macro tab id={} nodes={}",
-                    tab.id,
-                    tab.graph.nodes.len(),
-                );
-                macro_def.graph = self.convert_graph_to_description(&tab.graph)?;
-            }
-        }
-
-        // Convert local ClassVariable to ui::ClassVariable
-        let variables: Vec<blueprint_graph::ClassVariable> = self
-            .class_variables
-            .iter()
-            .map(|v| blueprint_graph::ClassVariable {
-                id: v.id.clone(),
-                name: v.name.clone(),
-                data_type: blueprint_graph::DataType::from_type_str(&v.var_type),
-                default_value: v.default_value.clone(),
-                description: v.description.clone(),
-            })
-            .collect();
-
-        // Convert event defs to serializable format
-        let local_events: Vec<formats::EventDefDescription> = self
-            .local_event_defs
-            .iter()
-            .map(|def| formats::EventDefDescription {
-                uid: def.uid.clone(),
-                name: def.name.clone(),
-                fields: def
-                    .fields
-                    .iter()
-                    .map(|f| formats::EventFieldDescription {
-                        name: f.name.clone(),
-                        type_name: f.type_name.clone(),
-                    })
-                    .collect(),
-                return_type: def.return_type.clone(),
-            })
-            .collect();
-
-        let graph_view_states = self
-            .open_tabs
-            .iter()
-            .map(|tab| {
-                (
-                    tab.id.clone(),
-                    blueprint_graph::GraphViewState {
-                        pan_offset_x: tab.graph.pan_offset.x,
-                        pan_offset_y: tab.graph.pan_offset.y,
-                        zoom: tab.graph.zoom_level,
-                    },
-                )
-            })
-            .collect();
-
-        Ok(formats::BlueprintAsset {
-            format_version: formats::current_format_version(),
-            main_graph,
-            subgraphs,
-            local_events,
-            variables,
-            editor_state: Some(formats::BlueprintEditorState {
-                open_tab_ids: self.open_tabs.iter().map(|tab| tab.id.clone()).collect(),
-                active_tab_index: self.active_tab_index,
-                graph_view_states,
-            }),
-            blueprint_metadata: self.blueprint_metadata.clone(),
-        })
+        BlueprintSaveSnapshot::capture(self).into_asset()
     }
 
     /// Load BlueprintAsset into the editor
