@@ -6,6 +6,7 @@ use crate::editor::panel::ResizeHandle;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::{NodeGraphRenderer, PIN_SIZE};
 use gpui::{CursorStyle, *};
+use ui::PixelsExt;
 // ─── coordinate conversion ────────────────────────────────────────────────────
 
 pub(super) fn to_canvas(window_pos: Point<Pixels>, canvas: &GraphCanvasPanel) -> Point<f32> {
