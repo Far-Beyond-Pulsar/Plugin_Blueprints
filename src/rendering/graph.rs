@@ -1964,6 +1964,22 @@ impl NodeGraphRenderer {
         };
         let node_id = node_id.clone();
         let has_bp = canvas.has_breakpoint(&node_id);
+        let is_collapsed_graph = canvas
+            .graph
+            .nodes
+            .iter()
+            .find(|node| node.id == node_id)
+            .and_then(|node| node.definition_id.strip_prefix("macro:"))
+            .and_then(|graph_id| {
+                canvas.panel.upgrade().map(|panel| {
+                    panel
+                        .read(cx)
+                        .local_macros
+                        .iter()
+                        .any(|graph| graph.id == graph_id && graph.kind == "collapsed")
+                })
+            })
+            .unwrap_or(false);
         let bp_label = if has_bp {
             "Remove Breakpoint"
         } else {
@@ -1974,6 +1990,7 @@ impl NodeGraphRenderer {
         let pe2 = pe.clone();
         let pe3 = pe.clone();
         let pe4 = pe.clone();
+        let pe5 = pe.clone();
         let nid_dup = node_id.clone();
         let nid_copy = node_id.clone();
         let nid_del = node_id.clone();
@@ -2036,6 +2053,29 @@ impl NodeGraphRenderer {
                                 });
                             }
                         }))
+                        .child(Self::menu_item(
+                            if is_collapsed_graph {
+                                "Uncollapse Node"
+                            } else {
+                                "Collapse to Node"
+                            },
+                            cx,
+                            {
+                                let pe = pe5.clone();
+                                let nid = node_id.clone();
+                                move |_, window, cx| {
+                                    pe.update(cx, |canvas, cx| {
+                                        if is_collapsed_graph {
+                                            canvas.expand_collapsed_node(nid.clone(), window, cx);
+                                        } else {
+                                            canvas.collapse_selected_nodes(cx);
+                                        }
+                                        canvas.node_context_menu = None;
+                                        cx.notify();
+                                    });
+                                }
+                            },
+                        ))
                         .child(Self::menu_divider(cx))
                         .child(Self::menu_item("Delete Node", cx, {
                             let pe = pe3.clone();

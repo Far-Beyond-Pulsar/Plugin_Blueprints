@@ -195,7 +195,7 @@ fn build_local_macro_palette_items(
 
     let visible: Vec<_> = macros
         .iter()
-        .filter(|m| Some(m.id.as_str()) != editing_macro_id)
+        .filter(|m| m.kind != "collapsed" && Some(m.id.as_str()) != editing_macro_id)
         .collect();
 
     if visible.is_empty() {

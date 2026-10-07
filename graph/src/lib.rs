@@ -740,6 +740,10 @@ impl Connection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubGraphDefinition {
     pub id: String,
+    /// Graph role. `macro` graphs are reusable palette entries; `collapsed`
+    /// graphs are private regions created by collapsing nodes in-place.
+    #[serde(default = "default_subgraph_kind")]
+    pub kind: String,
     pub name: String,
     pub description: String,
     pub graph: GraphDescription,
@@ -825,6 +829,7 @@ impl SubGraphDefinition {
     pub fn new(id: &str, name: &str) -> Self {
         Self {
             id: id.to_string(),
+            kind: default_subgraph_kind(),
             name: name.to_string(),
             description: String::new(),
             graph: GraphDescription::new(name),
@@ -1008,6 +1013,10 @@ impl SubGraphDefinition {
 
         node
     }
+}
+
+fn default_subgraph_kind() -> String {
+    "macro".to_string()
 }
 
 // ===== Sub-Graph Library System =====
