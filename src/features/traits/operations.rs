@@ -156,24 +156,21 @@ impl BlueprintEditorPanel {
 
 fn is_trait_catalog_event_path(path: &Path, project_root: Option<&Path>) -> bool {
     let normalized = path.to_string_lossy().replace('\\', "/");
-    let normalized = normalized.trim_end_matches('/');
+    let normalized = normalized.trim_end_matches('/').to_ascii_lowercase();
     if let Some(root) = project_root {
-        let root = root.to_string_lossy().replace('\\', "/");
-        let root = root.trim_end_matches('/');
-        let Some(relative) = normalized.strip_prefix(root) else {
+        let root = root
+            .to_string_lossy()
+            .replace('\\', "/")
+            .trim_end_matches('/')
+            .to_ascii_lowercase();
+        let Some(relative) = normalized.strip_prefix(&root) else {
             return false;
         };
         let relative = relative.trim_start_matches('/');
-        return relative.eq_ignore_ascii_case("types/traits")
-            || relative
-                .to_ascii_lowercase()
-                .starts_with("types/traits/");
+        return relative == "types/traits" || relative.starts_with("types/traits/");
     }
 
-    normalized.eq_ignore_ascii_case("types/traits")
-        || normalized
-            .to_ascii_lowercase()
-            .starts_with("types/traits/")
+    normalized == "types/traits" || normalized.starts_with("types/traits/")
 }
 
 fn load_trait_catalog(

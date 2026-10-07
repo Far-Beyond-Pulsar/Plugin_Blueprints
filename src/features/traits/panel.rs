@@ -37,7 +37,6 @@ impl ImplementedTraitsRenderer {
         let catalog_error = editor.implemented_trait_catalog_error.clone();
         let status = editor.implemented_trait_status.clone();
         let picker = editor.implemented_trait_picker.clone();
-        let editor_entity = cx.entity().clone();
         let add_trait =
             Popover::<SearchableList<TraitAssetSummary>>::new("implemented-trait-picker")
                 .anchor(Corner::BottomRight)
@@ -46,14 +45,12 @@ impl ImplementedTraitsRenderer {
                         .label("Add Trait")
                         .icon(IconName::Plus)
                         .small()
-                        .dropdown_caret(true),
+                        .dropdown_caret(true)
+                        .on_click(cx.listener(|editor, _, _, cx| {
+                            editor.refresh_implemented_trait_catalog(cx);
+                        })),
                 )
-                .content(move |_window, cx| {
-                    let _ = editor_entity.update(cx, |editor, cx| {
-                        editor.refresh_implemented_trait_catalog(cx);
-                    });
-                    picker.clone()
-                });
+                .content(move |_window, _cx| picker.clone());
         let refresh = Button::new("refresh-trait-catalog")
             .label("Refresh")
             .ghost()
