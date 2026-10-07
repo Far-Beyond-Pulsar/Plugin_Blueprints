@@ -214,16 +214,6 @@ impl BlueprintEditorPanel {
             return;
         };
 
-        // Snapshot live canvases and convert UI state before handing work off.
-        // Serialization and all file writes then happen on a long-running task.
-        let snapshot = match self.snapshot_blueprint_for_save(cx) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                self.report_save_preparation_error(error, cx);
-                return;
-            }
-        };
-
         let prefab_save = self.snapshot_prefab_sidecar_for_save();
         let prefab_save = match prefab_save {
             Ok(save) => Some(save),
@@ -242,27 +232,13 @@ impl BlueprintEditorPanel {
         let class_dir = self.current_class_path.clone();
         let publish_after_save = prefab_save.is_some();
 
-        // Existing dirty flags describe the state being captured by this save.
-        // Reset them now so edits made while the task runs remain dirty.
-        self.is_dirty = false;
-        for tab in &mut self.open_tabs {
-            tab.is_dirty = false;
-        }
-        let canvases: Vec<_> = self
-            .graph_panels
-            .iter()
-            .map(|(_, canvas)| canvas.clone())
-            .collect();
-        for canvas in canvases {
-            canvas.update(cx, |canvas, cx| {
-                canvas.is_dirty = false;
-                cx.notify();
-            });
-        }
-
+        // Register the save before taking the graph snapshot so the task is
+        // immediately visible in the editor's background-task audit panel.
         self.is_saving = true;
         cx.notify();
 
+        let (snapshot_tx, snapshot_rx) =
+            smol::channel::bounded::<Result<BlueprintSaveSnapshot, String>>(1);
         let (completion_tx, completion_rx) =
             smol::channel::bounded::<Result<Option<String>, String>>(1);
         let task_path = target_path.clone();
@@ -280,6 +256,13 @@ impl BlueprintEditorPanel {
             ),
             move |task| {
                 let result = (|| -> Result<Option<String>, String> {
+                    task.report_progress(0.02, "Waiting for graph snapshot");
+                    if task.is_cancelled() {
+                        return Err("Blueprint save cancelled".to_string());
+                    }
+
+                    let snapshot = smol::block_on(snapshot_rx.recv())
+                        .map_err(|_| "Blueprint save snapshot was not provided".to_string())??;
                     task.report_progress(0.05, "Serializing Blueprint graph");
                     if task.is_cancelled() {
                         return Err("Blueprint save cancelled".to_string());
@@ -317,6 +300,38 @@ impl BlueprintEditorPanel {
                 }
             },
         );
+
+        // Sync GPUI-owned canvases on the UI thread, then hand the detached
+        // value snapshot to the task for graph conversion, serialization, and IO.
+        let snapshot = match self.snapshot_blueprint_for_save(cx) {
+            Ok(snapshot) => Some(snapshot),
+            Err(error) => {
+                let _ = snapshot_tx.try_send(Err(error));
+                None
+            }
+        };
+
+        if let Some(snapshot) = snapshot {
+            // Reset dirty flags only after a complete snapshot has been captured.
+            // Edits made while the background task runs will set them again.
+            self.is_dirty = false;
+            for tab in &mut self.open_tabs {
+                tab.is_dirty = false;
+            }
+            let canvases: Vec<_> = self
+                .graph_panels
+                .iter()
+                .map(|(_, canvas)| canvas.clone())
+                .collect();
+            for canvas in canvases {
+                canvas.update(cx, |canvas, cx| {
+                    canvas.is_dirty = false;
+                    cx.notify();
+                });
+            }
+
+            let _ = snapshot_tx.try_send(Ok(snapshot));
+        }
 
         cx.spawn(async move |this, cx| {
             let save_result = completion_rx.recv().await.unwrap_or_else(|_| {
