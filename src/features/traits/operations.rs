@@ -58,7 +58,8 @@ impl BlueprintEditorPanel {
     }
 
     /// Refresh the catalog after a virtual filesystem event that can change
-    /// trait discovery. Events outside the canonical trait directory are ignored.
+    /// trait discovery. Any project-relative `.trait.json` asset can be a trait;
+    /// new files are still created in the canonical `types/traits` directory.
     pub fn refresh_for_trait_asset_event(&mut self, path: &Path, cx: &mut Context<Self>) {
         if !is_trait_catalog_event_path(path, self.project_root.as_deref()) {
             return;
@@ -167,10 +168,10 @@ fn is_trait_catalog_event_path(path: &Path, project_root: Option<&Path>) -> bool
             return false;
         };
         let relative = relative.trim_start_matches('/');
-        return relative == "types/traits" || relative.starts_with("types/traits/");
+        return relative.ends_with(".trait.json");
     }
 
-    normalized == "types/traits" || normalized.starts_with("types/traits/")
+    normalized.ends_with(".trait.json")
 }
 
 fn load_trait_catalog(
@@ -252,7 +253,7 @@ fn normalize_trait_path(raw: &str) -> Option<String> {
             _ => None,
         })
         .collect::<Vec<_>>();
-    if parts.len() < 3 || parts[0] != "types" || parts[1] != "traits" {
+    if parts.is_empty() {
         return None;
     }
     let path = parts.join("/");

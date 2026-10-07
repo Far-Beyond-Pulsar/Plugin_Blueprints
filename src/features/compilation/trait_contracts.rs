@@ -66,11 +66,10 @@ fn normalize_trait_paths(paths: &[String]) -> Result<Vec<String>, String> {
                     Component::ParentDir | Component::RootDir | Component::Prefix(_)
                 )
             })
-            || !path.starts_with("types/traits/")
             || !path.ends_with(".trait.json")
         {
             return Err(format!(
-                "Blueprint trait reference '{raw_path}' must be a normalized project-relative path under types/traits ending in .trait.json"
+                "Blueprint trait reference '{raw_path}' must be a normalized project-relative path ending in .trait.json"
             ));
         }
         let normalized_path = parsed
