@@ -272,7 +272,7 @@ impl BlueprintEditorPanel {
     }
 
     /// Convert current editor state to BlueprintAsset
-    fn to_blueprint_asset(&self) -> Result<formats::BlueprintAsset, String> {
+    pub(crate) fn to_blueprint_asset(&self) -> Result<formats::BlueprintAsset, String> {
         tracing::info!(
             ">>> to_blueprint_asset: open_tabs={}, self.graph.nodes={}, self.graph.connections={}",
             self.open_tabs.len(),

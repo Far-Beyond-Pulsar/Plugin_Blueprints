@@ -954,6 +954,53 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
                 node.is_selected = true;
             }
             expanded = Some((inner.nodes, restored_connections));
+
+            // Collapsed definitions are private to their call sites. Keep the
+            // definition while another instance still references it, but
+            // remove its saved graph and tab after the last instance expands.
+            let references_graph = |nodes: &[BlueprintNode]| {
+                nodes.iter().any(|node| {
+                    node.id != node_id
+                        && node.definition_id.strip_prefix("macro:") == Some(graph_id.as_str())
+                })
+            };
+            let has_other_instance = references_graph(&self.graph.nodes)
+                || editor
+                    .open_tabs
+                    .iter()
+                    .filter(|tab| tab.id != self.id)
+                    .any(|tab| references_graph(&tab.graph.nodes))
+                || editor
+                    .subgraphs
+                    .iter()
+                    .filter(|subgraph| subgraph.id != graph_id)
+                    .any(|subgraph| {
+                        subgraph
+                            .graph
+                            .nodes
+                            .values()
+                            .any(|node| node.node_type == format!("macro:{graph_id}"))
+                    });
+
+            if !has_other_instance {
+                let active_tab_id = editor
+                    .open_tabs
+                    .get(editor.active_tab_index)
+                    .map(|tab| tab.id.clone());
+                editor.subgraphs.retain(|subgraph| subgraph.id != graph_id);
+                editor.open_tabs.retain(|tab| tab.id != graph_id);
+                editor.active_tab_index = active_tab_id
+                    .and_then(|id| editor.open_tabs.iter().position(|tab| tab.id == id))
+                    .unwrap_or_else(|| {
+                        editor
+                            .active_tab_index
+                            .min(editor.open_tabs.len().saturating_sub(1))
+                    });
+                editor.graph_workspace_tabs_dirty = true;
+                editor.is_dirty = true;
+                editor.invalidate_palette(panel_cx);
+                editor.refresh_graph_workspace_tabs(window, panel_cx);
+            }
             panel_cx.notify();
         });
 

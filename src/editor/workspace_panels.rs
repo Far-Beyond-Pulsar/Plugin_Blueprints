@@ -20,10 +20,11 @@ use crate::features::connections::operations::ConnectionDrag;
 use crate::features::events::panel::EventsRenderer;
 use crate::features::macros::panel::MacrosRenderer;
 use crate::features::prefabs::panel::PrefabHierarchyRenderer;
+use crate::features::traits::ImplementedTraitsRenderer;
 use crate::features::undo::UndoManager;
 use crate::features::variables::rendering::VariablesRenderer;
-use crate::features::traits::ImplementedTraitsRenderer;
 use crate::rendering::graph::NodeGraphRenderer;
+use crate::ui_components::asset_inspector::{AssetInspectorRenderer, AssetInspectorSnapshot};
 use crate::ui_components::palette_view::NodePaletteView;
 use crate::ui_components::properties::PropertiesRenderer;
 use ui_common::reflected_properties_panel::PropertyStateManager;
@@ -256,6 +257,115 @@ impl Panel for CompilerPanel {
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
         "Compiler".into_any_element()
+    }
+}
+
+/// Live view of the sections that will be written to the Blueprint save file.
+pub struct AssetInspectorPanel {
+    editor: WeakEntity<BlueprintEditorPanel>,
+    focus_handle: FocusHandle,
+    snapshot: AssetInspectorSnapshot,
+    refresh_task: Option<Task<()>>,
+    observed_canvas_ids: HashSet<String>,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl AssetInspectorPanel {
+    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+        let mut panel = Self {
+            editor,
+            focus_handle: cx.focus_handle(),
+            snapshot: AssetInspectorSnapshot::default(),
+            refresh_task: None,
+            observed_canvas_ids: HashSet::new(),
+            _subscriptions: Vec::new(),
+        };
+
+        if let Some(editor_entity) = panel.editor.upgrade() {
+            let canvases = editor_entity.read(cx).graph_panels.clone();
+            panel.observe_canvases(&canvases, cx);
+            panel
+                ._subscriptions
+                .push(cx.observe(&editor_entity, |panel, editor, cx| {
+                    let canvases = editor.read(cx).graph_panels.clone();
+                    panel.observe_canvases(&canvases, cx);
+                    panel.schedule_preview_refresh(cx);
+                }));
+        }
+        panel.schedule_preview_refresh(cx);
+        panel
+    }
+
+    fn observe_canvases(
+        &mut self,
+        canvases: &[(String, Entity<GraphCanvasPanel>)],
+        cx: &mut Context<Self>,
+    ) {
+        for (tab_id, canvas) in canvases {
+            if self.observed_canvas_ids.insert(tab_id.clone()) {
+                self._subscriptions.push(cx.observe(canvas, |panel, _, cx| {
+                    panel.schedule_preview_refresh(cx);
+                }));
+            }
+        }
+    }
+
+    fn schedule_preview_refresh(&mut self, cx: &mut Context<Self>) {
+        let editor = self.editor.clone();
+        self.refresh_task = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(400))
+                .await;
+            let snapshot = if let Some(editor) = editor.upgrade() {
+                editor.update(cx, |editor, cx| {
+                    AssetInspectorRenderer::build_snapshot(editor, cx)
+                })
+            } else {
+                AssetInspectorSnapshot {
+                    error: Some("Editor not available".to_string()),
+                    ..Default::default()
+                }
+            };
+            let _ = this.update(cx, |panel, cx| {
+                panel.snapshot = snapshot;
+                panel.refresh_task = None;
+                cx.notify();
+            });
+        }));
+    }
+}
+
+impl EventEmitter<PanelEvent> for AssetInspectorPanel {}
+
+impl Render for AssetInspectorPanel {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(editor) = self.editor.upgrade() {
+            let snapshot = self.snapshot.clone();
+            div()
+                .size_full()
+                .bg(cx.theme().sidebar)
+                .child(editor.update(cx, |editor, cx| {
+                    AssetInspectorRenderer::render(editor, &snapshot, cx)
+                }))
+        } else {
+            div().child("Editor not available")
+        }
+    }
+}
+
+impl Focusable for AssetInspectorPanel {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Panel for AssetInspectorPanel {
+    fn panel_name(&self) -> &'static str {
+        "asset-save-data"
+    }
+
+    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+        "Save Data".into_any_element()
     }
 }
 

@@ -152,7 +152,23 @@ impl BlueprintEditorPanel {
             let definition_id = node_instance.node_type.clone();
             let node_def = node_definitions.get_node_definition(&definition_id);
 
-            let (title, icon, description, node_type, color) = if definition_id == "reroute" {
+            let (title, icon, description, node_type, color) = if definition_id == "macro_entry" {
+                (
+                    "Subgraph Entry".to_string(),
+                    "▶".to_string(),
+                    "Entry point for a macro or collapsed graph".to_string(),
+                    NodeType::MacroEntry,
+                    Some("#7C3AED".to_string()),
+                )
+            } else if definition_id == "macro_exit" {
+                (
+                    "Subgraph Exit".to_string(),
+                    "◀".to_string(),
+                    "Exit point for a macro or collapsed graph".to_string(),
+                    NodeType::MacroExit,
+                    Some("#7C3AED".to_string()),
+                )
+            } else if definition_id == "reroute" {
                 (
                     "Reroute".to_string(),
                     "•".to_string(),
