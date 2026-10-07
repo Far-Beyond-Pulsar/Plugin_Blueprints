@@ -232,19 +232,21 @@ fn section_summary(name: &str, value: &serde_json::Value) -> String {
 }
 
 fn subgraph_is_referenced(editor: &BlueprintEditorPanel, graph_id: &str) -> bool {
-    let definition_id = format!("macro:{graph_id}");
     editor
         .open_tabs
         .iter()
         .flat_map(|tab| tab.graph.nodes.iter())
-        .any(|node| node.definition_id == definition_id)
+        .any(|node| {
+            crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(&node.definition_id)
+                == Some(graph_id)
+        })
         || editor.subgraphs.iter().any(|subgraph| {
             subgraph.id != graph_id
-                && subgraph
-                    .graph
-                    .nodes
-                    .values()
-                    .any(|node| node.node_type == definition_id)
+                && subgraph.graph.nodes.values().any(|node| {
+                    crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(
+                        &node.node_type,
+                    ) == Some(graph_id)
+                })
         })
 }
 

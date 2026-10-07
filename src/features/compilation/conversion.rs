@@ -132,7 +132,12 @@ impl BlueprintEditorPanel {
                 })?;
             return Ok(format!("conversion:{conversion_id}"));
         }
-        Ok(bp_node.definition_id.clone())
+        Ok(crate::core::subgraph_ref::SubGraphReference::decode(
+            &bp_node.definition_id,
+            &self.subgraphs,
+        )
+        .map(|reference| reference.encode_for_compiler())
+        .unwrap_or_else(|| bp_node.definition_id.clone()))
     }
 
     /// Convert graph description to blueprint graph
@@ -238,12 +243,20 @@ impl BlueprintEditorPanel {
                     NodeType::CustomEventDispatch,
                     None,
                 )
-            } else if let Some(macro_id) = definition_id.strip_prefix("macro:") {
+            } else if let Some(reference) = crate::core::subgraph_ref::SubGraphReference::decode(
+                &definition_id,
+                &self.subgraphs,
+            ) {
+                let macro_id = reference.id.as_str();
                 let macro_name = self
                     .subgraphs
                     .iter()
-                    .find(|m| m.id == macro_id)
-                    .or_else(|| self.library_manager.get_subgraph(macro_id))
+                    .find(|m| m.id == macro_id && m.kind == reference.kind)
+                    .or_else(|| {
+                        self.library_manager
+                            .get_subgraph(macro_id)
+                            .filter(|subgraph| subgraph.kind == reference.kind)
+                    })
                     .map(|m| m.name.clone())
                     .unwrap_or_else(|| {
                         let name = macro_id.replace('-', " ");
@@ -261,8 +274,15 @@ impl BlueprintEditorPanel {
                 (
                     macro_name,
                     "📦".to_string(),
-                    format!("Instance of macro '{}'", macro_id),
-                    NodeType::MacroInstance,
+                    match reference.kind {
+                        blueprint_graph::SubGraphKind::Macro => {
+                            format!("Instance of macro '{}'", macro_id)
+                        }
+                        blueprint_graph::SubGraphKind::Collapsed => {
+                            format!("Collapsed graph '{}'", macro_id)
+                        }
+                    },
+                    NodeType::SubGraphCall,
                     Some("#9B59B6".to_string()),
                 )
             } else if let Some((title, is_event)) =

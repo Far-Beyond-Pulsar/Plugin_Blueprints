@@ -139,8 +139,8 @@ impl BlueprintEditorPanel {
     }
 
     /// Build a `graphy::GraphDescription` for the whole blueprint file: the main
-    /// event graph with every `MacroInstance`/`SubgraphCall` node
-    /// (`definition_id: "macro:<id>"`) inlined via graphy's
+    /// event graph with every subgraph call node (typed in new saves and
+    /// accepted from legacy `macro:<id>` saves) inlined via graphy's
     /// `SubGraphExpander`, using a library assembled from this file's local
     /// macros plus any shared library macros they reference.
     ///

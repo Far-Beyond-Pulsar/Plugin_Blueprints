@@ -21,7 +21,7 @@ use ui::ActiveTheme;
 use ui::PixelsExt;
 
 use crate::core::graph::BlueprintGraph;
-use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType, Pin};
+use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
 use crate::rendering::gpu::{
@@ -37,13 +37,21 @@ pub const PIN_ROW_H: f32 = layout::PIN_ROW_H;
 pub const PIN_GAP: f32 = layout::PIN_GAP;
 pub const PIN_SIZE: f32 = layout::PIN_SIZE;
 
-const WIRE_SEGS: usize = 32;
 const WIRE_THICKNESS: f32 = 2.8;
 const HEADER_FONT: f32 = 12.5;
 const PIN_FONT: f32 = 10.5;
 const HEADER_PAD_X: f32 = layout::HEADER_PAD_X;
 const COMMENT_TITLE_PAD_X: f32 = 12.0;
 const COMMENT_TITLE_PAD_Y: f32 = 6.0;
+
+mod context_menu;
+mod geometry;
+
+pub(crate) use geometry::bezier;
+use geometry::{
+    cached_text_width, category_color, pin_color, pin_gpos_id, pin_gpos_row, tessellate_line,
+    tessellate_wire, wire_phase,
+};
 
 pub struct NodeGraphRenderer;
 
@@ -94,39 +102,7 @@ impl NodeGraphRenderer {
         pin_id: Option<&str>,
         graph: &BlueprintGraph,
     ) -> Point<f32> {
-        if node.node_type == NodeType::Conversion {
-            return Self::graph_to_screen_pos(
-                Point::new(
-                    node.position.x + if is_input { 0.0 } else { node.size.width },
-                    node.position.y + node.size.height * 0.5,
-                ),
-                graph,
-            );
-        }
-        if node.node_type == NodeType::Reroute {
-            let cx = node.position.x + node.size.width * 0.5;
-            let cy = node.position.y + node.size.height * 0.5;
-            return Self::graph_to_screen_pos(Point::new(cx, cy), graph);
-        }
-        // Special case: __return__ pin renders in the header (right side)
-        if pin_id == Some("__return__") {
-            let scr = Self::graph_to_screen_pos(node.position, graph);
-            let px_ = scr.x + (node.size.width - 24.0) * graph.zoom_level;
-            let py = scr.y + HEADER_H * 0.5 * graph.zoom_level;
-            return Point::new(px_, py);
-        }
-        let zoom = graph.zoom_level;
-        let scr = Self::graph_to_screen_pos(node.position, graph);
-        let py = scr.y
-            + (HEADER_H + SEP_H + BODY_PAD) * zoom
-            + row as f32 * (PIN_ROW_H + PIN_GAP) * zoom
-            + PIN_ROW_H * 0.5 * zoom;
-        let px_ = if is_input {
-            scr.x + BODY_PAD * zoom
-        } else {
-            scr.x + (node.size.width - BODY_PAD) * zoom
-        };
-        Point::new(px_, py)
+        geometry::pin_canvas_pos(node, is_input, row, pin_id, graph)
     }
 
     pub fn calculate_pin_position(
@@ -135,32 +111,7 @@ impl NodeGraphRenderer {
         is_input: bool,
         graph: &BlueprintGraph,
     ) -> Option<Point<f32>> {
-        if node.node_type == NodeType::Conversion {
-            return Some(Self::graph_to_screen_pos(
-                Point::new(
-                    node.position.x + if is_input { 0.0 } else { node.size.width },
-                    node.position.y + node.size.height * 0.5,
-                ),
-                graph,
-            ));
-        }
-        if node.node_type == NodeType::Reroute {
-            let cx = node.position.x + node.size.width * 0.5;
-            let cy = node.position.y + node.size.height * 0.5;
-            return Some(Self::graph_to_screen_pos(Point::new(cx, cy), graph));
-        }
-        let row = if is_input {
-            node.inputs.iter().position(|p| p.id == pin_id)?
-        } else {
-            node.outputs.iter().position(|p| p.id == pin_id)?
-        };
-        Some(Self::pin_canvas_pos(
-            node,
-            is_input,
-            row,
-            Some(pin_id),
-            graph,
-        ))
+        geometry::calculate_pin_position(node, pin_id, is_input, graph)
     }
 
     pub fn calculate_pin_position_graph_space(
@@ -169,326 +120,26 @@ impl NodeGraphRenderer {
         row: usize,
         _graph: &BlueprintGraph,
     ) -> Point<f32> {
-        if node.node_type == NodeType::Conversion {
-            return Point::new(
-                node.position.x + if is_input { 0.0 } else { node.size.width },
-                node.position.y + node.size.height * 0.5,
-            );
-        }
-        let py = node.position.y
-            + HEADER_H
-            + SEP_H
-            + BODY_PAD
-            + row as f32 * (PIN_ROW_H + PIN_GAP)
-            + PIN_ROW_H * 0.5;
-        let px_ = if is_input {
-            node.position.x + BODY_PAD
-        } else {
-            node.position.x + node.size.width - BODY_PAD
-        };
-        Point::new(px_, py)
+        geometry::calculate_pin_position_graph_space(node, is_input, row, _graph)
     }
 
     /// Backwards-compat: is this node inside the viewport?
     pub fn is_node_visible_simple(node: &BlueprintNode, graph: &BlueprintGraph) -> bool {
-        let pad = 260.0 / graph.zoom_level.max(0.05);
-        let vl = -graph.pan_offset.x - pad;
-        let vt = -graph.pan_offset.y - pad;
-        let vr = -graph.pan_offset.x + 3840.0 / graph.zoom_level + pad;
-        let vb = -graph.pan_offset.y + 2160.0 / graph.zoom_level + pad;
-        !(node.position.x > vr
-            || node.position.x + node.size.width < vl
-            || node.position.y > vb
-            || node.position.y + node.size.height < vt)
+        geometry::is_node_visible_simple(node, graph)
     }
 
     pub fn is_connection_visible_simple(conn: &Connection, graph: &BlueprintGraph) -> bool {
-        let from = graph.nodes.iter().find(|n| n.id == conn.source_node);
-        let to = graph.nodes.iter().find(|n| n.id == conn.target_node);
-        match (from, to) {
-            (Some(f), Some(t)) => {
-                Self::is_node_visible_simple(f, graph) || Self::is_node_visible_simple(t, graph)
-            }
-            _ => false,
-        }
+        geometry::is_connection_visible_simple(conn, graph)
     }
 
     pub fn parse_hex_color(hex: &str) -> Option<gpui::Hsla> {
-        let hex = hex.trim_start_matches('#');
-        let p = |s: &str| u8::from_str_radix(s, 16).ok().map(|v| v as f32 / 255.0);
-        if hex.len() == 6 {
-            Some(gpui::Hsla::from(gpui::Rgba {
-                r: p(&hex[0..2])?,
-                g: p(&hex[2..4])?,
-                b: p(&hex[4..6])?,
-                a: 1.0,
-            }))
-        } else if hex.len() == 8 {
-            Some(gpui::Hsla::from(gpui::Rgba {
-                r: p(&hex[0..2])?,
-                g: p(&hex[2..4])?,
-                b: p(&hex[4..6])?,
-                a: p(&hex[6..8])?,
-            }))
-        } else {
-            None
-        }
+        geometry::parse_hex_color(hex)
     }
 }
-
-// ─── colour helpers ───────────────────────────────────────────────────────────
-
-fn category_color(node: &BlueprintNode) -> [f32; 4] {
-    if let Some(ref hex) = node.color {
-        let h = hex.trim_start_matches('#');
-        let p = |s: &str| u8::from_str_radix(s, 16).ok().map(|v| v as f32 / 255.0);
-        if h.len() == 6 {
-            if let (Some(r), Some(g), Some(b)) = (p(&h[0..2]), p(&h[2..4]), p(&h[4..6])) {
-                return [r, g, b, 1.0];
-            }
-        }
-    }
-    match node.node_type {
-        NodeType::Event => [0.72, 0.12, 0.10, 1.0],
-        NodeType::Logic => [0.13, 0.38, 0.78, 1.0],
-        NodeType::Math => [0.16, 0.62, 0.28, 1.0],
-        NodeType::Object => [0.78, 0.42, 0.08, 1.0],
-        NodeType::Reroute => [0.40, 0.40, 0.42, 1.0],
-        NodeType::Conversion => [0.24, 0.47, 0.65, 1.0],
-        NodeType::MacroEntry | NodeType::MacroExit => [0.44, 0.18, 0.72, 1.0],
-        NodeType::MacroInstance => [0.32, 0.12, 0.52, 1.0],
-        NodeType::CustomEvent => [0.90, 0.50, 0.10, 1.0], // orange
-        NodeType::CustomEventDispatch => [0.10, 0.60, 0.85, 1.0], // cyan
-    }
-}
-
-fn pin_color(dt: &DataType) -> [f32; 4] {
-    dt.display_color()
-}
-
-fn wire_phase(conn: &Connection) -> f32 {
-    let mut h: u32 = 2166136261;
-    for b in conn
-        .source_node
-        .bytes()
-        .chain(conn.source_pin.bytes())
-        .chain(conn.target_node.bytes())
-        .chain(conn.target_pin.bytes())
-    {
-        h ^= b as u32;
-        h = h.wrapping_mul(16777619);
-    }
-    (h as f32 / u32::MAX as f32) * 2.0
-}
-
-// ─── geometry helpers — all positions in GRAPH SPACE ─────────────────────────
-// The GPU vertex shaders apply graph→screen transform (pan+zoom).
-// CPU must NOT pre-apply pan or zoom to positions used by the GPU pipelines.
-// Exception: text positions are in screen space because text.wgsl uses NDC direct.
-
-/// Graph-space pin centre for a given node row (input or output side).
-/// No pan or zoom applied — the GPU shader handles the transform.
-fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) {
-    if node.node_type == NodeType::Conversion {
-        return (
-            node.position.x + if is_input { 0.0 } else { node.size.width },
-            node.position.y + node.size.height * 0.5,
-        );
-    }
-    if node.node_type == NodeType::Reroute {
-        let cx = node.position.x + node.size.width * 0.5;
-        let cy = node.position.y + node.size.height * 0.5;
-        return (cx, cy);
-    }
-    let py = node.position.y
-        + HEADER_H
-        + SEP_H
-        + BODY_PAD
-        + row as f32 * (PIN_ROW_H + PIN_GAP)
-        + PIN_ROW_H * 0.5;
-    let px = if is_input {
-        node.position.x + BODY_PAD
-    } else {
-        node.position.x + node.size.width - BODY_PAD
-    };
-    (px, py)
-}
-
-/// Graph-space pin centre addressed by pin ID.
-fn pin_gpos_id(node: &BlueprintNode, pin_id: &str, is_input: bool) -> Option<(f32, f32)> {
-    if node.node_type == NodeType::Conversion {
-        return Some((
-            node.position.x + if is_input { 0.0 } else { node.size.width },
-            node.position.y + node.size.height * 0.5,
-        ));
-    }
-    if node.node_type == NodeType::Reroute {
-        let cx = node.position.x + node.size.width * 0.5;
-        let cy = node.position.y + node.size.height * 0.5;
-        return Some((cx, cy));
-    }
-    if pin_id == "__return__" {
-        return Some((
-            node.position.x + node.size.width - 24.0,
-            node.position.y + HEADER_H * 0.5,
-        ));
-    }
-    let row = if is_input {
-        node.inputs.iter().position(|p| p.id == pin_id)?
-    } else {
-        node.outputs.iter().position(|p| p.id == pin_id)?
-    };
-    Some(pin_gpos_row(node, is_input, row))
-}
-
-pub(crate) fn bezier(
-    p0: (f32, f32),
-    p1: (f32, f32),
-    p2: (f32, f32),
-    p3: (f32, f32),
-    t: f32,
-) -> (f32, f32) {
-    let u = 1.0 - t;
-    let a = u * u * u;
-    let b = 3.0 * u * u * t;
-    let c = 3.0 * u * t * t;
-    let d = t * t * t;
-    (
-        a * p0.0 + b * p1.0 + c * p2.0 + d * p3.0,
-        a * p0.1 + b * p1.1 + c * p2.1 + d * p3.1,
-    )
-}
-
-/// Tessellate a bezier wire into thick-quad segments — positions in GRAPH SPACE.
-/// half_thick is in graph units (not multiplied by zoom — shader handles scale).
-fn tessellate_wire(
-    from: (f32, f32),
-    to: (f32, f32),
-    color: [f32; 4],
-    half_thick: f32,
-) -> Vec<WireVertex> {
-    let hd = (to.0 - from.0).abs();
-    // Control point offset in graph units — keeps wire shape consistent at all zoom levels.
-    let ctl = (hd * 0.45).max(55.0).min(220.0);
-    let c1 = (from.0 + ctl, from.1);
-    let c2 = (to.0 - ctl, to.1);
-    let mut out = Vec::with_capacity(WIRE_SEGS * 6);
-    let mut prev = from;
-    for i in 1..=WIRE_SEGS {
-        let t = i as f32 / WIRE_SEGS as f32;
-        let cur = bezier(from, c1, c2, to, t);
-        let dx = cur.0 - prev.0;
-        let dy = cur.1 - prev.1;
-        let len = (dx * dx + dy * dy).sqrt();
-        let (nx, ny) = if len > 0.0 {
-            (-dy / len * half_thick, dx / len * half_thick)
-        } else {
-            (0.0, half_thick)
-        };
-        let v0 = (i - 1) as f32 / WIRE_SEGS as f32;
-        let v1 = i as f32 / WIRE_SEGS as f32;
-        out.push(WireVertex {
-            pos: [prev.0 + nx, prev.1 + ny],
-            uv: [0.0, v0],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [prev.0 - nx, prev.1 - ny],
-            uv: [1.0, v0],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [cur.0 + nx, cur.1 + ny],
-            uv: [0.0, v1],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [cur.0 + nx, cur.1 + ny],
-            uv: [0.0, v1],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [prev.0 - nx, prev.1 - ny],
-            uv: [1.0, v0],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [cur.0 - nx, cur.1 - ny],
-            uv: [1.0, v1],
-            color,
-        });
-        prev = cur;
-    }
-    out
-}
-
-/// Tessellate a straight line segment — no bezier, no S-curves.
-/// Used for the selection box where all edges must be perfectly straight.
-fn tessellate_line(
-    from: (f32, f32),
-    to: (f32, f32),
-    color: [f32; 4],
-    half_thick: f32,
-) -> Vec<WireVertex> {
-    let dx = to.0 - from.0;
-    let dy = to.1 - from.1;
-    let len = (dx * dx + dy * dy).sqrt();
-    if len < 0.0001 {
-        return vec![];
-    }
-    let (nx, ny) = (-dy / len * half_thick, dx / len * half_thick);
-    vec![
-        WireVertex {
-            pos: [from.0 + nx, from.1 + ny],
-            uv: [0.0, 0.0],
-            color,
-        },
-        WireVertex {
-            pos: [from.0 - nx, from.1 - ny],
-            uv: [1.0, 0.0],
-            color,
-        },
-        WireVertex {
-            pos: [to.0 + nx, to.1 + ny],
-            uv: [0.0, 1.0],
-            color,
-        },
-        WireVertex {
-            pos: [to.0 + nx, to.1 + ny],
-            uv: [0.0, 1.0],
-            color,
-        },
-        WireVertex {
-            pos: [from.0 - nx, from.1 - ny],
-            uv: [1.0, 0.0],
-            color,
-        },
-        WireVertex {
-            pos: [to.0 - nx, to.1 - ny],
-            uv: [1.0, 1.0],
-            color,
-        },
-    ]
-}
-
-// ─── main render ──────────────────────────────────────────────────────────────
 
 type TextCall = (String, f32, f32, f32, [f32; 4], TextAlign);
 
-fn cached_text_width(
-    renderer: &mut crate::rendering::gpu::BpRenderer,
-    cache: &mut std::collections::HashMap<(String, u32), f32>,
-    text: &str,
-    size: f32,
-) -> f32 {
-    let key = (text.to_owned(), size.to_bits());
-    if let Some(width) = cache.get(&key) {
-        return *width;
-    }
-    let width = renderer.measure_text_width(text, size);
-    cache.insert(key, width);
-    width
-}
+// ─── main render ──────────────────────────────────────────────────────────────
 
 impl NodeGraphRenderer {
     pub fn render(
@@ -2016,244 +1667,5 @@ impl NodeGraphRenderer {
             );
 
         hud.into_any_element()
-    }
-
-    // ── Node context menu ─────────────────────────────────────────────────────
-
-    fn render_node_context_menu(
-        canvas: &GraphCanvasPanel,
-        cx: &mut Context<GraphCanvasPanel>,
-    ) -> AnyElement {
-        let Some((ref node_id, pos)) = canvas.node_context_menu else {
-            return div().into_any_element();
-        };
-        let node_id = node_id.clone();
-        let has_bp = canvas.has_breakpoint(&node_id);
-        let is_collapsed_graph = canvas
-            .graph
-            .nodes
-            .iter()
-            .find(|node| node.id == node_id)
-            .and_then(|node| node.definition_id.strip_prefix("macro:"))
-            .and_then(|graph_id| {
-                canvas.panel.upgrade().map(|panel| {
-                    panel.read(cx).subgraphs.iter().any(|graph| {
-                        graph.id == graph_id
-                            && graph.kind == blueprint_graph::SubGraphKind::Collapsed
-                    })
-                })
-            })
-            .unwrap_or(false);
-        let bp_label = if has_bp {
-            "Remove Breakpoint"
-        } else {
-            "Add Breakpoint  ⏹"
-        };
-
-        let pe = cx.entity().clone();
-        let pe2 = pe.clone();
-        let pe3 = pe.clone();
-        let pe4 = pe.clone();
-        let pe5 = pe.clone();
-        let nid_dup = node_id.clone();
-        let nid_copy = node_id.clone();
-        let nid_del = node_id.clone();
-        let nid_bp = node_id.clone();
-
-        deferred(
-            anchored()
-                .position(pos)
-                .snap_to_window_with_margin(px(8.0))
-                .anchor(gpui::Corner::TopLeft)
-                .child(
-                    div()
-                        .occlude()
-                        .w(px(200.0))
-                        .bg(cx.theme().popover)
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .shadow_lg()
-                        .rounded(px(6.0))
-                        .py(px(4.0))
-                        // ── Breakpoint section ─────────────────────────────────
-                        .child(Self::menu_item_colored(
-                            bp_label,
-                            if has_bp {
-                                gpui::rgba(0xFF9999FF)
-                            } else {
-                                gpui::rgba(0xFF6666FF)
-                            },
-                            cx,
-                            {
-                                let pe = pe4.clone();
-                                move |_, _, cx| {
-                                    pe.update(cx, |canvas, cx| {
-                                        canvas.toggle_breakpoint(nid_bp.clone(), cx);
-                                        canvas.node_context_menu = None;
-                                        cx.notify();
-                                    });
-                                }
-                            },
-                        ))
-                        .child(Self::menu_divider(cx))
-                        // ── Standard edit actions ──────────────────────────────
-                        .child(Self::menu_item("Duplicate Node", cx, {
-                            let pe = pe.clone();
-                            move |_, _, cx| {
-                                pe.update(cx, |canvas, cx| {
-                                    canvas.duplicate_node(nid_dup.clone(), cx);
-                                    canvas.node_context_menu = None;
-                                    cx.notify();
-                                });
-                            }
-                        }))
-                        .child(Self::menu_item("Copy Node", cx, {
-                            let pe = pe2.clone();
-                            move |_, _, cx| {
-                                pe.update(cx, |canvas, cx| {
-                                    canvas.copy_node(nid_copy.clone(), cx);
-                                    canvas.node_context_menu = None;
-                                    cx.notify();
-                                });
-                            }
-                        }))
-                        .child(Self::menu_item(
-                            if is_collapsed_graph {
-                                "Uncollapse Node"
-                            } else {
-                                "Collapse to Node"
-                            },
-                            cx,
-                            {
-                                let pe = pe5.clone();
-                                let nid = node_id.clone();
-                                move |_, window, cx| {
-                                    pe.update(cx, |canvas, cx| {
-                                        if is_collapsed_graph {
-                                            canvas.expand_collapsed_node(nid.clone(), window, cx);
-                                        } else {
-                                            canvas.collapse_selected_nodes(cx);
-                                        }
-                                        canvas.node_context_menu = None;
-                                        cx.notify();
-                                    });
-                                }
-                            },
-                        ))
-                        .child(Self::menu_divider(cx))
-                        .child(Self::menu_item("Delete Node", cx, {
-                            let pe = pe3.clone();
-                            move |_, _, cx| {
-                                pe.update(cx, |canvas, cx| {
-                                    canvas.delete_node(nid_del.clone(), cx);
-                                    canvas.node_context_menu = None;
-                                    cx.notify();
-                                });
-                            }
-                        }))
-                        .on_mouse_down_out(move |_, _, cx| {
-                            pe.update(cx, |canvas, cx| {
-                                canvas.node_context_menu = None;
-                                cx.notify();
-                            });
-                        }),
-                ),
-        )
-        .with_priority(2)
-        .into_any_element()
-    }
-
-    // ── Pin context menu ──────────────────────────────────────────────────────
-
-    fn render_pin_context_menu(
-        canvas: &GraphCanvasPanel,
-        cx: &mut Context<GraphCanvasPanel>,
-    ) -> AnyElement {
-        let Some((ref node_id, ref pin_id, pos)) = canvas.pin_context_menu else {
-            return div().into_any_element();
-        };
-        let node_id = node_id.clone();
-        let pin_id = pin_id.clone();
-        let pe = cx.entity().clone();
-        let pe2 = pe.clone();
-
-        deferred(
-            anchored()
-                .position(pos)
-                .snap_to_window_with_margin(px(8.0))
-                .anchor(gpui::Corner::TopLeft)
-                .child(
-                    div()
-                        .occlude()
-                        .w(px(180.0))
-                        .bg(cx.theme().popover)
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .shadow_lg()
-                        .rounded(px(6.0))
-                        .py(px(4.0))
-                        .child(Self::menu_item("Disconnect Pin", cx, {
-                            let pe = pe.clone();
-                            move |_, _, cx| {
-                                pe.update(cx, |canvas, cx| {
-                                    canvas.disconnect_pin(node_id.clone(), pin_id.clone(), cx);
-                                    canvas.pin_context_menu = None;
-                                    cx.notify();
-                                });
-                            }
-                        }))
-                        .on_mouse_down_out(move |_, _, cx| {
-                            pe2.update(cx, |canvas, cx| {
-                                canvas.pin_context_menu = None;
-                                cx.notify();
-                            });
-                        }),
-                ),
-        )
-        .with_priority(2)
-        .into_any_element()
-    }
-
-    // ── Shared menu primitives ────────────────────────────────────────────────
-
-    fn menu_item(
-        label: &str,
-        cx: &mut Context<GraphCanvasPanel>,
-        handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
-    ) -> impl IntoElement {
-        div()
-            .px(px(12.0))
-            .py(px(6.0))
-            .text_sm()
-            .text_color(cx.theme().popover_foreground)
-            .cursor_pointer()
-            .hover(|s| s.bg(cx.theme().accent.opacity(0.12)))
-            .on_mouse_down(gpui::MouseButton::Left, handler)
-            .child(label.to_string())
-    }
-
-    fn menu_item_colored(
-        label: &str,
-        color: gpui::Rgba,
-        cx: &mut Context<GraphCanvasPanel>,
-        handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
-    ) -> impl IntoElement {
-        div()
-            .px(px(12.0))
-            .py(px(6.0))
-            .text_sm()
-            .text_color(color)
-            .cursor_pointer()
-            .hover(|s| s.bg(gpui::rgba(0xFF000020)))
-            .on_mouse_down(gpui::MouseButton::Left, handler)
-            .child(label.to_string())
-    }
-
-    fn menu_divider(cx: &mut Context<GraphCanvasPanel>) -> impl IntoElement {
-        div()
-            .my(px(4.0))
-            .mx(px(8.0))
-            .h(px(1.0))
-            .bg(cx.theme().border)
     }
 }

@@ -68,9 +68,6 @@ pub struct BlueprintEditorPanel {
     pub pending_drag_node: Option<String>,
     /// Canvas-space position where the pending drag mouse-down landed.
     pub pending_drag_start: Option<Point<f32>>,
-    /// Pixels of canvas movement required to commit a drag (avoids phantom moves on clicks).
-    pub drag_commit_threshold: f32,
-
     // Connection drag state
     pub dragging_connection: Option<ConnectionDrag>,
 
@@ -86,7 +83,6 @@ pub struct BlueprintEditorPanel {
 
     // Right-click gesture detection
     pub right_click_start: Option<Point<f32>>,
-    pub right_click_threshold: f32,
 
     // Double-click for reroute nodes
     pub last_click_time: Option<std::time::Instant>,
@@ -96,10 +92,6 @@ pub struct BlueprintEditorPanel {
     /// Window-space origin of the single bp canvas element, captured each frame during paint.
     /// Event handlers subtract this to get canvas-relative (= "screen") coordinates.
     pub canvas_origin: Rc<RefCell<Point<f32>>>,
-    pub graph_element_bounds: Option<Bounds<Pixels>>,
-    pub graph_element_bounds_by_view: HashMap<String, Bounds<Pixels>>,
-    pub interaction_view_id: Option<String>,
-    pub interaction_state_by_view: HashMap<String, GraphInteractionState>,
 
     // Variables system
     pub class_variables: Vec<ClassVariable>,
@@ -200,6 +192,8 @@ pub struct BlueprintEditorPanel {
     pub dragging_tab: Option<TabDragInfo>,
 
     pub is_dirty: bool, // Whether there are unsaved changes
+    /// True while a toolbar save is running in the editor task queue.
+    pub is_saving: bool,
 
     // Undo/redo system
     pub undo_manager: crate::features::undo::UndoManager,
@@ -256,61 +250,6 @@ pub struct CompilationHistoryEntry {
     pub stage: String,
     pub message: String,
     pub detail: Option<String>,
-}
-
-#[derive(Clone, Debug)]
-pub struct GraphInteractionState {
-    pub dragging_node: Option<String>,
-    pub pending_drag_node: Option<String>,
-    pub pending_drag_start: Option<Point<f32>>,
-    pub drag_offset: Point<f32>,
-    pub initial_drag_positions: HashMap<String, Point<f32>>,
-    pub initial_comment_drag_positions: HashMap<String, Point<f32>>,
-    pub dragging_connection: Option<ConnectionDrag>,
-    pub is_panning: bool,
-    pub pan_start: Point<f32>,
-    pub pan_start_offset: Point<f32>,
-    pub selection_start: Option<Point<f32>>,
-    pub selection_end: Option<Point<f32>>,
-    pub last_mouse_pos: Option<Point<f32>>,
-    pub right_click_start: Option<Point<f32>>,
-    pub last_click_time: Option<std::time::Instant>,
-    pub last_click_pos: Option<Point<f32>>,
-    pub dragging_variable: Option<crate::features::variables::VariableDrag>,
-    pub variable_drop_menu_position: Option<Point<f32>>,
-    pub dragging_comment: Option<String>,
-    pub resizing_comment: Option<(String, ResizeHandle)>,
-    pub resizing_comment_start: Option<(Point<f32>, Size<f32>)>,
-    pub editing_comment: Option<String>,
-}
-
-impl Default for GraphInteractionState {
-    fn default() -> Self {
-        Self {
-            dragging_node: None,
-            pending_drag_node: None,
-            pending_drag_start: None,
-            drag_offset: Point::new(0.0, 0.0),
-            initial_drag_positions: HashMap::new(),
-            initial_comment_drag_positions: HashMap::new(),
-            dragging_connection: None,
-            is_panning: false,
-            pan_start: Point::new(0.0, 0.0),
-            pan_start_offset: Point::new(0.0, 0.0),
-            selection_start: None,
-            selection_end: None,
-            last_mouse_pos: None,
-            right_click_start: None,
-            last_click_time: None,
-            last_click_pos: None,
-            dragging_variable: None,
-            variable_drop_menu_position: None,
-            dragging_comment: None,
-            resizing_comment: None,
-            resizing_comment_start: None,
-            editing_comment: None,
-        }
-    }
 }
 
 /// Resize handle for comment boxes
@@ -574,7 +513,6 @@ impl BlueprintEditorPanel {
             node_clipboard: None,
             pending_drag_node: None,
             pending_drag_start: None,
-            drag_commit_threshold: 5.0,
             dragging_connection: None,
             is_panning: false,
             pan_start: Point::new(0.0, 0.0),
@@ -583,14 +521,9 @@ impl BlueprintEditorPanel {
             selection_end: None,
             last_mouse_pos: None,
             right_click_start: None,
-            right_click_threshold: 5.0,
             last_click_time: None,
             last_click_pos: None,
             canvas_origin: Rc::new(RefCell::new(Point::new(0.0, 0.0))),
-            graph_element_bounds: None,
-            graph_element_bounds_by_view: HashMap::new(),
-            interaction_view_id: None,
-            interaction_state_by_view: HashMap::new(),
             class_variables: Vec::new(),
             selected_variable: None,
             is_creating_variable: false,
@@ -676,6 +609,7 @@ impl BlueprintEditorPanel {
             right_tab: 0,
             dragging_tab: None,
             is_dirty: false,
+            is_saving: false,
             undo_manager: crate::features::undo::UndoManager::new(),
             bp_renderer: crate::rendering::gpu::BpRenderer::new(),
             bp_surface: None,
@@ -1062,90 +996,6 @@ impl BlueprintEditorPanel {
                 cx.notify();
             });
         }
-    }
-
-    fn capture_interaction_state(&self) -> GraphInteractionState {
-        GraphInteractionState {
-            dragging_node: self.dragging_node.clone(),
-            pending_drag_node: self.pending_drag_node.clone(),
-            pending_drag_start: self.pending_drag_start,
-            drag_offset: self.drag_offset,
-            initial_drag_positions: self.initial_drag_positions.clone(),
-            initial_comment_drag_positions: self.initial_comment_drag_positions.clone(),
-            dragging_connection: self.dragging_connection.clone(),
-            is_panning: self.is_panning,
-            pan_start: self.pan_start,
-            pan_start_offset: self.pan_start_offset,
-            selection_start: self.selection_start,
-            selection_end: self.selection_end,
-            last_mouse_pos: self.last_mouse_pos,
-            right_click_start: self.right_click_start,
-            last_click_time: self.last_click_time,
-            last_click_pos: self.last_click_pos,
-            dragging_variable: self.dragging_variable.clone(),
-            variable_drop_menu_position: self.variable_drop_menu_position,
-            dragging_comment: self.dragging_comment.clone(),
-            resizing_comment: self.resizing_comment.clone(),
-            resizing_comment_start: self.resizing_comment_start,
-            editing_comment: self.editing_comment.clone(),
-        }
-    }
-
-    fn apply_interaction_state(&mut self, state: GraphInteractionState) {
-        self.dragging_node = state.dragging_node;
-        self.drag_offset = state.drag_offset;
-        self.initial_drag_positions = state.initial_drag_positions;
-        self.initial_comment_drag_positions = state.initial_comment_drag_positions;
-        self.dragging_connection = state.dragging_connection;
-        self.is_panning = state.is_panning;
-        self.pan_start = state.pan_start;
-        self.pan_start_offset = state.pan_start_offset;
-        self.selection_start = state.selection_start;
-        self.selection_end = state.selection_end;
-        self.last_mouse_pos = state.last_mouse_pos;
-        self.right_click_start = state.right_click_start;
-        self.last_click_time = state.last_click_time;
-        self.last_click_pos = state.last_click_pos;
-        self.dragging_variable = state.dragging_variable;
-        self.variable_drop_menu_position = state.variable_drop_menu_position;
-        self.dragging_comment = state.dragging_comment;
-        self.resizing_comment = state.resizing_comment;
-        self.resizing_comment_start = state.resizing_comment_start;
-        self.editing_comment = state.editing_comment;
-    }
-
-    pub(crate) fn activate_interaction_view(&mut self, view_id: &str) {
-        self.ensure_active_graph_panel_state(view_id);
-
-        if self.interaction_view_id.as_deref() == Some(view_id) {
-            return;
-        }
-
-        if let Some(previous_view) = self.interaction_view_id.clone() {
-            self.interaction_state_by_view
-                .insert(previous_view, self.capture_interaction_state());
-        }
-
-        let next_state = self
-            .interaction_state_by_view
-            .get(view_id)
-            .cloned()
-            .unwrap_or_default();
-
-        self.apply_interaction_state(next_state);
-        self.interaction_view_id = Some(view_id.to_string());
-    }
-
-    pub(crate) fn persist_active_interaction_state(&mut self) {
-        if let Some(view_id) = self.interaction_view_id.clone() {
-            self.interaction_state_by_view
-                .insert(view_id, self.capture_interaction_state());
-        }
-    }
-
-    pub(crate) fn clear_interaction_view_owner(&mut self) {
-        self.persist_active_interaction_state();
-        self.interaction_view_id = None;
     }
 
     // ============================================================================

@@ -238,7 +238,8 @@ pub enum NodeType {
     Conversion,          // Typed conversion node rendered as a FROM/INTO pill
     MacroEntry,          // Entry point for macro graphs (replaces generic subgraph_input)
     MacroExit,           // Exit point for macro graphs (replaces generic subgraph_output)
-    MacroInstance,       // Instance of a macro in parent graph
+    #[serde(alias = "MacroInstance")]
+    SubGraphCall, // Call to a macro or collapsed subgraph
     CustomEvent, // On-node for a custom event definition (definition_id: "custom_event:<uid>")
     CustomEventDispatch, // Dispatch node for a custom event (definition_id: "custom_event_dispatch:<uid>")
 }

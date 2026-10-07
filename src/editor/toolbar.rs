@@ -42,6 +42,7 @@ impl ToolbarRenderer {
         let compile_state = panel.compilation_status.state.clone();
         let is_compiling = panel.compilation_status.is_compiling;
         let is_dirty = panel.is_dirty;
+        let is_saving = panel.is_saving;
         let show_minimap = panel.show_minimap;
         let show_debug = panel.show_debug_overlay;
         let show_controls = panel.show_graph_controls;
@@ -106,8 +107,11 @@ impl ToolbarRenderer {
                 h_flex().gap_1p5().items_center().child(
                     Button::new("toolbar-save")
                         .icon(IconName::FloppyDisk)
+                        .disabled(is_saving)
                         // Unsaved-changes dot keeps the user informed without a modal
-                        .tooltip(if is_dirty {
+                        .tooltip(if is_saving {
+                            "Saving Blueprint…"
+                        } else if is_dirty {
                             "Save Blueprint (Ctrl+S)  ●"
                         } else {
                             "Save Blueprint (Ctrl+S)"

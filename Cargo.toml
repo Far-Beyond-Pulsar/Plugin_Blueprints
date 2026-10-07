@@ -26,6 +26,7 @@ builtin = ["dep:plugin_manager"]
 
 [dependencies]
 engine_fs = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6868a0378f85b846a809490617d17404a7b4082c" }
+editor_task_queue = { path = "../../../crates/core/editor_task_queue" }
 ui_types_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
 blueprint_graph = { path = "graph" }
 # Resolve every public UI and engine type through one current Pulsar revision.

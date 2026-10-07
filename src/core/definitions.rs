@@ -164,7 +164,11 @@ impl NodeDefinitions {
                     .collect();
 
                 let node_def = NodeDefinition {
-                    id: format!("subgraph:{}", subgraph.id),
+                    id: crate::core::subgraph_ref::SubGraphReference::new(
+                        subgraph.id.clone(),
+                        subgraph.kind,
+                    )
+                    .encode(),
                     name: subgraph.name.clone(),
                     icon: "📦".to_string(), // Macro icon
                     description: subgraph.description.clone(),

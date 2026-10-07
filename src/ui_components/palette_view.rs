@@ -265,7 +265,11 @@ fn build_local_macro_palette_items(
 
         items.push(PaletteItem::NodeEntry {
             def: NodeDefinition {
-                id: format!("macro:{}", m.id),
+                id: crate::core::subgraph_ref::SubGraphReference::new(
+                    m.id.clone(),
+                    blueprint_graph::SubGraphKind::Macro,
+                )
+                .encode(),
                 name: m.name.clone(),
                 icon: "📦".to_string(),
                 description: m.description.clone(),
@@ -783,8 +787,11 @@ fn palette_node_row(
                         let place_pos = Point::new(base.x + stagger, base.y + stagger);
 
                         let node_clone =
-                            if let Some(macro_id) = def_now.id.strip_prefix("macro:") {
-                                canvas.create_macro_instance_node(macro_id.to_string(), place_pos, cx);
+                            if let Some(reference) = crate::core::subgraph_ref::SubGraphReference::decode(
+                                &def_now.id,
+                                &[],
+                            ) {
+                                canvas.create_macro_instance_node(reference.id, place_pos, cx);
                                 canvas.graph.nodes.last().cloned()
                             } else if let Some(uid) = def_now.id.strip_prefix("custom_event_dispatch:") {
                                 canvas.create_custom_event_dispatch_node(uid.to_string(), place_pos, cx);

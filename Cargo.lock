@@ -753,6 +753,7 @@ dependencies = [
  "blueprint_graph",
  "bytemuck",
  "chrono",
+ "editor_task_queue",
  "engine_backend",
  "engine_fs 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6868a0378f85b846a809490617d17404a7b4082c)",
  "fontdue",
@@ -771,11 +772,13 @@ dependencies = [
  "serde",
  "serde_json",
  "smol",
+ "syn 2.0.119",
  "tool_registry",
  "tool_registry_macros",
  "tracing",
  "ui 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3746651e5df5157078e3d911a3d2cb35a363f52b)",
  "ui_common",
+ "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3746651e5df5157078e3d911a3d2cb35a363f52b)",
  "uuid",
  "wgpu",
  "windows 0.62.2",
@@ -1996,6 +1999,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "editor_task_queue"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
 ]
 
 [[package]]

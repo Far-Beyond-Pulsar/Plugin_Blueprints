@@ -12,9 +12,72 @@ use std::path::{Path, PathBuf};
 
 const GRAPH_SAVE_FILE_NAME: &str = "graph_save.json";
 
+fn serialize_blueprint_asset(asset: &formats::BlueprintAsset) -> Result<String, String> {
+    formats::serialize_blueprint_with_header(asset)
+}
+
+fn persist_blueprint_content(path: &Path, content: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        engine_fs::virtual_fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create directory: {error}"))?;
+    }
+    engine_fs::virtual_fs::write_file(path, content.as_bytes())
+        .map_err(|error| format!("Failed to write file: {error}"))
+}
+
+fn persist_blueprint_asset(path: &Path, asset: &formats::BlueprintAsset) -> Result<usize, String> {
+    let content = serialize_blueprint_asset(asset)?;
+    persist_blueprint_content(path, &content)?;
+    Ok(content.len())
+}
+
+fn persist_prefab_sidecar(path: &Path, json: &str) -> Result<(), String> {
+    if let Some(class_dir) = path.parent() {
+        std::fs::create_dir_all(class_dir)
+            .map_err(|error| format!("Failed to create class directory: {error}"))?;
+        crate::features::prefabs::ensure_class_id(class_dir)?;
+    }
+    std::fs::write(path, json).map_err(|error| format!("Failed to write prefab sidecar: {error}"))
+}
+
+fn refresh_blueprint_trait_index_at(project_root: Option<&Path>) {
+    if let Some(project_root) = project_root {
+        if let Err(error) = engine_fs::BlueprintTraitIndex::rebuild(project_root) {
+            tracing::warn!(
+                project_root = %project_root.display(),
+                %error,
+                "Failed to refresh Blueprint trait index after save"
+            );
+        }
+    }
+}
+
 impl BlueprintEditorPanel {
+    fn snapshot_blueprint_for_save(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Result<formats::BlueprintAsset, String> {
+        self.sync_all_canvases_to_tabs(cx);
+        self.to_blueprint_asset()
+    }
+
+    fn snapshot_prefab_sidecar_for_save(&mut self) -> Result<(PathBuf, String), String> {
+        self.sync_prefab_to_script()?;
+        let path = self
+            .prefab_file_path()
+            .ok_or_else(|| "No class path available for prefab save".to_string())?;
+        self.prefab_asset.fill_missing_slot_ids();
+        let json = serde_json::to_string_pretty(&self.prefab_asset)
+            .map_err(|error| format!("Failed to serialize prefab: {error}"))?;
+        Ok((path, json))
+    }
+
     /// Save the current blueprint to its file path
-    pub fn plugin_save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn plugin_save(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_saving {
+            return;
+        }
+
         let file_path = self.get_graph_file_path();
         tracing::info!(
             ">>> plugin_save called: current_class_path={:?}, file_path={:?}, is_dirty={}, graph_panels_count={}, open_tabs_count={}, self.graph.nodes={}",
@@ -26,43 +89,167 @@ impl BlueprintEditorPanel {
             self.graph.nodes.len(),
         );
 
-        if let Some(path) = file_path {
-            match self.save_to_path(&path, window, cx) {
-                Ok(()) => {
-                    match self.save_prefab_sidecar() {
-                        Ok(()) => {
-                            // prefab.json and class.json are on disk: let
-                            // placed instances and a running game catch up.
-                            if let Some(class_dir) = self.current_class_path.clone() {
-                                crate::features::prefabs::publish_class_updated(&class_dir);
-                            }
-                        }
-                        Err(e) => tracing::warn!("Failed to save prefab sidecar: {}", e),
-                    }
-
-                    tracing::info!(">>> plugin_save: SUCCESS wrote to {:?}", path);
-                    self.is_dirty = false;
-
-                    // Clear dirty flags for all tabs
-                    for tab in &mut self.open_tabs {
-                        tab.is_dirty = false;
-                    }
-
-                    cx.notify();
-                }
-                Err(e) => {
-                    tracing::error!(">>> plugin_save: FAILED to save blueprint: {}", e);
-                    self.compilation_status.state = CompilationState::Error;
-                    self.compilation_status.message = format!("Save failed: {}", e);
-                    cx.notify();
-                }
-            }
-        } else {
+        let Some(path) = file_path else {
             tracing::warn!(">>> plugin_save: No save path set - cannot save blueprint");
             self.compilation_status.state = CompilationState::Error;
             self.compilation_status.message = "Save failed: no file path set".to_string();
             cx.notify();
+            return;
+        };
+
+        // Snapshot live canvases and convert UI state before handing work off.
+        // Serialization and all file writes then happen on a long-running task.
+        let asset = match self.snapshot_blueprint_for_save(cx) {
+            Ok(asset) => asset,
+            Err(error) => {
+                self.report_save_preparation_error(error, cx);
+                return;
+            }
+        };
+
+        let prefab_save = self.snapshot_prefab_sidecar_for_save();
+        let prefab_save = match prefab_save {
+            Ok(save) => Some(save),
+            Err(error) => {
+                tracing::warn!("Failed to prepare prefab sidecar save: {error}");
+                None
+            }
+        };
+
+        let target_path = Self::resolve_blueprint_path(&path);
+        let project_root = self.project_root.clone().or_else(|| {
+            self.current_class_path
+                .as_deref()
+                .and_then(crate::features::class_dirs::project_root_of)
+        });
+        let class_dir = self.current_class_path.clone();
+        let publish_after_save = prefab_save.is_some();
+
+        // Existing dirty flags describe the state being captured by this save.
+        // Reset them now so edits made while the task runs remain dirty.
+        self.is_dirty = false;
+        for tab in &mut self.open_tabs {
+            tab.is_dirty = false;
         }
+        let canvases: Vec<_> = self
+            .graph_panels
+            .iter()
+            .map(|(_, canvas)| canvas.clone())
+            .collect();
+        for canvas in canvases {
+            canvas.update(cx, |canvas, cx| {
+                canvas.is_dirty = false;
+                cx.notify();
+            });
+        }
+
+        self.is_saving = true;
+        cx.notify();
+
+        let (completion_tx, completion_rx) =
+            smol::channel::bounded::<Result<Option<String>, String>>(1);
+        let task_path = target_path.clone();
+        editor_task_queue::global().submit(
+            editor_task_queue::TaskDescription::new(
+                format!(
+                    "Save Blueprint: {}",
+                    target_path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("graph")
+                ),
+                "Blueprints",
+                editor_task_queue::TaskDuration::Long,
+            ),
+            move |task| {
+                let result = (|| -> Result<Option<String>, String> {
+                    task.report_progress(0.05, "Serializing Blueprint graph");
+                    if task.is_cancelled() {
+                        return Err("Blueprint save cancelled".to_string());
+                    }
+
+                    let content = serialize_blueprint_asset(&asset)?;
+                    task.report_progress(0.45, "Writing Blueprint graph");
+                    persist_blueprint_content(&task_path, &content)?;
+
+                    task.report_progress(0.7, "Writing prefab sidecar");
+                    let prefab_error = prefab_save.and_then(|(prefab_path, json)| {
+                        persist_prefab_sidecar(&prefab_path, &json).err()
+                    });
+                    if let Some(error) = &prefab_error {
+                        tracing::warn!("Failed to save prefab sidecar: {error}");
+                    }
+
+                    task.report_progress(0.9, "Refreshing Blueprint index");
+                    refresh_blueprint_trait_index_at(project_root.as_deref());
+
+                    tracing::info!(">>> plugin_save: SUCCESS wrote to {:?}", task_path);
+                    task.report_progress(1.0, "Blueprint saved");
+                    Ok(prefab_error)
+                })();
+                match result {
+                    Ok(prefab_warning) => {
+                        let _ = completion_tx.try_send(Ok(prefab_warning));
+                        Ok(())
+                    }
+                    Err(error) => {
+                        let _ = completion_tx.try_send(Err(error.clone()));
+                        Err(error)
+                    }
+                }
+            },
+        );
+
+        cx.spawn(async move |this, cx| {
+            let save_result = completion_rx.recv().await.unwrap_or_else(|_| {
+                Err("Blueprint save task ended without reporting a result".to_string())
+            });
+            let _ = this.update(cx, |panel, cx| {
+                panel.is_saving = false;
+                match save_result {
+                    Ok(prefab_error) => {
+                        let prefab_saved = publish_after_save && prefab_error.is_none();
+                        if let Some(error) = prefab_error {
+                            tracing::warn!("Prefab sidecar save warning: {error}");
+                        }
+                        if prefab_saved {
+                            if let Some(class_dir) = class_dir {
+                                crate::features::prefabs::publish_class_updated(&class_dir);
+                            }
+                        }
+
+                        let graph_edits_pending = panel
+                            .graph_panels
+                            .iter()
+                            .any(|(_, canvas)| canvas.read(cx).is_dirty);
+                        let tabs_edits_pending = panel.open_tabs.iter().any(|tab| tab.is_dirty);
+                        panel.is_dirty =
+                            panel.is_dirty || graph_edits_pending || tabs_edits_pending;
+                        if !panel.is_dirty {
+                            for tab in &mut panel.open_tabs {
+                                tab.is_dirty = false;
+                            }
+                        }
+                        tracing::info!(">>> plugin_save: async save completed");
+                    }
+                    Err(error) => {
+                        tracing::error!(">>> plugin_save: FAILED to save blueprint: {error}");
+                        panel.is_dirty = true;
+                        panel.compilation_status.state = CompilationState::Error;
+                        panel.compilation_status.message = format!("Save failed: {error}");
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn report_save_preparation_error(&mut self, error: String, cx: &mut Context<Self>) {
+        tracing::error!(">>> plugin_save: FAILED to prepare blueprint save: {error}");
+        self.compilation_status.state = CompilationState::Error;
+        self.compilation_status.message = format!("Save failed: {error}");
+        cx.notify();
     }
 
     /// Reload the blueprint from its file path
@@ -135,8 +322,8 @@ impl BlueprintEditorPanel {
         }
 
         // Flush every open canvas's live graph into its tab snapshot before
-        // serializing. This is the single authoritative sync: canvas → tab.
-        self.sync_all_canvases_to_tabs(cx);
+        // serializing. Toolbar and synchronous saves share this snapshot path.
+        let asset = self.snapshot_blueprint_for_save(cx)?;
 
         // Log what's in open_tabs after sync
         for tab in &self.open_tabs {
@@ -149,36 +336,25 @@ impl BlueprintEditorPanel {
             );
         }
 
-        // Convert current graph state to BlueprintAsset
-        let asset = self.to_blueprint_asset()?;
         tracing::info!(
             ">>> save_to_path: BlueprintAsset created: main_graph has {} nodes",
             asset.main_graph.nodes.len(),
         );
 
-        // Serialize to JSON with header
-        let content = formats::serialize_blueprint_with_header(&asset)?;
-        tracing::info!(
-            ">>> save_to_path: serialized {} bytes to string, first 200 chars: {:?}",
-            content.len(),
-            &content[..content.len().min(200)],
-        );
-
-        if let Some(parent) = target_path.parent() {
-            engine_fs::virtual_fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
-        }
-
-        engine_fs::virtual_fs::write_file(&target_path, content.as_bytes())
-            .map_err(|e| format!("Failed to write file: {}", e))?;
+        let bytes_written = persist_blueprint_asset(&target_path, &asset)?;
 
         // The project index is derived from authored Blueprint metadata. Keep
         // it current for toolbar saves, assignment-panel saves and autosaves.
-        self.refresh_blueprint_trait_index();
+        let project_root = self.project_root.clone().or_else(|| {
+            self.current_class_path
+                .as_deref()
+                .and_then(crate::features::class_dirs::project_root_of)
+        });
+        refresh_blueprint_trait_index_at(project_root.as_deref());
 
         tracing::info!(
             ">>> save_to_path: wrote {} bytes to {:?}",
-            content.len(),
+            bytes_written,
             target_path
         );
         Ok(())
@@ -252,23 +428,6 @@ impl BlueprintEditorPanel {
         );
 
         Ok(())
-    }
-
-    fn refresh_blueprint_trait_index(&self) {
-        let project_root = self.project_root.clone().or_else(|| {
-            self.current_class_path
-                .as_deref()
-                .and_then(crate::features::class_dirs::project_root_of)
-        });
-        if let Some(project_root) = project_root {
-            if let Err(error) = engine_fs::BlueprintTraitIndex::rebuild(&project_root) {
-                tracing::warn!(
-                    project_root = %project_root.display(),
-                    %error,
-                    "Failed to refresh Blueprint trait index after save"
-                );
-            }
-        }
     }
 
     /// Convert current editor state to BlueprintAsset

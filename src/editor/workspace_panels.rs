@@ -29,22 +29,44 @@ use crate::ui_components::palette_view::NodePaletteView;
 use crate::ui_components::properties::PropertiesRenderer;
 use ui_common::reflected_properties_panel::PropertyStateManager;
 
-/// Variables Panel
-pub struct VariablesPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl VariablesPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
+macro_rules! editor_panel_shell {
+    ($panel:ident, $panel_name:literal, $title:literal) => {
+        pub struct $panel {
+            editor: WeakEntity<BlueprintEditorPanel>,
+            focus_handle: FocusHandle,
         }
-    }
+
+        impl $panel {
+            pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+                Self {
+                    editor,
+                    focus_handle: cx.focus_handle(),
+                }
+            }
+        }
+
+        impl EventEmitter<PanelEvent> for $panel {}
+
+        impl Focusable for $panel {
+            fn focus_handle(&self, _cx: &App) -> FocusHandle {
+                self.focus_handle.clone()
+            }
+        }
+
+        impl Panel for $panel {
+            fn panel_name(&self) -> &'static str {
+                $panel_name
+            }
+
+            fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+                $title.into_any_element()
+            }
+        }
+    };
 }
 
-impl EventEmitter<PanelEvent> for VariablesPanel {}
+/// Variables Panel
+editor_panel_shell!(VariablesPanel, "variables", "Variables");
 
 impl Render for VariablesPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -59,38 +81,8 @@ impl Render for VariablesPanel {
     }
 }
 
-impl Focusable for VariablesPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for VariablesPanel {
-    fn panel_name(&self) -> &'static str {
-        "variables"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Variables".into_any_element()
-    }
-}
-
 /// Trait implementation assignments for the current Blueprint class.
-pub struct ImplementedTraitsPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl ImplementedTraitsPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for ImplementedTraitsPanel {}
+editor_panel_shell!(ImplementedTraitsPanel, "implemented-traits", "Traits");
 
 impl Render for ImplementedTraitsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -107,38 +99,8 @@ impl Render for ImplementedTraitsPanel {
     }
 }
 
-impl Focusable for ImplementedTraitsPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for ImplementedTraitsPanel {
-    fn panel_name(&self) -> &'static str {
-        "implemented-traits"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Traits".into_any_element()
-    }
-}
-
 /// Macros Panel
-pub struct MacrosPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl MacrosPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for MacrosPanel {}
+editor_panel_shell!(MacrosPanel, "macros", "Macros");
 
 impl Render for MacrosPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -153,38 +115,8 @@ impl Render for MacrosPanel {
     }
 }
 
-impl Focusable for MacrosPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for MacrosPanel {
-    fn panel_name(&self) -> &'static str {
-        "macros"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Macros".into_any_element()
-    }
-}
-
 /// Events Panel
-pub struct EventsPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl EventsPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for EventsPanel {}
+editor_panel_shell!(EventsPanel, "events", "Events");
 
 impl Render for EventsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -199,38 +131,8 @@ impl Render for EventsPanel {
     }
 }
 
-impl Focusable for EventsPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for EventsPanel {
-    fn panel_name(&self) -> &'static str {
-        "events"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Events".into_any_element()
-    }
-}
-
 /// Compiler Panel
-pub struct CompilerPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl CompilerPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for CompilerPanel {}
+editor_panel_shell!(CompilerPanel, "compiler", "Compiler");
 
 impl Render for CompilerPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -241,22 +143,6 @@ impl Render for CompilerPanel {
         } else {
             div().child("Editor not available")
         }
-    }
-}
-
-impl Focusable for CompilerPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for CompilerPanel {
-    fn panel_name(&self) -> &'static str {
-        "compiler"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Compiler".into_any_element()
     }
 }
 
@@ -371,21 +257,7 @@ impl Panel for AssetInspectorPanel {
 }
 
 /// Find Panel
-pub struct FindPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl FindPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for FindPanel {}
+editor_panel_shell!(FindPanel, "find", "Find");
 
 impl Render for FindPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -399,38 +271,8 @@ impl Render for FindPanel {
     }
 }
 
-impl Focusable for FindPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for FindPanel {
-    fn panel_name(&self) -> &'static str {
-        "find"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Find".into_any_element()
-    }
-}
-
 /// Properties Panel
-pub struct PropertiesPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl PropertiesPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for PropertiesPanel {}
+editor_panel_shell!(PropertiesPanel, "properties", "Properties");
 
 impl Render for PropertiesPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -447,38 +289,8 @@ impl Render for PropertiesPanel {
     }
 }
 
-impl Focusable for PropertiesPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for PropertiesPanel {
-    fn panel_name(&self) -> &'static str {
-        "properties"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Properties".into_any_element()
-    }
-}
-
 /// Prefab Hierarchy Panel
-pub struct PrefabHierarchyPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl PrefabHierarchyPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for PrefabHierarchyPanel {}
+editor_panel_shell!(PrefabHierarchyPanel, "prefab-hierarchy", "Components");
 
 impl Render for PrefabHierarchyPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -490,22 +302,6 @@ impl Render for PrefabHierarchyPanel {
         } else {
             div().child("Editor not available")
         }
-    }
-}
-
-impl Focusable for PrefabHierarchyPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for PrefabHierarchyPanel {
-    fn panel_name(&self) -> &'static str {
-        "prefab-hierarchy"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Components".into_any_element()
     }
 }
 
