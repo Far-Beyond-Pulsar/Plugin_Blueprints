@@ -282,13 +282,9 @@ impl AssetInspectorPanel {
         };
 
         if let Some(editor_entity) = panel.editor.upgrade() {
-            let canvases = editor_entity.read(cx).graph_panels.clone();
-            panel.observe_canvases(&canvases, cx);
             panel
                 ._subscriptions
-                .push(cx.observe(&editor_entity, |panel, editor, cx| {
-                    let canvases = editor.read(cx).graph_panels.clone();
-                    panel.observe_canvases(&canvases, cx);
+                .push(cx.observe(&editor_entity, |panel, _, cx| {
                     panel.schedule_preview_refresh(cx);
                 }));
         }
@@ -316,17 +312,22 @@ impl AssetInspectorPanel {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(400))
                 .await;
-            let snapshot = if let Some(editor) = editor.upgrade() {
+            let (snapshot, canvases) = if let Some(editor) = editor.upgrade() {
                 editor.update(cx, |editor, cx| {
-                    AssetInspectorRenderer::build_snapshot(editor, cx)
+                    let snapshot = AssetInspectorRenderer::build_snapshot(editor, cx);
+                    (snapshot, editor.graph_panels.clone())
                 })
             } else {
-                AssetInspectorSnapshot {
-                    error: Some("Editor not available".to_string()),
-                    ..Default::default()
-                }
+                (
+                    AssetInspectorSnapshot {
+                        error: Some("Editor not available".to_string()),
+                        ..Default::default()
+                    },
+                    Vec::new(),
+                )
             };
             let _ = this.update(cx, |panel, cx| {
+                panel.observe_canvases(&canvases, cx);
                 panel.snapshot = snapshot;
                 panel.refresh_task = None;
                 cx.notify();
