@@ -19,7 +19,11 @@ pub struct TraitAssetSummary {
 pub struct ImplementedTraitsRenderer;
 
 impl ImplementedTraitsRenderer {
-    pub fn render(editor: &mut BlueprintEditorPanel, _window: &mut Window, cx: &mut Context<BlueprintEditorPanel>) -> impl IntoElement {
+    pub fn render(
+        editor: &mut BlueprintEditorPanel,
+        _window: &mut Window,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         if !editor.implemented_trait_catalog_loaded && !editor.implemented_trait_catalog_loading {
             editor.refresh_implemented_trait_catalog(cx);
         }

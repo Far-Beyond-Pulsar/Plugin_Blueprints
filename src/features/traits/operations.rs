@@ -10,14 +10,11 @@ impl BlueprintEditorPanel {
         if self.implemented_trait_catalog_loading {
             return;
         }
-        let root = self
-            .project_root
-            .clone()
-            .or_else(|| {
-                self.current_class_path
-                    .as_deref()
-                    .and_then(crate::features::class_dirs::project_root_of)
-            });
+        let root = self.project_root.clone().or_else(|| {
+            self.current_class_path
+                .as_deref()
+                .and_then(crate::features::class_dirs::project_root_of)
+        });
         let Some(root) = root else {
             self.implemented_trait_catalog.clear();
             self.implemented_trait_catalog_error =
@@ -60,7 +57,8 @@ impl BlueprintEditorPanel {
         cx: &mut Context<Self>,
     ) {
         let Some(trait_path) = normalize_trait_path(trait_path) else {
-            self.implemented_trait_status = Some("Trait path is not a canonical project-relative .trait.json path".to_owned());
+            self.implemented_trait_status =
+                Some("Trait path is not a canonical project-relative .trait.json path".to_owned());
             cx.notify();
             return;
         };
@@ -69,7 +67,10 @@ impl BlueprintEditorPanel {
             .iter()
             .any(|asset| asset.path == trait_path)
         {
-            self.implemented_trait_status = Some(format!("Trait asset '{}' is not available in this project", trait_path));
+            self.implemented_trait_status = Some(format!(
+                "Trait asset '{}' is not available in this project",
+                trait_path
+            ));
             cx.notify();
             return;
         }
@@ -102,7 +103,8 @@ impl BlueprintEditorPanel {
 
     fn persist_trait_assignments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(path) = self.get_graph_file_path() else {
-            self.implemented_trait_status = Some("Cannot save trait selection without a Blueprint file path".to_owned());
+            self.implemented_trait_status =
+                Some("Cannot save trait selection without a Blueprint file path".to_owned());
             cx.notify();
             return;
         };
@@ -113,14 +115,17 @@ impl BlueprintEditorPanel {
             }
             Err(error) => {
                 self.is_dirty = true;
-                self.implemented_trait_status = Some(format!("Could not save trait selection: {error}"));
+                self.implemented_trait_status =
+                    Some(format!("Could not save trait selection: {error}"));
             }
         }
         cx.notify();
     }
 }
 
-fn load_trait_catalog(root: &Path) -> Result<Vec<crate::features::traits::TraitAssetSummary>, String> {
+fn load_trait_catalog(
+    root: &Path,
+) -> Result<Vec<crate::features::traits::TraitAssetSummary>, String> {
     let manifest = engine_fs::virtual_fs::manifest(root)
         .map_err(|error| format!("Could not scan project traits: {error}"))?;
     let mut assets = Vec::new();
@@ -169,7 +174,11 @@ fn load_trait_catalog(root: &Path) -> Result<Vec<crate::features::traits::TraitA
             description,
         });
     }
-    assets.sort_by(|left, right| left.display_name.cmp(&right.display_name).then(left.path.cmp(&right.path)));
+    assets.sort_by(|left, right| {
+        left.display_name
+            .cmp(&right.display_name)
+            .then(left.path.cmp(&right.path))
+    });
     Ok(assets)
 }
 
@@ -178,7 +187,10 @@ fn normalize_trait_path(raw: &str) -> Option<String> {
     let path = PathBuf::from(&normalized);
     if path.is_absolute()
         || path.components().any(|component| {
-            matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
         })
     {
         return None;
