@@ -8,8 +8,10 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui::{
-    input::{InputEvent, InputState}, resizable::ResizableState,
-    scroll::ScrollbarState, VirtualListScrollHandle,
+    input::{InputEvent, InputState},
+    resizable::ResizableState,
+    scroll::ScrollbarState,
+    VirtualListScrollHandle,
 };
 
 use super::tabs::GraphTab;
@@ -18,11 +20,11 @@ use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
 
 use crate::features::prefabs::PrefabAsset;
-use ui::dropdown::{SearchableList, SearchableListEvent};
 use crate::features::variables::ClassVariable;
 use crate::ui_components::palette_view::NodePaletteView;
-use ui::dock::{DockItem, DockPlacement};
 use blueprint_graph::{LibraryManager, SubGraphDefinition};
+use ui::dock::{DockItem, DockPlacement};
+use ui::dropdown::{SearchableList, SearchableListEvent};
 
 /// Which item is being renamed inline in a hierarchy panel.
 #[derive(Clone, Debug, PartialEq)]
@@ -45,7 +47,8 @@ pub struct BlueprintEditorPanel {
     pub implemented_trait_catalog_loading: bool,
     pub implemented_trait_catalog_refresh_pending: bool,
     pub implemented_trait_status: Option<String>,
-    pub implemented_trait_picker: Entity<SearchableList<crate::features::traits::TraitAssetSummary>>,
+    pub implemented_trait_picker:
+        Entity<SearchableList<crate::features::traits::TraitAssetSummary>>,
 
     // Workspace with full docking support
     pub(super) workspace: Option<Entity<ui::workspace::Workspace>>,
@@ -189,9 +192,9 @@ pub struct BlueprintEditorPanel {
     pub hovered_pin_tooltip_pos: Option<Point<Pixels>>,
 
     // Sidebar tab states
-    pub left_top_tab: usize,    // 0=Variables, 1=Functions, 2=Macros, 3=Events
+    pub left_top_tab: usize, // 0=Variables, 1=Functions, 2=Macros, 3=Events
     pub left_bottom_tab: usize, // 0=Library, 1=Compiler
-    pub right_tab: usize,       // 0=Details, 1=Prefabs, 2=Palette
+    pub right_tab: usize,    // 0=Details, 1=Prefabs, 2=Palette
 
     // Tab drag state
     pub dragging_tab: Option<TabDragInfo>,
@@ -481,7 +484,11 @@ impl BlueprintEditorPanel {
         cx.subscribe_in(
             &implemented_trait_picker,
             window,
-            |editor, _picker, event: &SearchableListEvent<crate::features::traits::TraitAssetSummary>, window, cx| {
+            |editor,
+             _picker,
+             event: &SearchableListEvent<crate::features::traits::TraitAssetSummary>,
+             window,
+             cx| {
                 if let SearchableListEvent::Select(asset) = event {
                     editor.add_implemented_trait(&asset.path, window, cx);
                 }
@@ -504,34 +511,42 @@ impl BlueprintEditorPanel {
             cx.new(|cx| InputState::new(window, cx).placeholder("Rename..."));
         // Commit rename on blur or Enter
         let sub_input = rename_input.clone();
-        cx.subscribe_in(&rename_input, window, move |this, input, event: &InputEvent, window, cx| {
-            if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
-                if let Some(target) = this.renaming_target.take() {
-                    let new_name = input.read(cx).text().to_string().trim().to_string();
-                    if !new_name.is_empty() {
-                        match target {
-                            RenameTarget::Event(uid) => {
-                                this.rename_event_def(&uid, new_name);
-                                this.sync_all_events(window, cx);
-                            }
-                            RenameTarget::Macro(id) => {
-                                this.rename_local_macro(&id, new_name, cx);
+        cx.subscribe_in(
+            &rename_input,
+            window,
+            move |this, input, event: &InputEvent, window, cx| {
+                if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
+                    if let Some(target) = this.renaming_target.take() {
+                        let new_name = input.read(cx).text().to_string().trim().to_string();
+                        if !new_name.is_empty() {
+                            match target {
+                                RenameTarget::Event(uid) => {
+                                    this.rename_event_def(&uid, new_name);
+                                    this.sync_all_events(window, cx);
+                                }
+                                RenameTarget::Macro(id) => {
+                                    this.rename_local_macro(&id, new_name, cx);
+                                }
                             }
                         }
+                        cx.notify();
                     }
-                    cx.notify();
                 }
-            }
-        })
+            },
+        )
         .detach();
 
         // ── Find panel search input ────────────────────────────────────────────
         let find_search_input: Entity<InputState> =
             cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
-        cx.subscribe_in(&find_search_input, window, move |this, input, _event: &InputEvent, _window, cx| {
-            this.find_search_query = input.read(cx).text().to_string();
-            cx.notify();
-        })
+        cx.subscribe_in(
+            &find_search_input,
+            window,
+            move |this, input, _event: &InputEvent, _window, cx| {
+                this.find_search_query = input.read(cx).text().to_string();
+                cx.notify();
+            },
+        )
         .detach();
 
         // Script errors from Play-in-Editor select the failing node.
@@ -588,7 +603,8 @@ impl BlueprintEditorPanel {
             prefab_asset: PrefabAsset::new("Prefab"),
             prefab_component_list,
             show_add_component_dialog: false,
-            prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager::new(),
+            prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager::new(
+            ),
             prefab_collapsed_categories: HashSet::new(),
             prefab_expanded_categories: HashSet::new(),
             selected_prefab_component: None,
@@ -612,7 +628,8 @@ impl BlueprintEditorPanel {
             find_output_scrollbar_state: ScrollbarState::default(),
             library_manager: {
                 let mut lib_manager = LibraryManager::default();
-                if let Err(e) = lib_manager.load_all_libraries(crate::io::libraries::load_directory) {
+                if let Err(e) = lib_manager.load_all_libraries(crate::io::libraries::load_directory)
+                {
                     eprintln!("Failed to load sub-graph libraries: {}", e);
                 }
                 lib_manager
@@ -677,8 +694,8 @@ impl BlueprintEditorPanel {
 
     /// Create a sample graph for demonstration - demonstrates all compiler features
     fn create_sample_graph() -> BlueprintGraph {
-        use crate::core::types::*;
         use crate::core::types::PinDataType as GraphDataType;
+        use crate::core::types::*;
 
         let mut nodes = Vec::new();
 
@@ -977,7 +994,12 @@ impl BlueprintEditorPanel {
     }
 
     /// Mark/unmark a single node as executing.
-    pub fn set_node_running(&mut self, node_id: impl AsRef<str>, running: bool, cx: &mut Context<Self>) {
+    pub fn set_node_running(
+        &mut self,
+        node_id: impl AsRef<str>,
+        running: bool,
+        cx: &mut Context<Self>,
+    ) {
         if running {
             self.running_nodes.insert(node_id.as_ref().to_string());
         } else {
@@ -998,7 +1020,9 @@ impl BlueprintEditorPanel {
     }
 
     /// Return the active graph canvas entity, if one exists.
-    pub fn active_canvas(&self) -> Option<&Entity<crate::editor::workspace_panels::GraphCanvasPanel>> {
+    pub fn active_canvas(
+        &self,
+    ) -> Option<&Entity<crate::editor::workspace_panels::GraphCanvasPanel>> {
         let tab_id = self.open_tabs.get(self.active_tab_index)?.id.as_str();
         self.graph_panels
             .iter()
@@ -1008,11 +1032,25 @@ impl BlueprintEditorPanel {
 
     /// Clear all sidebar selections so the Properties panel can switch modes.
     /// Keeps `selected_*` fields that match `keep` (bitmask).
-    pub fn clear_sidebar_selections(&mut self, keep_variable: bool, keep_macro: bool, keep_event: bool, keep_prefab: bool) {
-        if !keep_variable { self.selected_variable = None; }
-        if !keep_macro { self.selected_macro = None; }
-        if !keep_event { self.selected_event = None; }
-        if !keep_prefab { self.selected_prefab_component = None; }
+    pub fn clear_sidebar_selections(
+        &mut self,
+        keep_variable: bool,
+        keep_macro: bool,
+        keep_event: bool,
+        keep_prefab: bool,
+    ) {
+        if !keep_variable {
+            self.selected_variable = None;
+        }
+        if !keep_macro {
+            self.selected_macro = None;
+        }
+        if !keep_event {
+            self.selected_event = None;
+        }
+        if !keep_prefab {
+            self.selected_prefab_component = None;
+        }
     }
 
     /// Clear graph-node / comment selections on the active canvas.
@@ -1180,7 +1218,15 @@ impl BlueprintEditorPanel {
             let tab_graph = tab.graph.clone();
             let ew = editor_weak.clone();
             let panel = cx.new(|cx| {
-                GraphCanvasPanel::new(ew, tab_id.clone(), tab_name, tab_is_main, tab_graph, window, cx)
+                GraphCanvasPanel::new(
+                    ew,
+                    tab_id.clone(),
+                    tab_name,
+                    tab_is_main,
+                    tab_graph,
+                    window,
+                    cx,
+                )
             });
 
             workspace_entity.update(cx, |workspace, cx| {
@@ -1270,12 +1316,18 @@ impl BlueprintEditorPanel {
                 self.active_tab_index,
                 self.graph.nodes.len(),
                 tab_index,
-                self.open_tabs.get(tab_index).map(|t| t.graph.nodes.len()).unwrap_or(0),
+                self.open_tabs
+                    .get(tab_index)
+                    .map(|t| t.graph.nodes.len())
+                    .unwrap_or(0),
                 self.graph_panels.len(),
             );
 
             // Flush the current active canvas into its tab snapshot before leaving.
-            let active_tab_id = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone());
+            let active_tab_id = self
+                .open_tabs
+                .get(self.active_tab_index)
+                .map(|t| t.id.clone());
             if let Some(tab_id) = active_tab_id {
                 if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
                     let live = canvas.read(cx).graph.clone();
@@ -1317,7 +1369,10 @@ impl BlueprintEditorPanel {
 
         // Check if tab is already open
         if let Some(tab_index) = self.open_tabs.iter().position(|tab| tab.id == macro_id) {
-            tracing::info!(">>> open_macro_tab: tab already open at index {}, switching", tab_index);
+            tracing::info!(
+                ">>> open_macro_tab: tab already open at index {}, switching",
+                tab_index
+            );
             self.switch_to_tab(tab_index, window, cx);
             return;
         }
@@ -1334,9 +1389,14 @@ impl BlueprintEditorPanel {
                 self.convert_graph_description_to_blueprint(&macro_graph, window, cx)
             {
                 // Flush the current active canvas into its tab before switching.
-                let active_tab_id = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone());
+                let active_tab_id = self
+                    .open_tabs
+                    .get(self.active_tab_index)
+                    .map(|t| t.id.clone());
                 if let Some(tab_id) = active_tab_id {
-                    if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
+                    if let Some((_, canvas)) =
+                        self.graph_panels.iter().find(|(id, _)| id == &tab_id)
+                    {
                         let live = canvas.read(cx).graph.clone();
                         tracing::info!(
                             ">>> open_macro_tab: flushing canvas {} ({} nodes) to tab",
@@ -1496,7 +1556,10 @@ impl BlueprintEditorPanel {
 
         // Reload library manager so any library macros are available.
         self.library_manager = blueprint_graph::LibraryManager::default();
-        if let Err(e) = self.library_manager.load_all_libraries(crate::io::libraries::load_directory) {
+        if let Err(e) = self
+            .library_manager
+            .load_all_libraries(crate::io::libraries::load_directory)
+        {
             eprintln!("Failed to reload sub-graph libraries: {}", e);
         }
 
