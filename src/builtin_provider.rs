@@ -51,7 +51,7 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
                     },
                     "comments": []
                 },
-                "local_macros": [],
+                "subgraphs": [],
                 "variables": [],
                 "blueprint_metadata": {
                     "blueprint_type": "Generic",

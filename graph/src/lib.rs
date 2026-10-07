@@ -98,8 +98,9 @@ pub struct BlueprintAsset {
     /// The main event graph for this blueprint
     pub main_graph: GraphDescription,
 
-    /// Local macro definitions (subgraphs)
-    pub local_macros: Vec<SubGraphDefinition>,
+    /// Local subgraphs, including reusable macros and collapsed graph regions.
+    #[serde(default, alias = "local_macros")]
+    pub subgraphs: Vec<SubGraph>,
 
     /// Local event definitions
     #[serde(default)]
@@ -123,7 +124,7 @@ impl BlueprintAsset {
         Self {
             format_version: 1,
             main_graph: GraphDescription::new("EventGraph"),
-            local_macros: Vec::new(),
+            subgraphs: Vec::new(),
             local_events: Vec::new(),
             variables: Vec::new(),
             editor_state: None,
@@ -134,7 +135,7 @@ impl BlueprintAsset {
     /// Create a blueprint asset from components
     pub fn from_components(
         main_graph: GraphDescription,
-        local_macros: Vec<SubGraphDefinition>,
+        subgraphs: Vec<SubGraph>,
         local_events: Vec<EventDefDescription>,
         variables: Vec<ClassVariable>,
         editor_state: Option<BlueprintEditorState>,
@@ -142,7 +143,7 @@ impl BlueprintAsset {
         Self {
             format_version: 1,
             main_graph,
-            local_macros,
+            subgraphs,
             local_events,
             variables,
             editor_state,
@@ -737,13 +738,27 @@ impl Connection {
 
 // ===== Sub-Graph System =====
 
+/// Describes how a subgraph is used by the editor.
+///
+/// Both macros and collapsed regions share the same graph storage and pin
+/// interface. The kind keeps editor behavior such as palette visibility and
+/// uncollapse actions explicit in the serialized asset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SubGraphKind {
+    /// A reusable subgraph that can be placed from the macro palette.
+    #[default]
+    Macro,
+    /// A private subgraph region created by collapsing nodes in a graph.
+    Collapsed,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SubGraphDefinition {
+pub struct SubGraph {
     pub id: String,
-    /// Graph role. `macro` graphs are reusable palette entries; `collapsed`
-    /// graphs are private regions created by collapsing nodes in-place.
-    #[serde(default = "default_subgraph_kind")]
-    pub kind: String,
+    /// Graph role, serialized as `macro` or `collapsed`.
+    #[serde(default)]
+    pub kind: SubGraphKind,
     pub name: String,
     pub description: String,
     pub graph: GraphDescription,
@@ -752,6 +767,9 @@ pub struct SubGraphDefinition {
     #[serde(default)]
     pub macro_config: MacroConfiguration,
 }
+
+/// Backwards-compatible name retained for downstream users of the graph crate.
+pub type SubGraphDefinition = SubGraph;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubGraphInterface {
@@ -825,11 +843,11 @@ impl Default for MacroConfiguration {
     }
 }
 
-impl SubGraphDefinition {
+impl SubGraph {
     pub fn new(id: &str, name: &str) -> Self {
         Self {
             id: id.to_string(),
-            kind: default_subgraph_kind(),
+            kind: SubGraphKind::Macro,
             name: name.to_string(),
             description: String::new(),
             graph: GraphDescription::new(name),
@@ -1015,10 +1033,6 @@ impl SubGraphDefinition {
     }
 }
 
-fn default_subgraph_kind() -> String {
-    "macro".to_string()
-}
-
 // ===== Sub-Graph Library System =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1030,7 +1044,7 @@ pub struct SubGraphLibrary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
     pub category: String,
-    pub subgraphs: Vec<SubGraphDefinition>,
+    pub subgraphs: Vec<SubGraph>,
     pub metadata: LibraryMetadata,
     #[serde(default)]
     pub library_config: LibraryConfiguration,
@@ -1095,12 +1109,12 @@ impl SubGraphLibrary {
         }
     }
 
-    pub fn add_subgraph(&mut self, subgraph: SubGraphDefinition) {
+    pub fn add_subgraph(&mut self, subgraph: SubGraph) {
         self.subgraphs.push(subgraph);
         self.metadata.modified_at = chrono::Utc::now().to_rfc3339();
     }
 
-    pub fn get_subgraph(&self, id: &str) -> Option<&SubGraphDefinition> {
+    pub fn get_subgraph(&self, id: &str) -> Option<&SubGraph> {
         self.subgraphs.iter().find(|sg| sg.id == id)
     }
 

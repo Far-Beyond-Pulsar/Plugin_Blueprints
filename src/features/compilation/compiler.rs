@@ -209,12 +209,12 @@ impl BlueprintEditorPanel {
 
     /// Assemble a `GraphLibrary` (keyed by macro id) covering every sub-graph
     /// this blueprint file can reference: local macros — overlaid with any
-    /// open-tab edits not yet flushed back to `local_macros` (mirroring
+    /// open-tab edits not yet flushed back to `subgraphs` (mirroring
     /// `to_blueprint_asset`'s save snapshot) — plus shared library macros.
     fn collect_macro_library(
         &self,
     ) -> Result<HashMap<String, blueprint_graph::GraphDescription>, String> {
-        let mut macros = self.local_macros.clone();
+        let mut macros = self.subgraphs.clone();
         for tab in self
             .open_tabs
             .iter()

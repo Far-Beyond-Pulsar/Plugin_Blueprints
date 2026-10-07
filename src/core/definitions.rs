@@ -125,6 +125,10 @@ impl NodeDefinitions {
             let category_name = format!("Macros/{}", library.name);
 
             for subgraph in &library.subgraphs {
+                if subgraph.kind != blueprint_graph::SubGraphKind::Macro {
+                    continue;
+                }
+
                 // Convert sub-graph inputs to pin definitions
                 let inputs: Vec<PinDefinition> = subgraph
                     .interface

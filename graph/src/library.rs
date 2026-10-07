@@ -1,10 +1,10 @@
-use crate::{SubGraphDefinition, SubGraphLibrary};
+use crate::{SubGraph, SubGraphLibrary};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct LibraryManager {
     libraries: HashMap<String, SubGraphLibrary>,
-    subgraph_cache: HashMap<String, SubGraphDefinition>,
+    subgraph_cache: HashMap<String, SubGraph>,
     search_paths: Vec<std::path::PathBuf>,
 }
 
@@ -43,7 +43,7 @@ impl LibraryManager {
         self.libraries.insert(library.id.clone(), library);
     }
 
-    pub fn get_subgraph(&self, id: &str) -> Option<&SubGraphDefinition> {
+    pub fn get_subgraph(&self, id: &str) -> Option<&SubGraph> {
         self.subgraph_cache.get(id)
     }
 
@@ -51,11 +51,11 @@ impl LibraryManager {
         &self.libraries
     }
 
-    pub fn get_all_subgraphs(&self) -> Vec<&SubGraphDefinition> {
+    pub fn get_all_subgraphs(&self) -> Vec<&SubGraph> {
         self.subgraph_cache.values().collect()
     }
 
-    pub fn get_subgraphs_by_category(&self, category: &str) -> Vec<&SubGraphDefinition> {
+    pub fn get_subgraphs_by_category(&self, category: &str) -> Vec<&SubGraph> {
         self.libraries
             .values()
             .filter(|lib| lib.category == category)

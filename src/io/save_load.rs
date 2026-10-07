@@ -214,9 +214,9 @@ impl BlueprintEditorPanel {
         let asset = match formats::deserialize_blueprint(&content) {
             Ok(asset) => {
                 tracing::info!(
-                    ">>> load_from_path: deserialized as current format, main_graph has {} nodes, {} local_macros, {} variables",
+                    ">>> load_from_path: deserialized as current format, main_graph has {} nodes, {} subgraphs, {} variables",
                     asset.main_graph.nodes.len(),
-                    asset.local_macros.len(),
+                    asset.subgraphs.len(),
                     asset.variables.len(),
                 );
                 asset
@@ -230,7 +230,7 @@ impl BlueprintEditorPanel {
                 formats::BlueprintAsset {
                     format_version: formats::current_format_version(),
                     main_graph: legacy_graph,
-                    local_macros: Vec::new(),
+                    subgraphs: Vec::new(),
                     local_events: Vec::new(),
                     variables: Vec::new(),
                     editor_state: None,
@@ -297,13 +297,13 @@ impl BlueprintEditorPanel {
 
         // Serialize local macros from the open tab snapshots when those tabs are
         // present, so each graph is persisted independently.
-        let mut local_macros = self.local_macros.clone();
+        let mut subgraphs = self.subgraphs.clone();
         for tab in self
             .open_tabs
             .iter()
             .filter(|tab| !tab.is_main && !tab.is_library_macro)
         {
-            if let Some(macro_def) = local_macros.iter_mut().find(|m| m.id == tab.id) {
+            if let Some(macro_def) = subgraphs.iter_mut().find(|m| m.id == tab.id) {
                 tracing::info!(
                     ">>> to_blueprint_asset: saving macro tab id={} nodes={}",
                     tab.id,
@@ -363,7 +363,7 @@ impl BlueprintEditorPanel {
         Ok(formats::BlueprintAsset {
             format_version: formats::current_format_version(),
             main_graph,
-            local_macros,
+            subgraphs,
             local_events,
             variables,
             editor_state: Some(formats::BlueprintEditorState {
@@ -391,16 +391,16 @@ impl BlueprintEditorPanel {
         }
 
         tracing::info!(
-            ">>> load_blueprint_asset: format_version={}, main_graph has {} nodes, {} local_macros, {} variables",
+            ">>> load_blueprint_asset: format_version={}, main_graph has {} nodes, {} subgraphs, {} variables",
             asset.format_version,
             asset.main_graph.nodes.len(),
-            asset.local_macros.len(),
+            asset.subgraphs.len(),
             asset.variables.len(),
         );
 
         let formats::BlueprintAsset {
             main_graph: graph_desc,
-            local_macros,
+            subgraphs,
             local_events,
             variables,
             editor_state,
@@ -410,7 +410,7 @@ impl BlueprintEditorPanel {
 
         self.blueprint_metadata = blueprint_metadata;
 
-        self.local_macros = local_macros;
+        self.subgraphs = subgraphs;
 
         // Convert event defs from serializable format
         self.local_event_defs = local_events
@@ -462,7 +462,7 @@ impl BlueprintEditorPanel {
                 }
 
                 let macro_data = self
-                    .local_macros
+                    .subgraphs
                     .iter()
                     .find(|m| &m.id == tab_id)
                     .map(|m| (m.id.clone(), m.name.clone(), m.graph.clone()));
@@ -471,6 +471,14 @@ impl BlueprintEditorPanel {
                     if let Ok(mut macro_graph) =
                         self.convert_graph_description_to_blueprint(&macro_graph_desc, window, cx)
                     {
+                        crate::features::macros::operations::normalize_subgraph_boundary(
+                            &mut macro_graph,
+                            crate::core::types::NodeType::MacroEntry,
+                        );
+                        crate::features::macros::operations::normalize_subgraph_boundary(
+                            &mut macro_graph,
+                            crate::core::types::NodeType::MacroExit,
+                        );
                         if let Some(view_state) = editor_state.graph_view_states.get(tab_id) {
                             macro_graph.pan_offset =
                                 Point::new(view_state.pan_offset_x, view_state.pan_offset_y);

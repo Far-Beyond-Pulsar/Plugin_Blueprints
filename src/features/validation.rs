@@ -250,7 +250,7 @@ pub(crate) fn compile_asset(
 
     let graph = match blueprint_compiler::authored::expand_graph(
         &asset.main_graph,
-        asset.local_macros.iter().map(|m| (m.id.clone(), m.graph.clone())),
+        asset.subgraphs.iter().map(|m| (m.id.clone(), m.graph.clone())),
     ) {
         Ok(graph) => graph,
         Err(error) => {

@@ -40,9 +40,10 @@ impl MacrosRenderer {
         let panel_entity = cx.entity().clone();
         let panel_entity_for_drop = panel_entity.clone();
         let items: Vec<MacroHierarchyItem> = panel
-            .local_macros
+            .subgraphs
             .iter()
             .enumerate()
+            .filter(|(_, subgraph)| subgraph.kind == blueprint_graph::SubGraphKind::Macro)
             .map(|(index, subgraph)| {
                 let is_renaming = panel.renaming_target.as_ref().map_or(
                     false,
@@ -63,7 +64,7 @@ impl MacrosRenderer {
             })
             .collect();
 
-        let root_ids: Vec<usize> = (0..items.len()).collect();
+        let root_ids: Vec<usize> = items.iter().map(|item| item.index).collect();
 
         let config = HierarchyConfig {
             items,
@@ -101,7 +102,7 @@ impl MacrosRenderer {
                             panel.selected_macro = Some(selected_id);
                             cx.notify();
 
-                            if let Some(macro_def) = panel.local_macros.get(selected_id) {
+                            if let Some(macro_def) = panel.subgraphs.get(selected_id) {
                                 let macro_id = macro_def.id.clone();
                                 let macro_name = macro_def.name.clone();
                                 panel.open_local_macro(macro_id, macro_name, window, cx);
@@ -120,11 +121,11 @@ impl MacrosRenderer {
                         cx.defer(move |cx| {
                             panel.update(cx, |panel, cx| {
                                 // Reorder macros
-                                if from_index < panel.local_macros.len()
-                                    && to_index < panel.local_macros.len()
+                                if from_index < panel.subgraphs.len()
+                                    && to_index < panel.subgraphs.len()
                                 {
-                                    let macro_def = panel.local_macros.remove(from_index);
-                                    panel.local_macros.insert(to_index, macro_def);
+                                    let macro_def = panel.subgraphs.remove(from_index);
+                                    panel.subgraphs.insert(to_index, macro_def);
                                     cx.notify();
                                 }
                             });

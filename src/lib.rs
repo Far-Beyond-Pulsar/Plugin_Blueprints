@@ -118,7 +118,7 @@ impl EditorPlugin for BlueprintEditorPlugin {
                     },
                     "comments": []
                 },
-                "local_macros": [],
+                "subgraphs": [],
                 "variables": [],
                 "blueprint_metadata": {
                     "blueprint_type": "Generic",

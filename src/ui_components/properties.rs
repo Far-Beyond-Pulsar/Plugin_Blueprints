@@ -462,7 +462,12 @@ impl PropertiesRenderer {
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
-        let Some(macro_def) = panel.local_macros.get(index).cloned() else {
+        let Some(macro_def) = panel
+            .subgraphs
+            .get(index)
+            .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro)
+            .cloned()
+        else {
             return Self::render_empty_state(cx);
         };
         let macro_id = macro_def.id.clone();
@@ -542,9 +547,9 @@ impl PropertiesRenderer {
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
         let Some(macro_def) = panel
-            .local_macros
+            .subgraphs
             .iter()
-            .find(|m| m.id == macro_id)
+            .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
             .cloned()
         else {
             return div().into_any_element();
@@ -639,8 +644,9 @@ impl PropertiesRenderer {
                     if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
                         let new_name = state.read(cx).text().to_string().trim().to_string();
                         if !new_name.is_empty() {
-                            if let Some(m) = this.local_macros.iter_mut().find(|m| m.id == sub_mid)
-                            {
+                            if let Some(m) = this.subgraphs.iter_mut().find(|m| {
+                                m.id == sub_mid && m.kind == blueprint_graph::SubGraphKind::Macro
+                            }) {
                                 let pins = if sub_input {
                                     &mut m.interface.inputs
                                 } else {
@@ -677,8 +683,9 @@ impl PropertiesRenderer {
                     if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
                         let new_type = state.read(cx).text().to_string().trim().to_string();
                         if !new_type.is_empty() {
-                            if let Some(m) = this.local_macros.iter_mut().find(|m| m.id == sub_mid)
-                            {
+                            if let Some(m) = this.subgraphs.iter_mut().find(|m| {
+                                m.id == sub_mid && m.kind == blueprint_graph::SubGraphKind::Macro
+                            }) {
                                 let pins = if sub_input {
                                     &mut m.interface.inputs
                                 } else {

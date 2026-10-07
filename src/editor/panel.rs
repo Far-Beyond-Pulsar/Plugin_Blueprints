@@ -22,7 +22,7 @@ use crate::features::connections::operations::ConnectionDrag;
 use crate::features::prefabs::PrefabAsset;
 use crate::features::variables::ClassVariable;
 use crate::ui_components::palette_view::NodePaletteView;
-use blueprint_graph::{LibraryManager, SubGraphDefinition};
+use blueprint_graph::{LibraryManager, SubGraph};
 use ui::dock::{DockItem, DockPlacement};
 use ui::dropdown::{SearchableList, SearchableListEvent};
 
@@ -146,7 +146,7 @@ pub struct BlueprintEditorPanel {
 
     // Library/macro system
     pub library_manager: LibraryManager,
-    pub local_macros: Vec<SubGraphDefinition>,
+    pub subgraphs: Vec<SubGraph>,
     pub selected_macro: Option<usize>,
     // Event system (mirrors macro storage pattern)
     pub local_event_defs: Vec<crate::core::graph::EventDefinition>,
@@ -634,7 +634,7 @@ impl BlueprintEditorPanel {
                 }
                 lib_manager
             },
-            local_macros: Vec::new(),
+            subgraphs: Vec::new(),
             selected_macro: None,
             local_event_defs: Vec::new(),
             component_event_metadata: cx
@@ -1360,85 +1360,15 @@ impl BlueprintEditorPanel {
 
     /// Open a macro tab by macro ID, or switch to it if already open
     pub fn open_macro_tab(&mut self, macro_id: &str, window: &mut Window, cx: &mut Context<Self>) {
-        tracing::info!(
-            ">>> open_macro_tab: macro_id={}, active_tab_index={}, open_tabs={}",
-            macro_id,
-            self.active_tab_index,
-            self.open_tabs.len(),
-        );
-
-        // Check if tab is already open
-        if let Some(tab_index) = self.open_tabs.iter().position(|tab| tab.id == macro_id) {
-            tracing::info!(
-                ">>> open_macro_tab: tab already open at index {}, switching",
-                tab_index
-            );
-            self.switch_to_tab(tab_index, window, cx);
-            return;
-        }
-
-        // Find the macro definition
-        let macro_data = self
-            .local_macros
+        let Some(macro_name) = self
+            .subgraphs
             .iter()
-            .find(|m| m.id == macro_id)
-            .map(|m| (m.name.clone(), m.graph.clone()));
-
-        if let Some((macro_name, macro_graph)) = macro_data {
-            if let Ok(blueprint_graph) =
-                self.convert_graph_description_to_blueprint(&macro_graph, window, cx)
-            {
-                // Flush the current active canvas into its tab before switching.
-                let active_tab_id = self
-                    .open_tabs
-                    .get(self.active_tab_index)
-                    .map(|t| t.id.clone());
-                if let Some(tab_id) = active_tab_id {
-                    if let Some((_, canvas)) =
-                        self.graph_panels.iter().find(|(id, _)| id == &tab_id)
-                    {
-                        let live = canvas.read(cx).graph.clone();
-                        tracing::info!(
-                            ">>> open_macro_tab: flushing canvas {} ({} nodes) to tab",
-                            tab_id,
-                            live.nodes.len(),
-                        );
-                        self.graph = live.clone();
-                        if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-                            tab.graph = live;
-                        }
-                    }
-                }
-
-                // Create new tab seeded from the saved macro graph.
-                tracing::info!(
-                    ">>> open_macro_tab: creating new tab for macro {}, blueprint has {} nodes",
-                    macro_id,
-                    blueprint_graph.nodes.len(),
-                );
-                self.open_tabs.push(GraphTab {
-                    id: macro_id.to_string(),
-                    name: macro_name,
-                    graph: blueprint_graph.clone(),
-                    is_main: false,
-                    is_dirty: false,
-                    is_library_macro: false,
-                    library_id: None,
-                });
-
-                let new_tab_index = self.open_tabs.len() - 1;
-                self.active_tab_index = new_tab_index;
-                self.graph = blueprint_graph;
-                tracing::info!(
-                    ">>> open_macro_tab: switched to new tab {} at index {}, self.graph.nodes={}",
-                    macro_id,
-                    new_tab_index,
-                    self.graph.nodes.len(),
-                );
-                self.graph_workspace_tabs_dirty = true;
-                cx.notify();
-            }
-        }
+            .find(|subgraph| subgraph.id == macro_id)
+            .map(|subgraph| subgraph.name.clone())
+        else {
+            return;
+        };
+        self.open_local_macro(macro_id.to_string(), macro_name, window, cx);
     }
 
     /// Flush the active canvas's live graph into its tab snapshot.
@@ -1567,22 +1497,32 @@ impl BlueprintEditorPanel {
     }
 
     /// Load local macros from macros.json
-    fn load_local_macros(&mut self, class_path: &std::path::Path) -> Result<(), String> {
+    fn load_subgraphs(&mut self, class_path: &std::path::Path) -> Result<(), String> {
         let macros_file = class_path.join("macros.json");
         if !macros_file.exists() {
-            self.local_macros.clear();
+            self.subgraphs
+                .retain(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Collapsed);
             return Ok(());
         }
 
         let content = std::fs::read_to_string(&macros_file)
             .map_err(|e| format!("Failed to read macros.json: {}", e))?;
-        let macros: Vec<blueprint_graph::SubGraphDefinition> = serde_json::from_str(&content)
+        let macros: Vec<blueprint_graph::SubGraph> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse macros.json: {}", e))?;
 
-        self.local_macros = macros;
+        self.subgraphs
+            .retain(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Collapsed);
+        self.subgraphs.extend(
+            macros
+                .into_iter()
+                .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro),
+        );
         println!(
             "📂 Loaded {} local macros from macros.json",
-            self.local_macros.len()
+            self.subgraphs
+                .iter()
+                .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro)
+                .count()
         );
         Ok(())
     }
@@ -1644,7 +1584,7 @@ impl BlueprintEditorPanel {
                 }
             } else {
                 let macro_graph = self
-                    .local_macros
+                    .subgraphs
                     .iter()
                     .find(|m| m.id == ser_tab.id)
                     .map(|m| m.graph.clone());

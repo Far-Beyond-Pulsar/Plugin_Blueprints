@@ -14,7 +14,7 @@ fn blueprint_asset_creation_uses_current_defaults() {
     assert_eq!(asset.format_version, 1);
     assert_eq!(asset.main_graph.metadata.name, "EventGraph");
     assert!(asset.main_graph.custom_event_defs.is_empty());
-    assert!(asset.local_macros.is_empty());
+    assert!(asset.subgraphs.is_empty());
     assert!(asset.variables.is_empty());
 }
 

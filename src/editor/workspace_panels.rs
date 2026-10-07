@@ -455,7 +455,7 @@ impl Panel for PalettePanel {
 /// Each open tab is its own `GraphCanvasPanel` entity. It owns the graph, the
 /// per-tab undo history, the GPU surface/renderer, and every piece of
 /// interaction state. The `panel` weak-ref is read-only access to shared data
-/// (library_manager, class_variables, local_macros) on the shell editor.
+/// (library_manager, class_variables, subgraphs) on the shell editor.
 pub struct GraphCanvasPanel {
     pub id: String,
     pub name: String,

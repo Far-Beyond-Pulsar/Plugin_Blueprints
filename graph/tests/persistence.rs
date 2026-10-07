@@ -34,10 +34,10 @@ fn authored_v1_round_trip_preserves_identity_defaults_macros_events_and_layout()
             "{key}"
         );
     }
-    assert_eq!(asset.local_macros[0].id, "once-macro");
-    assert_eq!(asset.local_macros[0].graph.connections.len(), 2);
+    assert_eq!(asset.subgraphs[0].id, "once-macro");
+    assert_eq!(asset.subgraphs[0].graph.connections.len(), 2);
     assert_eq!(
-        asset.local_macros[0].graph.nodes["once"].properties["reset"],
+        asset.subgraphs[0].graph.nodes["once"].properties["reset"],
         false
     );
 }

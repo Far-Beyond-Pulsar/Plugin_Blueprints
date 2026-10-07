@@ -224,7 +224,7 @@ impl BlueprintEditorPanel {
                 )
             } else if let Some(macro_id) = definition_id.strip_prefix("macro:") {
                 let macro_name = self
-                    .local_macros
+                    .subgraphs
                     .iter()
                     .find(|m| m.id == macro_id)
                     .or_else(|| self.library_manager.get_subgraph(macro_id))

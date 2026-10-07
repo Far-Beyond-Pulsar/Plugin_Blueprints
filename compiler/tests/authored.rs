@@ -12,7 +12,7 @@ fn saved_graph_runs_headlessly_and_macro_state_is_stable_and_independent() {
         expand_graph(
             &asset.main_graph,
             asset
-                .local_macros
+                .subgraphs
                 .iter()
                 .map(|m| (m.id.clone(), m.graph.clone())),
         )
@@ -99,7 +99,7 @@ fn macro_expansion_cannot_overwrite_an_authored_node() {
     let error = expand_graph(
         &asset.main_graph,
         asset
-            .local_macros
+            .subgraphs
             .iter()
             .map(|m| (m.id.clone(), m.graph.clone())),
     )

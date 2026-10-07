@@ -24,7 +24,9 @@ use crate::core::graph::BlueprintGraph;
 use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType, Pin};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
-use crate::rendering::gpu::{GraphUniforms, NodeInstance, PinInstance, TextAlign, WireInstance, WireVertex};
+use crate::rendering::gpu::{
+    GraphUniforms, NodeInstance, PinInstance, TextAlign, WireInstance, WireVertex,
+};
 use crate::rendering::layout;
 
 // shared with hit-testing in input.rs
@@ -93,7 +95,13 @@ impl NodeGraphRenderer {
         graph: &BlueprintGraph,
     ) -> Point<f32> {
         if node.node_type == NodeType::Conversion {
-            return Self::graph_to_screen_pos(Point::new(node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5), graph);
+            return Self::graph_to_screen_pos(
+                Point::new(
+                    node.position.x + if is_input { 0.0 } else { node.size.width },
+                    node.position.y + node.size.height * 0.5,
+                ),
+                graph,
+            );
         }
         if node.node_type == NodeType::Reroute {
             let cx = node.position.x + node.size.width * 0.5;
@@ -128,7 +136,13 @@ impl NodeGraphRenderer {
         graph: &BlueprintGraph,
     ) -> Option<Point<f32>> {
         if node.node_type == NodeType::Conversion {
-            return Some(Self::graph_to_screen_pos(Point::new(node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5), graph));
+            return Some(Self::graph_to_screen_pos(
+                Point::new(
+                    node.position.x + if is_input { 0.0 } else { node.size.width },
+                    node.position.y + node.size.height * 0.5,
+                ),
+                graph,
+            ));
         }
         if node.node_type == NodeType::Reroute {
             let cx = node.position.x + node.size.width * 0.5;
@@ -156,7 +170,10 @@ impl NodeGraphRenderer {
         _graph: &BlueprintGraph,
     ) -> Point<f32> {
         if node.node_type == NodeType::Conversion {
-            return Point::new(node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5);
+            return Point::new(
+                node.position.x + if is_input { 0.0 } else { node.size.width },
+                node.position.y + node.size.height * 0.5,
+            );
         }
         let py = node.position.y
             + HEADER_H
@@ -272,7 +289,12 @@ fn wire_phase(conn: &Connection) -> f32 {
 /// Graph-space pin centre for a given node row (input or output side).
 /// No pan or zoom applied — the GPU shader handles the transform.
 fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) {
-    if node.node_type == NodeType::Conversion { return (node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5); }
+    if node.node_type == NodeType::Conversion {
+        return (
+            node.position.x + if is_input { 0.0 } else { node.size.width },
+            node.position.y + node.size.height * 0.5,
+        );
+    }
     if node.node_type == NodeType::Reroute {
         let cx = node.position.x + node.size.width * 0.5;
         let cy = node.position.y + node.size.height * 0.5;
@@ -294,7 +316,12 @@ fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) 
 
 /// Graph-space pin centre addressed by pin ID.
 fn pin_gpos_id(node: &BlueprintNode, pin_id: &str, is_input: bool) -> Option<(f32, f32)> {
-    if node.node_type == NodeType::Conversion { return Some((node.position.x + if is_input { 0.0 } else { node.size.width }, node.position.y + node.size.height * 0.5)); }
+    if node.node_type == NodeType::Conversion {
+        return Some((
+            node.position.x + if is_input { 0.0 } else { node.size.width },
+            node.position.y + node.size.height * 0.5,
+        ));
+    }
     if node.node_type == NodeType::Reroute {
         let cx = node.position.x + node.size.width * 0.5;
         let cy = node.position.y + node.size.height * 0.5;
@@ -525,23 +552,36 @@ impl NodeGraphRenderer {
             if node.node_type == NodeType::Reroute {
                 continue;
             }
-            let title_width = cached_text_width(renderer, &mut text_width_cache, &node.title, HEADER_FONT);
-            let header_output = node.outputs.iter().find(|pin| pin.id == "__return__").map(|pin| {
-                if pin.name.is_empty() {
-                    0.0
-                } else {
-                    cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
-                }
-            });
+            let title_width =
+                cached_text_width(renderer, &mut text_width_cache, &node.title, HEADER_FONT);
+            let header_output = node
+                .outputs
+                .iter()
+                .find(|pin| pin.id == "__return__")
+                .map(|pin| {
+                    if pin.name.is_empty() {
+                        0.0
+                    } else {
+                        cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
+                    }
+                });
             let rows = node.inputs.len().max(node.outputs.len());
             let mut pin_label_rows = Vec::with_capacity(rows);
             for row in 0..rows {
-                let input_width = node.inputs.get(row).filter(|pin| !pin.name.is_empty()).map_or(0.0, |pin| {
-                    cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
-                });
-                let output_width = node.outputs.get(row)
+                let input_width = node
+                    .inputs
+                    .get(row)
+                    .filter(|pin| !pin.name.is_empty())
+                    .map_or(0.0, |pin| {
+                        cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
+                    });
+                let output_width = node
+                    .outputs
+                    .get(row)
                     .filter(|pin| pin.id != "__return__" && !pin.name.is_empty())
-                    .map_or(0.0, |pin| cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT));
+                    .map_or(0.0, |pin| {
+                        cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
+                    });
                 pin_label_rows.push((input_width, output_width));
             }
             node.size.width = layout::node_width_for_labels(
@@ -667,9 +707,16 @@ impl NodeGraphRenderer {
                     layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)),
                 )
             };
-            let hdr_frac = if is_conversion { 0.0 } else { (HEADER_H + SEP_H) / gh };
+            let hdr_frac = if is_conversion {
+                0.0
+            } else {
+                (HEADER_H + SEP_H) / gh
+            };
             let is_running = node_is_active(node.id.as_str());
-            let flags = (is_reroute as u32) | ((is_sel as u32) << 1) | ((is_running as u32) << 2) | ((is_conversion as u32) << 3);
+            let flags = (is_reroute as u32)
+                | ((is_sel as u32) << 1)
+                | ((is_running as u32) << 2)
+                | ((is_conversion as u32) << 3);
 
             node_instances.push(NodeInstance {
                 pos: [node.position.x, node.position.y],
@@ -696,8 +743,22 @@ impl NodeGraphRenderer {
                 let x = scr.x + gw * zoom * 0.5;
                 let y = scr.y + gh * zoom * 0.5 + 6.0 * zoom;
                 let label_color = [0.76, 0.78, 0.82, 1.0];
-                text_calls.push((label.clone(), x, y, 18.0 * zoom, label_color, TextAlign::Center));
-                text_calls.push((label, x + 0.8 * zoom, y, 18.0 * zoom, label_color, TextAlign::Center));
+                text_calls.push((
+                    label.clone(),
+                    x,
+                    y,
+                    18.0 * zoom,
+                    label_color,
+                    TextAlign::Center,
+                ));
+                text_calls.push((
+                    label,
+                    x + 0.8 * zoom,
+                    y,
+                    18.0 * zoom,
+                    label_color,
+                    TextAlign::Center,
+                ));
             } else if zoom >= LOD_TITLES && !is_reroute {
                 let scr = Self::graph_to_screen_pos(node.position, &canvas.graph);
                 text_calls.push((
@@ -759,7 +820,11 @@ impl NodeGraphRenderer {
                                 scr_y + PIN_FONT * zoom * 0.45,
                                 PIN_FONT * zoom,
                                 [0.78, 0.81, 0.87, 0.98],
-                                if is_input { TextAlign::Left } else { TextAlign::Right },
+                                if is_input {
+                                    TextAlign::Left
+                                } else {
+                                    TextAlign::Right
+                                },
                             ));
                         }
                     }
@@ -1220,13 +1285,13 @@ impl NodeGraphRenderer {
         }
         let macro_id = canvas.id.clone();
 
-        // local_macros live on the shared panel
-        let local_macros = canvas
+        // subgraphs live on the shared panel
+        let subgraphs = canvas
             .panel
             .upgrade()
-            .map(|p| p.read(cx).local_macros.clone())
+            .map(|p| p.read(cx).subgraphs.clone())
             .unwrap_or_default();
-        let macro_def = match local_macros.iter().find(|m| m.id == macro_id) {
+        let macro_def = match subgraphs.iter().find(|m| m.id == macro_id) {
             Some(m) => m.clone(),
             None => return div().into_any_element(),
         };
@@ -1972,11 +2037,10 @@ impl NodeGraphRenderer {
             .and_then(|node| node.definition_id.strip_prefix("macro:"))
             .and_then(|graph_id| {
                 canvas.panel.upgrade().map(|panel| {
-                    panel
-                        .read(cx)
-                        .local_macros
-                        .iter()
-                        .any(|graph| graph.id == graph_id && graph.kind == "collapsed")
+                    panel.read(cx).subgraphs.iter().any(|graph| {
+                        graph.id == graph_id
+                            && graph.kind == blueprint_graph::SubGraphKind::Collapsed
+                    })
                 })
             })
             .unwrap_or(false);

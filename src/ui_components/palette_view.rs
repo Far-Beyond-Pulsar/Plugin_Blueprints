@@ -19,9 +19,9 @@ use ui::{
     v_flex, v_virtual_list, ActiveTheme, Icon, IconName, VirtualListScrollHandle,
 };
 
+use crate::core::definitions::PinDefinition;
 use crate::core::definitions::{NodeDefinition, NodeDefinitions};
 use crate::core::types::{BlueprintNode, PinType};
-use crate::core::definitions::PinDefinition;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
@@ -108,7 +108,9 @@ impl NodePaletteView {
         if let Some(weak) = &self.canvas {
             return weak.upgrade();
         }
-        self.editor.upgrade().and_then(|e| e.read(cx).active_canvas().cloned())
+        self.editor
+            .upgrade()
+            .and_then(|e| e.read(cx).active_canvas().cloned())
     }
 
     /// Rebuild the palette items (called when prefab or macros change).
@@ -126,13 +128,12 @@ impl NodePaletteView {
             // (prevents a macro from containing itself).
             let editing_macro_id = editor_ref.current_editing_macro_id().map(str::to_owned);
             let local_macro_items =
-                build_local_macro_palette_items(&editor_ref.local_macros, editing_macro_id.as_deref());
+                build_local_macro_palette_items(&editor_ref.subgraphs, editing_macro_id.as_deref());
             all_items.extend(local_macro_items);
 
             // Custom event Dispatch nodes — from panel event defs
-            let dispatch_items = build_custom_event_dispatch_palette_items_from_panel(
-                &editor_ref.local_event_defs,
-            );
+            let dispatch_items =
+                build_custom_event_dispatch_palette_items_from_panel(&editor_ref.local_event_defs);
             all_items.extend(dispatch_items);
 
             // Engine events (#924): On / Send / Broadcast nodes for the
@@ -143,7 +144,8 @@ impl NodePaletteView {
                 .as_deref()
                 .and_then(crate::features::class_dirs::class_name_of)
                 .unwrap_or_else(|| "unnamed_blueprint".to_owned());
-            let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> = Default::default();
+            let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> =
+                Default::default();
             for (category, def) in crate::features::events::engine_events::event_node_definitions(
                 class_path.as_deref(),
                 &class_name,
@@ -152,9 +154,16 @@ impl NodePaletteView {
                 by_category.entry(category).or_default().push(def);
             }
             for (category, defs) in by_category {
-                all_items.push(PaletteItem::category(category, "#C0392B".to_string(), defs.len()));
+                all_items.push(PaletteItem::category(
+                    category,
+                    "#C0392B".to_string(),
+                    defs.len(),
+                ));
                 for def in defs {
-                    all_items.push(PaletteItem::NodeEntry { def, category_color: "#C0392B".to_string() });
+                    all_items.push(PaletteItem::NodeEntry {
+                        def,
+                        category_color: "#C0392B".to_string(),
+                    });
                 }
             }
 
@@ -166,14 +175,23 @@ impl NodePaletteView {
                 let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> =
                     Default::default();
                 for (category, def) in
-                    crate::features::events::engine_events::component_event_node_definitions(&catalog.events)
+                    crate::features::events::engine_events::component_event_node_definitions(
+                        &catalog.events,
+                    )
                 {
                     by_category.entry(category).or_default().push(def);
                 }
                 for (category, defs) in by_category {
-                    all_items.push(PaletteItem::category(category, "#C0392B".to_string(), defs.len()));
+                    all_items.push(PaletteItem::category(
+                        category,
+                        "#C0392B".to_string(),
+                        defs.len(),
+                    ));
                     for def in defs {
-                        all_items.push(PaletteItem::NodeEntry { def, category_color: "#C0392B".to_string() });
+                        all_items.push(PaletteItem::NodeEntry {
+                            def,
+                            category_color: "#C0392B".to_string(),
+                        });
                     }
                 }
             }
@@ -187,7 +205,7 @@ impl NodePaletteView {
 /// Build palette items for all local macros, excluding `editing_macro_id` to
 /// prevent a macro from being placed inside itself.
 fn build_local_macro_palette_items(
-    macros: &[blueprint_graph::SubGraphDefinition],
+    macros: &[blueprint_graph::SubGraph],
     editing_macro_id: Option<&str>,
 ) -> Vec<PaletteItem> {
     use crate::core::definitions::{NodeDefinition, PinDefinition};
@@ -195,14 +213,21 @@ fn build_local_macro_palette_items(
 
     let visible: Vec<_> = macros
         .iter()
-        .filter(|m| m.kind != "collapsed" && Some(m.id.as_str()) != editing_macro_id)
+        .filter(|m| {
+            m.kind == blueprint_graph::SubGraphKind::Macro
+                && Some(m.id.as_str()) != editing_macro_id
+        })
         .collect();
 
     if visible.is_empty() {
         return Vec::new();
     }
 
-    let mut items = vec![PaletteItem::category("Local Macros".to_string(), "#9B59B6".to_string(), visible.len())];
+    let mut items = vec![PaletteItem::category(
+        "Local Macros".to_string(),
+        "#9B59B6".to_string(),
+        visible.len(),
+    )];
 
     for m in visible {
         let inputs = m
@@ -214,7 +239,9 @@ fn build_local_macro_palette_items(
                 PinDefinition {
                     id: p.id.clone(),
                     name: p.name.clone(),
-                    data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
+                    data_type: crate::core::types::PinDataType::from_type_str(
+                        canonical.to_string(),
+                    ),
                     pin_type: PinType::Input,
                 }
             })
@@ -228,7 +255,9 @@ fn build_local_macro_palette_items(
                 PinDefinition {
                     id: p.id.clone(),
                     name: p.name.clone(),
-                    data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
+                    data_type: crate::core::types::PinDataType::from_type_str(
+                        canonical.to_string(),
+                    ),
                     pin_type: PinType::Output,
                 }
             })
@@ -262,7 +291,11 @@ fn build_custom_event_dispatch_palette_items_from_panel(
         return Vec::new();
     }
 
-    let mut items = vec![PaletteItem::category("Custom Events".to_string(), "#E67E22".to_string(), defs.len())];
+    let mut items = vec![PaletteItem::category(
+        "Custom Events".to_string(),
+        "#E67E22".to_string(),
+        defs.len(),
+    )];
 
     for def in defs {
         let mut dispatch_inputs = vec![PinDefinition {
@@ -315,7 +348,8 @@ impl NodePaletteView {
             self.search_input
                 .update(cx, |input, cx| input.set_value("", window, cx));
         }
-        self.scroll_handle.scroll_to_item(0, gpui::ScrollStrategy::Top);
+        self.scroll_handle
+            .scroll_to_item(0, gpui::ScrollStrategy::Top);
     }
 
     /// Return the focus handle of the search input so callers can focus it.
@@ -408,10 +442,7 @@ impl Render for NodePaletteView {
                                 h_flex()
                                     .gap_2()
                                     .items_center()
-                                    .child(
-                                        Icon::new(IconName::Search)
-                                            .size(px(14.0)),
-                                    )
+                                    .child(Icon::new(IconName::Search).size(px(14.0)))
                                     .child(
                                         div()
                                             .text_sm()
@@ -602,10 +633,14 @@ fn palette_category_header(
                 .bg(cat_color.opacity(if expanded { 0.9 } else { 0.7 })),
         )
         .child(
-            Icon::new(if expanded { IconName::ChevronDown } else { IconName::ChevronRight })
-                .size(px(12.0))
-                .text_color(muted)
-                .ml_2(),
+            Icon::new(if expanded {
+                IconName::ChevronDown
+            } else {
+                IconName::ChevronRight
+            })
+            .size(px(12.0))
+            .text_color(muted)
+            .ml_2(),
         )
         .child(
             div()
@@ -613,7 +648,11 @@ fn palette_category_header(
                 .px_2()
                 .text_xs()
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(if expanded { cx.theme().foreground } else { muted })
+                .text_color(if expanded {
+                    cx.theme().foreground
+                } else {
+                    muted
+                })
                 .child(name.to_uppercase()),
         )
         .child(div().px_3().text_xs().text_color(muted).child(count))
