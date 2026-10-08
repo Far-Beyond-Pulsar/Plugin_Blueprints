@@ -73,13 +73,68 @@ impl RTreeObject for IndexedBounds {
 pub struct WireGeometry {
     pub from: Point<f32>,
     pub to: Point<f32>,
-    pub bounds: GraphRect,
 }
 
+/// Compact adjacency for node-to-wire updates. Two flat buffers avoid one
+/// heap allocation and a `Vec` header for every node, including isolated
+/// nodes in large pasted graphs.
 #[derive(Default)]
-struct NodePinPositions {
-    inputs: HashMap<String, Point<f32>>,
-    outputs: HashMap<String, Point<f32>>,
+struct ConnectionAdjacency {
+    offsets: Vec<usize>,
+    edges: Vec<usize>,
+}
+
+impl ConnectionAdjacency {
+    fn edges_for(&self, node_index: usize) -> &[usize] {
+        let Some((&start, &end)) = self
+            .offsets
+            .get(node_index)
+            .zip(self.offsets.get(node_index + 1))
+        else {
+            return &[];
+        };
+        &self.edges[start..end]
+    }
+
+    fn build(graph: &BlueprintGraph, node_indices: &HashMap<String, usize>) -> Self {
+        let mut offsets = vec![0; graph.nodes.len() + 1];
+        for connection in &graph.connections {
+            if let Some(&source) = node_indices.get(&connection.source_node) {
+                offsets[source + 1] += 1;
+            }
+            if connection.target_node != connection.source_node {
+                if let Some(&target) = node_indices.get(&connection.target_node) {
+                    offsets[target + 1] += 1;
+                }
+            }
+        }
+        for index in 1..offsets.len() {
+            offsets[index] += offsets[index - 1];
+        }
+
+        let mut edges = vec![0; *offsets.last().unwrap_or(&0)];
+        for (edge_index, connection) in graph.connections.iter().enumerate() {
+            if let Some(&source) = node_indices.get(&connection.source_node) {
+                let cursor = offsets[source];
+                edges[cursor] = edge_index;
+                offsets[source] += 1;
+            }
+            if connection.target_node != connection.source_node {
+                if let Some(&target) = node_indices.get(&connection.target_node) {
+                    let cursor = offsets[target];
+                    edges[cursor] = edge_index;
+                    offsets[target] += 1;
+                }
+            }
+        }
+        // Filling advanced each node's start offset to its end offset. Shift
+        // those cumulative ends right in place to recover the prefix table.
+        for index in (0..graph.nodes.len()).rev() {
+            offsets[index + 1] = offsets[index];
+        }
+        offsets[0] = 0;
+        Self { offsets, edges }
+    }
 }
 
 #[derive(Default)]
@@ -94,13 +149,15 @@ pub struct GraphSpatialIndex {
     nodes: RTree<IndexedBounds>,
     comments: RTree<IndexedBounds>,
     wires: RTree<IndexedBounds>,
-    node_entries: Vec<Option<IndexedBounds>>,
-    comment_entries: Vec<Option<IndexedBounds>>,
-    wire_entries: Vec<Option<IndexedBounds>>,
+    // Keep only the old rectangle needed for R-tree removal. The tree owns
+    // its own entry, so storing another full IndexedBounds per graph item
+    // needlessly doubled the dominant spatial-index memory cost.
+    node_entries: Vec<Option<GraphRect>>,
+    comment_entries: Vec<Option<GraphRect>>,
+    wire_entries: Vec<Option<GraphRect>>,
     node_indices_by_id: HashMap<String, usize>,
-    node_pin_positions: Vec<NodePinPositions>,
     comment_indices_by_id: HashMap<String, usize>,
-    connections_by_node: HashMap<String, Vec<usize>>,
+    connections_by_node: ConnectionAdjacency,
     wire_geometry: Vec<Option<WireGeometry>>,
 }
 
@@ -205,9 +262,6 @@ impl GraphSpatialIndex {
 
         let mut affected_connections = Vec::new();
         for &index in indices {
-            if index >= self.node_pin_positions.len() {
-                return false;
-            }
             let Some(node) = graph.nodes.get(index) else {
                 return false;
             };
@@ -217,10 +271,7 @@ impl GraphSpatialIndex {
                 index,
                 node_bounds(node),
             );
-            refresh_node_pin_positions(&mut self.node_pin_positions[index], node);
-            if let Some(edges) = self.connections_by_node.get(&node.id) {
-                affected_connections.extend_from_slice(edges);
-            }
+            affected_connections.extend_from_slice(self.connections_by_node.edges_for(index));
         }
         affected_connections.sort_unstable();
         affected_connections.dedup();
@@ -276,9 +327,6 @@ impl GraphSpatialIndex {
 
         let mut affected_connections = Vec::new();
         for &index in node_indices {
-            if index >= self.node_pin_positions.len() {
-                return false;
-            }
             let Some(node) = graph.nodes.get(index) else {
                 return false;
             };
@@ -288,10 +336,7 @@ impl GraphSpatialIndex {
                 index,
                 node_bounds(node),
             );
-            refresh_node_pin_positions(&mut self.node_pin_positions[index], node);
-            if let Some(edges) = self.connections_by_node.get(&node.id) {
-                affected_connections.extend_from_slice(edges);
-            }
+            affected_connections.extend_from_slice(self.connections_by_node.edges_for(index));
         }
         affected_connections.sort_unstable();
         affected_connections.dedup();
@@ -345,17 +390,15 @@ impl GraphSpatialIndex {
 
     fn rebuild_nodes_and_wires(&mut self, graph: &BlueprintGraph) {
         self.node_entries = vec![None; graph.nodes.len()];
-        self.node_pin_positions = Vec::with_capacity(graph.nodes.len());
         self.node_indices_by_id.clear();
         let mut entries = Vec::with_capacity(graph.nodes.len());
         for (index, node) in graph.nodes.iter().enumerate() {
-            self.node_pin_positions.push(node_pin_positions(node));
             self.node_indices_by_id
                 .entry(node.id.clone())
                 .or_insert(index);
             if let Some(envelope) = node_bounds(node).envelope() {
                 let entry = IndexedBounds { index, envelope };
-                self.node_entries[index] = Some(entry.clone());
+                self.node_entries[index] = Some(node_bounds(node));
                 entries.push(entry);
             }
         }
@@ -382,7 +425,12 @@ impl GraphSpatialIndex {
             .envelope()
             {
                 let entry = IndexedBounds { index, envelope };
-                self.comment_entries[index] = Some(entry.clone());
+                self.comment_entries[index] = Some(rect_from_xywh(
+                    comment.position.x,
+                    comment.position.y,
+                    comment.size.width,
+                    comment.size.height,
+                ));
                 entries.push(entry);
             }
         }
@@ -394,32 +442,19 @@ impl GraphSpatialIndex {
     fn rebuild_wires(&mut self, graph: &BlueprintGraph) {
         self.wire_entries = vec![None; graph.connections.len()];
         self.wire_geometry = vec![None; graph.connections.len()];
-        self.connections_by_node.clear();
+        self.connections_by_node = ConnectionAdjacency::build(graph, &self.node_indices_by_id);
         let mut entries = Vec::with_capacity(graph.connections.len());
         for (index, connection) in graph.connections.iter().enumerate() {
-            self.connections_by_node
-                .entry(connection.source_node.clone())
-                .or_default()
-                .push(index);
-            if connection.target_node != connection.source_node {
-                self.connections_by_node
-                    .entry(connection.target_node.clone())
-                    .or_default()
-                    .push(index);
-            }
-            let Some(geometry) = connection_geometry(
-                connection,
-                graph,
-                &self.node_indices_by_id,
-                &self.node_pin_positions,
-            ) else {
+            let Some(geometry) = connection_geometry(connection, graph, &self.node_indices_by_id)
+            else {
                 continue;
             };
             self.wire_geometry[index] = Some(geometry);
-            if let Some(envelope) = rect_with_padding(geometry.bounds, WIRE_HIT_PADDING).envelope()
-            {
+            let bounds =
+                rect_with_padding(wire_bounds(geometry.from, geometry.to), WIRE_HIT_PADDING);
+            if let Some(envelope) = bounds.envelope() {
                 let entry = IndexedBounds { index, envelope };
-                self.wire_entries[index] = Some(entry.clone());
+                self.wire_entries[index] = Some(bounds);
                 entries.push(entry);
             }
         }
@@ -429,21 +464,15 @@ impl GraphSpatialIndex {
     }
 
     fn update_wire(&mut self, graph: &BlueprintGraph, index: usize) {
-        if let Some(entry) = self.wire_entries.get_mut(index).and_then(Option::take) {
-            self.wires.remove(&entry);
-        }
+        Self::remove_entry(&mut self.wires, &mut self.wire_entries, index);
         let Some(connection) = graph.connections.get(index) else {
             if let Some(geometry) = self.wire_geometry.get_mut(index) {
                 *geometry = None;
             }
             return;
         };
-        let Some(geometry) = connection_geometry(
-            connection,
-            graph,
-            &self.node_indices_by_id,
-            &self.node_pin_positions,
-        ) else {
+        let Some(geometry) = connection_geometry(connection, graph, &self.node_indices_by_id)
+        else {
             if let Some(geometry) = self.wire_geometry.get_mut(index) {
                 *geometry = None;
             }
@@ -454,13 +483,13 @@ impl GraphSpatialIndex {
             &mut self.wires,
             &mut self.wire_entries,
             index,
-            rect_with_padding(geometry.bounds, WIRE_HIT_PADDING),
+            rect_with_padding(wire_bounds(geometry.from, geometry.to), WIRE_HIT_PADDING),
         );
     }
 
     fn insert_entry(
         tree: &mut RTree<IndexedBounds>,
-        entries: &mut Vec<Option<IndexedBounds>>,
+        entries: &mut Vec<Option<GraphRect>>,
         index: usize,
         rect: GraphRect,
     ) {
@@ -469,20 +498,30 @@ impl GraphSpatialIndex {
         }
         if let Some(envelope) = rect.envelope() {
             let entry = IndexedBounds { index, envelope };
-            tree.insert(entry.clone());
-            entries[index] = Some(entry);
+            tree.insert(entry);
+            entries[index] = Some(rect);
+        }
+    }
+
+    fn remove_entry(
+        tree: &mut RTree<IndexedBounds>,
+        entries: &mut Vec<Option<GraphRect>>,
+        index: usize,
+    ) {
+        if let Some(rect) = entries.get_mut(index).and_then(Option::take) {
+            if let Some(envelope) = rect.envelope() {
+                tree.remove(&IndexedBounds { index, envelope });
+            }
         }
     }
 
     fn replace_entry(
         tree: &mut RTree<IndexedBounds>,
-        entries: &mut Vec<Option<IndexedBounds>>,
+        entries: &mut Vec<Option<GraphRect>>,
         index: usize,
         rect: GraphRect,
     ) {
-        if let Some(entry) = entries.get_mut(index).and_then(Option::take) {
-            tree.remove(&entry);
-        }
+        Self::remove_entry(tree, entries, index);
         Self::insert_entry(tree, entries, index, rect);
     }
 }
@@ -519,81 +558,45 @@ fn rect_with_padding(rect: GraphRect, padding: f32) -> GraphRect {
     }
 }
 
-fn node_pin_positions(node: &BlueprintNode) -> NodePinPositions {
-    let mut positions = NodePinPositions::default();
-    refresh_node_pin_positions(&mut positions, node);
-    positions
-}
-
-fn refresh_node_pin_positions(positions: &mut NodePinPositions, node: &BlueprintNode) {
-    positions.inputs.reserve(node.inputs.len());
-    positions.outputs.reserve(node.outputs.len() + 1);
-    for (row, pin) in node.inputs.iter().enumerate() {
-        let position =
-            NodeGraphRenderer::calculate_pin_position_graph_space_for_row(node, &pin.id, true, row);
-        if let Some(cached) = positions.inputs.get_mut(&pin.id) {
-            *cached = position;
-        } else {
-            positions.inputs.insert(pin.id.clone(), position);
-        }
-    }
-    for (row, pin) in node.outputs.iter().enumerate() {
-        let position = NodeGraphRenderer::calculate_pin_position_graph_space_for_row(
-            node, &pin.id, false, row,
-        );
-        if let Some(cached) = positions.outputs.get_mut(&pin.id) {
-            *cached = position;
-        } else {
-            positions.outputs.insert(pin.id.clone(), position);
-        }
-    }
-    if let Some(position) =
-        NodeGraphRenderer::calculate_pin_position_graph_space(node, "__return__", false)
-    {
-        if let Some(cached) = positions.outputs.get_mut("__return__") {
-            *cached = position;
-        } else {
-            positions.outputs.insert("__return__".to_owned(), position);
-        }
-    }
-}
-
 fn connection_geometry(
     connection: &Connection,
     graph: &BlueprintGraph,
     node_indices: &HashMap<String, usize>,
-    pin_positions: &[NodePinPositions],
 ) -> Option<WireGeometry> {
     let from_index = *node_indices.get(&connection.source_node)?;
     let to_index = *node_indices.get(&connection.target_node)?;
     let from_node = graph.nodes.get(from_index)?;
     let to_node = graph.nodes.get(to_index)?;
-    let from = pin_positions
-        .get(from_index)?
-        .outputs
-        .get(&connection.source_pin)
-        .copied()
-        .unwrap_or_else(|| {
-            Point::new(
-                from_node.position.x + from_node.size.width,
-                from_node.position.y + from_node.size.height * 0.5,
-            )
-        });
-    let to = pin_positions
-        .get(to_index)?
-        .inputs
-        .get(&connection.target_pin)
-        .copied()
-        .unwrap_or_else(|| {
-            Point::new(
-                to_node.position.x,
-                to_node.position.y + to_node.size.height * 0.5,
-            )
-        });
+    let from = NodeGraphRenderer::calculate_pin_position_graph_space(
+        from_node,
+        &connection.source_pin,
+        false,
+    )
+    .unwrap_or_else(|| {
+        Point::new(
+            from_node.position.x + from_node.size.width,
+            from_node.position.y + from_node.size.height * 0.5,
+        )
+    });
+    let to = NodeGraphRenderer::calculate_pin_position_graph_space(
+        to_node,
+        &connection.target_pin,
+        true,
+    )
+    .unwrap_or_else(|| {
+        Point::new(
+            to_node.position.x,
+            to_node.position.y + to_node.size.height * 0.5,
+        )
+    });
+    Some(WireGeometry { from, to })
+}
+
+fn wire_bounds(from: Point<f32>, to: Point<f32>) -> GraphRect {
     let control_offset = ((to.x - from.x).abs() * 0.45).clamp(55.0, 220.0);
     let c1 = Point::new(from.x + control_offset, from.y);
     let c2 = Point::new(to.x - control_offset, to.y);
-    let bounds = GraphRect::from_corners(
+    GraphRect::from_corners(
         Point::new(
             from.x.min(c1.x).min(c2.x).min(to.x),
             from.y.min(c1.y).min(c2.y).min(to.y),
@@ -602,6 +605,5 @@ fn connection_geometry(
             from.x.max(c1.x).max(c2.x).max(to.x),
             from.y.max(c1.y).max(c2.y).max(to.y),
         ),
-    );
-    Some(WireGeometry { from, to, bounds })
+    )
 }

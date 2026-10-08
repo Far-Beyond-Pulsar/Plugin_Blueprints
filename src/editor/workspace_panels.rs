@@ -1263,6 +1263,10 @@ impl GraphCanvasPanel {
         let Ok(data) = ClipboardData::from_json(&json) else {
             return;
         };
+        // The deserialized clipboard owns its strings. Release the raw JSON
+        // buffer before allocating graph entities to keep peak paste memory
+        // proportional to the resulting graph instead of both representations.
+        drop(json);
         let mwp = window.mouse_position();
         let mep =
             crate::rendering::graph::NodeGraphRenderer::window_to_graph_element_pos(mwp, self);
@@ -1292,17 +1296,15 @@ impl GraphCanvasPanel {
         let (nodes, comments, conns) = data.to_graph_entities(off, window, cx);
         self.graph.selected_nodes.clear();
         self.graph.selected_comments.clear();
-        for n in &nodes {
-            self.graph.nodes.push(n.clone());
-            self.graph.selected_nodes.push(n.id.clone());
-        }
-        for c in &comments {
-            self.graph.comments.push(c.clone());
-            self.graph.selected_comments.push(c.id.clone());
-        }
-        for conn in &conns {
-            self.graph.connections.push(conn.clone());
-        }
+        self.graph
+            .selected_nodes
+            .extend(nodes.iter().map(|node| node.id.clone()));
+        self.graph.nodes.extend(nodes);
+        self.graph
+            .selected_comments
+            .extend(comments.iter().map(|comment| comment.id.clone()));
+        self.graph.comments.extend(comments);
+        self.graph.connections.extend(conns);
         self.comment_color_bindings_dirty = true;
         cx.notify();
     }

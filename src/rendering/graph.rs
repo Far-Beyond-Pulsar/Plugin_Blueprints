@@ -135,23 +135,6 @@ impl NodeGraphRenderer {
         geometry::calculate_pin_position_graph_space(node, pin_id, is_input)
     }
 
-    pub(crate) fn calculate_pin_position_graph_space_for_row(
-        node: &BlueprintNode,
-        pin_id: &str,
-        is_input: bool,
-        row: usize,
-    ) -> Point<f32> {
-        if pin_id == "__return__" {
-            return geometry::calculate_pin_position_graph_space(node, pin_id, is_input)
-                .unwrap_or_else(|| {
-                    let (x, y) = geometry::pin_gpos_row(node, is_input, row);
-                    Point::new(x, y)
-                });
-        }
-        let (x, y) = geometry::pin_gpos_row(node, is_input, row);
-        Point::new(x, y)
-    }
-
     pub fn viewport_graph_bounds(
         graph: &BlueprintGraph,
         viewport_size: Size<f32>,

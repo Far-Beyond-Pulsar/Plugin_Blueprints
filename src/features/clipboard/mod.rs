@@ -171,7 +171,7 @@ impl ClipboardData {
 
     /// Serialize to JSON string
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
+        serde_json::to_string(self)
     }
 
     /// Deserialize from JSON string
@@ -181,7 +181,7 @@ impl ClipboardData {
 
     /// Convert back to graph entities with new IDs and offset positions
     pub fn to_graph_entities<E: 'static>(
-        &self,
+        self,
         offset: Point<f32>,
         window: &mut Window,
         cx: &mut Context<E>,
@@ -189,7 +189,8 @@ impl ClipboardData {
         use crate::core::types::PinDataType as DataType;
 
         // Generate ID mapping (old ID -> new ID)
-        let mut id_map: HashMap<String, String> = HashMap::new();
+        let mut id_map: HashMap<String, String> =
+            HashMap::with_capacity(self.nodes.len() + self.comments.len());
         for node in &self.nodes {
             id_map.insert(node.id.clone(), uuid::Uuid::new_v4().to_string());
         }
@@ -200,41 +201,41 @@ impl ClipboardData {
         // Convert nodes
         let nodes: Vec<BlueprintNode> = self
             .nodes
-            .iter()
+            .into_iter()
             .filter_map(|snode| {
                 let new_id = id_map.get(&snode.id)?;
                 Some(BlueprintNode {
                     id: new_id.clone(),
-                    definition_id: snode.definition_id.clone(),
-                    title: snode.title.clone(),
-                    icon: snode.icon.clone(),
-                    node_type: snode.node_type.clone(),
+                    definition_id: snode.definition_id,
+                    title: snode.title,
+                    icon: snode.icon,
+                    node_type: snode.node_type,
                     position: Point::new(snode.position.0 + offset.x, snode.position.1 + offset.y),
                     size: Size::new(snode.size.0, snode.size.1),
                     inputs: snode
                         .inputs
-                        .iter()
+                        .into_iter()
                         .map(|pin| crate::core::types::Pin {
-                            id: pin.id.clone(),
-                            name: pin.name.clone(),
-                            pin_type: pin.pin_type.clone(),
+                            id: pin.id,
+                            name: pin.name,
+                            pin_type: pin.pin_type,
                             data_type: DataType::from_type_str(&pin.data_type),
                         })
                         .collect(),
                     outputs: snode
                         .outputs
-                        .iter()
+                        .into_iter()
                         .map(|pin| crate::core::types::Pin {
-                            id: pin.id.clone(),
-                            name: pin.name.clone(),
-                            pin_type: pin.pin_type.clone(),
+                            id: pin.id,
+                            name: pin.name,
+                            pin_type: pin.pin_type,
                             data_type: DataType::from_type_str(&pin.data_type),
                         })
                         .collect(),
-                    properties: snode.properties.clone(),
+                    properties: snode.properties,
                     is_selected: false,
-                    description: snode.description.clone(),
-                    color: snode.color.clone(),
+                    description: snode.description,
+                    color: snode.color,
                 })
             })
             .collect();
@@ -242,20 +243,20 @@ impl ClipboardData {
         // Convert comments
         let comments: Vec<BlueprintComment> = self
             .comments
-            .iter()
+            .into_iter()
             .filter_map(|scomment| {
                 let new_id = id_map.get(&scomment.id)?;
 
                 // Update contained node IDs to use new IDs
                 let new_contained_ids: Vec<String> = scomment
                     .contained_node_ids
-                    .iter()
+                    .into_iter()
                     .filter_map(|old_id| id_map.get(old_id).cloned())
                     .collect();
 
                 Some(BlueprintComment {
                     id: new_id.clone(),
-                    text: scomment.text.clone(),
+                    text: scomment.text,
                     position: Point::new(
                         scomment.position.0 + offset.x,
                         scomment.position.1 + offset.y,
@@ -279,7 +280,7 @@ impl ClipboardData {
         // Convert connections (update IDs to new ones)
         let connections: Vec<Connection> = self
             .connections
-            .iter()
+            .into_iter()
             .filter_map(|sconn| {
                 let new_source = id_map.get(&sconn.source_node)?;
                 let new_target = id_map.get(&sconn.target_node)?;
@@ -294,9 +295,9 @@ impl ClipboardData {
                 Some(Connection {
                     id: uuid::Uuid::new_v4().to_string(),
                     source_node: new_source.clone(),
-                    source_pin: sconn.source_pin.clone(),
+                    source_pin: sconn.source_pin,
                     target_node: new_target.clone(),
-                    target_pin: sconn.target_pin.clone(),
+                    target_pin: sconn.target_pin,
                     connection_type,
                 })
             })
