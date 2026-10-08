@@ -321,8 +321,10 @@ impl NodeGraphRenderer {
                 || (wire_active_mode && selected_nodes.contains(node_id))
         };
 
-        let mut comment_instances: Vec<crate::rendering::gpu::CommentInstance> = Vec::new();
-        let mut comment_text_calls: Vec<TextCall> = Vec::new();
+        let mut comment_instances: Vec<crate::rendering::gpu::CommentInstance> =
+            Vec::with_capacity(visible_comment_indices.len());
+        let mut comment_text_calls: Vec<TextCall> =
+            Vec::with_capacity(visible_comment_indices.len());
         let mut comment_refs: Vec<&BlueprintComment> = visible_comment_indices
             .iter()
             .filter_map(|&index| canvas.graph.comments.get(index))
@@ -371,9 +373,19 @@ impl NodeGraphRenderer {
             }
         }
 
-        let mut node_instances: Vec<NodeInstance> = Vec::new();
-        let mut pin_instances: Vec<PinInstance> = Vec::new();
-        let mut text_calls: Vec<TextCall> = Vec::new();
+        let visible_pin_count = if zoom >= LOD_FULL {
+            visible_node_indices
+                .iter()
+                .filter_map(|&index| canvas.graph.nodes.get(index))
+                .map(|node| node.inputs.len().saturating_add(node.outputs.len()))
+                .fold(0_usize, usize::saturating_add)
+        } else {
+            0
+        };
+        let mut node_instances: Vec<NodeInstance> = Vec::with_capacity(visible_node_indices.len());
+        let mut pin_instances: Vec<PinInstance> = Vec::with_capacity(visible_pin_count);
+        let mut text_calls: Vec<TextCall> =
+            Vec::with_capacity(visible_node_indices.len().saturating_add(visible_pin_count));
 
         for index in visible_node_indices {
             let Some(node) = canvas.graph.nodes.get(index) else {
@@ -543,14 +555,21 @@ impl NodeGraphRenderer {
 
         // ── Bezier wire instances — one struct per connection, GPU does all tessellation ──
         // No CPU bezier evaluation: just compute four control points and hand off to GPU.
-        let mut wire_instances: Vec<WireInstance> = Vec::new();
-        let mut electronic_wire_instances: Vec<WireInstance> = Vec::new();
-        let half_thick = WIRE_THICKNESS * 0.5; // graph-space half-thickness; shader × zoom → px
-
         let visible_wire_indices = canvas
             .spatial_index
             .borrow()
             .wires_intersecting(viewport_rect);
+        let mut wire_instances: Vec<WireInstance> = if electronic_connections {
+            Vec::new()
+        } else {
+            Vec::with_capacity(visible_wire_indices.len())
+        };
+        let mut electronic_wire_instances: Vec<WireInstance> = if electronic_connections {
+            Vec::with_capacity(visible_wire_indices.len())
+        } else {
+            Vec::new()
+        };
+        let half_thick = WIRE_THICKNESS * 0.5; // graph-space half-thickness; shader × zoom → px
 
         // Helper: build a WireInstance from two graph-space endpoints.
         let make_wire = |fp: (f32, f32),
