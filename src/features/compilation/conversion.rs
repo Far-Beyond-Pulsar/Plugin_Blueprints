@@ -519,9 +519,9 @@ impl BlueprintEditorPanel {
             .collect();
 
         Ok(BlueprintGraph {
-            nodes,
-            connections,
-            comments,
+            nodes: nodes.into(),
+            connections: connections.into(),
+            comments: comments.into(),
             selected_nodes: Vec::new(),
             selected_comments: Vec::new(),
             zoom_level: 1.0,

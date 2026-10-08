@@ -462,9 +462,9 @@ impl BlueprintEditorPanel {
         let main_graph = if project_path.is_some() {
             // Empty graph - will be loaded from file
             BlueprintGraph {
-                nodes: Vec::new(),
-                connections: Vec::new(),
-                comments: Vec::new(),
+                nodes: Vec::new().into(),
+                connections: Vec::new().into(),
+                comments: Vec::new().into(),
                 selected_nodes: Vec::new(),
                 selected_comments: Vec::new(),
                 zoom_level: 1.0,
@@ -995,9 +995,9 @@ impl BlueprintEditorPanel {
         ];
 
         BlueprintGraph {
-            nodes,
-            connections,
-            comments: vec![],
+            nodes: nodes.into(),
+            connections: connections.into(),
+            comments: vec![].into(),
             selected_nodes: vec![],
             selected_comments: vec![],
             zoom_level: 1.0,

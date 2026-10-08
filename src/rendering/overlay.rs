@@ -7,6 +7,7 @@
 
 //! Overlay rendering - debug info, selection box, viewport bounds
 use super::graph::NodeGraphRenderer;
+use crate::core::spatial_index::GraphRect;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
 use ui::{
@@ -123,22 +124,21 @@ pub fn render_debug_overlay(
     let viewport_height = visible_bottom - visible_top;
 
     // Count visible vs culled nodes and connections
-    let visible_node_count = panel
-        .graph
-        .nodes
-        .iter()
-        .filter(|node| NodeGraphRenderer::is_node_visible_simple(node, &panel.graph, viewport_size))
-        .count();
+    let (visible_node_count, visible_connection_count) = {
+        let mut spatial = panel.spatial_index.borrow_mut();
+        spatial.ensure_current(&panel.graph);
+        let visible_rect = GraphRect {
+            min_x: visible_left,
+            min_y: visible_top,
+            max_x: visible_right,
+            max_y: visible_bottom,
+        };
+        (
+            spatial.nodes_intersecting(visible_rect, false).len(),
+            spatial.wires_intersecting(visible_rect).len(),
+        )
+    };
     let culled_node_count = panel.graph.nodes.len() - visible_node_count;
-
-    let visible_connection_count = panel
-        .graph
-        .connections
-        .iter()
-        .filter(|connection| {
-            NodeGraphRenderer::is_connection_visible_simple(connection, &panel.graph, viewport_size)
-        })
-        .count();
     let culled_connection_count = panel.graph.connections.len() - visible_connection_count;
 
     let container_width = viewport_size.width;

@@ -31,7 +31,8 @@ pub(super) fn pin_canvas_pos_index(
     // The caller already has the pin's row. Avoid a second linear ID lookup
     // for every pin during hit testing while keeping special pin placement
     // identical to pin_gpos_id (also used by wire rendering).
-    let graph_pos = if node.node_type == NodeType::Conversion || node.node_type == NodeType::Reroute {
+    let graph_pos = if node.node_type == NodeType::Conversion || node.node_type == NodeType::Reroute
+    {
         pin_gpos_row(node, is_input, row)
     } else if pin_id == "__return__" {
         pin_gpos_id(node, pin_id, is_input).unwrap_or_else(|| pin_gpos_row(node, is_input, row))
@@ -382,23 +383,23 @@ pub(super) fn tessellate_line(
 
 pub(super) fn cached_text_width(
     renderer: &mut crate::rendering::gpu::BpRenderer,
-    cache: &mut std::collections::HashMap<(String, u32), f32>,
+    cache: &mut std::collections::HashMap<u32, std::collections::HashMap<String, f32>>,
     text: &str,
     size: f32,
 ) -> f32 {
-    let key = (text.to_owned(), size.to_bits());
-    if let Some(width) = cache.get(&key) {
+    let entries = cache.entry(size.to_bits()).or_default();
+    if let Some(width) = entries.get(text) {
         return *width;
     }
     // Keep the per-canvas cache bounded for graphs that generate changing
     // labels. Metrics are keyed by the full text and font size, so clearing
     // cannot leave stale geometry behind; the next render repopulates entries.
-    const MAX_TEXT_WIDTH_CACHE_ENTRIES: usize = 4096;
-    if cache.len() >= MAX_TEXT_WIDTH_CACHE_ENTRIES {
-        cache.clear();
+    const MAX_TEXT_WIDTH_CACHE_ENTRIES: usize = 65_536;
+    if entries.len() >= MAX_TEXT_WIDTH_CACHE_ENTRIES {
+        entries.clear();
     }
     let width = renderer.measure_text_width(text, size);
-    cache.insert(key, width);
+    entries.insert(text.to_owned(), width);
     width
 }
 

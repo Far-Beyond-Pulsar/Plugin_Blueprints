@@ -1,7 +1,8 @@
 // Coordinate conversion and graph hit testing shared by graph input handlers.
 
-use crate::core::types::{BlueprintNode, NodeType};
+use crate::core::spatial_index::GraphRect;
 use crate::core::types::PinDataType as DataType;
+use crate::core::types::{BlueprintNode, NodeType};
 use crate::editor::panel::ResizeHandle;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::{NodeGraphRenderer, PIN_SIZE};
@@ -36,7 +37,15 @@ fn pin_hit_radius(canvas: &GraphCanvasPanel, scale: f32, min_distance: f32) -> f
 // ─── hit testing ─────────────────────────────────────────────────────────────
 
 fn hit_node_ref<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a BlueprintNode> {
-    for node in canvas.graph.nodes.iter().rev() {
+    let candidates = {
+        let mut spatial = canvas.spatial_index.borrow_mut();
+        spatial.ensure_current(&canvas.graph);
+        spatial.nodes_intersecting(GraphRect::around(gp, 0.0), true)
+    };
+    for index in candidates {
+        let Some(node) = canvas.graph.nodes.get(index) else {
+            continue;
+        };
         let nl = node.position.x;
         let nt = node.position.y;
         let nr = nl + node.size.width;
@@ -46,6 +55,16 @@ fn hit_node_ref<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a 
         }
     }
     None
+}
+
+fn nearby_node_indices(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Vec<usize> {
+    let graph_point = to_graph(cp, canvas);
+    // Pin targets use a minimum screen-space radius, so expand the graph query
+    // by that radius at the current zoom before doing exact screen-space tests.
+    let radius = 12.0 / canvas.graph.zoom_level.max(0.05);
+    let mut spatial = canvas.spatial_index.borrow_mut();
+    spatial.ensure_current(&canvas.graph);
+    spatial.nodes_intersecting(GraphRect::around(graph_point, radius), true)
 }
 
 pub(super) fn hit_node<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str> {
@@ -63,13 +82,8 @@ fn output_pin_on_node(
         pin_hit_radius(canvas, 0.9, 6.0)
     };
     node.outputs.iter().enumerate().find_map(|(i, pin)| {
-        let center = NodeGraphRenderer::pin_canvas_pos_index(
-            node,
-            false,
-            i,
-            pin.id.as_str(),
-            &canvas.graph,
-        );
+        let center =
+            NodeGraphRenderer::pin_canvas_pos_index(node, false, i, pin.id.as_str(), &canvas.graph);
         within_radius(cp, center, r).then(|| (node.id.clone(), pin.id.clone()))
     })
 }
@@ -93,13 +107,8 @@ fn input_pin_on_node(
         if src_type.is_some_and(|source| !source.is_compatible_with(&pin.data_type)) {
             return None;
         }
-        let center = NodeGraphRenderer::pin_canvas_pos_index(
-            node,
-            true,
-            i,
-            pin.id.as_str(),
-            &canvas.graph,
-        );
+        let center =
+            NodeGraphRenderer::pin_canvas_pos_index(node, true, i, pin.id.as_str(), &canvas.graph);
         within_radius(cp, center, r).then(|| (node.id.clone(), pin.id.clone()))
     })
 }
@@ -138,11 +147,9 @@ pub(super) fn hit_output_pin(
     if let Some(node) = hit_node_ref(to_graph(cp, canvas), canvas) {
         return output_pin_on_node(cp, canvas, node);
     }
-    canvas
-        .graph
-        .nodes
-        .iter()
-        .rev()
+    nearby_node_indices(cp, canvas)
+        .into_iter()
+        .filter_map(|index| canvas.graph.nodes.get(index))
         .find_map(|node| output_pin_on_node(cp, canvas, node))
 }
 
@@ -155,25 +162,32 @@ pub(super) fn hit_input_pin(
     if let Some(node) = hit_node_ref(to_graph(cp, canvas), canvas) {
         return input_pin_on_node(cp, canvas, node, Some(skip_node), Some(src_type));
     }
-    canvas.graph.nodes.iter().rev().find_map(|node| {
-        input_pin_on_node(cp, canvas, node, Some(skip_node), Some(src_type))
-    })
+    nearby_node_indices(cp, canvas)
+        .into_iter()
+        .filter_map(|index| canvas.graph.nodes.get(index))
+        .find_map(|node| input_pin_on_node(cp, canvas, node, Some(skip_node), Some(src_type)))
 }
 
 pub(super) fn hit_any_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, String)> {
     if let Some(node) = hit_node_ref(to_graph(cp, canvas), canvas) {
         return any_pin_on_node(cp, canvas, node);
     }
-    canvas
-        .graph
-        .nodes
-        .iter()
-        .rev()
+    nearby_node_indices(cp, canvas)
+        .into_iter()
+        .filter_map(|index| canvas.graph.nodes.get(index))
         .find_map(|node| any_pin_on_node(cp, canvas, node))
 }
 
 pub(super) fn hit_comment<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str> {
-    for comment in canvas.graph.comments.iter().rev() {
+    let candidates = {
+        let mut spatial = canvas.spatial_index.borrow_mut();
+        spatial.ensure_current(&canvas.graph);
+        spatial.comments_intersecting(GraphRect::around(gp, 0.0), true)
+    };
+    for index in candidates {
+        let Some(comment) = canvas.graph.comments.get(index) else {
+            continue;
+        };
         let left = comment.position.x;
         let top = comment.position.y;
         let right = left + comment.size.width;
@@ -190,7 +204,15 @@ pub(super) fn hit_comment_header<'a>(
     canvas: &'a GraphCanvasPanel,
 ) -> Option<&'a str> {
     let header_h = (30.0 / canvas.graph.zoom_level.max(0.25)).clamp(18.0, 44.0);
-    for comment in canvas.graph.comments.iter().rev() {
+    let candidates = {
+        let mut spatial = canvas.spatial_index.borrow_mut();
+        spatial.ensure_current(&canvas.graph);
+        spatial.comments_intersecting(GraphRect::around(gp, header_h), true)
+    };
+    for index in candidates {
+        let Some(comment) = canvas.graph.comments.get(index) else {
+            continue;
+        };
         let left = comment.position.x;
         let top = comment.position.y;
         let right = left + comment.size.width;
@@ -210,7 +232,15 @@ pub(super) fn hit_comment_title<'a>(
     let pad_x = 12.0;
     let title_top = 2.0;
     let title_bottom = header_h - 3.0;
-    for comment in canvas.graph.comments.iter().rev() {
+    let candidates = {
+        let mut spatial = canvas.spatial_index.borrow_mut();
+        spatial.ensure_current(&canvas.graph);
+        spatial.comments_intersecting(GraphRect::around(gp, header_h), true)
+    };
+    for index in candidates {
+        let Some(comment) = canvas.graph.comments.get(index) else {
+            continue;
+        };
         let left = comment.position.x + pad_x;
         let top = comment.position.y + title_top;
         let right = comment.position.x + comment.size.width - pad_x;
@@ -233,7 +263,12 @@ fn hit_comment_resize(
     canvas: &GraphCanvasPanel,
     comment_id: &str,
 ) -> Option<ResizeHandle> {
-    let comment = canvas.graph.comments.iter().find(|c| c.id == comment_id)?;
+    let comment_index = {
+        let mut spatial = canvas.spatial_index.borrow_mut();
+        spatial.ensure_current(&canvas.graph);
+        spatial.comment_index(comment_id)?
+    };
+    let comment = canvas.graph.comments.get(comment_index)?;
     let left = comment.position.x;
     let top = comment.position.y;
     let right = left + comment.size.width;
@@ -262,7 +297,15 @@ pub(super) fn hit_any_comment_resize(
     canvas: &GraphCanvasPanel,
 ) -> Option<(String, ResizeHandle)> {
     let edge = comment_resize_edge(canvas);
-    for comment in canvas.graph.comments.iter().rev() {
+    let candidates = {
+        let mut spatial = canvas.spatial_index.borrow_mut();
+        spatial.ensure_current(&canvas.graph);
+        spatial.comments_intersecting(GraphRect::around(gp, edge), true)
+    };
+    for index in candidates {
+        let Some(comment) = canvas.graph.comments.get(index) else {
+            continue;
+        };
         let left = comment.position.x - edge;
         let top = comment.position.y - edge;
         let right = comment.position.x + comment.size.width + edge;

@@ -251,7 +251,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         self.graph.nodes.retain(|node| node.id != node_id);
         let restored_ids = nodes.iter().map(|node| node.id.clone()).collect::<Vec<_>>();
         self.graph.nodes.extend(nodes);
-        self.graph.connections = connections;
+        self.graph.connections = connections.into();
         self.graph.selected_nodes = restored_ids;
         self.is_dirty = true;
         cx.notify();
@@ -526,10 +526,10 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
                     description: format!("Exit — {graph_name}"),
                     color: Some("#7C3AED".to_string()),
                 });
-                nodes
+                nodes.into()
             },
-            connections: internal_connections,
-            comments: Vec::new(),
+            connections: internal_connections.into(),
+            comments: Vec::new().into(),
             selected_nodes: Vec::new(),
             selected_comments: Vec::new(),
             zoom_level: 1.0,
@@ -598,7 +598,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
 
         self.graph.nodes.retain(|node| !selected.contains(&node.id));
         self.graph.nodes.push(replacement);
-        self.graph.connections = parent_connections;
+        self.graph.connections = parent_connections.into();
         self.graph.selected_nodes = vec![instance_id];
         self.is_dirty = true;
         cx.notify();

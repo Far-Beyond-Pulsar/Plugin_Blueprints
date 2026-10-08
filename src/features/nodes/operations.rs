@@ -233,25 +233,88 @@ impl GraphCanvasPanel {
                     new_position.y - initial_pos.y,
                 );
 
-                // Move all nodes that were selected when dragging started
-                for (node_id, initial_position) in &self.initial_drag_positions {
-                    if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == *node_id) {
-                        node.position = NodeGraphRenderer::snap_to_grid(Point::new(
-                            initial_position.x + delta.x,
-                            initial_position.y + delta.y,
-                        ));
-                    }
-                }
+                let (
+                    node_updates,
+                    comment_updates,
+                    previous_node_revision,
+                    previous_comment_revision,
+                ) = {
+                    let mut spatial = self.spatial_index.borrow_mut();
+                    spatial.ensure_current(&self.graph);
+                    let node_updates = self
+                        .initial_drag_positions
+                        .iter()
+                        .filter_map(|(id, initial)| {
+                            spatial.node_index(id).map(|index| {
+                                (
+                                    index,
+                                    NodeGraphRenderer::snap_to_grid(Point::new(
+                                        initial.x + delta.x,
+                                        initial.y + delta.y,
+                                    )),
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    let comment_updates = self
+                        .initial_comment_drag_positions
+                        .iter()
+                        .filter_map(|(id, initial)| {
+                            spatial.comment_index(id).map(|index| {
+                                (
+                                    index,
+                                    NodeGraphRenderer::snap_to_grid(Point::new(
+                                        initial.x + delta.x,
+                                        initial.y + delta.y,
+                                    )),
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    (
+                        node_updates,
+                        comment_updates,
+                        self.graph.nodes.revision(),
+                        self.graph.comments.revision(),
+                    )
+                };
 
-                // Move all comments that were selected when dragging started
-                for (comment_id, initial_position) in &self.initial_comment_drag_positions.clone() {
-                    if let Some(comment) =
-                        self.graph.comments.iter_mut().find(|c| c.id == *comment_id)
-                    {
-                        comment.position = NodeGraphRenderer::snap_to_grid(Point::new(
-                            initial_position.x + delta.x,
-                            initial_position.y + delta.y,
-                        ));
+                if !node_updates.is_empty() {
+                    self.graph.nodes.with_mut(|nodes| {
+                        for &(index, position) in &node_updates {
+                            if let Some(node) = nodes.get_mut(index) {
+                                node.position = position;
+                            }
+                        }
+                    });
+                }
+                if !comment_updates.is_empty() {
+                    self.graph.comments.with_mut(|comments| {
+                        for &(index, position) in &comment_updates {
+                            if let Some(comment) = comments.get_mut(index) {
+                                comment.position = position;
+                            }
+                        }
+                    });
+                }
+                if !node_updates.is_empty() || !comment_updates.is_empty() {
+                    let node_indices = node_updates
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>();
+                    let comment_indices = comment_updates
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>();
+                    let mut spatial = self.spatial_index.borrow_mut();
+                    if !spatial.sync_geometry_after_batch(
+                        &self.graph,
+                        previous_node_revision,
+                        &node_indices,
+                        previous_comment_revision,
+                        &comment_indices,
+                    ) {
+                        spatial.ensure_current(&self.graph);
                     }
                 }
             }

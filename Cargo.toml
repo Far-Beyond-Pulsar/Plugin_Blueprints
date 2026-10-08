@@ -75,6 +75,7 @@ wgpu = { version = "30.0.0", default-features = false, features = [
     "wgsl",
 ] }
 parking_lot = "0.12"
+rstar = "0.12.2"
 fontdue = "0.9"
 bytemuck = { version = "1", features = ["derive"] }
 tool_registry = { git = "https://github.com/Far-Beyond-Pulsar/ToolbeltRS", rev = "116b9028bad6b9467073de2534be60ef4df9b279" }

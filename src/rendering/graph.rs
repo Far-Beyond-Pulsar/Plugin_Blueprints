@@ -21,6 +21,7 @@ use ui::ActiveTheme;
 use ui::PixelsExt;
 
 use crate::core::graph::BlueprintGraph;
+use crate::core::spatial_index::GraphRect;
 use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
@@ -40,6 +41,8 @@ pub const PIN_SIZE: f32 = layout::PIN_SIZE;
 const WIRE_THICKNESS: f32 = 2.8;
 const HEADER_FONT: f32 = 12.5;
 const PIN_FONT: f32 = 10.5;
+const LOD_FULL: f32 = 0.35;
+const LOD_TITLES: f32 = 0.18;
 const HEADER_PAD_X: f32 = layout::HEADER_PAD_X;
 const COMMENT_TITLE_PAD_X: f32 = 12.0;
 const COMMENT_TITLE_PAD_Y: f32 = 6.0;
@@ -132,6 +135,23 @@ impl NodeGraphRenderer {
         geometry::calculate_pin_position_graph_space(node, pin_id, is_input)
     }
 
+    pub(crate) fn calculate_pin_position_graph_space_for_row(
+        node: &BlueprintNode,
+        pin_id: &str,
+        is_input: bool,
+        row: usize,
+    ) -> Point<f32> {
+        if pin_id == "__return__" {
+            return geometry::calculate_pin_position_graph_space(node, pin_id, is_input)
+                .unwrap_or_else(|| {
+                    let (x, y) = geometry::pin_gpos_row(node, is_input, row);
+                    Point::new(x, y)
+                });
+        }
+        let (x, y) = geometry::pin_gpos_row(node, is_input, row);
+        Point::new(x, y)
+    }
+
     pub fn viewport_graph_bounds(
         graph: &BlueprintGraph,
         viewport_size: Size<f32>,
@@ -208,58 +228,100 @@ impl NodeGraphRenderer {
             .unwrap_or((1.0, 1.0));
         let (vl, vt, vr, vb) =
             geometry::viewport_graph_bounds(&canvas.graph, Size::new(vw, vh), 260.0);
-        let visible = |n: &BlueprintNode| {
-            !(n.position.x > vr
-                || n.position.x + n.size.width < vl
-                || n.position.y > vb
-                || n.position.y + n.size.height < vt)
+        let viewport_rect = GraphRect {
+            min_x: vl,
+            min_y: vt,
+            max_x: vr,
+            max_y: vb,
+        };
+        let (visible_node_indices, visible_comment_indices) = {
+            let mut spatial = canvas.spatial_index.borrow_mut();
+            spatial.ensure_current(&canvas.graph);
+            (
+                spatial.nodes_intersecting(viewport_rect, false),
+                spatial.comments_intersecting(viewport_rect, false),
+            )
         };
 
-        // Grow authored/default widths to fit the actual rendered text. The
-        // cache avoids raster metric work for repeated titles and pin names.
-        let (renderer, text_width_cache) = (&mut canvas.renderer, &mut canvas.text_width_cache);
-        for node in &mut canvas.graph.nodes {
-            if node.node_type == NodeType::Reroute {
-                continue;
-            }
-            let title_width =
-                cached_text_width(renderer, text_width_cache, &node.title, HEADER_FONT);
-            let header_output = node
-                .outputs
-                .iter()
-                .find(|pin| pin.id == "__return__")
-                .map(|pin| {
-                    if pin.name.is_empty() {
-                        0.0
-                    } else {
-                        cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
-                    }
+        // Measure only labels in the viewport. The index bounds include the
+        // existing viewport culling margin, so labels from nearby nodes remain
+        // eligible without a graph-wide scan.
+        let mut width_updates = Vec::new();
+        if zoom >= LOD_TITLES {
+            let (renderer, text_width_cache) = (&mut canvas.renderer, &mut canvas.text_width_cache);
+            for &index in &visible_node_indices {
+                let Some(node) = canvas.graph.nodes.get(index) else {
+                    continue;
+                };
+                if node.node_type == NodeType::Reroute {
+                    continue;
+                }
+                let title_width =
+                    cached_text_width(renderer, text_width_cache, &node.title, HEADER_FONT);
+                let header_output = (zoom >= LOD_FULL).then(|| {
+                    node.outputs
+                        .iter()
+                        .find(|pin| pin.id == "__return__")
+                        .map(|pin| {
+                            if pin.name.is_empty() {
+                                0.0
+                            } else {
+                                cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
+                            }
+                        })
+                        .unwrap_or_default()
                 });
-            let rows = node.inputs.len().max(node.outputs.len());
-            let mut pin_label_rows = Vec::with_capacity(rows);
-            for row in 0..rows {
-                let input_width = node
-                    .inputs
-                    .get(row)
-                    .filter(|pin| !pin.name.is_empty())
-                    .map_or(0.0, |pin| {
-                        cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
-                    });
-                let output_width = node
-                    .outputs
-                    .get(row)
-                    .filter(|pin| pin.id != "__return__" && !pin.name.is_empty())
-                    .map_or(0.0, |pin| {
-                        cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
-                    });
-                pin_label_rows.push((input_width, output_width));
+                let rows = if zoom >= LOD_FULL {
+                    node.inputs.len().max(node.outputs.len())
+                } else {
+                    0
+                };
+                let mut pin_label_rows = Vec::with_capacity(rows);
+                for row in 0..rows {
+                    let input_width = node
+                        .inputs
+                        .get(row)
+                        .filter(|pin| !pin.name.is_empty())
+                        .map_or(0.0, |pin| {
+                            cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
+                        });
+                    let output_width = node
+                        .outputs
+                        .get(row)
+                        .filter(|pin| pin.id != "__return__" && !pin.name.is_empty())
+                        .map_or(0.0, |pin| {
+                            cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
+                        });
+                    pin_label_rows.push((input_width, output_width));
+                }
+                let width = layout::node_width_for_labels(
+                    node.size.width,
+                    title_width,
+                    header_output,
+                    &pin_label_rows,
+                );
+                if width > node.size.width {
+                    width_updates.push((index, width));
+                }
             }
-            node.size.width = layout::node_width_for_labels(
-                node.size.width,
-                title_width,
-                header_output,
-                &pin_label_rows,
-            );
+        }
+        if !width_updates.is_empty() {
+            let previous_revision = canvas.graph.nodes.revision();
+            let changed_indices = width_updates
+                .iter()
+                .map(|(index, _)| *index)
+                .collect::<Vec<_>>();
+            canvas.graph.nodes.with_mut(|nodes| {
+                for (index, width) in width_updates {
+                    if let Some(node) = nodes.get_mut(index) {
+                        node.size.width = width;
+                    }
+                }
+            });
+            let mut spatial = canvas.spatial_index.borrow_mut();
+            if !spatial.sync_nodes_after_batch(&canvas.graph, previous_revision, &changed_indices) {
+                spatial.ensure_current(&canvas.graph);
+            }
         }
 
         let dragging_conn = canvas.dragging_connection.clone();
@@ -278,16 +340,9 @@ impl NodeGraphRenderer {
 
         let mut comment_instances: Vec<crate::rendering::gpu::CommentInstance> = Vec::new();
         let mut comment_text_calls: Vec<TextCall> = Vec::new();
-        let mut comment_refs: Vec<&BlueprintComment> = canvas
-            .graph
-            .comments
+        let mut comment_refs: Vec<&BlueprintComment> = visible_comment_indices
             .iter()
-            .filter(|comment| {
-                comment.position.x + comment.size.width >= vl
-                    && comment.position.x <= vr
-                    && comment.position.y + comment.size.height >= vt
-                    && comment.position.y <= vb
-            })
+            .filter_map(|&index| canvas.graph.comments.get(index))
             .collect();
         comment_refs.sort_by(|a, b| {
             let area_a = a.size.width * a.size.height;
@@ -337,10 +392,10 @@ impl NodeGraphRenderer {
         let mut pin_instances: Vec<PinInstance> = Vec::new();
         let mut text_calls: Vec<TextCall> = Vec::new();
 
-        for node in &canvas.graph.nodes {
-            if !visible(node) {
+        for index in visible_node_indices {
+            let Some(node) = canvas.graph.nodes.get(index) else {
                 continue;
-            }
+            };
 
             let is_sel = selected_nodes.contains(node.id.as_str());
             let is_reroute = node.node_type == NodeType::Reroute;
@@ -403,8 +458,7 @@ impl NodeGraphRenderer {
 
             // ── LOD: above this zoom level render pins, text, and labels.
             // Below it we only draw node bodies and wires — much cheaper at scale.
-            const LOD_FULL: f32 = 0.35;
-            const LOD_TITLES: f32 = 0.18; // show title text but still no pins
+            // Titles can remain visible at lower zoom while pin labels are culled.
 
             // Node title
             if zoom >= LOD_TITLES && is_conversion {
@@ -510,19 +564,10 @@ impl NodeGraphRenderer {
         let mut electronic_wire_instances: Vec<WireInstance> = Vec::new();
         let half_thick = WIRE_THICKNESS * 0.5; // graph-space half-thickness; shader × zoom → px
 
-        let node_map: std::collections::HashMap<&str, &BlueprintNode> = canvas
-            .graph
-            .nodes
-            .iter()
-            .map(|n| (n.id.as_str(), n))
-            .collect();
-        let vis_ids: std::collections::HashSet<&str> = canvas
-            .graph
-            .nodes
-            .iter()
-            .filter(|n| visible(n))
-            .map(|n| n.id.as_str())
-            .collect();
+        let visible_wire_indices = canvas
+            .spatial_index
+            .borrow()
+            .wires_intersecting(viewport_rect);
 
         // Helper: build a WireInstance from two graph-space endpoints.
         let make_wire = |fp: (f32, f32),
@@ -547,17 +592,27 @@ impl NodeGraphRenderer {
             }
         };
 
-        for conn in &canvas.graph.connections {
-            if !vis_ids.contains(conn.source_node.as_str())
-                && !vis_ids.contains(conn.target_node.as_str())
-            {
+        for index in visible_wire_indices {
+            let Some(conn) = canvas.graph.connections.get(index) else {
                 continue;
-            }
-            let (fn_, tn) = (
-                node_map.get(conn.source_node.as_str()),
-                node_map.get(conn.target_node.as_str()),
-            );
-            if let (Some(fn_), Some(tn)) = (fn_, tn) {
+            };
+            let (wire_geometry, source_index, target_index) = {
+                let spatial = canvas.spatial_index.borrow();
+                (
+                    spatial.wire(index),
+                    spatial.node_index(&conn.source_node),
+                    spatial.node_index(&conn.target_node),
+                )
+            };
+            let (Some(wire_geometry), Some(source_index), Some(target_index)) =
+                (wire_geometry, source_index, target_index)
+            else {
+                continue;
+            };
+            if let (Some(fn_), Some(tn)) = (
+                canvas.graph.nodes.get(source_index),
+                canvas.graph.nodes.get(target_index),
+            ) {
                 let src = fn_
                     .outputs
                     .iter()
@@ -587,23 +642,26 @@ impl NodeGraphRenderer {
                     fc = [0.98, 0.84, 0.10, fc[3]];
                     thick *= 1.12;
                 }
-                if let (Some(fp), Some(tp)) = (
-                    pin_gpos_id(fn_, &conn.source_pin, false),
-                    pin_gpos_id(tn, &conn.target_pin, true),
-                ) {
-                    let wire = make_wire(fp, tp, fc, thick, wire_flags, wire_phase(conn));
-                    if electronic_connections {
-                        electronic_wire_instances.push(wire);
-                    } else {
-                        wire_instances.push(wire);
-                    }
+                let wire = make_wire(
+                    (wire_geometry.from.x, wire_geometry.from.y),
+                    (wire_geometry.to.x, wire_geometry.to.y),
+                    fc,
+                    thick,
+                    wire_flags,
+                    wire_phase(conn),
+                );
+                if electronic_connections {
+                    electronic_wire_instances.push(wire);
+                } else {
+                    wire_instances.push(wire);
                 }
             }
         }
 
         // Drag wire preview — source pin in graph space, mouse pos converted from canvas space.
         if let Some(ref drag) = canvas.dragging_connection.clone() {
-            if let Some(fn_) = node_map.get(drag.source_node.as_str()) {
+            let source_index = canvas.spatial_index.borrow().node_index(&drag.source_node);
+            if let Some(fn_) = source_index.and_then(|index| canvas.graph.nodes.get(index)) {
                 if let Some(fp) = pin_gpos_id(fn_, &drag.source_pin, false) {
                     let dc = pin_color(&drag.source_pin_type);
                     let mp = drag.current_mouse_pos;

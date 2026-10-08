@@ -14,6 +14,7 @@ use ui::{
 };
 
 use crate::core::graph::BlueprintGraph;
+use crate::core::spatial_index::GraphSpatialIndex;
 use crate::core::types::BlueprintNode;
 use crate::editor::panel::{BlueprintEditorPanel, ResizeHandle};
 use crate::features::connections::operations::ConnectionDrag;
@@ -381,7 +382,9 @@ pub struct GraphCanvasPanel {
     // ── GPU renderer (per-canvas) ──────────────────────────────────────────
     pub renderer: crate::rendering::gpu::BpRenderer,
     /// Font metrics are stable for this renderer and reused across frames.
-    pub(crate) text_width_cache: HashMap<(String, u32), f32>,
+    pub(crate) text_width_cache: HashMap<u32, HashMap<String, f32>>,
+    /// Spatial candidates and resolved wire geometry shared by rendering and input.
+    pub(crate) spatial_index: RefCell<GraphSpatialIndex>,
     pub surface: Option<gpui::WgpuSurfaceHandle>,
     pub canvas_origin: Rc<RefCell<Point<f32>>>,
     pub element_bounds: Option<Bounds<Pixels>>,
@@ -537,6 +540,7 @@ impl GraphCanvasPanel {
             focus_handle: cx.focus_handle(),
             renderer: crate::rendering::gpu::BpRenderer::new(),
             text_width_cache: HashMap::new(),
+            spatial_index: RefCell::new(GraphSpatialIndex::default()),
             surface: None,
             canvas_origin: Rc::new(RefCell::new(Point::new(0.0, 0.0))),
             element_bounds: None,
@@ -938,17 +942,85 @@ impl GraphCanvasPanel {
             let new_pos = self.snap_comment_position(raw);
             if let Some(ip) = self.initial_comment_drag_positions.get(cid) {
                 let delta = Point::new(new_pos.x - ip.x, new_pos.y - ip.y);
-                for (id, ip) in &self.initial_comment_drag_positions.clone() {
-                    let np = self.snap_comment_position(Point::new(ip.x + delta.x, ip.y + delta.y));
-                    if let Some(c) = self.graph.comments.iter_mut().find(|c| c.id == *id) {
-                        c.position = np;
-                    }
+                let (
+                    comment_updates,
+                    node_updates,
+                    previous_comment_revision,
+                    previous_node_revision,
+                ) = {
+                    let mut spatial = self.spatial_index.borrow_mut();
+                    spatial.ensure_current(&self.graph);
+                    let comment_updates = self
+                        .initial_comment_drag_positions
+                        .iter()
+                        .filter_map(|(id, initial)| {
+                            spatial.comment_index(id).map(|index| {
+                                (
+                                    index,
+                                    crate::rendering::graph::NodeGraphRenderer::snap_to_grid(
+                                        Point::new(initial.x + delta.x, initial.y + delta.y),
+                                    ),
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    let node_updates = self
+                        .initial_drag_positions
+                        .iter()
+                        .filter_map(|(id, initial)| {
+                            spatial.node_index(id).map(|index| {
+                                (
+                                    index,
+                                    crate::rendering::graph::NodeGraphRenderer::snap_to_grid(
+                                        Point::new(initial.x + delta.x, initial.y + delta.y),
+                                    ),
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    (
+                        comment_updates,
+                        node_updates,
+                        self.graph.comments.revision(),
+                        self.graph.nodes.revision(),
+                    )
+                };
+                if !comment_updates.is_empty() {
+                    self.graph.comments.with_mut(|comments| {
+                        for &(index, position) in &comment_updates {
+                            if let Some(comment) = comments.get_mut(index) {
+                                comment.position = position;
+                            }
+                        }
+                    });
                 }
-                for (id, ip) in &self.initial_drag_positions.clone() {
-                    if let Some(n) = self.graph.nodes.iter_mut().find(|n| n.id == *id) {
-                        n.position = crate::rendering::graph::NodeGraphRenderer::snap_to_grid(
-                            Point::new(ip.x + delta.x, ip.y + delta.y),
-                        );
+                if !node_updates.is_empty() {
+                    self.graph.nodes.with_mut(|nodes| {
+                        for &(index, position) in &node_updates {
+                            if let Some(node) = nodes.get_mut(index) {
+                                node.position = position;
+                            }
+                        }
+                    });
+                }
+                if !comment_updates.is_empty() || !node_updates.is_empty() {
+                    let comment_indices = comment_updates
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>();
+                    let node_indices = node_updates
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>();
+                    let mut spatial = self.spatial_index.borrow_mut();
+                    if !spatial.sync_geometry_after_batch(
+                        &self.graph,
+                        previous_node_revision,
+                        &node_indices,
+                        previous_comment_revision,
+                        &comment_indices,
+                    ) {
+                        spatial.ensure_current(&self.graph);
                     }
                 }
                 cx.notify();
@@ -967,72 +1039,89 @@ impl GraphCanvasPanel {
                 return;
             };
 
-            if let Some(c) = self.graph.comments.iter_mut().find(|c| c.id == *cid) {
-                let min_width = 100.0;
-                let min_height = 50.0;
-                let mut left = start_pos.x;
-                let mut top = start_pos.y;
-                let mut right = start_pos.x + start_size.width;
-                let mut bottom = start_pos.y + start_size.height;
+            let (comment_index, previous_revision) = {
+                let mut spatial = self.spatial_index.borrow_mut();
+                spatial.ensure_current(&self.graph);
+                (spatial.comment_index(cid), self.graph.comments.revision())
+            };
+            if let Some(comment_index) = comment_index {
+                if let Some(c) = self.graph.comments.get_mut(comment_index) {
+                    let min_width = 100.0;
+                    let min_height = 50.0;
+                    let mut left = start_pos.x;
+                    let mut top = start_pos.y;
+                    let mut right = start_pos.x + start_size.width;
+                    let mut bottom = start_pos.y + start_size.height;
 
-                match handle {
-                    ResizeHandle::TopLeft => {
-                        left = mouse_pos.x;
-                        top = mouse_pos.y;
-                    }
-                    ResizeHandle::TopRight => {
-                        right = mouse_pos.x;
-                        top = mouse_pos.y;
-                    }
-                    ResizeHandle::BottomLeft => {
-                        left = mouse_pos.x;
-                        bottom = mouse_pos.y;
-                    }
-                    ResizeHandle::BottomRight => {
-                        right = mouse_pos.x;
-                        bottom = mouse_pos.y;
-                    }
-                    ResizeHandle::Top => {
-                        top = mouse_pos.y;
-                    }
-                    ResizeHandle::Bottom => {
-                        bottom = mouse_pos.y;
-                    }
-                    ResizeHandle::Left => {
-                        left = mouse_pos.x;
-                    }
-                    ResizeHandle::Right => {
-                        right = mouse_pos.x;
-                    }
-                }
-
-                if right - left < min_width {
                     match handle {
-                        ResizeHandle::Left | ResizeHandle::TopLeft | ResizeHandle::BottomLeft => {
-                            left = right - min_width;
+                        ResizeHandle::TopLeft => {
+                            left = mouse_pos.x;
+                            top = mouse_pos.y;
                         }
-                        _ => {
-                            right = left + min_width;
+                        ResizeHandle::TopRight => {
+                            right = mouse_pos.x;
+                            top = mouse_pos.y;
+                        }
+                        ResizeHandle::BottomLeft => {
+                            left = mouse_pos.x;
+                            bottom = mouse_pos.y;
+                        }
+                        ResizeHandle::BottomRight => {
+                            right = mouse_pos.x;
+                            bottom = mouse_pos.y;
+                        }
+                        ResizeHandle::Top => {
+                            top = mouse_pos.y;
+                        }
+                        ResizeHandle::Bottom => {
+                            bottom = mouse_pos.y;
+                        }
+                        ResizeHandle::Left => {
+                            left = mouse_pos.x;
+                        }
+                        ResizeHandle::Right => {
+                            right = mouse_pos.x;
                         }
                     }
-                }
 
-                if bottom - top < min_height {
-                    match handle {
-                        ResizeHandle::Top | ResizeHandle::TopLeft | ResizeHandle::TopRight => {
-                            top = bottom - min_height;
-                        }
-                        _ => {
-                            bottom = top + min_height;
+                    if right - left < min_width {
+                        match handle {
+                            ResizeHandle::Left
+                            | ResizeHandle::TopLeft
+                            | ResizeHandle::BottomLeft => {
+                                left = right - min_width;
+                            }
+                            _ => {
+                                right = left + min_width;
+                            }
                         }
                     }
-                }
 
-                c.position = Point::new(left, top);
-                c.size = Size::new(right - left, bottom - top);
-                Self::snap_comment_bounds(c);
-                self.drag_offset = mouse_pos;
-                cx.notify();
+                    if bottom - top < min_height {
+                        match handle {
+                            ResizeHandle::Top | ResizeHandle::TopLeft | ResizeHandle::TopRight => {
+                                top = bottom - min_height;
+                            }
+                            _ => {
+                                bottom = top + min_height;
+                            }
+                        }
+                    }
+
+                    c.position = Point::new(left, top);
+                    c.size = Size::new(right - left, bottom - top);
+                    Self::snap_comment_bounds(c);
+                    self.drag_offset = mouse_pos;
+                    cx.notify();
+                }
+                let mut spatial = self.spatial_index.borrow_mut();
+                if !spatial.sync_comments_after_batch(
+                    &self.graph,
+                    previous_revision,
+                    &[comment_index],
+                ) {
+                    spatial.ensure_current(&self.graph);
+                }
             }
         }
     }
