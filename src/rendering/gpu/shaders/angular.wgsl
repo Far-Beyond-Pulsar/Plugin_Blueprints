@@ -43,17 +43,25 @@ fn screen_to_ndc(p: vec2<f32>) -> vec2<f32> {
                -(p.y / u.viewport.y * 2.0 - 1.0));
 }
 
-// The route has five straight runs: horizontal, 45-degree chamfer, vertical,
-// 45-degree chamfer, horizontal. Fixed tessellation boundaries land exactly
-// on each corner so no quad ever cuts diagonally across an elbow.
+// Keep chamfers large enough to rasterize cleanly. When the available space is
+// too short at the current zoom, use a square elbow rather than a subpixel
+// diagonal that changes apparent angle as the graph is zoomed.
+fn route_bevel(p0: vec2<f32>, p5: vec2<f32>) -> f32 {
+    let delta = p5 - p0;
+    let half_horizontal = abs(delta.x) * 0.5;
+    let vertical = abs(delta.y);
+    let max_bevel = min(18.0, min(half_horizontal * 0.45, vertical * 0.45));
+    return select(0.0, max_bevel, max_bevel * u.zoom >= 6.0);
+}
+
+// Five runs: horizontal, 45-degree chamfer, vertical, 45-degree chamfer,
+// horizontal. Tessellation boundaries land exactly on each corner.
 fn route_points(p0: vec2<f32>, p5: vec2<f32>) -> array<vec2<f32>, 6> {
     let delta = p5 - p0;
     let mid_x = (p0.x + p5.x) * 0.5;
-    let half_horizontal = abs(delta.x) * 0.5;
-    let vertical = abs(delta.y);
     let sx = select(-1.0, 1.0, delta.x > 0.0);
     let sy = select(-1.0, 1.0, delta.y > 0.0);
-    let bevel = min(18.0, min(half_horizontal * 0.45, vertical * 0.45));
+    let bevel = route_bevel(p0, p5);
 
     if abs(delta.x) < 0.001 || abs(delta.y) < 0.001 {
         return array<vec2<f32>, 6>(p0, p0, p0, p0, p5, p5);
@@ -76,6 +84,12 @@ fn route_tangent(p0: vec2<f32>, p5: vec2<f32>, section: u32) -> vec2<f32> {
     }
     let sx = select(-1.0, 1.0, delta.x > 0.0);
     let sy = select(-1.0, 1.0, delta.y > 0.0);
+    if route_bevel(p0, p5) == 0.0 {
+        if section == 0u || section == 4u {
+            return vec2(sx, 0.0);
+        }
+        return vec2(0.0, sy);
+    }
     if section == 0u || section == 4u {
         return vec2(sx, 0.0);
     }
@@ -144,6 +158,27 @@ fn route_offset(p0: vec2<f32>, p5: vec2<f32>, step: u32, half_width: f32, side: 
     let delta = p5 - p0;
     if abs(delta.x) < 0.001 || abs(delta.y) < 0.001 {
         let tangent = select(vec2(1.0, 0.0), normalize(delta), length(delta) > 0.001);
+        return vec2(-tangent.y, tangent.x) * half_width * side;
+    }
+
+    if route_bevel(p0, p5) == 0.0 {
+        if step >= 6u && step <= 11u {
+            return corner_offset(
+                route_tangent(p0, p5, 0u),
+                route_tangent(p0, p5, 1u),
+                half_width,
+                side,
+            );
+        }
+        if step >= 21u && step <= 26u {
+            return corner_offset(
+                route_tangent(p0, p5, 2u),
+                route_tangent(p0, p5, 4u),
+                half_width,
+                side,
+            );
+        }
+        let tangent = route_tangent(p0, p5, select(2u, 0u, step < 6u || step > 26u));
         return vec2(-tangent.y, tangent.x) * half_width * side;
     }
 

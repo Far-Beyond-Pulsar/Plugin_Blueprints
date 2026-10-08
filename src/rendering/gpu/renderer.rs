@@ -650,9 +650,14 @@ impl BpRenderer {
             cache: None,
         });
 
+        let instance_label = if label == "angular" {
+            "angular_inst"
+        } else {
+            "bezier_inst"
+        };
         let init_cap = 4096 * std::mem::size_of::<WireInstance>() as u64;
         let inst_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("bezier_inst"),
+            label: Some(instance_label),
             size: init_cap,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
