@@ -595,6 +595,38 @@ impl BlueprintEditorPanel {
 
 impl Render for BlueprintEditorPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(error) = self.load_error.as_deref() {
+            return v_flex()
+                .size_full()
+                .items_center()
+                .justify_center()
+                .bg(cx.theme().background)
+                .child(
+                    v_flex()
+                        .w_full()
+                        .max_w(px(720.0))
+                        .gap_3()
+                        .p_6()
+                        .bg(cx.theme().sidebar)
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .rounded_md()
+                        .child(
+                            div()
+                                .text_lg()
+                                .text_color(cx.theme().danger)
+                                .child("Blueprint could not be opened"),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(error.to_string()),
+                        ),
+                )
+                .into_any_element();
+        }
+
         if self.workspace.is_none() {
             self.initialize_workspace(window, cx);
         }
@@ -653,7 +685,7 @@ impl Render for BlueprintEditorPanel {
                 }
                 // TODO: route show_node_picker through active canvas
             }))
-            .child(ToolbarRenderer::render(self, cx))
+            .child(ToolbarRenderer::render(self, window, cx))
             .child(div().flex_1().min_h_0().map(|el| {
                 if let Some(workspace) = &self.workspace {
                     el.child(workspace.clone())
@@ -661,5 +693,6 @@ impl Render for BlueprintEditorPanel {
                     el.child(div().child("Initializing workspace..."))
                 }
             }))
+            .into_any_element()
     }
 }

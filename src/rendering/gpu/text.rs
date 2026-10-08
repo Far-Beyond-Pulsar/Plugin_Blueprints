@@ -19,6 +19,10 @@ use wgpu::util::DeviceExt;
 
 const ATLAS_W: u32 = 2048;
 const ATLAS_H: u32 = 2048;
+const MIN_RASTER_SIZE_PX: f32 = 2.0;
+const MAX_RASTER_SIZE_PX: f32 = 128.0;
+const FALLBACK_GLYPH: char = '?';
+const FALLBACK_GLYPH_SIZE_PX: f32 = 16.0;
 
 #[derive(Clone, Copy)]
 struct GlyphSlot {
@@ -26,8 +30,8 @@ struct GlyphSlot {
     uv_min: [f32; 2],
     uv_max: [f32; 2],
     /// Glyph metrics in pixels at the rasterised size
-    width: u32,
-    height: u32,
+    width: f32,
+    height: f32,
     bearing_x: f32,
     bearing_y: f32,
     advance: f32,
@@ -44,6 +48,8 @@ pub struct GlyphAtlas {
     cursor_x: u32,
     cursor_y: u32,
     row_h: u32,
+    /// Permanently allocated glyph used when the atlas cannot fit another glyph.
+    fallback_slot: GlyphSlot,
 
     // GPU objects (created lazily)
     pub texture: Option<wgpu::Texture>,
@@ -57,36 +63,102 @@ impl GlyphAtlas {
         let font_data = Self::load_font();
         let font = fontdue::Font::from_bytes(font_data, fontdue::FontSettings::default())
             .expect("failed to parse embedded font");
-        Self {
+        let mut atlas = Self {
             font,
             slots: HashMap::new(),
             data: vec![0u8; (ATLAS_W * ATLAS_H) as usize],
             cursor_x: 1, // leave 1px border so clamped UV never hits edge
             cursor_y: 1,
             row_h: 0,
+            fallback_slot: GlyphSlot {
+                uv_min: [0.0; 2],
+                uv_max: [0.0; 2],
+                width: 0.0,
+                height: 0.0,
+                bearing_x: 0.0,
+                bearing_y: 0.0,
+                advance: 0.0,
+            },
             texture: None,
             texture_view: None,
             sampler: None,
             dirty: true,
-        }
+        };
+        atlas.fallback_slot = atlas
+            .rasterize_and_store(FALLBACK_GLYPH, FALLBACK_GLYPH_SIZE_PX)
+            .expect("fallback glyph must fit in an empty glyph atlas");
+        atlas
     }
 
     /// Get or rasterize a glyph, returning its atlas slot.
-    pub fn glyph(&mut self, ch: char, size_px: f32) -> Option<GlyphSlot> {
-        let key: GlyphKey = (ch as u32, (size_px * 2.0).round() as u32);
-        if let Some(&s) = self.slots.get(&key) {
-            return Some(s);
+    pub fn glyph(&mut self, ch: char, size_px: f32) -> GlyphSlot {
+        if !size_px.is_finite() || size_px <= 0.0 {
+            return GlyphSlot {
+                uv_min: [0.0; 2],
+                uv_max: [0.0; 2],
+                width: 0.0,
+                height: 0.0,
+                bearing_x: 0.0,
+                bearing_y: 0.0,
+                advance: 0.0,
+            };
         }
 
-        // Rasterize with fontdue
+        // Quantize and clamp raster sizes so tiny zoom changes and unusual input
+        // cannot create an unbounded number of size-specific atlas entries.
+        let requested_size = size_px.clamp(MIN_RASTER_SIZE_PX, MAX_RASTER_SIZE_PX);
+        let bucket_size = (requested_size * 2.0).round() * 0.5;
+        let key: GlyphKey = (ch as u32, (bucket_size * 2.0) as u32);
+        let base_slot = if let Some(&slot) = self.slots.get(&key) {
+            slot
+        } else if let Some(slot) = self.rasterize_and_store(ch, bucket_size) {
+            slot
+        } else {
+            // Preserve the original glyph's advance for layout, but draw the
+            // reserved '?' bitmap in its place. Measurement and rendering both
+            // receive this same slot, so exhaustion never hides text or shifts
+            // subsequent glyphs differently between those paths.
+            let (metrics, _) = self.font.rasterize(ch, bucket_size);
+            let fallback_scale = bucket_size / FALLBACK_GLYPH_SIZE_PX;
+            let slot = GlyphSlot {
+                width: self.fallback_slot.width * fallback_scale,
+                height: self.fallback_slot.height * fallback_scale,
+                bearing_x: self.fallback_slot.bearing_x * fallback_scale,
+                bearing_y: self.fallback_slot.bearing_y * fallback_scale,
+                advance: metrics.advance_width,
+                ..self.fallback_slot
+            };
+            self.slots.insert(key, slot);
+            slot
+        };
+
+        let scale = requested_size / bucket_size;
+        GlyphSlot {
+            width: base_slot.width * scale,
+            height: base_slot.height * scale,
+            bearing_x: base_slot.bearing_x * scale,
+            bearing_y: base_slot.bearing_y * scale,
+            advance: base_slot.advance * scale,
+            ..base_slot
+        }
+    }
+
+    /// Rasterize one glyph at an already-quantized size and allocate its slot.
+    /// Returns `None` only when its bitmap cannot fit in the remaining atlas.
+    fn rasterize_and_store(&mut self, ch: char, size_px: f32) -> Option<GlyphSlot> {
+        let key: GlyphKey = (ch as u32, (size_px * 2.0).round() as u32);
+        if let Some(&slot) = self.slots.get(&key) {
+            return Some(slot);
+        }
+
         let (metrics, bitmap) = self.font.rasterize(ch, size_px);
         if metrics.width == 0 || metrics.height == 0 {
             // Whitespace / missing glyph — store a zero-size slot for the advance
             let slot = GlyphSlot {
                 uv_min: [0.0; 2],
                 uv_max: [0.0; 2],
-                width: 0,
-                height: 0,
+                width: 0.0,
+                height: 0.0,
                 bearing_x: metrics.xmin as f32,
                 bearing_y: metrics.ymin as f32,
                 advance: metrics.advance_width,
@@ -99,6 +171,10 @@ impl GlyphAtlas {
         let gh = metrics.height as u32;
         let pad = 1u32;
 
+        if gw + pad + 1 > ATLAS_W || gh + pad + 1 > ATLAS_H {
+            return None;
+        }
+
         // Row-advance if needed
         if self.cursor_x + gw + pad > ATLAS_W {
             self.cursor_y += self.row_h + pad;
@@ -106,7 +182,7 @@ impl GlyphAtlas {
             self.row_h = 0;
         }
         if self.cursor_y + gh + pad > ATLAS_H {
-            // Atlas full — return None (caller renders nothing)
+            // Atlas is full. `glyph` substitutes the reserved fallback bitmap.
             return None;
         }
 
@@ -128,8 +204,8 @@ impl GlyphAtlas {
                 (self.cursor_x + gw) as f32 / ATLAS_W as f32,
                 (self.cursor_y + gh) as f32 / ATLAS_H as f32,
             ],
-            width: gw,
-            height: gh,
+            width: gw as f32,
+            height: gh as f32,
             bearing_x: metrics.xmin as f32,
             bearing_y: metrics.ymin as f32,
             advance: metrics.advance_width,
@@ -143,9 +219,7 @@ impl GlyphAtlas {
 
     /// Measure a string's pixel width at a given size.
     pub fn measure_width(&mut self, text: &str, size_px: f32) -> f32 {
-        text.chars().fold(0.0, |acc, ch| {
-            acc + self.glyph(ch, size_px).map_or(0.0, |s| s.advance)
-        })
+        text.chars().map(|ch| self.glyph(ch, size_px).advance).sum()
     }
 
     /// Upload atlas to GPU if dirty.
@@ -324,18 +398,16 @@ impl TextRenderer {
         let mut cx = screen_x + x_off;
 
         for ch in text.chars() {
-            let Some(slot) = self.atlas.glyph(ch, size_px) else {
-                continue;
-            };
-            if slot.width == 0 {
+            let slot = self.atlas.glyph(ch, size_px);
+            if slot.width == 0.0 {
                 cx += slot.advance;
                 continue;
             }
 
             let x0 = cx + slot.bearing_x;
-            let y0 = screen_y - slot.bearing_y - slot.height as f32;
-            let x1 = x0 + slot.width as f32;
-            let y1 = y0 + slot.height as f32;
+            let y0 = screen_y - slot.bearing_y - slot.height;
+            let x1 = x0 + slot.width;
+            let y1 = y0 + slot.height;
             let [u0, v0] = slot.uv_min;
             let [u1, v1] = slot.uv_max;
 

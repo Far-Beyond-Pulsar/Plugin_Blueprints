@@ -1,5 +1,7 @@
 //! Connection operations - dragging and managing connections between nodes
 
+use std::collections::HashMap;
+
 use crate::core::types::PinDataType as GraphDataType;
 use crate::core::types::{BlueprintNode, Connection, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
@@ -312,41 +314,33 @@ impl GraphCanvasPanel {
     }
 
     fn pin_graph_position(
-        &self,
         node: &BlueprintNode,
         pin_id: &str,
         is_input: bool,
     ) -> Option<Point<f32>> {
-        let row = if is_input {
-            node.inputs.iter().position(|p| p.id == pin_id)
-        } else {
-            node.outputs.iter().position(|p| p.id == pin_id)
-        };
-
-        row.map(|row| {
-            crate::rendering::graph::NodeGraphRenderer::calculate_pin_position_graph_space(
-                node,
-                is_input,
-                row,
-                &self.graph,
-            )
-        })
+        crate::rendering::graph::NodeGraphRenderer::calculate_pin_position_graph_space(
+            node, pin_id, is_input,
+        )
     }
 
-    fn connection_endpoints(&self, connection: &Connection) -> Option<(Point<f32>, Point<f32>)> {
-        let from_node = self
-            .graph
-            .nodes
-            .iter()
-            .find(|n| n.id == connection.source_node)?;
-        let to_node = self
-            .graph
-            .nodes
-            .iter()
-            .find(|n| n.id == connection.target_node)?;
+    fn build_node_index(&self) -> HashMap<&str, &BlueprintNode> {
+        let mut nodes = HashMap::with_capacity(self.graph.nodes.len());
+        for node in &self.graph.nodes {
+            // Preserve the existing `.find()` behavior if malformed input has
+            // duplicate node IDs: the first node remains authoritative.
+            nodes.entry(node.id.as_str()).or_insert(node);
+        }
+        nodes
+    }
 
-        let from_pos = self
-            .pin_graph_position(from_node, &connection.source_pin, false)
+    fn connection_endpoints(
+        connection: &Connection,
+        nodes: &HashMap<&str, &BlueprintNode>,
+    ) -> Option<(Point<f32>, Point<f32>)> {
+        let from_node = *nodes.get(connection.source_node.as_str())?;
+        let to_node = *nodes.get(connection.target_node.as_str())?;
+
+        let from_pos = Self::pin_graph_position(from_node, &connection.source_pin, false)
             .unwrap_or_else(|| {
                 Point::new(
                     from_node.position.x + from_node.size.width,
@@ -354,8 +348,7 @@ impl GraphCanvasPanel {
                 )
             });
 
-        let to_pos = self
-            .pin_graph_position(to_node, &connection.target_pin, true)
+        let to_pos = Self::pin_graph_position(to_node, &connection.target_pin, true)
             .unwrap_or_else(|| {
                 Point::new(
                     to_node.position.x,
@@ -441,12 +434,47 @@ impl GraphCanvasPanel {
         false
     }
 
+    fn point_in_bezier_bounds(
+        point: Point<f32>,
+        from_pos: Point<f32>,
+        to_pos: Point<f32>,
+        padding: f32,
+    ) -> bool {
+        let (control_1, control_2) = Self::bezier_control_points(from_pos, to_pos);
+        let min_x = from_pos
+            .x
+            .min(control_1.x)
+            .min(control_2.x)
+            .min(to_pos.x)
+            - padding;
+        let max_x = from_pos
+            .x
+            .max(control_1.x)
+            .max(control_2.x)
+            .max(to_pos.x)
+            + padding;
+        let min_y = from_pos
+            .y
+            .min(control_1.y)
+            .min(control_2.y)
+            .min(to_pos.y)
+            - padding;
+        let max_y = from_pos
+            .y
+            .max(control_1.y)
+            .max(control_2.y)
+            .max(to_pos.y)
+            + padding;
+        point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
+    }
+
     /// Find connection near a point (for double-click reroute creation)
     pub fn find_connection_near_point(&self, point: Point<f32>) -> Option<Connection> {
         const CLICK_THRESHOLD: f32 = 30.0;
+        let nodes = self.build_node_index();
 
         for connection in &self.graph.connections {
-            if let Some((from_pos, to_pos)) = self.connection_endpoints(connection) {
+            if let Some((from_pos, to_pos)) = Self::connection_endpoints(connection, &nodes) {
                 if Self::point_near_bezier(point, from_pos, to_pos, CLICK_THRESHOLD) {
                     return Some(connection.clone());
                 }
@@ -463,10 +491,22 @@ impl GraphCanvasPanel {
     pub fn find_connection_near_point_precise(&self, point: Point<f32>) -> Option<Connection> {
         const SAMPLES: usize = 48;
         const THRESHOLD: f32 = 12.0;
+        let nodes = self.build_node_index();
 
         for connection in &self.graph.connections {
-            if let Some((from_pos, to_pos)) = self.connection_endpoints(connection) {
-                if self.is_point_near_bezier_curve(point, from_pos, to_pos, SAMPLES, THRESHOLD) {
+            if let Some((from_pos, to_pos)) = Self::connection_endpoints(connection, &nodes) {
+                // A cubic Bezier lies inside the convex hull of its four
+                // control points, so this expanded AABB safely skips curves
+                // that cannot reach the pointer before the 48-sample test.
+                if Self::point_in_bezier_bounds(point, from_pos, to_pos, THRESHOLD)
+                    && self.is_point_near_bezier_curve(
+                        point,
+                        from_pos,
+                        to_pos,
+                        SAMPLES,
+                        THRESHOLD,
+                    )
+                {
                     return Some(connection.clone());
                 }
             }

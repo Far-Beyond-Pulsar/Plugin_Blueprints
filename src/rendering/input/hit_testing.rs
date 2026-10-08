@@ -1,6 +1,6 @@
 // Coordinate conversion and graph hit testing shared by graph input handlers.
 
-use crate::core::types::NodeType;
+use crate::core::types::{BlueprintNode, NodeType};
 use crate::core::types::PinDataType as DataType;
 use crate::editor::panel::ResizeHandle;
 use crate::editor::workspace_panels::GraphCanvasPanel;
@@ -22,8 +22,11 @@ pub(super) fn to_graph(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Point<f32> 
     )
 }
 
-fn point_distance(a: Point<f32>, b: Point<f32>) -> f32 {
-    ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
+#[inline]
+fn within_radius(a: Point<f32>, b: Point<f32>, radius: f32) -> bool {
+    let dx = a.x - b.x;
+    let dy = a.y - b.y;
+    dx * dx + dy * dy <= radius * radius
 }
 
 fn pin_hit_radius(canvas: &GraphCanvasPanel, scale: f32, min_distance: f32) -> f32 {
@@ -32,14 +35,97 @@ fn pin_hit_radius(canvas: &GraphCanvasPanel, scale: f32, min_distance: f32) -> f
 
 // ─── hit testing ─────────────────────────────────────────────────────────────
 
-pub(super) fn hit_node<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str> {
+fn hit_node_ref<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a BlueprintNode> {
     for node in canvas.graph.nodes.iter().rev() {
         let nl = node.position.x;
         let nt = node.position.y;
         let nr = nl + node.size.width;
         let nb = nt + node.size.height;
         if gp.x >= nl && gp.x <= nr && gp.y >= nt && gp.y <= nb {
-            return Some(&node.id);
+            return Some(node);
+        }
+    }
+    None
+}
+
+pub(super) fn hit_node<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str> {
+    hit_node_ref(gp, canvas).map(|node| node.id.as_str())
+}
+
+fn output_pin_on_node(
+    cp: Point<f32>,
+    canvas: &GraphCanvasPanel,
+    node: &BlueprintNode,
+) -> Option<(String, String)> {
+    let r = if node.node_type == NodeType::Reroute {
+        (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+    } else {
+        pin_hit_radius(canvas, 0.9, 6.0)
+    };
+    node.outputs.iter().enumerate().find_map(|(i, pin)| {
+        let center = NodeGraphRenderer::pin_canvas_pos_index(
+            node,
+            false,
+            i,
+            pin.id.as_str(),
+            &canvas.graph,
+        );
+        within_radius(cp, center, r).then(|| (node.id.clone(), pin.id.clone()))
+    })
+}
+
+fn input_pin_on_node(
+    cp: Point<f32>,
+    canvas: &GraphCanvasPanel,
+    node: &BlueprintNode,
+    skip_node: Option<&str>,
+    src_type: Option<&DataType>,
+) -> Option<(String, String)> {
+    if skip_node == Some(node.id.as_str()) {
+        return None;
+    }
+    let r = if node.node_type == NodeType::Reroute {
+        (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+    } else {
+        pin_hit_radius(canvas, if src_type.is_some() { 1.3 } else { 1.2 }, 8.0)
+    };
+    node.inputs.iter().enumerate().find_map(|(i, pin)| {
+        if src_type.is_some_and(|source| !source.is_compatible_with(&pin.data_type)) {
+            return None;
+        }
+        let center = NodeGraphRenderer::pin_canvas_pos_index(
+            node,
+            true,
+            i,
+            pin.id.as_str(),
+            &canvas.graph,
+        );
+        within_radius(cp, center, r).then(|| (node.id.clone(), pin.id.clone()))
+    })
+}
+
+fn any_pin_on_node(
+    cp: Point<f32>,
+    canvas: &GraphCanvasPanel,
+    node: &BlueprintNode,
+) -> Option<(String, String)> {
+    let r = if node.node_type == NodeType::Reroute {
+        (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
+    } else {
+        pin_hit_radius(canvas, 1.2, 8.0)
+    };
+    for (is_input, pins) in [(true, &node.inputs), (false, &node.outputs)] {
+        if let Some((_, pin)) = pins.iter().enumerate().find(|(i, pin)| {
+            let center = NodeGraphRenderer::pin_canvas_pos_index(
+                node,
+                is_input,
+                *i,
+                pin.id.as_str(),
+                &canvas.graph,
+            );
+            within_radius(cp, center, r)
+        }) {
+            return Some((node.id.clone(), pin.id.clone()));
         }
     }
     None
@@ -49,26 +135,15 @@ pub(super) fn hit_output_pin(
     cp: Point<f32>,
     canvas: &GraphCanvasPanel,
 ) -> Option<(String, String)> {
-    for node in &canvas.graph.nodes {
-        let r = if node.node_type == NodeType::Reroute {
-            (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
-        } else {
-            pin_hit_radius(canvas, 0.9, 6.0)
-        };
-        for (i, pin) in node.outputs.iter().enumerate() {
-            let c = NodeGraphRenderer::pin_canvas_pos(
-                node,
-                false,
-                i,
-                Some(pin.id.as_str()),
-                &canvas.graph,
-            );
-            if point_distance(cp, c) <= r {
-                return Some((node.id.clone(), pin.id.clone()));
-            }
-        }
+    if let Some(node) = hit_node_ref(to_graph(cp, canvas), canvas) {
+        return output_pin_on_node(cp, canvas, node);
     }
-    None
+    canvas
+        .graph
+        .nodes
+        .iter()
+        .rev()
+        .find_map(|node| output_pin_on_node(cp, canvas, node))
 }
 
 pub(super) fn hit_input_pin(
@@ -77,57 +152,24 @@ pub(super) fn hit_input_pin(
     skip_node: &str,
     src_type: &DataType,
 ) -> Option<(String, String)> {
-    for node in &canvas.graph.nodes {
-        let r = if node.node_type == NodeType::Reroute {
-            (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
-        } else {
-            pin_hit_radius(canvas, 1.3, 8.0)
-        };
-        if node.id == skip_node {
-            continue;
-        }
-        for (i, pin) in node.inputs.iter().enumerate() {
-            if !src_type.is_compatible_with(&pin.data_type) {
-                continue;
-            }
-            let c = NodeGraphRenderer::pin_canvas_pos(
-                node,
-                true,
-                i,
-                Some(pin.id.as_str()),
-                &canvas.graph,
-            );
-            if point_distance(cp, c) <= r {
-                return Some((node.id.clone(), pin.id.clone()));
-            }
-        }
+    if let Some(node) = hit_node_ref(to_graph(cp, canvas), canvas) {
+        return input_pin_on_node(cp, canvas, node, Some(skip_node), Some(src_type));
     }
-    None
+    canvas.graph.nodes.iter().rev().find_map(|node| {
+        input_pin_on_node(cp, canvas, node, Some(skip_node), Some(src_type))
+    })
 }
 
 pub(super) fn hit_any_pin(cp: Point<f32>, canvas: &GraphCanvasPanel) -> Option<(String, String)> {
-    for node in &canvas.graph.nodes {
-        let r = if node.node_type == NodeType::Reroute {
-            (node.size.width.max(node.size.height) * 0.5 * canvas.graph.zoom_level) * 0.4
-        } else {
-            pin_hit_radius(canvas, 1.2, 8.0)
-        };
-        for (is_input, pins) in [(true, &node.inputs), (false, &node.outputs)] {
-            for (i, pin) in pins.iter().enumerate() {
-                let c = NodeGraphRenderer::pin_canvas_pos(
-                    node,
-                    is_input,
-                    i,
-                    Some(pin.id.as_str()),
-                    &canvas.graph,
-                );
-                if point_distance(cp, c) <= r {
-                    return Some((node.id.clone(), pin.id.clone()));
-                }
-            }
-        }
+    if let Some(node) = hit_node_ref(to_graph(cp, canvas), canvas) {
+        return any_pin_on_node(cp, canvas, node);
     }
-    None
+    canvas
+        .graph
+        .nodes
+        .iter()
+        .rev()
+        .find_map(|node| any_pin_on_node(cp, canvas, node))
 }
 
 pub(super) fn hit_comment<'a>(gp: Point<f32>, canvas: &'a GraphCanvasPanel) -> Option<&'a str> {

@@ -234,10 +234,10 @@ pub enum NodeType {
     Logic,
     Math,
     Object,
-    Reroute,             // Visual pass-through node for organizing connections
-    Conversion,          // Typed conversion node rendered as a FROM/INTO pill
-    MacroEntry,          // Entry point for macro graphs (replaces generic subgraph_input)
-    MacroExit,           // Exit point for macro graphs (replaces generic subgraph_output)
+    Reroute,    // Visual pass-through node for organizing connections
+    Conversion, // Typed conversion node rendered as a FROM/INTO pill
+    MacroEntry, // Entry point for macro graphs (replaces generic subgraph_input)
+    MacroExit,  // Exit point for macro graphs (replaces generic subgraph_output)
     #[serde(alias = "MacroInstance")]
     SubGraphCall, // Call to a macro or collapsed subgraph
     CustomEvent, // On-node for a custom event definition (definition_id: "custom_event:<uid>")
@@ -391,7 +391,10 @@ pub struct VirtualizationStats {
 
 impl BlueprintNode {
     /// Construct a graph node for one reflection-registered conversion.
-    pub fn from_conversion(conversion: &pulsar_reflection::ConversionInfo, position: Point<f32>) -> Self {
+    pub fn from_conversion(
+        conversion: &pulsar_reflection::ConversionInfo,
+        position: Point<f32>,
+    ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             definition_id: format!("conversion:{}", conversion.id),
@@ -401,11 +404,24 @@ impl BlueprintNode {
             position,
             // Two 10px graph-grid units; the renderer snaps this to 20px.
             size: Size::new(116.0, 20.0),
-            inputs: vec![Pin { id: "from".to_string(), name: String::new(), pin_type: PinType::Input, data_type: PinDataType::from_type_str(conversion.source_type_name) }],
-            outputs: vec![Pin { id: "into".to_string(), name: String::new(), pin_type: PinType::Output, data_type: PinDataType::from_type_str(conversion.target_type_name) }],
+            inputs: vec![Pin {
+                id: "from".to_string(),
+                name: String::new(),
+                pin_type: PinType::Input,
+                data_type: PinDataType::from_type_str(conversion.source_type_name),
+            }],
+            outputs: vec![Pin {
+                id: "into".to_string(),
+                name: String::new(),
+                pin_type: PinType::Output,
+                data_type: PinDataType::from_type_str(conversion.target_type_name),
+            }],
             properties: HashMap::from([("conversion_id".to_string(), conversion.id.to_string())]),
             is_selected: false,
-            description: format!("Convert {} to {}", conversion.source_type_name, conversion.target_type_name),
+            description: format!(
+                "Convert {} to {}",
+                conversion.source_type_name, conversion.target_type_name
+            ),
             color: None,
         }
     }

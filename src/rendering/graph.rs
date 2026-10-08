@@ -105,6 +105,16 @@ impl NodeGraphRenderer {
         geometry::pin_canvas_pos(node, is_input, row, pin_id, graph)
     }
 
+    pub(crate) fn pin_canvas_pos_index(
+        node: &BlueprintNode,
+        is_input: bool,
+        row: usize,
+        pin_id: &str,
+        graph: &BlueprintGraph,
+    ) -> Point<f32> {
+        geometry::pin_canvas_pos_index(node, pin_id, is_input, row, graph)
+    }
+
     pub fn calculate_pin_position(
         node: &BlueprintNode,
         pin_id: &str,
@@ -116,20 +126,34 @@ impl NodeGraphRenderer {
 
     pub fn calculate_pin_position_graph_space(
         node: &BlueprintNode,
+        pin_id: &str,
         is_input: bool,
-        row: usize,
-        _graph: &BlueprintGraph,
-    ) -> Point<f32> {
-        geometry::calculate_pin_position_graph_space(node, is_input, row, _graph)
+    ) -> Option<Point<f32>> {
+        geometry::calculate_pin_position_graph_space(node, pin_id, is_input)
     }
 
-    /// Backwards-compat: is this node inside the viewport?
-    pub fn is_node_visible_simple(node: &BlueprintNode, graph: &BlueprintGraph) -> bool {
-        geometry::is_node_visible_simple(node, graph)
+    pub fn viewport_graph_bounds(
+        graph: &BlueprintGraph,
+        viewport_size: Size<f32>,
+        padding_px: f32,
+    ) -> (f32, f32, f32, f32) {
+        geometry::viewport_graph_bounds(graph, viewport_size, padding_px)
     }
 
-    pub fn is_connection_visible_simple(conn: &Connection, graph: &BlueprintGraph) -> bool {
-        geometry::is_connection_visible_simple(conn, graph)
+    pub fn is_node_visible_simple(
+        node: &BlueprintNode,
+        graph: &BlueprintGraph,
+        viewport_size: Size<f32>,
+    ) -> bool {
+        geometry::is_node_visible_simple(node, graph, viewport_size)
+    }
+
+    pub fn is_connection_visible_simple(
+        conn: &Connection,
+        graph: &BlueprintGraph,
+        viewport_size: Size<f32>,
+    ) -> bool {
+        geometry::is_connection_visible_simple(conn, graph, viewport_size)
     }
 
     pub fn parse_hex_color(hex: &str) -> Option<gpui::Hsla> {
@@ -181,14 +205,9 @@ impl NodeGraphRenderer {
                     b.size.height.as_f32().max(1.0),
                 )
             })
-            .unwrap_or((3840.0, 2160.0));
-        let pad = (260.0 / zoom.max(0.05)).max(120.0);
-        let (vl, vt, vr, vb) = (
-            -pan_x - pad,
-            -pan_y - pad,
-            -pan_x + vw / zoom + pad,
-            -pan_y + vh / zoom + pad,
-        );
+            .unwrap_or((1.0, 1.0));
+        let (vl, vt, vr, vb) =
+            geometry::viewport_graph_bounds(&canvas.graph, Size::new(vw, vh), 260.0);
         let visible = |n: &BlueprintNode| {
             !(n.position.x > vr
                 || n.position.x + n.size.width < vl
@@ -198,14 +217,13 @@ impl NodeGraphRenderer {
 
         // Grow authored/default widths to fit the actual rendered text. The
         // cache avoids raster metric work for repeated titles and pin names.
-        let mut text_width_cache = std::collections::HashMap::new();
-        let renderer = &mut canvas.renderer;
+        let (renderer, text_width_cache) = (&mut canvas.renderer, &mut canvas.text_width_cache);
         for node in &mut canvas.graph.nodes {
             if node.node_type == NodeType::Reroute {
                 continue;
             }
             let title_width =
-                cached_text_width(renderer, &mut text_width_cache, &node.title, HEADER_FONT);
+                cached_text_width(renderer, text_width_cache, &node.title, HEADER_FONT);
             let header_output = node
                 .outputs
                 .iter()
@@ -214,7 +232,7 @@ impl NodeGraphRenderer {
                     if pin.name.is_empty() {
                         0.0
                     } else {
-                        cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
+                        cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
                     }
                 });
             let rows = node.inputs.len().max(node.outputs.len());
@@ -225,14 +243,14 @@ impl NodeGraphRenderer {
                     .get(row)
                     .filter(|pin| !pin.name.is_empty())
                     .map_or(0.0, |pin| {
-                        cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
+                        cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
                     });
                 let output_width = node
                     .outputs
                     .get(row)
                     .filter(|pin| pin.id != "__return__" && !pin.name.is_empty())
                     .map_or(0.0, |pin| {
-                        cached_text_width(renderer, &mut text_width_cache, &pin.name, PIN_FONT)
+                        cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
                     });
                 pin_label_rows.push((input_width, output_width));
             }
@@ -733,7 +751,7 @@ impl NodeGraphRenderer {
                     &node_instances,
                     &wire_instances, // one struct per bezier connection
                     &electronic_wire_instances,
-                    &line_verts,     // selection box straight lines only
+                    &line_verts, // selection box straight lines only
                     &pin_instances,
                     &text_calls,
                 );

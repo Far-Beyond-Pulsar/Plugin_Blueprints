@@ -574,21 +574,11 @@ impl BpRenderer {
 
     // ── bezier/angular instanced wire pipelines ───────────────────────────────
     fn create_bezier(device: &wgpu::Device, fmt: wgpu::TextureFormat) -> WireState {
-        Self::create_wire_pipeline(
-            device,
-            fmt,
-            "bezier",
-            include_str!("shaders/bezier.wgsl"),
-        )
+        Self::create_wire_pipeline(device, fmt, "bezier", include_str!("shaders/bezier.wgsl"))
     }
 
     fn create_angular(device: &wgpu::Device, fmt: wgpu::TextureFormat) -> WireState {
-        Self::create_wire_pipeline(
-            device,
-            fmt,
-            "angular",
-            include_str!("shaders/angular.wgsl"),
-        )
+        Self::create_wire_pipeline(device, fmt, "angular", include_str!("shaders/angular.wgsl"))
     }
 
     fn create_wire_pipeline(

@@ -9,6 +9,47 @@ use crate::{
 use blueprint_graph::{self as graph_types, GraphDescription, NodeInstance, PinInstance, Position};
 use gpui::*;
 
+/// Authored comment colors use normalized RGBA channels. GPUI stores the same
+/// colors as HSLA, so convert at the editor/schema boundary.
+fn hsla_to_rgba(color: gpui::Hsla) -> [f32; 4] {
+    let h = color.h;
+    let s = color.s;
+    let l = color.l;
+    let a = color.a;
+    if s == 0.0 {
+        return [l, l, l, a];
+    }
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
+    let p = 2.0 * l - q;
+    let hue_to_rgb = |mut t: f32| {
+        if t < 0.0 {
+            t += 1.0;
+        }
+        if t > 1.0 {
+            t -= 1.0;
+        }
+        if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 1.0 / 2.0 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        }
+    };
+    [
+        hue_to_rgb(h + 1.0 / 3.0),
+        hue_to_rgb(h),
+        hue_to_rgb(h - 1.0 / 3.0),
+        a,
+    ]
+}
+
 impl BlueprintEditorPanel {
     /// Convert current blueprint graph to graph description
     pub(crate) fn convert_to_graph_description(
@@ -77,7 +118,7 @@ impl BlueprintEditorPanel {
                 node_instance.set_property(key, prop_value);
             }
 
-            graph_desc.add_node(node_instance);
+            graph_desc.add_node(node_instance)?;
         }
 
         // Convert connections
@@ -104,7 +145,7 @@ impl BlueprintEditorPanel {
                 &connection.target_pin,
                 conn_type,
             );
-            graph_desc.add_connection(graph_connection);
+            graph_desc.add_connection(graph_connection)?;
         }
 
         // Convert comments
@@ -116,7 +157,7 @@ impl BlueprintEditorPanel {
                 text: c.text.clone(),
                 position: (c.position.x, c.position.y),
                 size: (c.size.width, c.size.height),
-                color: [c.color.h, c.color.s, c.color.l, c.color.a],
+                color: hsla_to_rgba(c.color),
                 contained_node_ids: c.contained_node_ids.clone(),
             })
             .collect();
@@ -455,12 +496,12 @@ impl BlueprintEditorPanel {
             .comments
             .iter()
             .map(|c| {
-                let color = Hsla {
-                    h: c.color[0],
-                    s: c.color[1],
-                    l: c.color[2],
+                let color = Hsla::from(gpui::Rgba {
+                    r: c.color[0],
+                    g: c.color[1],
+                    b: c.color[2],
                     a: c.color[3],
-                };
+                });
                 let color_picker_state =
                     Some(cx.new(|cx| ui::color_picker::ColorPickerState::new(window, cx)));
 

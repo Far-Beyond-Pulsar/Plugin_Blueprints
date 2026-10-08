@@ -15,38 +15,30 @@ pub(super) fn pin_canvas_pos(
     pin_id: Option<&str>,
     graph: &crate::core::graph::BlueprintGraph,
 ) -> gpui::Point<f32> {
-    if node.node_type == NodeType::Conversion {
-        return graph_to_screen_pos(
-            gpui::Point::new(
-                node.position.x + if is_input { 0.0 } else { node.size.width },
-                node.position.y + node.size.height * 0.5,
-            ),
-            graph,
-        );
-    }
-    if node.node_type == NodeType::Reroute {
-        let cx = node.position.x + node.size.width * 0.5;
-        let cy = node.position.y + node.size.height * 0.5;
-        return graph_to_screen_pos(gpui::Point::new(cx, cy), graph);
-    }
-    if pin_id == Some("__return__") {
-        let scr = graph_to_screen_pos(node.position, graph);
-        let px = scr.x + (node.size.width - 24.0) * graph.zoom_level;
-        let py = scr.y + HEADER_H * 0.5 * graph.zoom_level;
-        return gpui::Point::new(px, py);
-    }
-    let zoom = graph.zoom_level;
-    let scr = graph_to_screen_pos(node.position, graph);
-    let py = scr.y
-        + (HEADER_H + SEP_H + BODY_PAD) * zoom
-        + row as f32 * (PIN_ROW_H + PIN_GAP) * zoom
-        + PIN_ROW_H * 0.5 * zoom;
-    let px = if is_input {
-        scr.x + BODY_PAD * zoom
+    let graph_pos = pin_id
+        .and_then(|id| pin_gpos_id(node, id, is_input))
+        .unwrap_or_else(|| pin_gpos_row(node, is_input, row));
+    graph_to_screen_pos(gpui::Point::new(graph_pos.0, graph_pos.1), graph)
+}
+
+pub(super) fn pin_canvas_pos_index(
+    node: &BlueprintNode,
+    pin_id: &str,
+    is_input: bool,
+    row: usize,
+    graph: &crate::core::graph::BlueprintGraph,
+) -> gpui::Point<f32> {
+    // The caller already has the pin's row. Avoid a second linear ID lookup
+    // for every pin during hit testing while keeping special pin placement
+    // identical to pin_gpos_id (also used by wire rendering).
+    let graph_pos = if node.node_type == NodeType::Conversion || node.node_type == NodeType::Reroute {
+        pin_gpos_row(node, is_input, row)
+    } else if pin_id == "__return__" {
+        pin_gpos_id(node, pin_id, is_input).unwrap_or_else(|| pin_gpos_row(node, is_input, row))
     } else {
-        scr.x + (node.size.width - BODY_PAD) * zoom
+        pin_gpos_row(node, is_input, row)
     };
-    gpui::Point::new(px, py)
+    graph_to_screen_pos(gpui::Point::new(graph_pos.0, graph_pos.1), graph)
 }
 
 pub(super) fn calculate_pin_position(
@@ -79,54 +71,52 @@ pub(super) fn calculate_pin_position(
 
 pub(super) fn calculate_pin_position_graph_space(
     node: &BlueprintNode,
+    pin_id: &str,
     is_input: bool,
-    row: usize,
-    _graph: &crate::core::graph::BlueprintGraph,
-) -> gpui::Point<f32> {
-    if node.node_type == NodeType::Conversion {
-        return gpui::Point::new(
-            node.position.x + if is_input { 0.0 } else { node.size.width },
-            node.position.y + node.size.height * 0.5,
-        );
-    }
-    let py = node.position.y
-        + HEADER_H
-        + SEP_H
-        + BODY_PAD
-        + row as f32 * (PIN_ROW_H + PIN_GAP)
-        + PIN_ROW_H * 0.5;
-    let px = if is_input {
-        node.position.x + BODY_PAD
-    } else {
-        node.position.x + node.size.width - BODY_PAD
-    };
-    gpui::Point::new(px, py)
+) -> Option<gpui::Point<f32>> {
+    pin_gpos_id(node, pin_id, is_input).map(|(x, y)| gpui::Point::new(x, y))
 }
 
 pub(super) fn is_node_visible_simple(
     node: &BlueprintNode,
     graph: &crate::core::graph::BlueprintGraph,
+    viewport_size: gpui::Size<f32>,
 ) -> bool {
-    let pad = 260.0 / graph.zoom_level.max(0.05);
-    let vl = -graph.pan_offset.x - pad;
-    let vt = -graph.pan_offset.y - pad;
-    let vr = -graph.pan_offset.x + 3840.0 / graph.zoom_level + pad;
-    let vb = -graph.pan_offset.y + 2160.0 / graph.zoom_level + pad;
+    let (vl, vt, vr, vb) = viewport_graph_bounds(graph, viewport_size, 260.0);
     !(node.position.x > vr
         || node.position.x + node.size.width < vl
         || node.position.y > vb
         || node.position.y + node.size.height < vt)
 }
 
+/// Graph-space viewport bounds shared by rendering and debug overlays.
+/// `padding_px` is kept in screen pixels and scaled into graph space here.
+pub(super) fn viewport_graph_bounds(
+    graph: &crate::core::graph::BlueprintGraph,
+    viewport_size: gpui::Size<f32>,
+    padding_px: f32,
+) -> (f32, f32, f32, f32) {
+    let zoom = graph.zoom_level.max(0.05);
+    let pad = (padding_px / zoom).max(120.0);
+    (
+        -graph.pan_offset.x - pad,
+        -graph.pan_offset.y - pad,
+        -graph.pan_offset.x + viewport_size.width.max(0.0) / zoom + pad,
+        -graph.pan_offset.y + viewport_size.height.max(0.0) / zoom + pad,
+    )
+}
+
 pub(super) fn is_connection_visible_simple(
     conn: &Connection,
     graph: &crate::core::graph::BlueprintGraph,
+    viewport_size: gpui::Size<f32>,
 ) -> bool {
     let from = graph.nodes.iter().find(|node| node.id == conn.source_node);
     let to = graph.nodes.iter().find(|node| node.id == conn.target_node);
     match (from, to) {
         (Some(from), Some(to)) => {
-            is_node_visible_simple(from, graph) || is_node_visible_simple(to, graph)
+            is_node_visible_simple(from, graph, viewport_size)
+                || is_node_visible_simple(to, graph, viewport_size)
         }
         _ => false,
     }
@@ -399,6 +389,13 @@ pub(super) fn cached_text_width(
     let key = (text.to_owned(), size.to_bits());
     if let Some(width) = cache.get(&key) {
         return *width;
+    }
+    // Keep the per-canvas cache bounded for graphs that generate changing
+    // labels. Metrics are keyed by the full text and font size, so clearing
+    // cannot leave stale geometry behind; the next render repopulates entries.
+    const MAX_TEXT_WIDTH_CACHE_ENTRIES: usize = 4096;
+    if cache.len() >= MAX_TEXT_WIDTH_CACHE_ENTRIES {
+        cache.clear();
     }
     let width = renderer.measure_text_width(text, size);
     cache.insert(key, width);

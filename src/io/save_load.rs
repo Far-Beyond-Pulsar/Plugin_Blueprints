@@ -189,8 +189,12 @@ fn persist_blueprint_content(path: &Path, content: &str) -> Result<(), String> {
         engine_fs::virtual_fs::create_dir_all(parent)
             .map_err(|error| format!("Failed to create directory: {error}"))?;
     }
-    engine_fs::virtual_fs::write_file(path, content.as_bytes())
-        .map_err(|error| format!("Failed to write file: {error}"))
+    engine_fs::virtual_fs::write_file_atomically(path, content.as_bytes()).map_err(|error| {
+        format!(
+            "Failed to atomically write blueprint file using the {} filesystem provider: {error}",
+            engine_fs::virtual_fs::current_label()
+        )
+    })
 }
 
 fn persist_blueprint_asset(path: &Path, asset: &formats::BlueprintAsset) -> Result<usize, String> {
@@ -222,6 +226,11 @@ fn refresh_blueprint_trait_index_at(project_root: Option<&Path>) {
 
 impl BlueprintEditorPanel {
     fn snapshot_blueprint_for_save(&self, cx: &App) -> Result<BlueprintSaveSnapshot, String> {
+        if let Some(error) = self.load_error.as_deref() {
+            return Err(format!(
+                "Cannot save Blueprint because the source failed to load: {error}"
+            ));
+        }
         Ok(BlueprintSaveSnapshot::capture(self, Some(cx)))
     }
 
@@ -269,6 +278,15 @@ impl BlueprintEditorPanel {
 
     /// Save the current blueprint to its file path
     pub fn plugin_save(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(error) = self.load_error.as_deref() {
+            self.compilation_status.state = CompilationState::Error;
+            self.compilation_status.message = format!(
+                "Save blocked because the Blueprint source failed to load: {error}"
+            );
+            cx.notify();
+            return;
+        }
+
         if self.is_saving {
             return;
         }
@@ -890,6 +908,11 @@ impl BlueprintEditorPanel {
 
         if !self.is_dirty {
             return; // No changes to save
+        }
+
+        if self.load_error.is_some() {
+            tracing::warn!("Skipping Blueprint autosave because the source failed to load");
+            return;
         }
 
         if let Some(path) = self.get_graph_file_path() {

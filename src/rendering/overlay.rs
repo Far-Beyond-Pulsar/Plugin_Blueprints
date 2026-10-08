@@ -20,10 +20,6 @@ pub fn render_selection_box(
     _view_id: &str,
     cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
 ) -> impl IntoElement {
-    if false {
-        return div().into_any_element();
-    }
-
     if let (Some(start), Some(end)) = (panel.selection_start, panel.selection_end) {
         // Convert selection bounds to screen coordinates
         let start_screen = NodeGraphRenderer::graph_to_screen_pos(start, &panel.graph);
@@ -74,17 +70,12 @@ pub fn render_viewport_bounds_debug(
         return div().into_any_element();
     }
 
-    // Calculate the exact same viewport bounds used by the culling system
-    let screen_to_graph_origin =
-        NodeGraphRenderer::screen_to_graph_pos(Point::new(px(0.0), px(0.0)), &panel.graph);
-    let screen_to_graph_end =
-        NodeGraphRenderer::screen_to_graph_pos(Point::new(px(3840.0), px(2160.0)), &panel.graph);
-    let padding_in_graph_space = 200.0 / panel.graph.zoom_level;
-
-    let visible_left = screen_to_graph_origin.x - padding_in_graph_space;
-    let visible_top = screen_to_graph_origin.y - padding_in_graph_space;
-    let visible_right = screen_to_graph_end.x + padding_in_graph_space;
-    let visible_bottom = screen_to_graph_end.y + padding_in_graph_space;
+    let Some(bounds) = panel.element_bounds else {
+        return div().into_any_element();
+    };
+    let viewport_size = Size::new(bounds.size.width.as_f32(), bounds.size.height.as_f32());
+    let (visible_left, visible_top, visible_right, visible_bottom) =
+        NodeGraphRenderer::viewport_graph_bounds(&panel.graph, viewport_size, 260.0);
 
     // Convert back to screen coordinates for rendering
     let top_left_screen =
@@ -119,16 +110,13 @@ pub fn render_debug_overlay(
     cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
 ) -> impl IntoElement {
     // Calculate all the viewport metrics
-    let screen_to_graph_origin =
-        NodeGraphRenderer::screen_to_graph_pos(Point::new(px(0.0), px(0.0)), &panel.graph);
-    let screen_to_graph_end =
-        NodeGraphRenderer::screen_to_graph_pos(Point::new(px(3840.0), px(2160.0)), &panel.graph);
-    let padding_in_graph_space = 200.0 / panel.graph.zoom_level;
-
-    let visible_left = screen_to_graph_origin.x - padding_in_graph_space;
-    let visible_top = screen_to_graph_origin.y - padding_in_graph_space;
-    let visible_right = screen_to_graph_end.x + padding_in_graph_space;
-    let visible_bottom = screen_to_graph_end.y + padding_in_graph_space;
+    let Some(bounds) = panel.element_bounds else {
+        return div().into_any_element();
+    };
+    let viewport_size = Size::new(bounds.size.width.as_f32(), bounds.size.height.as_f32());
+    let (visible_left, visible_top, visible_right, visible_bottom) =
+        NodeGraphRenderer::viewport_graph_bounds(&panel.graph, viewport_size, 260.0);
+    let padding_in_graph_space = -panel.graph.pan_offset.x - visible_left;
 
     // Calculate viewport dimensions
     let viewport_width = visible_right - visible_left;
@@ -139,7 +127,7 @@ pub fn render_debug_overlay(
         .graph
         .nodes
         .iter()
-        .filter(|node| NodeGraphRenderer::is_node_visible_simple(node, &panel.graph))
+        .filter(|node| NodeGraphRenderer::is_node_visible_simple(node, &panel.graph, viewport_size))
         .count();
     let culled_node_count = panel.graph.nodes.len() - visible_node_count;
 
@@ -148,14 +136,13 @@ pub fn render_debug_overlay(
         .connections
         .iter()
         .filter(|connection| {
-            NodeGraphRenderer::is_connection_visible_simple(connection, &panel.graph)
+            NodeGraphRenderer::is_connection_visible_simple(connection, &panel.graph, viewport_size)
         })
         .count();
     let culled_connection_count = panel.graph.connections.len() - visible_connection_count;
 
-    // Get actual container dimensions (approximation)
-    let container_width = 3840.0; // Using our fixed screen bounds
-    let container_height = 2160.0;
+    let container_width = viewport_size.width;
+    let container_height = viewport_size.height;
 
     div()
         .absolute()

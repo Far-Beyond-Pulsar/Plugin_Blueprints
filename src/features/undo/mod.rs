@@ -18,6 +18,7 @@ pub enum Command {
     AddConnection(AddConnectionCommand),
     DeleteConnection(DeleteConnectionCommand),
     Batch(BatchCommand),
+    ReplaceGraph(ReplaceGraphCommand),
 }
 
 impl Command {
@@ -37,6 +38,7 @@ impl Command {
             Command::AddConnection(cmd) => cmd.execute(panel, cx),
             Command::DeleteConnection(cmd) => cmd.execute(panel, cx),
             Command::Batch(cmd) => cmd.execute(panel, cx),
+            Command::ReplaceGraph(cmd) => cmd.execute(panel, cx),
         }
     }
 
@@ -56,6 +58,7 @@ impl Command {
             Command::AddConnection(cmd) => cmd.undo(panel, cx),
             Command::DeleteConnection(cmd) => cmd.undo(panel, cx),
             Command::Batch(cmd) => cmd.undo(panel, cx),
+            Command::ReplaceGraph(cmd) => cmd.undo(panel, cx),
         }
     }
 
@@ -71,7 +74,54 @@ impl Command {
             Command::AddConnection(cmd) => cmd.description(),
             Command::DeleteConnection(cmd) => cmd.description(),
             Command::Batch(cmd) => cmd.description(),
+            Command::ReplaceGraph(cmd) => cmd.description(),
         }
+    }
+}
+
+/// Replace a graph as one reversible operation (used by AI graph edits).
+#[derive(Debug, Clone)]
+pub struct ReplaceGraphCommand {
+    before: crate::core::graph::BlueprintGraph,
+    after: crate::core::graph::BlueprintGraph,
+}
+
+impl ReplaceGraphCommand {
+    pub fn new(
+        before: crate::core::graph::BlueprintGraph,
+        after: crate::core::graph::BlueprintGraph,
+    ) -> Self {
+        Self { before, after }
+    }
+
+    pub fn execute(
+        &mut self,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
+    ) {
+        let mut graph = self.after.clone();
+        graph.zoom_level = panel.graph.zoom_level;
+        graph.pan_offset = panel.graph.pan_offset;
+        panel.graph = graph;
+        panel.is_dirty = true;
+        cx.notify();
+    }
+
+    pub fn undo(
+        &mut self,
+        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
+        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
+    ) {
+        let mut graph = self.before.clone();
+        graph.zoom_level = panel.graph.zoom_level;
+        graph.pan_offset = panel.graph.pan_offset;
+        panel.graph = graph;
+        panel.is_dirty = true;
+        cx.notify();
+    }
+
+    pub fn description(&self) -> String {
+        "Apply AI graph edit".to_string()
     }
 }
 

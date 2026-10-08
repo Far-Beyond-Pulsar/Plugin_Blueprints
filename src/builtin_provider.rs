@@ -23,48 +23,7 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
     }
 
     fn file_types(&self) -> Vec<FileTypeDefinition> {
-        use serde_json::json;
-
-        vec![FileTypeDefinition {
-            id: FileTypeId::new("class"),
-            extension: "class".to_string(),
-            display_name: "Blueprint Class".to_string(),
-            icon: ui::IconName::Component,
-            color: gpui::rgb(0x9C27B0).into(),
-            structure: FileStructure::FolderBased {
-                marker_file: "graph_save.json".to_string(),
-                template_structure: vec![PathTemplate::Folder {
-                    path: "events".into(),
-                }],
-            },
-            default_content: json!({
-                "format_version": 1,
-                "main_graph": {
-                    "nodes": {},
-                    "connections": [],
-                    "metadata": {
-                        "name": "EventGraph",
-                        "description": "",
-                        "version": "1.0.0",
-                        "created_at": "2024-01-01T00:00:00+00:00",
-                        "modified_at": "2024-01-01T00:00:00+00:00"
-                    },
-                    "comments": []
-                },
-                "subgraphs": [],
-                "variables": [],
-                "blueprint_metadata": {
-                    "blueprint_type": "Generic",
-                    "parent_class": null,
-                    "description": "",
-                    "category": "Uncategorized",
-                    "tags": []
-                }
-            }),
-            creation_directory: None,
-
-            categories: vec!["Blueprints".to_string()],
-        }]
+        vec![crate::blueprint_file_type()]
     }
 
     fn editors(&self) -> Vec<EditorMetadata> {
@@ -112,7 +71,12 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
                 Ok(panel) => panel,
                 Err(e) => {
                     tracing::error!("Failed to create blueprint panel: {}", e);
-                    crate::BlueprintEditorPanel::new(window, cx)
+                    crate::BlueprintEditorPanel::new_with_load_error(
+                        file_path.clone(),
+                        e.to_string(),
+                        window,
+                        cx,
+                    )
                 }
             }
         });
@@ -122,9 +86,11 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
             });
         }
 
-        // Keep plugin AI tools aligned with the currently opened blueprint panel state.
-        let graph_snapshot = panel.read(cx).graph.clone();
-        crate::upsert_ai_session(file_path.clone(), graph_snapshot);
+        if panel.read(cx).load_error.is_none() {
+            panel.update(cx, |panel, cx| {
+                panel.attach_ai_graph_updates(file_path.clone(), cx);
+            });
+        }
 
         Ok(Arc::new(panel))
     }

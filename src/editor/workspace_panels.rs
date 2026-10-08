@@ -380,6 +380,8 @@ pub struct GraphCanvasPanel {
 
     // ── GPU renderer (per-canvas) ──────────────────────────────────────────
     pub renderer: crate::rendering::gpu::BpRenderer,
+    /// Font metrics are stable for this renderer and reused across frames.
+    pub(crate) text_width_cache: HashMap<(String, u32), f32>,
     pub surface: Option<gpui::WgpuSurfaceHandle>,
     pub canvas_origin: Rc<RefCell<Point<f32>>>,
     pub element_bounds: Option<Bounds<Pixels>>,
@@ -534,6 +536,7 @@ impl GraphCanvasPanel {
             undo_manager: UndoManager::new(),
             focus_handle: cx.focus_handle(),
             renderer: crate::rendering::gpu::BpRenderer::new(),
+            text_width_cache: HashMap::new(),
             surface: None,
             canvas_origin: Rc::new(RefCell::new(Point::new(0.0, 0.0))),
             element_bounds: None,

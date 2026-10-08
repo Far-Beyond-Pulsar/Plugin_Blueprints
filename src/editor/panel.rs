@@ -16,7 +16,7 @@ use ui::{
 
 use super::tabs::GraphTab;
 use crate::core::{events::*, graph::*, types::*};
-use crate::editor::workspace_panels::GraphCanvasPanel;
+use crate::editor::workspace_panels::{FindPanel, GraphCanvasPanel};
 use crate::features::connections::operations::ConnectionDrag;
 
 use crate::features::prefabs::PrefabAsset;
@@ -52,10 +52,14 @@ pub struct BlueprintEditorPanel {
 
     // Workspace with full docking support
     pub(super) workspace: Option<Entity<ui::workspace::Workspace>>,
+    pub(super) find_panel: Option<Entity<FindPanel>>,
 
     // File I/O
     pub current_class_path: Option<std::path::PathBuf>,
     pub tab_title: Option<String>,
+    /// Set when a requested file could not be loaded. Failed opens render an
+    /// explicit error state instead of presenting an empty, editable document.
+    pub load_error: Option<String>,
 
     // Node drag state
     pub dragging_node: Option<String>,
@@ -183,11 +187,6 @@ pub struct BlueprintEditorPanel {
     pub hovered_pin_tooltip: Option<String>,
     pub hovered_pin_tooltip_pos: Option<Point<Pixels>>,
 
-    // Sidebar tab states
-    pub left_top_tab: usize, // 0=Variables, 1=Functions, 2=Macros, 3=Events
-    pub left_bottom_tab: usize, // 0=Library, 1=Compiler
-    pub right_tab: usize,    // 0=Details, 1=Prefabs, 2=Palette
-
     // Tab drag state
     pub dragging_tab: Option<TabDragInfo>,
 
@@ -266,6 +265,85 @@ pub enum ResizeHandle {
 }
 
 impl BlueprintEditorPanel {
+    /// Bridge synchronous AI tool calls to the GPUI-owned live canvas. Tool
+    /// calls run on worker threads; this task applies each graph snapshot on
+    /// the UI thread and acknowledges it before the tool reports success.
+    pub(crate) fn attach_ai_graph_updates(
+        &mut self,
+        file_path: std::path::PathBuf,
+        cx: &mut Context<Self>,
+    ) {
+        let receiver = crate::ai_tools::register_live_editor(file_path.clone(), self.graph.clone());
+        cx.spawn(async move |this, cx| {
+            while let Ok(update) = receiver.recv().await {
+                let result = this
+                    .update(cx, |editor, cx| {
+                        editor.apply_ai_graph_update(&file_path, &update.before, &update.after, cx)
+                    })
+                    .map_err(|error| error.to_string())
+                    .and_then(|result| result);
+                update.respond(result).await;
+            }
+        })
+        .detach();
+    }
+
+    fn apply_ai_graph_update(
+        &mut self,
+        file_path: &std::path::Path,
+        before: &crate::core::graph::BlueprintGraph,
+        after: &crate::core::graph::BlueprintGraph,
+        cx: &mut Context<Self>,
+    ) -> Result<crate::ai_tools::AiGraphUpdateAck, String> {
+        let Some(open_path) = self.current_class_path.as_deref() else {
+            return Err("Blueprint editor has no loaded class path".to_string());
+        };
+        if !crate::ai_tools::same_file_key(open_path, file_path) {
+            return Err(format!(
+                "Requested Blueprint {} does not match this editor {}",
+                file_path.display(),
+                open_path.display()
+            ));
+        }
+
+        let Some((tab_id, canvas)) = self.graph_panels.iter().find_map(|(tab_id, canvas)| {
+            canvas
+                .read(cx)
+                .is_main
+                .then_some((tab_id.clone(), canvas.clone()))
+        }) else {
+            return Err("The main Blueprint graph canvas is not ready".to_string());
+        };
+        let current_graph = canvas.read(cx).graph.clone();
+        if !crate::ai_tools::graphs_match(&current_graph, before) {
+            return Ok(crate::ai_tools::AiGraphUpdateAck {
+                graph: current_graph,
+                applied: false,
+            });
+        }
+
+        canvas.update(cx, |canvas, cx| {
+            let mut command = crate::features::undo::ReplaceGraphCommand::new(
+                current_graph.clone(),
+                after.clone(),
+            );
+            command.execute(canvas, cx);
+            canvas.push_undo_command(crate::features::undo::Command::ReplaceGraph(command));
+        });
+        self.graph = after.clone();
+        if let Some(tab) = self.open_tabs.iter_mut().find(|tab| tab.id == tab_id) {
+            tab.graph = after.clone();
+            tab.is_dirty = true;
+        }
+        self.is_dirty = true;
+        cx.notify();
+
+        Ok(crate::ai_tools::AiGraphUpdateAck {
+            graph: after.clone(),
+            applied: true,
+        })
+    }
+
     /// Create a new blueprint editor panel
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self::new_internal(None, window, cx)
@@ -317,6 +395,20 @@ impl BlueprintEditorPanel {
         Ok(panel)
     }
 
+    /// Build a non-editable panel that explains why a requested blueprint
+    /// could not be opened. Keeping this as the same panel type lets both
+    /// provider paths report the failure without fabricating a blank document.
+    pub fn new_with_load_error(
+        file_path: std::path::PathBuf,
+        error: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let mut panel = Self::new_internal(Some(file_path), window, cx);
+        panel.load_error = Some(error);
+        panel
+    }
+
     /// Create a new blueprint editor panel with a file to load
     pub fn new_with_file(
         file_path: std::path::PathBuf,
@@ -325,14 +417,15 @@ impl BlueprintEditorPanel {
     ) -> Self {
         let mut panel = Self::new_internal(Some(file_path.clone()), window, cx);
 
-        // Try to load the blueprint file
-        if let Err(e) = panel.load_blueprint(file_path.to_str().unwrap(), window, cx) {
-            eprintln!("Failed to load blueprint: {}", e);
-        } else {
-            if let Err(e) = panel.load_prefab_sidecar() {
-                log::warn!("Failed to load prefab sidecar: {}", e);
+        // Keep a failed open visibly distinct from a successfully loaded empty
+        // graph. The latter is a valid document; the former must not be edited
+        // or saved over the unreadable source.
+        match panel.load_blueprint(file_path.to_str().unwrap(), window, cx) {
+            Ok(()) => println!("Loaded blueprint from {:?}", file_path),
+            Err(error) => {
+                log::error!("Failed to load blueprint: {}", error);
+                panel.load_error = Some(error);
             }
-            println!("Loaded blueprint from {:?}", file_path);
         }
 
         panel
@@ -504,8 +597,10 @@ impl BlueprintEditorPanel {
             implemented_trait_status: None,
             implemented_trait_picker,
             workspace: None, // Will be initialized in render
+            find_panel: None,
             current_class_path: None,
             tab_title: None,
+            load_error: None,
             dragging_node: None,
             drag_offset: Point::new(0.0, 0.0),
             initial_drag_positions: HashMap::new(),
@@ -604,9 +699,6 @@ impl BlueprintEditorPanel {
             quick_palette_view,
             hovered_pin_tooltip: None,
             hovered_pin_tooltip_pos: None,
-            left_top_tab: 0,
-            left_bottom_tab: 0,
-            right_tab: 0,
             dragging_tab: None,
             is_dirty: false,
             is_saving: false,
@@ -1156,6 +1248,47 @@ impl BlueprintEditorPanel {
                 let _ = activate_tab_item(dock_area.items_mut(), panel_entity_id, window, cx);
             });
         });
+    }
+
+    /// Activate the Find dock tab and put keyboard focus in its search field.
+    pub(crate) fn focus_find_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(workspace), Some(find_panel)) = (self.workspace.clone(), self.find_panel.clone())
+        else {
+            return;
+        };
+        let panel_id = find_panel.entity_id();
+
+        workspace.update(cx, |workspace, cx| {
+            workspace.dock_area().update(cx, |dock_area, cx| {
+                fn activate(
+                    item: &mut DockItem,
+                    panel_id: EntityId,
+                    window: &mut Window,
+                    cx: &mut App,
+                ) -> bool {
+                    match item {
+                        DockItem::Tabs { view, .. } => view.update(cx, |tabs, cx| {
+                            let Some(index) = tabs.index_of_panel_by_entity_id(panel_id) else {
+                                return false;
+                            };
+                            tabs.set_active_tab(index, window, cx);
+                            true
+                        }),
+                        DockItem::Split { items, .. } => items
+                            .iter_mut()
+                            .any(|child| activate(child, panel_id, window, cx)),
+                        _ => false,
+                    }
+                }
+
+                let _ = activate(dock_area.items_mut(), panel_id, window, cx);
+            });
+        });
+
+        self.find_search_input
+            .read(cx)
+            .focus_handle(cx)
+            .focus(window, cx);
     }
 
     /// Switch to a different tab, flushing the current canvas first.

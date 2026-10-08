@@ -41,7 +41,11 @@ pub fn signature_of(descriptor: &EventDescriptor) -> Option<EventSignature> {
             Some(EventField::new(name.clone(), ty))
         })
         .collect::<Option<Vec<_>>>()?;
-    Some(EventSignature { id: descriptor.id, name: descriptor.name.clone(), fields })
+    Some(EventSignature {
+        id: descriptor.id,
+        name: descriptor.name.clone(),
+        fields,
+    })
 }
 
 /// The engine's built-in events.
@@ -49,7 +53,11 @@ pub fn builtin_events() -> Vec<PaletteEvent> {
     plugin_editor_api::pulsar_events::builtin::builtin_events()
         .into_iter()
         .filter_map(|(descriptor, category)| {
-            Some(PaletteEvent { signature: signature_of(&descriptor)?, category: category.to_string(), declared_here: false })
+            Some(PaletteEvent {
+                signature: signature_of(&descriptor)?,
+                category: category.to_string(),
+                declared_here: false,
+            })
         })
         .collect()
 }
@@ -57,7 +65,9 @@ pub fn builtin_events() -> Vec<PaletteEvent> {
 /// Custom events declared by the compiled modules of every class in the
 /// project except `current` (the class being edited).
 pub fn project_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
-    let Some(class_path) = class_path else { return Vec::new() };
+    let Some(class_path) = class_path else {
+        return Vec::new();
+    };
     let current = crate::features::class_dirs::class_name_of(class_path);
     let classes: Vec<PathBuf> = crate::features::class_dirs::sibling_class_dirs(class_path);
     let mut events = Vec::new();
@@ -67,27 +77,41 @@ pub fn project_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
             continue;
         }
         let module = class.join("events").join(".build").join("module.json");
-        let Ok(json) = std::fs::read_to_string(&module) else { continue };
+        let Ok(json) = std::fs::read_to_string(&module) else {
+            continue;
+        };
         let Ok(module) = Module::from_json(&json) else {
             tracing::debug!("unreadable script module {}", module.display());
             continue;
         };
         for signature in blueprint_compiler::declared_events(&module) {
-            events.push(PaletteEvent { signature, category: format!("Custom/{name}"), declared_here: false });
+            events.push(PaletteEvent {
+                signature,
+                category: format!("Custom/{name}"),
+                declared_here: false,
+            });
         }
     }
     events
 }
 
 /// This class's own custom events, as the compiler will declare them.
-pub fn local_events(class_name: &str, defs: &[crate::core::graph::EventDefinition]) -> Vec<PaletteEvent> {
+pub fn local_events(
+    class_name: &str,
+    defs: &[crate::core::graph::EventDefinition],
+) -> Vec<PaletteEvent> {
     defs.iter()
         .filter(|d| !d.name.trim().is_empty())
         .filter_map(|d| {
             let fields = d
                 .fields
                 .iter()
-                .map(|f| Some(EventField::new(f.name.clone(), blueprint_compiler::script_type(&f.type_name)?)))
+                .map(|f| {
+                    Some(EventField::new(
+                        f.name.clone(),
+                        blueprint_compiler::script_type(&f.type_name)?,
+                    ))
+                })
                 .collect::<Option<Vec<_>>>()?;
             Some(PaletteEvent {
                 signature: EventSignature {
@@ -105,7 +129,11 @@ pub fn local_events(class_name: &str, defs: &[crate::core::graph::EventDefinitio
 /// What the compiler checks event nodes against: built-ins and other
 /// classes' events.
 pub fn known_event_signatures(class_path: Option<&Path>) -> Vec<EventSignature> {
-    builtin_events().into_iter().chain(project_events(class_path)).map(|e| e.signature).collect()
+    builtin_events()
+        .into_iter()
+        .chain(project_events(class_path))
+        .map(|e| e.signature)
+        .collect()
 }
 
 /// Typed component event signatures from the host catalog, combined with
@@ -122,12 +150,18 @@ pub fn known_event_signatures_with_components(
 }
 
 /// The editor's event definitions as compiler input.
-pub fn event_sources(defs: &[crate::core::graph::EventDefinition]) -> Vec<blueprint_compiler::EventSource> {
+pub fn event_sources(
+    defs: &[crate::core::graph::EventDefinition],
+) -> Vec<blueprint_compiler::EventSource> {
     defs.iter()
         .map(|d| blueprint_compiler::EventSource {
             uid: d.uid.clone(),
             name: d.name.clone(),
-            fields: d.fields.iter().map(|f| (f.name.clone(), f.type_name.clone())).collect(),
+            fields: d
+                .fields
+                .iter()
+                .map(|f| (f.name.clone(), f.type_name.clone()))
+                .collect(),
         })
         .collect()
 }
@@ -136,7 +170,9 @@ fn pin(id: &str, ty: &str, pin_type: PinType) -> PinDefinition {
     PinDefinition {
         id: id.to_string(),
         name: id.to_string(),
-        data_type: PinDataType::from_type_str(blueprint_graph::DataType::from_type_str(ty).to_string()),
+        data_type: PinDataType::from_type_str(
+            blueprint_graph::DataType::from_type_str(ty).to_string(),
+        ),
         pin_type,
     }
 }
@@ -151,8 +187,16 @@ pub fn node_definition(node: &EventNode) -> NodeDefinition {
         inputs.push(pin("exec", "execution", PinType::Input));
         outputs.push(pin("exec_out", "execution", PinType::Output));
     }
-    inputs.extend(node.inputs.iter().map(|(id, ty)| pin(id, ty, PinType::Input)));
-    outputs.extend(node.outputs.iter().map(|(id, ty)| pin(id, ty, PinType::Output)));
+    inputs.extend(
+        node.inputs
+            .iter()
+            .map(|(id, ty)| pin(id, ty, PinType::Input)),
+    );
+    outputs.extend(
+        node.outputs
+            .iter()
+            .map(|(id, ty)| pin(id, ty, PinType::Output)),
+    );
     NodeDefinition {
         id: node.node_type.clone(),
         name: node.name.clone(),
@@ -177,7 +221,10 @@ pub fn event_node_definitions(
     let mut events = builtin_events();
     events.extend(project_events(class_path));
     events.extend(local_events(class_name, defs));
-    event_nodes(&events).iter().map(|n| (n.category.clone(), node_definition(n))).collect()
+    event_nodes(&events)
+        .iter()
+        .map(|n| (n.category.clone(), node_definition(n)))
+        .collect()
 }
 
 /// Build typed Blueprint entry points for host-owned component events. The
@@ -244,7 +291,10 @@ pub fn component_event_node_definitions(
 pub fn component_event_signatures(
     events: &[plugin_editor_api::ComponentEventMetadata],
 ) -> Vec<EventSignature> {
-    events.iter().map(|event| EventSignature::from(&event.event)).collect()
+    events
+        .iter()
+        .map(|event| EventSignature::from(&event.event))
+        .collect()
 }
 
 /// Title and whether it is an entry point, for an `event::<kind>::<name>`
@@ -281,7 +331,9 @@ fn title_case(snake: &str) -> String {
         .filter(|word| !word.is_empty())
         .map(|word| {
             let mut chars = word.chars();
-            chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
+            chars.next().map_or_else(String::new, |first| {
+                first.to_uppercase().chain(chars).collect()
+            })
         })
         .collect::<Vec<_>>()
         .join(" ")

@@ -228,7 +228,10 @@ impl NodeDefinitions {
                     data_type: PinDataType::from_type_str(conversion.target_type_name),
                     pin_type: PinType::Output,
                 }],
-                properties: HashMap::from([("conversion_id".to_string(), conversion.id.to_string())]),
+                properties: HashMap::from([(
+                    "conversion_id".to_string(),
+                    conversion.id.to_string(),
+                )]),
                 color: Some("#3D78A6".to_string()),
                 is_event: false,
             })

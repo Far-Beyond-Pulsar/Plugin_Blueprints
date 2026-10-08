@@ -21,6 +21,8 @@ use hit_testing::{
     hit_input_pin, hit_node, hit_output_pin, to_canvas, to_graph, update_graph_cursor,
 };
 
+const DOUBLE_CLICK_DISTANCE_PX: f32 = 50.0;
+
 fn delete_hovered_connection(
     canvas: &mut GraphCanvasPanel,
     gp: Point<f32>,
@@ -144,8 +146,8 @@ pub fn on_mouse_down_left(
                     canvas.last_comment_click_id.as_deref(),
                 ) {
                     let ms = now.duration_since(t).as_millis();
-                    let d = ((gp.x - p.x).powi(2) + (gp.y - p.y).powi(2)).sqrt();
-                    id == comment_id.as_str() && ms < 500 && d < 50.0
+                    let d = ((cp.x - p.x).powi(2) + (cp.y - p.y).powi(2)).sqrt();
+                    id == comment_id.as_str() && ms < 500 && d < DOUBLE_CLICK_DISTANCE_PX
                 } else {
                     false
                 };
@@ -168,7 +170,7 @@ pub fn on_mouse_down_left(
                 }
 
                 canvas.last_comment_click_time = Some(now);
-                canvas.last_comment_click_pos = Some(gp);
+                canvas.last_comment_click_pos = Some(cp);
                 canvas.last_comment_click_id = Some(comment_id.clone());
                 canvas.start_comment_drag(comment_id, gp, cx);
                 update_graph_cursor(window, canvas, cp, gp);
@@ -222,8 +224,8 @@ pub fn on_mouse_down_left(
                 let is_double_click =
                     if let (Some(t), Some(p)) = (canvas.last_click_time, canvas.last_click_pos) {
                         let ms = now.duration_since(t).as_millis();
-                        let d = ((gp.x - p.x).powi(2) + (gp.y - p.y).powi(2)).sqrt();
-                        ms < 500 && d < 50.0
+                        let d = ((cp.x - p.x).powi(2) + (cp.y - p.y).powi(2)).sqrt();
+                        ms < 500 && d < DOUBLE_CLICK_DISTANCE_PX
                     } else {
                         false
                     };
@@ -298,7 +300,7 @@ pub fn on_mouse_down_left(
                     canvas.last_click_pos = None;
                 } else {
                     canvas.last_click_time = Some(now);
-                    canvas.last_click_pos = Some(gp);
+                    canvas.last_click_pos = Some(cp);
                 }
 
                 if !canvas.graph.selected_nodes.contains(&node_id) {
@@ -542,6 +544,9 @@ pub fn on_scroll_wheel(
                 ScrollDelta::Pixels(p) => p.y.as_f32(),
                 ScrollDelta::Lines(l) => l.y * 20.0,
             };
+            if !delta_y.is_finite() || delta_y == 0.0 {
+                return;
+            }
             let cp = to_canvas(event.position, canvas);
             let element_pos = Point::new(px(cp.x), px(cp.y));
             canvas.handle_zoom(delta_y, element_pos, cx);
@@ -593,6 +598,11 @@ pub fn on_key_down(
                 }
                 "c" if has_copy_paste_modifier => {
                     canvas.copy_selected_entities(cx);
+                }
+                "f" if has_copy_paste_modifier => {
+                    if let Some(editor) = canvas.panel.upgrade() {
+                        editor.update(cx, |editor, cx| editor.focus_find_panel(window, cx));
+                    }
                 }
                 "v" if has_copy_paste_modifier => {
                     canvas.paste_entities(window, cx);

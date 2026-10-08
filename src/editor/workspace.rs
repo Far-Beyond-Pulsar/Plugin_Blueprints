@@ -64,6 +64,7 @@ impl BlueprintEditorPanel {
             let asset_inspector_panel =
                 cx.new(|cx| AssetInspectorPanel::new(editor_weak.clone(), cx));
             let find_panel = cx.new(|cx| FindPanel::new(editor_weak.clone(), cx));
+            self.find_panel = Some(find_panel.clone());
             let properties_panel = cx.new(|cx| PropertiesPanel::new(editor_weak.clone(), cx));
             let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = self
                 .open_tabs

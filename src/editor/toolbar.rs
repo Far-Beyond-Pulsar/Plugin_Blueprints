@@ -20,7 +20,9 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use ui::{
     button::{Button, ButtonVariants as _},
-    h_flex, ActiveTheme, Disableable, Icon, IconName,
+    h_flex,
+    menu::DropdownMenu as _,
+    ActiveTheme, Disableable, Icon, IconName,
 };
 
 use crate::core::types::CompilationState;
@@ -35,6 +37,7 @@ pub struct ToolbarRenderer;
 impl ToolbarRenderer {
     pub fn render(
         panel: &BlueprintEditorPanel,
+        window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         // ── Snapshot mutable state before building the element tree ──────────
@@ -55,6 +58,9 @@ impl ToolbarRenderer {
             .clone()
             .unwrap_or_else(|| "Blueprint Editor".to_string());
         let compile_mode = panel.compile_mode.clone();
+        let toolbar_width = window.bounds().size.width;
+        let compact = toolbar_width < px(960.0);
+        let very_compact = toolbar_width < px(620.0);
 
         // ── Debug session state ──────────────────────────────────────────────
         let debug_is_paused = panel
@@ -96,8 +102,8 @@ impl ToolbarRenderer {
         h_flex()
             .w_full()
             .h(px(48.0))
-            .px_4()
-            .gap_3()
+            .px_2()
+            .gap_2()
             .items_center()
             // Same surface treatment as the level-editor toolbar
             .bg(cx.theme().sidebar.opacity(0.98))
@@ -132,13 +138,17 @@ impl ToolbarRenderer {
                     // Build the base button, then apply colour variant in a
                     // single match so the type stays `Button` throughout.
                     .child({
-                        let btn = Button::new("toolbar-compile")
-                            .icon(compile_icon)
-                            .label(if is_compiling {
+                        let btn = Button::new("toolbar-compile").icon(compile_icon);
+                        let btn = if very_compact {
+                            btn
+                        } else {
+                            btn.label(if is_compiling {
                                 "Compiling…"
                             } else {
                                 "Compile"
                             })
+                        };
+                        let btn = btn
                             .loading(is_compiling)
                             .disabled(is_compiling)
                             .tooltip("Compile Blueprint (F7)")
@@ -154,7 +164,7 @@ impl ToolbarRenderer {
                         }
                     })
                     // Mode toggle: "Rust" ↔ "VM"
-                    .child({
+                    .when(!compact, |group| group.child({
                         use crate::core::types::CompileMode;
                         let mode_label = compile_mode.label();
                         let tooltip = match &compile_mode {
@@ -172,7 +182,7 @@ impl ToolbarRenderer {
                             CompileMode::BytecodeVm => btn.primary(),
                             CompileMode::DirectRust => btn,
                         }
-                    }),
+                    })),
             )
             .child(toolbar_separator(cx))
             // ── Group 3 · Blueprint Graph Editing ────────────────────────────
@@ -181,23 +191,23 @@ impl ToolbarRenderer {
                     .gap_1p5()
                     .items_center()
                     // Reload resets the graph to the last saved version
-                    .child(
+                    .when(!compact, |group| group.child(
                         Button::new("toolbar-reload")
                             .icon(IconName::Refresh)
                             .tooltip("Reload Blueprint from Disk")
                             .on_click(cx.listener(|panel, _, window, cx| {
                                 panel.plugin_reload(window, cx);
                             })),
-                    )
+                    ))
                     // Add Comment box at the centre of the current viewport
-                    .child(
+                    .when(!very_compact, |group| group.child(
                         Button::new("toolbar-add-comment")
                             .icon(IconName::Message)
                             .tooltip("Add Comment to Graph")
                             .on_click(cx.listener(|panel, _, window, cx| {
                                 if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.create_comment_at_center(window, cx)); }
                             })),
-                    ),
+                    )),
             )
             .child(toolbar_separator(cx))
             // ── Group 4 · Find & Navigate ────────────────────────────────────
@@ -206,85 +216,173 @@ impl ToolbarRenderer {
                     Button::new("toolbar-find")
                         .icon(IconName::Search)
                         .tooltip("Find in Blueprint (Ctrl+F)")
-                        .on_click(cx.listener(|_panel, _, _window, _cx| {
-                            // TODO: focus the Find Results panel in the
-                            // workspace dock when the workspace API supports
-                            // programmatic panel activation.
+                        .on_click(cx.listener(|panel, _, window, cx| {
+                            panel.focus_find_panel(window, cx);
                         })),
                 ),
             )
-            .child(toolbar_separator(cx))
-            // ── Group 5 · View Toggles ───────────────────────────────────────
-            // Matches the level-editor toggle pattern:
-            //   inactive → secondary (default), active → primary
-            .child(
-                h_flex()
-                    .gap_1p5()
-                    .items_center()
-                    .child({
-                        let btn = Button::new("toolbar-minimap")
-                            .icon(IconName::Map)
-                            .tooltip("Toggle Minimap")
-                            .on_click(cx.listener(|panel, _, _, cx| {
-                                panel.show_minimap = !panel.show_minimap;
-                                cx.notify();
-                            }));
-                        if show_minimap {
-                            btn.primary()
-                        } else {
-                            btn
-                        }
-                    })
-                    .child({
-                        let btn = Button::new("toolbar-debug")
-                            .icon(IconName::Bug)
-                            .tooltip("Toggle Debug Overlay")
-                            .on_click(cx.listener(|panel, _, _, cx| {
-                                panel.show_debug_overlay = !panel.show_debug_overlay;
-                                cx.notify();
-                            }));
-                        if show_debug {
-                            btn.primary()
-                        } else {
-                            btn
-                        }
-                    })
-                    .child({
-                        let btn = Button::new("toolbar-graph-controls")
-                            .icon(IconName::Settings)
-                            .tooltip("Toggle Graph Controls")
-                            .on_click(cx.listener(|panel, _, _, cx| {
-                                panel.show_graph_controls = !panel.show_graph_controls;
-                                cx.notify();
-                            }));
-                        if show_controls {
-                            btn.primary()
-                        } else {
-                            btn
-                        }
-                    })
-                    .child({
-                        let btn = Button::new("toolbar-electronic-connections")
-                            .icon(IconName::GitBranch)
-                            .tooltip("Toggle Electronic-Style Connections")
-                            .on_click(cx.listener(|panel, _, _, cx| {
-                                if let Some(canvas) = panel.active_canvas().cloned() {
-                                    canvas.update(cx, |canvas, cx| {
-                                        canvas.electronic_connections = !canvas.electronic_connections;
-                                        cx.notify();
-                                    });
+            .when(!compact, |toolbar| {
+                toolbar.child(toolbar_separator(cx)).child(
+                    h_flex()
+                        .gap_1p5()
+                        .items_center()
+                        .child({
+                            let btn = Button::new("toolbar-minimap")
+                                .icon(IconName::Map)
+                                .tooltip("Toggle Minimap")
+                                .on_click(cx.listener(|panel, _, _, cx| {
+                                    panel.show_minimap = !panel.show_minimap;
                                     cx.notify();
-                                }
-                            }));
-                        if electronic_connections {
-                            btn.primary()
-                        } else {
-                            btn
-                        }
-                    })
-            )
+                                }));
+                            if show_minimap { btn.primary() } else { btn }
+                        })
+                        .child({
+                            let btn = Button::new("toolbar-debug")
+                                .icon(IconName::Bug)
+                                .tooltip("Toggle Debug Overlay")
+                                .on_click(cx.listener(|panel, _, _, cx| {
+                                    panel.show_debug_overlay = !panel.show_debug_overlay;
+                                    cx.notify();
+                                }));
+                            if show_debug { btn.primary() } else { btn }
+                        })
+                        .child({
+                            let btn = Button::new("toolbar-graph-controls")
+                                .icon(IconName::Settings)
+                                .tooltip("Toggle Graph Controls")
+                                .on_click(cx.listener(|panel, _, _, cx| {
+                                    panel.show_graph_controls = !panel.show_graph_controls;
+                                    cx.notify();
+                                }));
+                            if show_controls { btn.primary() } else { btn }
+                        })
+                        .child({
+                            let btn = Button::new("toolbar-electronic-connections")
+                                .icon(IconName::GitBranch)
+                                .tooltip("Toggle Electronic-Style Connections")
+                                .on_click(cx.listener(|panel, _, _, cx| {
+                                    if let Some(canvas) = panel.active_canvas().cloned() {
+                                        canvas.update(cx, |canvas, cx| {
+                                            canvas.electronic_connections = !canvas.electronic_connections;
+                                            cx.notify();
+                                        });
+                                        cx.notify();
+                                    }
+                                }));
+                            if electronic_connections { btn.primary() } else { btn }
+                        }),
+                )
+            })
+            .when(compact, |toolbar| {
+                let panel = cx.entity().clone();
+                let mode_label = compile_mode.label();
+                toolbar.child(
+                    Button::new("toolbar-more-actions")
+                        .icon(IconName::Ellipsis)
+                        .tooltip("More Blueprint actions")
+                        .popup_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
+                            let mut menu = menu.menu_handler_with_icon("Reload Blueprint", IconName::Refresh, {
+                                let panel = panel.clone();
+                                move |window, cx| { let _ = panel.update(cx, |panel, cx| panel.plugin_reload(window, cx)); }
+                            })
+                            .menu_handler_with_icon(format!("Compile Mode: {mode_label}"), IconName::Flash, {
+                                let panel = panel.clone();
+                                move |_, cx| { let _ = panel.update(cx, |panel, cx| {
+                                    panel.compile_mode = panel.compile_mode.toggle();
+                                    cx.notify();
+                                }); }
+                            })
+                            .separator()
+                            .menu_handler_with_icon("Add Comment", IconName::Message, {
+                                let panel = panel.clone();
+                                move |window, cx| { let _ = panel.update(cx, |panel, cx| {
+                                    if let Some(canvas) = panel.active_canvas().cloned() {
+                                        canvas.update(cx, |canvas, cx| canvas.create_comment_at_center(window, cx));
+                                    }
+                                }); }
+                            })
+                            .menu_handler_with_icon("Toggle Minimap", IconName::Map, {
+                                let panel = panel.clone();
+                                move |_, cx| { let _ = panel.update(cx, |panel, cx| {
+                                    panel.show_minimap = !panel.show_minimap;
+                                    cx.notify();
+                                }); }
+                            })
+                            .menu_handler_with_icon("Toggle Debug Overlay", IconName::Bug, {
+                                let panel = panel.clone();
+                                move |_, cx| { let _ = panel.update(cx, |panel, cx| {
+                                    panel.show_debug_overlay = !panel.show_debug_overlay;
+                                    cx.notify();
+                                }); }
+                            })
+                            .menu_handler_with_icon("Toggle Graph Controls", IconName::Settings, {
+                                let panel = panel.clone();
+                                move |_, cx| { let _ = panel.update(cx, |panel, cx| {
+                                    panel.show_graph_controls = !panel.show_graph_controls;
+                                    cx.notify();
+                                }); }
+                            })
+                            .menu_handler_with_icon("Toggle Electronic Connections", IconName::GitBranch, {
+                                let panel = panel.clone();
+                                move |_, cx| { let _ = panel.update(cx, |panel, cx| {
+                                    if let Some(canvas) = panel.active_canvas().cloned() {
+                                        canvas.update(cx, |canvas, cx| {
+                                            canvas.electronic_connections = !canvas.electronic_connections;
+                                            cx.notify();
+                                        });
+                                    }
+                                    cx.notify();
+                                }); }
+                            });
+                            if debug_session_active {
+                                menu = menu.separator()
+                                    .menu_handler_with_icon("Continue", IconName::Play, {
+                                        let panel = panel.clone();
+                                        move |_, cx| { let _ = panel.update(cx, |panel, cx| {
+                                            if let Some(canvas) = panel.active_canvas().cloned() {
+                                                canvas.update(cx, |canvas, cx| canvas.debug_continue(cx));
+                                            }
+                                        }); }
+                                    })
+                                    .menu_handler_with_icon("Step Back", IconName::ArrowLeft, {
+                                        let panel = panel.clone();
+                                        move |_, cx| { let _ = panel.update(cx, |panel, cx| {
+                                            if let Some(canvas) = panel.active_canvas().cloned() {
+                                                canvas.update(cx, |canvas, cx| canvas.debug_step_backward(cx));
+                                            }
+                                        }); }
+                                    })
+                                    .menu_handler_with_icon("Step Forward", IconName::ArrowRight, {
+                                        let panel = panel.clone();
+                                        move |_, cx| { let _ = panel.update(cx, |panel, cx| {
+                                            if let Some(canvas) = panel.active_canvas().cloned() {
+                                                canvas.update(cx, |canvas, cx| canvas.debug_step_forward(cx));
+                                            }
+                                        }); }
+                                    })
+                                    .menu_handler_with_icon("Stop Debug Session", IconName::X, {
+                                        let panel = panel.clone();
+                                        move |_, cx| { let _ = panel.update(cx, |panel, cx| {
+                                            if let Some(canvas) = panel.active_canvas().cloned() {
+                                                canvas.update(cx, |canvas, cx| canvas.debug_stop(cx));
+                                            }
+                                        }); }
+                                    });
+                            }
+                            if bp_count > 0 && !debug_session_active {
+                                menu = menu.menu_handler_with_icon_and_disabled(
+                                    format!("Breakpoints: {bp_count}"),
+                                    IconName::Bug,
+                                    true,
+                                    |_, _| {},
+                                );
+                            }
+                            menu
+                        }),
+                )
+            })
             // ── Group 6 · Debugger controls ──────────────────────────────────
-            .when(debug_session_active || bp_count > 0, |el| {
+            .when(!compact && (debug_session_active || bp_count > 0), |el| {
                 el.child(toolbar_separator(cx)).child(
                     h_flex()
                         .gap_1p5()
@@ -298,11 +396,11 @@ impl ToolbarRenderer {
                                     .flex()
                                     .items_center()
                                     .rounded(cx.theme().radius)
-                                    .bg(gpui::rgba(0x4A0000FF))
+                                    .bg(cx.theme().danger.opacity(0.15))
                                     .border_1()
-                                    .border_color(gpui::rgba(0xCC111144))
+                                    .border_color(cx.theme().danger.opacity(0.45))
                                     .text_size(gpui::px(11.0))
-                                    .text_color(gpui::rgba(0xFF6666FF))
+                                    .text_color(cx.theme().danger)
                                     .child(format!("⏹ {}", bp_count)),
                             )
                         })
@@ -369,7 +467,7 @@ impl ToolbarRenderer {
             // ── Right side · Compile status + Blueprint name pill ────────────
             .child(
                 h_flex()
-                    .gap_3()
+                    .gap_2()
                     .items_center()
                     // Live compile status text (hidden when idle)
                     .when(show_status, |el| {
@@ -397,13 +495,13 @@ impl ToolbarRenderer {
                                 Icon::new(IconName::Component)
                                     .size(px(14.0)),
                             )
-                            .child(
+                            .when(!very_compact, |pill| pill.child(
                                 div()
                                     .text_sm()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(cx.theme().foreground)
                                     .child(blueprint_name),
-                            )
+                            ))
                             // Amber dot when there are unsaved changes
                             .when(is_dirty, |el| {
                                 el.child(
