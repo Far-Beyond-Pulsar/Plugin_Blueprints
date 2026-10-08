@@ -169,6 +169,7 @@ impl NodeGraphRenderer {
         let pan_y = canvas.graph.pan_offset.y;
         let wire_active_mode = canvas.wire_active_test_mode;
         let wire_hidden_mode = canvas.wire_hidden_test_mode;
+        let electronic_connections = canvas.electronic_connections;
         let anim_time = canvas.graph_anim_start.elapsed().as_secs_f32();
 
         // viewport culling
@@ -514,6 +515,10 @@ impl NodeGraphRenderer {
          -> WireInstance {
             let hd = (tp.0 - fp.0).abs();
             let ctl = (hd * 0.45).max(55.0).min(220.0);
+            let mut flags = flags;
+            if electronic_connections {
+                flags |= 4;
+            }
             WireInstance {
                 from: [fp.0, fp.1],
                 ctrl1: [fp.0 + ctl, fp.1],

@@ -46,8 +46,10 @@ impl ToolbarRenderer {
         let show_minimap = panel.show_minimap;
         let show_debug = panel.show_debug_overlay;
         let show_controls = panel.show_graph_controls;
-        let wire_active_mode = panel.wire_active_test_mode;
-        let wire_hidden_mode = panel.wire_hidden_test_mode;
+        let electronic_connections = panel
+            .active_canvas()
+            .map(|canvas| canvas.read(cx).electronic_connections)
+            .unwrap_or(false);
         let blueprint_name = panel
             .tab_title
             .clone()
@@ -256,6 +258,25 @@ impl ToolbarRenderer {
                                 cx.notify();
                             }));
                         if show_controls {
+                            btn.primary()
+                        } else {
+                            btn
+                        }
+                    })
+                    .child({
+                        let btn = Button::new("toolbar-electronic-connections")
+                            .icon(IconName::GitBranch)
+                            .tooltip("Toggle Electronic-Style Connections")
+                            .on_click(cx.listener(|panel, _, _, cx| {
+                                if let Some(canvas) = panel.active_canvas().cloned() {
+                                    canvas.update(cx, |canvas, cx| {
+                                        canvas.electronic_connections = !canvas.electronic_connections;
+                                        cx.notify();
+                                    });
+                                    cx.notify();
+                                }
+                            }));
+                        if electronic_connections {
                             btn.primary()
                         } else {
                             btn

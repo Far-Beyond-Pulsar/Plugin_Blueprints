@@ -395,6 +395,8 @@ pub struct GraphCanvasPanel {
     pub show_graph_controls: bool,
     pub wire_active_test_mode: bool,
     pub wire_hidden_test_mode: bool,
+    /// Draw node connections as circuit-style right-angle routes.
+    pub electronic_connections: bool,
 
     // ── Context menus / overlays ───────────────────────────────────────────
     pub node_context_menu: Option<(String, Point<Pixels>)>,
@@ -545,6 +547,7 @@ impl GraphCanvasPanel {
             show_graph_controls: true,
             wire_active_test_mode: false,
             wire_hidden_test_mode: false,
+            electronic_connections: false,
             node_context_menu: None,
             pin_context_menu: None,
             quick_palette_open: false,

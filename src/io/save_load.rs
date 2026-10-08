@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 const GRAPH_SAVE_FILE_NAME: &str = "graph_save.json";
 
 struct BlueprintSaveSnapshot {
-    open_tabs: Vec<GraphTab>,
+    tabs: Vec<BlueprintSaveTabSnapshot>,
     subgraphs: Vec<blueprint_graph::SubGraph>,
     local_event_defs: Vec<crate::core::graph::EventDefinition>,
     class_variables: Vec<crate::features::variables::ClassVariable>,
@@ -21,10 +21,61 @@ struct BlueprintSaveSnapshot {
     blueprint_metadata: blueprint_graph::BlueprintMetadata,
 }
 
+struct BlueprintSaveTabSnapshot {
+    id: String,
+    is_main: bool,
+    is_library_macro: bool,
+    graph: crate::core::graph::BlueprintGraph,
+}
+
+struct PrefabSaveSnapshot {
+    path: PathBuf,
+    asset: crate::features::prefabs::PrefabAsset,
+    graph_tab_id: String,
+}
+
+impl PrefabSaveSnapshot {
+    fn into_json(
+        mut self,
+        graph: &crate::core::graph::BlueprintGraph,
+        subgraphs: &[blueprint_graph::SubGraph],
+    ) -> Result<(PathBuf, String), String> {
+        self.asset.script_graph = Some(
+            BlueprintEditorPanel::convert_graph_to_description_for_subgraphs(graph, subgraphs)?,
+        );
+        let json = serde_json::to_string_pretty(&self.asset)
+            .map_err(|error| format!("Failed to serialize prefab: {error}"))?;
+        Ok((self.path, json))
+    }
+}
+
 impl BlueprintSaveSnapshot {
-    fn capture(panel: &BlueprintEditorPanel) -> Self {
+    fn capture(panel: &BlueprintEditorPanel, cx: Option<&App>) -> Self {
+        // Read and clone each live canvas graph once. The old path first cloned
+        // every graph into open_tabs, then cloned all tabs again for the save
+        // snapshot, and cloned the active graph a third time for the prefab.
+        let mut live_graphs = cx
+            .map(|cx| {
+                panel
+                    .graph_panels
+                    .iter()
+                    .map(|(tab_id, canvas)| (tab_id.clone(), canvas.read(cx).graph.clone()))
+                    .collect::<std::collections::HashMap<_, _>>()
+            })
+            .unwrap_or_default();
         Self {
-            open_tabs: panel.open_tabs.clone(),
+            tabs: panel
+                .open_tabs
+                .iter()
+                .map(|tab| BlueprintSaveTabSnapshot {
+                    id: tab.id.clone(),
+                    is_main: tab.is_main,
+                    is_library_macro: tab.is_library_macro,
+                    graph: live_graphs
+                        .remove(&tab.id)
+                        .unwrap_or_else(|| tab.graph.clone()),
+                })
+                .collect(),
             subgraphs: panel.subgraphs.clone(),
             local_event_defs: panel.local_event_defs.clone(),
             class_variables: panel.class_variables.clone(),
@@ -35,7 +86,7 @@ impl BlueprintSaveSnapshot {
 
     fn into_asset(mut self) -> Result<formats::BlueprintAsset, String> {
         let main_tab = self
-            .open_tabs
+            .tabs
             .iter()
             .find(|tab| tab.is_main)
             .ok_or("No main graph tab found")?;
@@ -45,7 +96,7 @@ impl BlueprintSaveSnapshot {
         )?;
 
         let subgraph_updates = self
-            .open_tabs
+            .tabs
             .iter()
             .filter(|tab| {
                 !tab.is_main
@@ -99,7 +150,7 @@ impl BlueprintSaveSnapshot {
             .collect();
 
         let graph_view_states = self
-            .open_tabs
+            .tabs
             .iter()
             .map(|tab| {
                 (
@@ -120,7 +171,7 @@ impl BlueprintSaveSnapshot {
             local_events,
             variables,
             editor_state: Some(formats::BlueprintEditorState {
-                open_tab_ids: self.open_tabs.iter().map(|tab| tab.id.clone()).collect(),
+                open_tab_ids: self.tabs.iter().map(|tab| tab.id.clone()).collect(),
                 active_tab_index: self.active_tab_index,
                 graph_view_states,
             }),
@@ -170,23 +221,50 @@ fn refresh_blueprint_trait_index_at(project_root: Option<&Path>) {
 }
 
 impl BlueprintEditorPanel {
-    fn snapshot_blueprint_for_save(
-        &mut self,
-        cx: &mut Context<Self>,
-    ) -> Result<BlueprintSaveSnapshot, String> {
-        self.sync_all_canvases_to_tabs(cx);
-        Ok(BlueprintSaveSnapshot::capture(self))
+    fn snapshot_blueprint_for_save(&self, cx: &App) -> Result<BlueprintSaveSnapshot, String> {
+        Ok(BlueprintSaveSnapshot::capture(self, Some(cx)))
     }
 
-    fn snapshot_prefab_sidecar_for_save(&mut self) -> Result<(PathBuf, String), String> {
-        self.sync_prefab_to_script()?;
+    fn snapshot_prefab_sidecar_for_save(&mut self) -> Result<PrefabSaveSnapshot, String> {
+        if self.prefab_asset.prefab_version == 0 {
+            self.prefab_asset.prefab_version = 1;
+        }
+        if self.prefab_asset.name.trim().is_empty() {
+            self.prefab_asset.name = self
+                .current_class_path
+                .as_deref()
+                .and_then(crate::features::class_dirs::class_name_of)
+                .unwrap_or_else(|| "Prefab".to_string());
+        }
+        if let Some(path) = self.current_class_path.as_ref() {
+            let mut defaults = std::collections::HashMap::new();
+            for variable in &self.class_variables {
+                if let Some(value) = &variable.default_value {
+                    defaults.insert(
+                        variable.name.clone(),
+                        serde_json::Value::String(value.clone()),
+                    );
+                }
+            }
+            self.prefab_asset.blueprint_class = Some(crate::features::prefabs::BlueprintClassRef {
+                class_path: path.display().to_string(),
+                variable_defaults: defaults,
+            });
+        }
+
         let path = self
             .prefab_file_path()
             .ok_or_else(|| "No class path available for prefab save".to_string())?;
         self.prefab_asset.fill_missing_slot_ids();
-        let json = serde_json::to_string_pretty(&self.prefab_asset)
-            .map_err(|error| format!("Failed to serialize prefab: {error}"))?;
-        Ok((path, json))
+        Ok(PrefabSaveSnapshot {
+            path,
+            asset: self.prefab_asset.clone(),
+            graph_tab_id: self
+                .open_tabs
+                .get(self.active_tab_index)
+                .map(|tab| tab.id.clone())
+                .unwrap_or_else(|| "main".to_string()),
+        })
     }
 
     /// Save the current blueprint to its file path
@@ -214,15 +292,6 @@ impl BlueprintEditorPanel {
             return;
         };
 
-        let prefab_save = self.snapshot_prefab_sidecar_for_save();
-        let prefab_save = match prefab_save {
-            Ok(save) => Some(save),
-            Err(error) => {
-                tracing::warn!("Failed to prepare prefab sidecar save: {error}");
-                None
-            }
-        };
-
         let target_path = Self::resolve_blueprint_path(&path);
         let project_root = self.project_root.clone().or_else(|| {
             self.current_class_path
@@ -230,19 +299,18 @@ impl BlueprintEditorPanel {
                 .and_then(crate::features::class_dirs::project_root_of)
         });
         let class_dir = self.current_class_path.clone();
-        let publish_after_save = prefab_save.is_some();
-
-        // Register the save before taking the graph snapshot so the task is
-        // immediately visible in the editor's background-task audit panel.
+        let mut publish_after_save = false;
         self.is_saving = true;
         cx.notify();
 
-        let (snapshot_tx, snapshot_rx) =
-            smol::channel::bounded::<Result<BlueprintSaveSnapshot, String>>(1);
+        let (snapshot_tx, snapshot_rx) = smol::channel::bounded::<
+            Result<(BlueprintSaveSnapshot, Option<PrefabSaveSnapshot>), String>,
+        >(1);
         let (completion_tx, completion_rx) =
             smol::channel::bounded::<Result<Option<String>, String>>(1);
         let task_path = target_path.clone();
-        editor_task_queue::global().submit(
+        let task_queue = editor_task_queue::global().clone();
+        let task_id = task_queue.submit(
             editor_task_queue::TaskDescription::new(
                 format!(
                     "Save Blueprint: {}",
@@ -256,26 +324,49 @@ impl BlueprintEditorPanel {
             ),
             move |task| {
                 let result = (|| -> Result<Option<String>, String> {
-                    task.report_progress(0.02, "Waiting for graph snapshot");
+                    task.report_progress(0.02, "Waiting for editor snapshot");
                     if task.is_cancelled() {
                         return Err("Blueprint save cancelled".to_string());
                     }
 
-                    let snapshot = smol::block_on(snapshot_rx.recv())
+                    let (snapshot, prefab_snapshot) = smol::block_on(snapshot_rx.recv())
                         .map_err(|_| "Blueprint save snapshot was not provided".to_string())??;
-                    task.report_progress(0.05, "Serializing Blueprint graph");
+                    task.report_progress(0.05, "Preparing Blueprint graph data");
                     if task.is_cancelled() {
                         return Err("Blueprint save cancelled".to_string());
                     }
+
+                    let prefab_json = prefab_snapshot.map(|prefab_snapshot| {
+                        let graph = snapshot
+                            .tabs
+                            .iter()
+                            .find(|tab| tab.id == prefab_snapshot.graph_tab_id)
+                            .map(|tab| &tab.graph)
+                            .ok_or_else(|| {
+                                format!(
+                                    "Prefab graph tab '{}' was not present in save snapshot",
+                                    prefab_snapshot.graph_tab_id
+                                )
+                            })?;
+                        prefab_snapshot.into_json(graph, &snapshot.subgraphs)
+                    });
 
                     let asset = snapshot.into_asset()?;
                     let content = serialize_blueprint_asset(&asset)?;
+                    if task.is_cancelled() {
+                        return Err("Blueprint save cancelled".to_string());
+                    }
                     task.report_progress(0.45, "Writing Blueprint graph");
                     persist_blueprint_content(&task_path, &content)?;
 
+                    if task.is_cancelled() {
+                        return Err("Blueprint save cancelled".to_string());
+                    }
                     task.report_progress(0.7, "Writing prefab sidecar");
-                    let prefab_error = prefab_save.and_then(|(prefab_path, json)| {
-                        persist_prefab_sidecar(&prefab_path, &json).err()
+                    let prefab_error = prefab_json.and_then(|result| {
+                        result
+                            .and_then(|(path, json)| persist_prefab_sidecar(&path, &json))
+                            .err()
                     });
                     if let Some(error) = &prefab_error {
                         tracing::warn!("Failed to save prefab sidecar: {error}");
@@ -301,12 +392,20 @@ impl BlueprintEditorPanel {
             },
         );
 
-        // Sync GPUI-owned canvases on the UI thread, then hand the detached
-        // value snapshot to the task for graph conversion, serialization, and IO.
+        // GPUI-owned graph entities must be read on the UI thread. The save
+        // task is already registered; hand it detached data for all heavy work.
         let snapshot = match self.snapshot_blueprint_for_save(cx) {
             Ok(snapshot) => Some(snapshot),
             Err(error) => {
-                let _ = snapshot_tx.try_send(Err(error));
+                let _ = snapshot_tx.try_send(Err(error.clone()));
+                self.report_save_preparation_error(error, cx);
+                None
+            }
+        };
+        let prefab_snapshot = match self.snapshot_prefab_sidecar_for_save() {
+            Ok(snapshot) => Some(snapshot),
+            Err(error) => {
+                tracing::warn!("Failed to prepare prefab sidecar save: {error}");
                 None
             }
         };
@@ -330,13 +429,47 @@ impl BlueprintEditorPanel {
                 });
             }
 
-            let _ = snapshot_tx.try_send(Ok(snapshot));
+            publish_after_save = prefab_snapshot.is_some();
+            let _ = snapshot_tx.try_send(Ok((snapshot, prefab_snapshot)));
         }
 
         cx.spawn(async move |this, cx| {
-            let save_result = completion_rx.recv().await.unwrap_or_else(|_| {
-                Err("Blueprint save task ended without reporting a result".to_string())
-            });
+            let save_result = loop {
+                match completion_rx.try_recv() {
+                    Ok(result) => break result,
+                    Err(smol::channel::TryRecvError::Closed) => {
+                        break Err(
+                            "Blueprint save task ended without reporting a result".to_string()
+                        );
+                    }
+                    Err(smol::channel::TryRecvError::Empty) => {}
+                }
+
+                let task_state = task_queue
+                    .snapshots()
+                    .into_iter()
+                    .find(|task| task.id == task_id);
+                match task_state.map(|task| (task.status, task.error)) {
+                    Some((editor_task_queue::TaskStatus::Cancelled, _)) => {
+                        break Err("Blueprint save cancelled".to_string());
+                    }
+                    Some((editor_task_queue::TaskStatus::Failed, error)) => {
+                        break Err(error.unwrap_or_else(|| {
+                            "Blueprint save task failed without reporting a reason".to_string()
+                        }));
+                    }
+                    Some((editor_task_queue::TaskStatus::Succeeded, _)) => {
+                        break Err(
+                            "Blueprint save task ended without reporting a result".to_string()
+                        );
+                    }
+                    Some((editor_task_queue::TaskStatus::Queued, _))
+                    | Some((editor_task_queue::TaskStatus::Running, _))
+                    | None => {}
+                }
+
+                smol::Timer::after(std::time::Duration::from_millis(100)).await;
+            };
             let _ = this.update(cx, |panel, cx| {
                 panel.is_saving = false;
                 match save_result {
@@ -566,7 +699,7 @@ impl BlueprintEditorPanel {
 
     /// Convert current editor state to BlueprintAsset
     pub(crate) fn to_blueprint_asset(&self) -> Result<formats::BlueprintAsset, String> {
-        BlueprintSaveSnapshot::capture(self).into_asset()
+        BlueprintSaveSnapshot::capture(self, None).into_asset()
     }
 
     /// Load BlueprintAsset into the editor
