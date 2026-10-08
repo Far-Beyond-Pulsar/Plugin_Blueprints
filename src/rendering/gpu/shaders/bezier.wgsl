@@ -48,41 +48,6 @@ fn bezier_tangent(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f32>, t:
     return 3.0*u_*u_*(p1-p0) + 6.0*u_*t*(p2-p1) + 3.0*t*t*(p3-p2);
 }
 
-// Electronic style routes use three straight segments with a shared x-axis
-// elbow. Parameterize each segment by its share of the total route length so
-// the pulse animation moves at a steady speed along the wire.
-fn electronic_point(p0: vec2<f32>, p3: vec2<f32>, t: f32) -> vec2<f32> {
-    let mid_x = (p0.x + p3.x) * 0.5;
-    let horizontal = abs(p3.x - p0.x) * 0.5;
-    let vertical = abs(p3.y - p0.y);
-    let total = max(horizontal * 2.0 + vertical, 0.001);
-    let along = t * total;
-    if along < horizontal {
-        let local_t = along / max(horizontal, 0.001);
-        return vec2(mix(p0.x, mid_x, local_t), p0.y);
-    }
-    if along < horizontal + vertical {
-        let local_t = (along - horizontal) / max(vertical, 0.001);
-        return vec2(mid_x, mix(p0.y, p3.y, local_t));
-    }
-    let local_t = (along - horizontal - vertical) / max(horizontal, 0.001);
-    return vec2(mix(mid_x, p3.x, local_t), p3.y);
-}
-
-fn electronic_tangent(p0: vec2<f32>, p3: vec2<f32>, t: f32) -> vec2<f32> {
-    let horizontal = abs(p3.x - p0.x) * 0.5;
-    let vertical = abs(p3.y - p0.y);
-    let total = max(horizontal * 2.0 + vertical, 0.001);
-    let along = t * total;
-    if along < horizontal {
-        return vec2(sign(p3.x - p0.x), 0.0);
-    }
-    if along < horizontal + vertical {
-        return vec2(0.0, sign(p3.y - p0.y));
-    }
-    return vec2(sign(p3.x - p0.x), 0.0);
-}
-
 @vertex
 fn vs_main(inst: WireInst, @builtin(vertex_index) vi: u32) -> VOut {
     let seg    = vi / 6u;
@@ -93,17 +58,8 @@ fn vs_main(inst: WireInst, @builtin(vertex_index) vi: u32) -> VOut {
 
     let t = select(f32(seg), f32(seg + 1u), use_t1) / f32(WIRE_SEGS);
 
-    let is_electronic = (inst.flags & 4u) != 0u;
-    let gp = select(
-        bezier(inst.start, inst.ctrl1, inst.ctrl2, inst.to, t),
-        electronic_point(inst.start, inst.to, t),
-        is_electronic,
-    );
-    let gtan = select(
-        bezier_tangent(inst.start, inst.ctrl1, inst.ctrl2, inst.to, t),
-        electronic_tangent(inst.start, inst.to, t),
-        is_electronic,
-    );
+    let gp = bezier(inst.start, inst.ctrl1, inst.ctrl2, inst.to, t);
+    let gtan = bezier_tangent(inst.start, inst.ctrl1, inst.ctrl2, inst.to, t);
 
     let slen = length(gtan * u.zoom);
     var normal_screen = vec2(0.0, 1.0);

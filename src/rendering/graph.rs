@@ -489,6 +489,7 @@ impl NodeGraphRenderer {
         // ── Bezier wire instances — one struct per connection, GPU does all tessellation ──
         // No CPU bezier evaluation: just compute four control points and hand off to GPU.
         let mut wire_instances: Vec<WireInstance> = Vec::new();
+        let mut electronic_wire_instances: Vec<WireInstance> = Vec::new();
         let half_thick = WIRE_THICKNESS * 0.5; // graph-space half-thickness; shader × zoom → px
 
         let node_map: std::collections::HashMap<&str, &BlueprintNode> = canvas
@@ -515,10 +516,6 @@ impl NodeGraphRenderer {
          -> WireInstance {
             let hd = (tp.0 - fp.0).abs();
             let ctl = (hd * 0.45).max(55.0).min(220.0);
-            let mut flags = flags;
-            if electronic_connections {
-                flags |= 4;
-            }
             WireInstance {
                 from: [fp.0, fp.1],
                 ctrl1: [fp.0 + ctl, fp.1],
@@ -576,7 +573,12 @@ impl NodeGraphRenderer {
                     pin_gpos_id(fn_, &conn.source_pin, false),
                     pin_gpos_id(tn, &conn.target_pin, true),
                 ) {
-                    wire_instances.push(make_wire(fp, tp, fc, thick, wire_flags, wire_phase(conn)));
+                    let wire = make_wire(fp, tp, fc, thick, wire_flags, wire_phase(conn));
+                    if electronic_connections {
+                        electronic_wire_instances.push(wire);
+                    } else {
+                        wire_instances.push(wire);
+                    }
                 }
             }
         }
@@ -603,14 +605,19 @@ impl NodeGraphRenderer {
                     } else {
                         0.70
                     };
-                    wire_instances.push(make_wire(
+                    let wire = make_wire(
                         fp,
                         tp,
                         [dc[0], dc[1], dc[2], drag_alpha],
                         half_thick * 0.85,
                         drag_flags,
                         0.0,
-                    ));
+                    );
+                    if electronic_connections {
+                        electronic_wire_instances.push(wire);
+                    } else {
+                        wire_instances.push(wire);
+                    }
                 }
             }
         }
@@ -725,6 +732,7 @@ impl NodeGraphRenderer {
                     &comment_instances,
                     &node_instances,
                     &wire_instances, // one struct per bezier connection
+                    &electronic_wire_instances,
                     &line_verts,     // selection box straight lines only
                     &pin_instances,
                     &text_calls,
