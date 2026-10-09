@@ -20,20 +20,22 @@ use ui::{
     StyledExt,
 };
 
-use crate::core::types::{BlueprintComment, BlueprintNode, NodeType, Pin};
+use crate::core::types::{BlueprintComment, BlueprintNode};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
-use crate::features::connections::compatibility::is_pin_connected;
 use crate::features::prefabs::panel::group_rows_by_category;
-use ui_common::properties_inspector;
-use ui_common::reflected_properties_panel::rgba_to_hsla;
 use std::any::Any;
 use std::sync::Arc;
+use ui_common::properties_inspector;
 
 /// Unified multi-mode Properties panel renderer.
 ///
 /// Dispatches to the appropriate sub-renderer based on selection priority:
 /// prefab component → macro → event → variable → graph node → comment → empty.
+mod event_details;
+mod macro_details;
+mod shared_controls;
+
 pub struct PropertiesRenderer;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -56,7 +58,9 @@ impl PropertiesRenderer {
     ) -> impl IntoElement {
         let active_canvas = panel.active_canvas().cloned();
         if let Some(canvas) = active_canvas.as_ref() {
-            canvas.update(cx, |canvas, cx| canvas.sync_comment_inspector_state(window, cx));
+            canvas.update(cx, |canvas, cx| {
+                canvas.sync_comment_inspector_state(window, cx)
+            });
         }
 
         let selection_kind = Self::active_selection_kind(panel, &active_canvas, cx);
@@ -66,14 +70,13 @@ impl PropertiesRenderer {
             .bg(cx.theme().sidebar)
             .child(Self::render_header(selection_kind, cx))
             .child(
-                v_flex()
-                    .flex_1()
-                    .overflow_hidden()
-                    .child(
-                        div().size_full().p_3().scrollable(ScrollbarAxis::Vertical).child(
-                            Self::render_properties_content(panel, window, cx),
-                        ),
-                    ),
+                v_flex().flex_1().overflow_hidden().child(
+                    div()
+                        .size_full()
+                        .p_3()
+                        .scrollable(ScrollbarAxis::Vertical)
+                        .child(Self::render_properties_content(panel, window, cx)),
+                ),
             )
     }
 
@@ -111,7 +114,10 @@ impl PropertiesRenderer {
         SelectionKind::None
     }
 
-    fn render_header(selection_kind: SelectionKind, cx: &Context<BlueprintEditorPanel>) -> impl IntoElement {
+    fn render_header(
+        selection_kind: SelectionKind,
+        cx: &Context<BlueprintEditorPanel>,
+    ) -> impl IntoElement {
         let (title, icon, badge) = match &selection_kind {
             SelectionKind::PrefabComponent => ("Properties", IconName::Component, "Component"),
             SelectionKind::Macro => ("Properties", IconName::GitBranch, "Macro"),
@@ -217,8 +223,13 @@ impl PropertiesRenderer {
         let class_name = component.class_name.clone();
         let state_key = format!("{}#{}", index, class_name);
         let mut missing_in_registry = false;
-        let mut row_data: Vec<(AnyElement, Option<String>, Option<String>, bool, Option<usize>)> =
-            Vec::new();
+        let mut row_data: Vec<(
+            AnyElement,
+            Option<String>,
+            Option<String>,
+            bool,
+            Option<usize>,
+        )> = Vec::new();
 
         if let Some(instance) = REGISTRY.create_instance(&class_name) {
             for prop in instance.get_properties() {
@@ -246,9 +257,15 @@ impl PropertiesRenderer {
                 let prop_name_for_wb = prop.name.to_string();
                 let write_back = Arc::new(
                     move |new_val: Box<dyn Any + Send>, _window: &mut Window, cx: &mut App| {
-                        if let Ok(json) = pulsar_reflection::RUNTIME_TYPE_REGISTRY.serialize_json_for_any(new_val.as_ref()) {
+                        if let Ok(json) = pulsar_reflection::RUNTIME_TYPE_REGISTRY
+                            .serialize_json_for_any(new_val.as_ref())
+                        {
                             panel_for_wb.update(cx, |panel, cx| {
-                                panel.update_prefab_component_property(index, &prop_name_for_wb, json);
+                                panel.update_prefab_component_property(
+                                    index,
+                                    &prop_name_for_wb,
+                                    json,
+                                );
                                 cx.notify();
                             });
                         }
@@ -288,10 +305,7 @@ impl PropertiesRenderer {
                     .p_3()
                     .gap_2()
                     .items_center()
-                    .child(
-                        ui::Icon::new(IconName::Component)
-                            .size(px(16.0)),
-                    )
+                    .child(ui::Icon::new(IconName::Component).size(px(16.0)))
                     .child(
                         div()
                             .text_sm()
@@ -307,9 +321,7 @@ impl PropertiesRenderer {
                         .pb_3()
                         .text_sm()
                         .text_color(cx.theme().warning)
-                        .child(
-                            "This component class is not available in the reflection registry.",
-                        )
+                        .child("This component class is not available in the reflection registry.")
                         .into_any_element()
                 } else {
                     let (mut uncategorized, categorized) = group_rows_by_category(row_data);
@@ -340,598 +352,111 @@ impl PropertiesRenderer {
 
         categorized_rows
             .into_iter()
-            .map(|(category_name, category_rows, category_color_hex, default_collapsed, _)| {
-                let category_key = (component_index, category_name.clone());
+            .map(
+                |(category_name, category_rows, category_color_hex, default_collapsed, _)| {
+                    let category_key = (component_index, category_name.clone());
 
-                let is_collapsed = if panel.prefab_collapsed_categories.contains(&category_key) {
-                    true
-                } else if panel.prefab_expanded_categories.contains(&category_key) {
-                    false
-                } else {
-                    default_collapsed
-                };
+                    let is_collapsed = if panel.prefab_collapsed_categories.contains(&category_key)
+                    {
+                        true
+                    } else if panel.prefab_expanded_categories.contains(&category_key) {
+                        false
+                    } else {
+                        default_collapsed
+                    };
 
-                let toggle_key = category_key.clone();
-                let was_collapsed = is_collapsed;
-                let accent = category_color_hex
-                    .as_deref()
-                    .and_then(crate::features::viewport::coordinates::parse_hex_color);
+                    let toggle_key = category_key.clone();
+                    let was_collapsed = is_collapsed;
+                    let accent = category_color_hex
+                        .as_deref()
+                        .and_then(crate::features::viewport::coordinates::parse_hex_color);
 
-                div()
-                    .w_full()
-                    .pb(px(8.0))
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .items_stretch()
-                            .gap_1p5()
-                            .child(
-                                div()
-                                    .w(px(3.0))
-                                    .rounded_full()
-                                    .flex_shrink_0()
-                                    .when_some(accent, |el, color| el.bg(color.opacity(0.85)))
-                                    .when(accent.is_none(), |el| {
-                                        el.bg(cx.theme().muted.opacity(0.35))
-                                    }),
-                            )
-                            .child(
-                                v_flex()
-                                    .flex_1()
-                                    .gap_1()
-                                    .child(
-                                        h_flex()
-                                            .w_full()
-                                            .items_center()
-                                            .justify_between()
-                                            .cursor_pointer()
-                                            .on_mouse_down(
-                                                MouseButton::Left,
-                                                cx.listener(move |this, _event, _window, cx| {
-                                                    if was_collapsed {
-                                                        this.prefab_collapsed_categories.remove(&toggle_key);
-                                                        this.prefab_expanded_categories
-                                                            .insert(toggle_key.clone());
+                    div()
+                        .w_full()
+                        .pb(px(8.0))
+                        .child(
+                            h_flex()
+                                .w_full()
+                                .items_stretch()
+                                .gap_1p5()
+                                .child(
+                                    div()
+                                        .w(px(3.0))
+                                        .rounded_full()
+                                        .flex_shrink_0()
+                                        .when_some(accent, |el, color| el.bg(color.opacity(0.85)))
+                                        .when(accent.is_none(), |el| {
+                                            el.bg(cx.theme().muted.opacity(0.35))
+                                        }),
+                                )
+                                .child(
+                                    v_flex()
+                                        .flex_1()
+                                        .gap_1()
+                                        .child(
+                                            h_flex()
+                                                .w_full()
+                                                .items_center()
+                                                .justify_between()
+                                                .cursor_pointer()
+                                                .on_mouse_down(
+                                                    MouseButton::Left,
+                                                    cx.listener(
+                                                        move |this, _event, _window, cx| {
+                                                            if was_collapsed {
+                                                                this.prefab_collapsed_categories
+                                                                    .remove(&toggle_key);
+                                                                this.prefab_expanded_categories
+                                                                    .insert(toggle_key.clone());
+                                                            } else {
+                                                                this.prefab_expanded_categories
+                                                                    .remove(&toggle_key);
+                                                                this.prefab_collapsed_categories
+                                                                    .insert(toggle_key.clone());
+                                                            }
+                                                            cx.notify();
+                                                        },
+                                                    ),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .font_weight(FontWeight::SEMIBOLD)
+                                                        .when_some(accent, |el, color| {
+                                                            el.text_color(color)
+                                                        })
+                                                        .when(accent.is_none(), |el| {
+                                                            el.text_color(
+                                                                cx.theme().muted_foreground,
+                                                            )
+                                                        })
+                                                        .child(category_name),
+                                                )
+                                                .child(
+                                                    ui::Icon::new(if is_collapsed {
+                                                        IconName::ChevronRight
                                                     } else {
-                                                        this.prefab_expanded_categories.remove(&toggle_key);
-                                                        this.prefab_collapsed_categories
-                                                            .insert(toggle_key.clone());
-                                                    }
-                                                    cx.notify();
-                                                }),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .font_weight(FontWeight::SEMIBOLD)
-                                                    .when_some(accent, |el, color| el.text_color(color))
+                                                        IconName::ChevronDown
+                                                    })
+                                                    .xsmall()
+                                                    .when_some(accent, |el, color| {
+                                                        el.text_color(color)
+                                                    })
                                                     .when(accent.is_none(), |el| {
                                                         el.text_color(cx.theme().muted_foreground)
-                                                    })
-                                                    .child(category_name),
-                                            )
-                                            .child(
-                                                ui::Icon::new(if is_collapsed {
-                                                    IconName::ChevronRight
-                                                } else {
-                                                    IconName::ChevronDown
-                                                })
-                                                .xsmall()
-                                                .when_some(accent, |el, color| el.text_color(color))
-                                                .when(accent.is_none(), |el| {
-                                                    el.text_color(cx.theme().muted_foreground)
-                                                }),
-                                            ),
-                                    )
-                                    .when(!is_collapsed, |el| el.children(category_rows)),
-                            ),
-                    )
-                    .into_any_element()
-            })
+                                                    }),
+                                                ),
+                                        )
+                                        .when(!is_collapsed, |el| el.children(category_rows)),
+                                ),
+                        )
+                        .into_any_element()
+                },
+            )
             .collect()
     }
 
     // ── Macro details (editable pins) ────────────────────────────────────────
-
-    fn render_macro_details(
-        panel: &mut BlueprintEditorPanel,
-        index: usize,
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) -> AnyElement {
-        let Some(macro_def) = panel.local_macros.get(index).cloned() else {
-            return Self::render_empty_state(cx);
-        };
-        let macro_id = macro_def.id.clone();
-
-        v_flex()
-            .gap_3()
-            .child(Self::render_card(
-                std::iter::once::<AnyElement>(
-                    h_flex()
-                        .w_full()
-                        .p_3()
-                        .gap_3()
-                        .items_center()
-                        .child(
-                            ui::Icon::new(IconName::GitBranch)
-                                .size(px(18.0)),
-                        )
-                        .child(
-                            div()
-                                .text_lg()
-                                .font_bold()
-                                .text_color(cx.theme().foreground)
-                                .child(macro_def.name.clone()),
-                        )
-                        .into_any_element(),
-                )
-                .chain(if !macro_def.description.is_empty() {
-                    Some(
-                        div()
-                            .w_full()
-                            .px_3()
-                            .pb_3()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(macro_def.description.clone()),
-                            )
-                            .into_any_element(),
-                    )
-                } else {
-                    None
-                }),
-                cx,
-            ))
-            .child(Self::render_macro_pin_card(panel, &macro_id, true, window, cx))
-            .child(Self::render_macro_pin_card(panel, &macro_id, false, window, cx))
-            .child(
-                Self::render_card(
-                    [
-                        Self::render_section_header("Macro Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_2p5()
-                            .child(Self::render_info_row("ID", &macro_def.id, cx))
-                            .child(Self::render_info_row(
-                                "Nodes",
-                                &macro_def.graph.nodes.len().to_string(),
-                                cx,
-                            ))
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
-            .into_any_element()
-    }
-
-    fn render_macro_pin_card(
-        panel: &mut BlueprintEditorPanel,
-        macro_id: &str,
-        is_input: bool,
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) -> AnyElement {
-        let Some(macro_def) = panel.local_macros.iter().find(|m| m.id == macro_id).cloned() else {
-            return div().into_any_element();
-        };
-        let pins = if is_input {
-            macro_def.interface.inputs.clone()
-        } else {
-            macro_def.interface.outputs.clone()
-        };
-        let (title, add_label) = if is_input {
-            ("Inputs", "Add Input")
-        } else {
-            ("Outputs", "Add Output")
-        };
-
-        let mid = macro_id.to_string();
-        let on_add = cx.listener(move |this: &mut BlueprintEditorPanel, _: &gpui::ClickEvent, _window, cx| {
-            this.add_macro_pin(&mid, "new_pin".to_string(), "?".to_string(), is_input, cx);
-            cx.notify();
-        });
-
-        Self::render_card(
-            [
-                Self::render_section_header(title, IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
-                v_flex()
-                    .w_full()
-                    .p_3()
-                    .gap_1p5()
-                    .children(pins.iter().enumerate().map(|(pi, pin)| {
-                        Self::render_editable_pin_row(panel, macro_id, pi, pin, is_input, window, cx)
-                    }))
-                    .when(pins.is_empty(), |el| {
-                        el.child(
-                            div()
-                                .text_xs()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(if is_input { "No inputs" } else { "No outputs" }),
-                        )
-                    })
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .pt_1()
-                            .child(
-                                ui::button::Button::new(format!("add-macro-pin-{}-{}", macro_id, is_input))
-                                    .label(add_label)
-                                    .icon(IconName::Plus)
-                                    .ghost()
-                                    .xsmall()
-                                    .on_click(on_add),
-                            ),
-                    )
-                    .into_any_element(),
-            ],
-            cx,
-        )
-        .into_any_element()
-    }
-
-    fn render_editable_pin_row(
-        panel: &mut BlueprintEditorPanel,
-        macro_id: &str,
-        pin_index: usize,
-        pin: &ui::graph::SubGraphPin,
-        is_input: bool,
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) -> AnyElement {
-        use ui::input::TextInput;
-        let name_key = (macro_id.to_string(), pin_index, is_input);
-        let type_key = (macro_id.to_string(), pin_index, is_input);
-
-        if !panel.macro_pin_name_inputs.contains_key(&name_key) {
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Name..."));
-            input.update(cx, |state, cx| {
-                state.set_value(&pin.name, window, cx);
-            });
-            let sub_mid = macro_id.to_string();
-            let sub_pid = pin.id.clone();
-            let sub_input = is_input;
-            cx.subscribe_in(&input, window, move |this: &mut BlueprintEditorPanel, state, event: &InputEvent, _window, cx| {
-                if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
-                    let new_name = state.read(cx).text().to_string().trim().to_string();
-                    if !new_name.is_empty() {
-                        if let Some(m) = this.local_macros.iter_mut().find(|m| m.id == sub_mid) {
-                            let pins = if sub_input { &mut m.interface.inputs } else { &mut m.interface.outputs };
-                            if let Some(p) = pins.iter_mut().find(|p| p.id == sub_pid) {
-                                p.name = new_name;
-                            }
-                        }
-                        this.sync_entry_exit_in_active_graph(&sub_mid, cx);
-                        this.sync_all_macro_instances(&sub_mid, cx);
-                        this.invalidate_palette(cx);
-                        cx.notify();
-                    }
-                }
-            }).detach();
-            panel.macro_pin_name_inputs.insert(name_key.clone(), input);
-        }
-
-        if !panel.macro_pin_type_inputs.contains_key(&type_key) {
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Type..."));
-            input.update(cx, |state, cx| {
-                state.set_value(&pin.data_type.to_string(), window, cx);
-            });
-            let sub_mid = macro_id.to_string();
-            let sub_pid = pin.id.clone();
-            let sub_input = is_input;
-            cx.subscribe_in(&input, window, move |this: &mut BlueprintEditorPanel, state, event: &InputEvent, _window, cx| {
-                if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
-                    let new_type = state.read(cx).text().to_string().trim().to_string();
-                    if !new_type.is_empty() {
-                        if let Some(m) = this.local_macros.iter_mut().find(|m| m.id == sub_mid) {
-                            let pins = if sub_input { &mut m.interface.inputs } else { &mut m.interface.outputs };
-                            if let Some(p) = pins.iter_mut().find(|p| p.id == sub_pid) {
-                                p.data_type = ui::graph::DataType::from_type_str(&new_type);
-                            }
-                        }
-                        this.sync_entry_exit_in_active_graph(&sub_mid, cx);
-                        this.sync_all_macro_instances(&sub_mid, cx);
-                        this.invalidate_palette(cx);
-                        cx.notify();
-                    }
-                }
-            }).detach();
-            panel.macro_pin_type_inputs.insert(type_key.clone(), input);
-        }
-
-        let name_input = panel.macro_pin_name_inputs.get(&name_key).cloned();
-        let type_input = panel.macro_pin_type_inputs.get(&type_key).cloned();
-        let pin_id = pin.id.clone();
-        let mid = macro_id.to_string();
-        let pin_is_input = is_input;
-
-        let on_remove = cx.listener(move |this: &mut BlueprintEditorPanel, _: &gpui::ClickEvent, _window, cx| {
-            this.remove_macro_pin(&mid, &pin_id, pin_is_input, cx);
-            this.macro_pin_name_inputs.remove(&(mid.clone(), pin_index, pin_is_input));
-            this.macro_pin_type_inputs.remove(&(mid.clone(), pin_index, pin_is_input));
-            cx.notify();
-        });
-
-        h_flex()
-            .w_full()
-            .gap_2()
-            .items_center()
-            .child(
-                div().flex_1().child(
-                    name_input.map(|input| TextInput::new(&input).text_xs().into_any_element())
-                        .unwrap_or_else(|| div().into_any_element()),
-                ),
-            )
-            .child(
-                div().w(px(80.0)).child(
-                    type_input.map(|input| TextInput::new(&input).text_xs().font_family("JetBrainsMono-Regular").into_any_element())
-                        .unwrap_or_else(|| div().into_any_element()),
-                ),
-            )
-            .child(
-                ui::button::Button::new(format!("remove-macro-pin-{}-{}-{}", macro_id, pin_index, is_input))
-                    .icon(IconName::Xmark)
-                    .ghost()
-                    .xsmall()
-                    .on_click(on_remove),
-            )
-            .into_any_element()
-    }
-
-    // ── Event details (editable fields) ────────────────────────────────────────
-
-    fn render_event_details(
-        panel: &mut BlueprintEditorPanel,
-        index: usize,
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) -> AnyElement {
-        let Some(event_def) = panel.local_event_defs.get(index).cloned() else {
-            return Self::render_empty_state(cx);
-        };
-        let event_uid = event_def.uid.clone();
-
-        v_flex()
-            .gap_3()
-            .child(Self::render_card(
-                [
-                    h_flex()
-                        .w_full()
-                        .p_3()
-                        .gap_3()
-                        .items_center()
-                        .child(
-                            ui::Icon::new(IconName::Flash)
-                                .size(px(18.0))
-                                .text_color(cx.theme().warning),
-                        )
-                        .child(
-                            div()
-                                .text_lg()
-                                .font_bold()
-                                .text_color(cx.theme().foreground)
-                                .child(event_def.name.clone()),
-                        )
-                        .into_any_element(),
-                    div()
-                        .w_full()
-                        .px_3()
-                        .pb_3()
-                        .child(
-                            div()
-                                .px_2()
-                                .py_1()
-                                .rounded(px(4.0))
-                                .bg(cx.theme().warning.opacity(0.15))
-                                .border_1()
-                                .border_color(cx.theme().warning.opacity(0.3))
-                                .text_xs()
-                                .font_semibold()
-                                .text_color(cx.theme().warning)
-                                .child("Custom Event"),
-                        )
-                        .into_any_element(),
-                ],
-                cx,
-            ))
-            .child(Self::render_event_fields_card(panel, &event_uid, window, cx))
-            .when(!event_def.return_type.is_empty(), |el| {
-                el.child(
-                    Self::render_card(
-                        [
-                            Self::render_section_header("Return Type", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
-                            div()
-                                .w_full()
-                                .p_3()
-                                .text_sm()
-                                .text_color(cx.theme().foreground)
-                                .child(event_def.return_type.clone())
-                                .into_any_element(),
-                        ],
-                        cx,
-                    ),
-                )
-            })
-            .child(
-                Self::render_card(
-                    [
-                        Self::render_section_header("Event Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_2p5()
-                            .child(Self::render_info_row("UID", &event_def.uid, cx))
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
-            .into_any_element()
-    }
-
-    fn render_event_fields_card(
-        panel: &mut BlueprintEditorPanel,
-        event_uid: &str,
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) -> AnyElement {
-        let Some(event_def) = panel.local_event_defs.iter().find(|d| d.uid == event_uid).cloned() else {
-            return div().into_any_element();
-        };
-        let uid = event_uid.to_string();
-
-        let on_add = cx.listener(move |this: &mut BlueprintEditorPanel, _: &gpui::ClickEvent, window, cx| {
-            this.add_event_field(&uid, "new_field".to_string(), "?".to_string());
-            this.sync_all_events(window, cx);
-            cx.notify();
-        });
-
-        Self::render_card(
-            [
-                Self::render_section_header("Fields", IconName::List, cx).px_3().pt_3().into_any_element(),
-                v_flex()
-                    .w_full()
-                    .p_3()
-                    .gap_1p5()
-                    .children(event_def.fields.iter().enumerate().map(|(fi, field)| {
-                        Self::render_editable_field_row(panel, event_uid, fi, field, window, cx)
-                    }))
-                    .when(event_def.fields.is_empty(), |el| {
-                        el.child(
-                            div()
-                                .text_xs()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("No fields"),
-                        )
-                    })
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .pt_1()
-                            .child(
-                                ui::button::Button::new(format!("add-event-field-{}", event_uid))
-                                    .label("Add Field")
-                                    .icon(IconName::Plus)
-                                    .ghost()
-                                    .xsmall()
-                                    .on_click(on_add),
-                            ),
-                    )
-                    .into_any_element(),
-            ],
-            cx,
-        )
-        .into_any_element()
-    }
-
-    fn render_editable_field_row(
-        panel: &mut BlueprintEditorPanel,
-        event_uid: &str,
-        field_index: usize,
-        field: &crate::core::graph::CustomEventField,
-        window: &mut Window,
-        cx: &mut Context<BlueprintEditorPanel>,
-    ) -> AnyElement {
-        use ui::input::TextInput;
-        let name_key = (event_uid.to_string(), field_index);
-        let type_key = (event_uid.to_string(), field_index);
-
-        if !panel.event_field_name_inputs.contains_key(&name_key) {
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Name..."));
-            input.update(cx, |state, cx| {
-                state.set_value(&field.name, window, cx);
-            });
-            let sub_uid = event_uid.to_string();
-            let sub_fi = field_index;
-            cx.subscribe_in(&input, window, move |this: &mut BlueprintEditorPanel, state, event: &InputEvent, window, cx| {
-                if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
-                    let new_name = state.read(cx).text().to_string().trim().to_string();
-                    if !new_name.is_empty() {
-                        if let Some(def) = this.local_event_defs.iter_mut().find(|d| d.uid == sub_uid) {
-                            if let Some(f) = def.fields.get_mut(sub_fi) {
-                                f.name = new_name;
-                            }
-                        }
-                        this.sync_all_events(window, cx);
-                        cx.notify();
-                    }
-                }
-            }).detach();
-            panel.event_field_name_inputs.insert(name_key.clone(), input);
-        }
-
-        if !panel.event_field_type_inputs.contains_key(&type_key) {
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Type..."));
-            input.update(cx, |state, cx| {
-                state.set_value(&field.type_name, window, cx);
-            });
-            let sub_uid = event_uid.to_string();
-            let sub_fi = field_index;
-            cx.subscribe_in(&input, window, move |this: &mut BlueprintEditorPanel, state, event: &InputEvent, window, cx| {
-                if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. }) {
-                    let new_type = state.read(cx).text().to_string().trim().to_string();
-                    if !new_type.is_empty() {
-                        if let Some(def) = this.local_event_defs.iter_mut().find(|d| d.uid == sub_uid) {
-                            if let Some(f) = def.fields.get_mut(sub_fi) {
-                                f.type_name = new_type;
-                            }
-                        }
-                        this.sync_all_events(window, cx);
-                        cx.notify();
-                    }
-                }
-            }).detach();
-            panel.event_field_type_inputs.insert(type_key.clone(), input);
-        }
-
-        let name_input = panel.event_field_name_inputs.get(&name_key).cloned();
-        let type_input = panel.event_field_type_inputs.get(&type_key).cloned();
-        let uid = event_uid.to_string();
-
-        let on_remove = cx.listener(move |this: &mut BlueprintEditorPanel, _: &gpui::ClickEvent, window, cx| {
-            let field_name = this.local_event_defs.iter()
-                .find(|d| d.uid == uid)
-                .and_then(|d| d.fields.get(field_index))
-                .map(|f| f.name.clone())
-                .unwrap_or_default();
-            this.remove_event_field(&uid, &field_name);
-            this.sync_all_events(window, cx);
-            this.event_field_name_inputs.remove(&(uid.clone(), field_index));
-            this.event_field_type_inputs.remove(&(uid.clone(), field_index));
-            cx.notify();
-        });
-
-        h_flex()
-            .w_full()
-            .gap_2()
-            .items_center()
-            .child(
-                div().flex_1().child(
-                    name_input.map(|input| TextInput::new(&input).text_xs().into_any_element())
-                        .unwrap_or_else(|| div().into_any_element()),
-                ),
-            )
-            .child(
-                div().w(px(80.0)).child(
-                    type_input.map(|input| TextInput::new(&input).text_xs().font_family("JetBrainsMono-Regular").into_any_element())
-                        .unwrap_or_else(|| div().into_any_element()),
-                ),
-            )
-            .child(
-                ui::button::Button::new(format!("remove-event-field-{}-{}", event_uid, field_index))
-                    .icon(IconName::Xmark)
-                    .ghost()
-                    .xsmall()
-                    .on_click(on_remove),
-            )
-            .into_any_element()
-    }
-
-    // ── Variable details ─────────────────────────────────────────────────────
 
     fn render_variable_details(
         panel: &BlueprintEditorPanel,
@@ -974,7 +499,6 @@ impl PropertiesRenderer {
                                 .px_2()
                                 .py_1()
                                 .rounded(px(4.0))
-                                
                                 .bg(cx.theme().info.opacity(0.15))
                                 .border_1()
                                 .border_color(cx.theme().info.opacity(0.3))
@@ -988,27 +512,26 @@ impl PropertiesRenderer {
                 cx,
             ))
             // Variable Info card
-            .child(
-                Self::render_card(
-                    [
-                        Self::render_section_header("Variable Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_2p5()
-                            .child(Self::render_info_row("Type", &var.var_type, cx))
-                            .child(
-                                Self::render_info_row(
-                                    "Default Value",
-                                    &var.default_value.clone().unwrap_or_else(|| "—".to_string()),
-                                    cx,
-                                ),
-                            )
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
+            .child(Self::render_card(
+                [
+                    Self::render_section_header("Variable Info", IconName::Info, cx)
+                        .px_3()
+                        .pt_3()
+                        .into_any_element(),
+                    v_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_2p5()
+                        .child(Self::render_info_row("Type", &var.var_type, cx))
+                        .child(Self::render_info_row(
+                            "Default Value",
+                            &var.default_value.clone().unwrap_or_else(|| "—".to_string()),
+                            cx,
+                        ))
+                        .into_any_element(),
+                ],
+                cx,
+            ))
             .into_any_element()
     }
 
@@ -1019,53 +542,55 @@ impl PropertiesRenderer {
         v_flex()
             .gap_3()
             // Title card
-            .child(
-                Self::render_card(
-                    [
-                        h_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_3()
-                            .items_center()
-                            .child(div().text_2xl().child(selected_node.icon.clone()))
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_bold()
-                                    .text_color(cx.theme().foreground)
-                                    .child(selected_node.title.clone()),
-                            )
-                            .into_any_element(),
-                        div()
-                            .w_full()
-                            .px_3()
-                            .pb_3()
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(px(4.0))
-                                    
-                                    .bg(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.15))
-                                    .border_1()
-                                    .border_color(
-                                        Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.3),
-                                    )
-                                    .text_xs()
-                                    .font_semibold()
-                                    .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
-                                    .child(format!("{:?} Node", selected_node.node_type)),
-                            )
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
+            .child(Self::render_card(
+                [
+                    h_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_3()
+                        .items_center()
+                        .child(div().text_2xl().child(selected_node.icon.clone()))
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_bold()
+                                .text_color(cx.theme().foreground)
+                                .child(selected_node.title.clone()),
+                        )
+                        .into_any_element(),
+                    div()
+                        .w_full()
+                        .px_3()
+                        .pb_3()
+                        .child(
+                            div()
+                                .px_2()
+                                .py_1()
+                                .rounded(px(4.0))
+                                .bg(Self::get_node_type_color(&selected_node.node_type, cx)
+                                    .opacity(0.15))
+                                .border_1()
+                                .border_color(
+                                    Self::get_node_type_color(&selected_node.node_type, cx)
+                                        .opacity(0.3),
+                                )
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
+                                .child(format!("{:?} Node", selected_node.node_type)),
+                        )
+                        .into_any_element(),
+                ],
+                cx,
+            ))
             // Inputs card
             .when(!selected_node.inputs.is_empty(), |el| {
                 el.child(Self::render_card(
                     [
-                        Self::render_section_header("Inputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
+                        Self::render_section_header("Inputs", IconName::ArrowRight, cx)
+                            .px_3()
+                            .pt_3()
+                            .into_any_element(),
                         v_flex()
                             .w_full()
                             .p_3()
@@ -1080,7 +605,10 @@ impl PropertiesRenderer {
             .when(!selected_node.outputs.is_empty(), |el| {
                 el.child(Self::render_card(
                     [
-                        Self::render_section_header("Outputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
+                        Self::render_section_header("Outputs", IconName::ArrowRight, cx)
+                            .px_3()
+                            .pt_3()
+                            .into_any_element(),
                         v_flex()
                             .w_full()
                             .p_3()
@@ -1095,7 +623,10 @@ impl PropertiesRenderer {
             .when(!selected_node.properties.is_empty(), |el| {
                 el.child(Self::render_card(
                     [
-                        Self::render_section_header("Properties", IconName::Settings, cx).px_3().pt_3().into_any_element(),
+                        Self::render_section_header("Properties", IconName::Settings, cx)
+                            .px_3()
+                            .pt_3()
+                            .into_any_element(),
                         v_flex()
                             .w_full()
                             .p_3()
@@ -1107,20 +638,21 @@ impl PropertiesRenderer {
                 ))
             })
             // Node Info card
-            .child(
-                Self::render_card(
-                    [
-                        Self::render_section_header("Node Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_2p5()
-                            .child(Self::render_node_info(selected_node, cx))
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
+            .child(Self::render_card(
+                [
+                    Self::render_section_header("Node Info", IconName::Info, cx)
+                        .px_3()
+                        .pt_3()
+                        .into_any_element(),
+                    v_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_2p5()
+                        .child(Self::render_node_info(selected_node, cx))
+                        .into_any_element(),
+                ],
+                cx,
+            ))
             .into_any_element()
     }
 
@@ -1133,7 +665,12 @@ impl PropertiesRenderer {
         let Some(selected_node_id) = selected_node_id else {
             return Self::render_empty_state(cx);
         };
-        let Some(selected_node) = canvas.graph.nodes.iter().find(|n| n.id == selected_node_id).cloned()
+        let Some(selected_node) = canvas
+            .graph
+            .nodes
+            .iter()
+            .find(|n| n.id == selected_node_id)
+            .cloned()
         else {
             return Self::render_empty_state(cx);
         };
@@ -1143,59 +680,65 @@ impl PropertiesRenderer {
         v_flex()
             .gap_3()
             // Title card
-            .child(
-                Self::render_card(
-                    [
-                        h_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_3()
-                            .items_center()
-                            .child(div().text_2xl().child(selected_node.icon.clone()))
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_bold()
-                                    .text_color(cx.theme().foreground)
-                                    .child(selected_node.title.clone()),
-                            )
-                            .into_any_element(),
-                        div()
-                            .w_full()
-                            .px_3()
-                            .pb_3()
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(px(4.0))
-                                    
-                                    .bg(Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.15))
-                                    .border_1()
-                                    .border_color(
-                                        Self::get_node_type_color(&selected_node.node_type, cx).opacity(0.3),
-                                    )
-                                    .text_xs()
-                                    .font_semibold()
-                                    .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
-                                    .child(format!("{:?} Node", selected_node.node_type)),
-                            )
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
+            .child(Self::render_card(
+                [
+                    h_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_3()
+                        .items_center()
+                        .child(div().text_2xl().child(selected_node.icon.clone()))
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_bold()
+                                .text_color(cx.theme().foreground)
+                                .child(selected_node.title.clone()),
+                        )
+                        .into_any_element(),
+                    div()
+                        .w_full()
+                        .px_3()
+                        .pb_3()
+                        .child(
+                            div()
+                                .px_2()
+                                .py_1()
+                                .rounded(px(4.0))
+                                .bg(Self::get_node_type_color(&selected_node.node_type, cx)
+                                    .opacity(0.15))
+                                .border_1()
+                                .border_color(
+                                    Self::get_node_type_color(&selected_node.node_type, cx)
+                                        .opacity(0.3),
+                                )
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
+                                .child(format!("{:?} Node", selected_node.node_type)),
+                        )
+                        .into_any_element(),
+                ],
+                cx,
+            ))
             // Inputs card
             .when(!selected_node.inputs.is_empty(), |el| {
                 el.child(Self::render_card(
                     [
-                        Self::render_section_header("Inputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
+                        Self::render_section_header("Inputs", IconName::ArrowRight, cx)
+                            .px_3()
+                            .pt_3()
+                            .into_any_element(),
                         v_flex()
                             .w_full()
                             .p_3()
                             .gap_1p5()
                             .child(Self::render_pin_editors(
-                                canvas, &canvas_entity, &selected_node, window, cx,
+                                canvas,
+                                &canvas_entity,
+                                &selected_node,
+                                window,
+                                cx,
                             ))
                             .into_any_element(),
                     ],
@@ -1206,7 +749,10 @@ impl PropertiesRenderer {
             .when(!selected_node.outputs.is_empty(), |el| {
                 el.child(Self::render_card(
                     [
-                        Self::render_section_header("Outputs", IconName::ArrowRight, cx).px_3().pt_3().into_any_element(),
+                        Self::render_section_header("Outputs", IconName::ArrowRight, cx)
+                            .px_3()
+                            .pt_3()
+                            .into_any_element(),
                         v_flex()
                             .w_full()
                             .p_3()
@@ -1221,7 +767,10 @@ impl PropertiesRenderer {
             .when(!selected_node.properties.is_empty(), |el| {
                 el.child(Self::render_card(
                     [
-                        Self::render_section_header("Properties", IconName::Settings, cx).px_3().pt_3().into_any_element(),
+                        Self::render_section_header("Properties", IconName::Settings, cx)
+                            .px_3()
+                            .pt_3()
+                            .into_any_element(),
                         v_flex()
                             .w_full()
                             .p_3()
@@ -1233,27 +782,28 @@ impl PropertiesRenderer {
                 ))
             })
             // Node Info card
-            .child(
-                Self::render_card(
-                    [
-                        Self::render_section_header("Node Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_2p5()
-                            .child(Self::render_node_info(&selected_node, cx))
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
+            .child(Self::render_card(
+                [
+                    Self::render_section_header("Node Info", IconName::Info, cx)
+                        .px_3()
+                        .pt_3()
+                        .into_any_element(),
+                    v_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_2p5()
+                        .child(Self::render_node_info(&selected_node, cx))
+                        .into_any_element(),
+                ],
+                cx,
+            ))
             .into_any_element()
     }
 
     fn render_comment_properties(
         panel: &BlueprintEditorPanel,
         comment: &BlueprintComment,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
         let active_canvas = panel.active_canvas().cloned();
@@ -1264,554 +814,181 @@ impl PropertiesRenderer {
         if let Some(canvas) = active_canvas {
             let canvas_state = canvas.read(cx);
             comment_text_input = Some(canvas_state.comment_text_input.clone());
-            if let Some(selected) = canvas_state.graph.comments.iter().find(|c| c.id == comment.id) {
+            if let Some(selected) = canvas_state
+                .graph
+                .comments
+                .iter()
+                .find(|c| c.id == comment.id)
+            {
                 comment_color = selected.color;
                 color_picker = selected.color_picker_state.clone();
+            }
+        }
+
+        // Keep the picker controls initialized from the selected comment.
+        if let Some(picker) = color_picker.as_ref() {
+            if picker.read(cx).value() != Some(comment_color) {
+                picker.update(cx, |picker, cx| picker.set_value(comment_color, window, cx));
             }
         }
 
         v_flex()
             .gap_3()
             // Title card
-            .child(
-                Self::render_card(
-                    [
-                        h_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_3()
-                            .items_center()
-                            .child(
-                                ui::Icon::new(IconName::Info)
-                                    .size(px(18.0))
-                                    .text_color(cx.theme().info),
-                            )
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_bold()
-                                    .text_color(cx.theme().foreground)
-                                    .child(comment.text.clone()),
-                            )
-                            .into_any_element(),
-                        div()
-                            .w_full()
-                            .px_3()
-                            .pb_3()
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded(px(4.0))
-                                    
-                                    .bg(comment_color.opacity(0.15))
-                                    .border_1()
-                                    .border_color(comment_color.opacity(0.3))
-                                    .text_xs()
-                                    .font_semibold()
-                                    .text_color(comment_color)
-                                    .child("Comment"),
-                            )
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
+            .child(Self::render_card(
+                [
+                    h_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_3()
+                        .items_center()
+                        .child(
+                            ui::Icon::new(IconName::Info)
+                                .size(px(18.0))
+                                .text_color(cx.theme().info),
+                        )
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_bold()
+                                .text_color(cx.theme().foreground)
+                                .child(comment.text.clone()),
+                        )
+                        .into_any_element(),
+                    div()
+                        .w_full()
+                        .px_3()
+                        .pb_3()
+                        .child(
+                            div()
+                                .px_2()
+                                .py_1()
+                                .rounded(px(4.0))
+                                .bg(comment_color.opacity(0.15))
+                                .border_1()
+                                .border_color(comment_color.opacity(0.3))
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(comment_color)
+                                .child("Comment"),
+                        )
+                        .into_any_element(),
+                ],
+                cx,
+            ))
             // Comment Properties card
-            .child(
-                Self::render_card(
-                    [
-                        Self::render_section_header("Comment Properties", IconName::Settings, cx).px_3().pt_3().into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_3()
-                            .child(
-                                v_flex()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .font_semibold()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child("Name"),
-                                    )
-                                    .child(
-                                        comment_text_input
-                                            .map(|input| div().w_full().child(input).into_any_element())
-                                            .unwrap_or_else(|| {
-                                                div()
-                                                    .w_full()
-                                                    .text_sm()
-                                                    .text_color(cx.theme().muted_foreground)
-                                                    .child("No comment editor available")
-                                                    .into_any_element()
-                                            }),
-                                    ),
-                            )
-                            .child(
-                                v_flex()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .font_semibold()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .child("Color"),
-                                    )
-                                    .child(
-                                        h_flex()
-                                            .items_center()
-                                            .gap_2()
-                                            .child(
-                                                div()
-                                                    .w(px(24.0))
-                                                    .h(px(24.0))
-                                                    .rounded(px(4.0))
-                                                    .border_1()
-                                                    .border_color(cx.theme().border)
-                                                    .bg(comment_color)
-                                                    .into_any_element(),
-                                            )
-                                            .child(color_picker.map(|picker| {
-                                                div().w_full().child(picker).into_any_element()
-                                            }).unwrap_or_else(|| {
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(cx.theme().muted_foreground)
-                                                    .child("Color picker unavailable")
-                                                    .into_any_element()
-                                            })),
-                                    ),
-                            )
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
+            .child(Self::render_card(
+                [
+                    Self::render_section_header("Comment Properties", IconName::Settings, cx)
+                        .px_3()
+                        .pt_3()
+                        .into_any_element(),
+                    v_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_3()
+                        .child(
+                            v_flex()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_semibold()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("Name"),
+                                )
+                                .child(
+                                    comment_text_input
+                                        .map(|input| div().w_full().child(input).into_any_element())
+                                        .unwrap_or_else(|| {
+                                            div()
+                                                .w_full()
+                                                .text_sm()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child("No comment editor available")
+                                                .into_any_element()
+                                        }),
+                                ),
+                        )
+                        .child(
+                            v_flex()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_semibold()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child("Color"),
+                                )
+                                .child(
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .w(px(24.0))
+                                                .h(px(24.0))
+                                                .rounded(px(4.0))
+                                                .border_1()
+                                                .border_color(cx.theme().border)
+                                                .bg(comment_color)
+                                                .into_any_element(),
+                                        )
+                                        .child(
+                                            color_picker
+                                                .map(|picker| {
+                                                    div()
+                                                        .w_full()
+                                                        .child(ui::color_picker::ColorPicker::new(
+                                                            &picker,
+                                                        ))
+                                                        .into_any_element()
+                                                })
+                                                .unwrap_or_else(|| {
+                                                    div()
+                                                        .text_xs()
+                                                        .text_color(cx.theme().muted_foreground)
+                                                        .child("Color picker unavailable")
+                                                        .into_any_element()
+                                                }),
+                                        ),
+                                ),
+                        )
+                        .into_any_element(),
+                ],
+                cx,
+            ))
             // Comment Info card
-            .child(
-                Self::render_card(
-                    [
-                        Self::render_section_header("Comment Info", IconName::Info, cx).px_3().pt_3().into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_2p5()
-                            .child(Self::render_info_row("Comment ID", &comment.id, cx))
-                            .child(Self::render_info_row(
-                                "Position",
-                                &format!("({:.0}, {:.0})", comment.position.x, comment.position.y),
-                                cx,
-                            ))
-                            .child(Self::render_info_row(
-                                "Size",
-                                &format!("{:.0} × {:.0} px", comment.size.width, comment.size.height),
-                                cx,
-                            ))
-                            .child(Self::render_info_row(
-                                "Contained Nodes",
-                                &comment.contained_node_ids.len().to_string(),
-                                cx,
-                            ))
-                            .into_any_element(),
-                    ],
-                    cx,
-                ),
-            )
-            .into_any_element()
-    }
-
-    fn render_multi_selection_state<T>(
-        node_count: usize,
-        comment_count: usize,
-        cx: &mut Context<T>,
-    ) -> AnyElement {
-        let summary = match (node_count, comment_count) {
-            (n, 0) => format!("{} nodes selected", n),
-            (0, c) => format!("{} comments selected", c),
-            (n, c) => format!("{} nodes, {} comments selected", n, c),
-        };
-        v_flex()
-            .size_full()
-            .items_center()
-            .justify_center()
-            .gap_2()
-            .child(
-                ui::Icon::new(IconName::Copy)
-                    .size(px(20.0))
-                    .text_color(cx.theme().muted_foreground.opacity(0.5)),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(summary),
-            )
-            .into_any_element()
-    }
-
-    /// Card container matching the level-editor properties panel style.
-    fn render_card<T>(children: impl IntoIterator<Item: IntoElement>, cx: &mut Context<T>) -> impl IntoElement {
-        v_flex()
-            .w_full()
-            .bg(cx.theme().sidebar)
-            .rounded(px(8.0))
-            .border_1()
-            .border_color(cx.theme().border)
-            .overflow_hidden()
-            .children(children)
-    }
-
-    fn render_section_header<T>(
-        title: &str,
-        _icon: IconName,
-        cx: &mut Context<T>,
-    ) -> Div {
-        h_flex().items_center().gap_2().child(
-            div()
-                .text_xs()
-                .font_bold()
-                .text_color(cx.theme().muted_foreground)
-                .child(title.to_uppercase()),
-        )
-    }
-
-    fn render_separator<T>(cx: &mut Context<T>) -> impl IntoElement {
-        div().w_full().h_px().bg(cx.theme().border.opacity(0.3))
-    }
-
-    fn get_node_type_color<T>(
-        node_type: &NodeType,
-        cx: &mut Context<T>,
-    ) -> gpui::Hsla {
-        match node_type {
-            NodeType::Event => cx.theme().danger,
-            NodeType::Logic => cx.theme().primary,
-            NodeType::Math => cx.theme().success,
-            NodeType::Object => cx.theme().warning,
-            NodeType::Reroute => cx.theme().accent,
-            NodeType::MacroEntry => gpui::Hsla {
-                h: 0.75,
-                s: 0.7,
-                l: 0.6,
-                a: 1.0,
-            },
-            NodeType::MacroExit => gpui::Hsla {
-                h: 0.75,
-                s: 0.7,
-                l: 0.6,
-                a: 1.0,
-            },
-            NodeType::MacroInstance => gpui::Hsla {
-                h: 0.75,
-                s: 0.5,
-                l: 0.5,
-                a: 1.0,
-            },
-            NodeType::CustomEvent => gpui::Hsla {
-                h: 0.08,
-                s: 0.8,
-                l: 0.5,
-                a: 1.0,
-            },
-            NodeType::CustomEventDispatch => gpui::Hsla {
-                h: 0.55,
-                s: 0.8,
-                l: 0.5,
-                a: 1.0,
-            },
-        }
-    }
-
-    /// Compact, centered placeholder shown when there's nothing to inspect —
-    /// matches the empty-details state of professional editors (Unreal/Unity).
-    fn render_empty_state<T>(cx: &mut Context<T>) -> AnyElement {
-        v_flex()
-            .size_full()
-            .items_center()
-            .justify_center()
-            .gap_2()
-            .child(
-                ui::Icon::new(IconName::Component)
-                    .size(px(20.0))
-                    .text_color(cx.theme().muted_foreground.opacity(0.5)),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("Select a node to view its properties"),
-            )
-            .into_any_element()
-    }
-
-    /// Render a pin list section — type display (badge color, resolved name)
-    /// is sourced entirely from `PinDataType`/`RuntimeTypeInfo`, the same
-    /// canonical reflection-backed lookup the graph view uses for pin colors,
-    /// so the panel and graph always agree visually.
-    fn render_pin_list<T>(
-        pins: &[Pin],
-        cx: &mut Context<T>,
-    ) -> impl IntoElement {
-        v_flex()
-            .gap_1p5()
-            .children(pins.iter().map(|pin| Self::render_pin_row(pin, cx)))
-    }
-
-    fn render_pin_editors(
-        canvas: &mut GraphCanvasPanel,
-        canvas_entity: &Entity<GraphCanvasPanel>,
-        node: &BlueprintNode,
-        window: &mut Window,
-        cx: &mut Context<GraphCanvasPanel>,
-    ) -> impl IntoElement {
-        v_flex()
-            .gap_1p5()
-            .children(node.inputs.iter().map(|pin| {
-                Self::render_input_pin_row(canvas, canvas_entity, node, pin, window, cx)
-            }))
-    }
-
-    fn render_input_pin_row(
-        canvas: &mut GraphCanvasPanel,
-        canvas_entity: &Entity<GraphCanvasPanel>,
-        node: &BlueprintNode,
-        pin: &Pin,
-        window: &mut Window,
-        cx: &mut Context<GraphCanvasPanel>,
-    ) -> AnyElement {
-        let row = Self::render_pin_row(pin, cx);
-        if is_pin_connected(&node.id, &pin.id, true, &canvas.graph) {
-            return row.into_any_element();
-        }
-
-        let Some(type_info) = pin.data_type.runtime_type() else {
-            return row.into_any_element();
-        };
-
-        let state_key = format!("{}#{}", node.id, pin.id);
-        let current_json = Self::read_pin_property_value(node, &pin.id);
-        let current_any: Box<dyn Any> = if current_json.is_null() {
-            Box::new(())
-        } else {
-            pulsar_reflection::RUNTIME_TYPE_REGISTRY
-                .deserialize_json_for_type(type_info, current_json.clone())
-                .unwrap_or_else(|_| Box::new(()))
-        };
-
-        let canvas_for_wb = canvas_entity.clone();
-        let node_id_for_wb = node.id.clone();
-        let pin_id_for_wb = pin.id.clone();
-        let write_back = Arc::new(
-            move |new_val: Box<dyn Any + Send>, _window: &mut Window, cx: &mut App| {
-                if let Ok(json) = pulsar_reflection::RUNTIME_TYPE_REGISTRY.serialize_json_for_any(new_val.as_ref()) {
-                    canvas_for_wb.update(cx, |canvas, cx| {
-                        canvas.update_node_input_property(&node_id_for_wb, &pin_id_for_wb, json, cx);
-                    });
-                }
-            },
-        );
-
-        let editor = ui_common::render_property_row_runtime(
-            &mut canvas.pin_property_state,
-            "node-input",
-            &state_key,
-            &Self::format_property_name(&pin.name),
-            &pin.id,
-            &pin.name,
-            type_info,
-            current_any.as_ref(),
-            write_back,
-            window,
-            cx,
-        );
-
-        v_flex()
-            .gap_1p5()
-            .child(row)
-            .child(editor)
-            .into_any_element()
-    }
-
-    fn read_pin_property_value(node: &BlueprintNode, pin_id: &str) -> serde_json::Value {
-        let Some(raw_value) = node.properties.get(pin_id) else {
-            return serde_json::Value::Null;
-        };
-
-        serde_json::from_str(raw_value)
-            .unwrap_or_else(|_| serde_json::Value::String(raw_value.clone()))
-    }
-
-    fn render_pin_row<T>(pin: &Pin, cx: &mut Context<T>) -> impl IntoElement {
-        let badge_color: gpui::Hsla = rgba_to_hsla(pin.data_type.display_color()).into();
-
-        let type_label = if pin.data_type.is_execution() {
-            "Execution".to_string()
-        } else if pin.data_type.is_wildcard() {
-            "Wildcard".to_string()
-        } else {
-            pin.data_type.type_name.clone()
-        };
-
-        h_flex()
-            .w_full()
-            .justify_between()
-            .items_center()
-            .px_3()
-            .py_2()
-            .rounded(px(4.0))
-            .hover(|style| style.bg(cx.theme().muted.opacity(0.1)))
-            .child(
-                h_flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        div()
-                            .size(px(8.0))
-                            .rounded_full()
-                            .bg(badge_color),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .font_medium()
-                            .text_color(cx.theme().foreground)
-                            .child(if pin.name.is_empty() {
-                                "(unnamed)".to_string()
-                            } else {
-                                pin.name.clone()
-                            }),
-                    ),
-            )
-            .child(
-                div()
-                    .px_2()
-                    .py_1()
-                    .rounded(px(4.0))
-                    .bg(badge_color.opacity(0.15))
-                    .border_1()
-                    .border_color(badge_color.opacity(0.4))
-                    .text_xs()
-                    .font_family("JetBrainsMono-Regular")
-                    .text_color(badge_color)
-                    .child(type_label),
-            )
-    }
-
-    fn render_node_properties<T>(
-        node: &BlueprintNode,
-        cx: &mut Context<T>,
-    ) -> impl IntoElement {
-        v_flex().gap_3().children(
-            node.properties
-                .iter()
-                .map(|(key, value)| Self::render_property_field(key, value, cx)),
-        )
-    }
-
-    fn render_property_field<T>(
-        key: &str,
-        value: &str,
-        cx: &mut Context<T>,
-    ) -> impl IntoElement {
-        h_flex()
-            .w_full()
-            .gap_2()
-            .items_center()
-            .child(
-                div()
-                    .w(px(80.0))
-                    .flex_shrink_0()
-                    .text_xs()
-                    .font_medium()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(Self::format_property_name(key)),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .px_2()
-                    .py_1p5()
-                    .bg(cx.theme().input)
-                    .border_1()
-                    .border_color(cx.theme().border.opacity(0.6))
-                    .rounded(px(4.0))
-                    .text_xs()
-                    .text_color(cx.theme().foreground)
-                    .child(value.to_string())
-                    .cursor_pointer()
-                    .hover(|style| {
-                        style.border_color(cx.theme().accent.opacity(0.5))
-                    }),
-            )
-    }
-
-    fn render_node_info<T>(
-        node: &BlueprintNode,
-        cx: &mut Context<T>,
-    ) -> impl IntoElement {
-        v_flex()
-            .gap_2p5()
-            .child(Self::render_info_row("Node ID", &node.id, cx))
-            .child(Self::render_info_row(
-                "Position",
-                &format!("({:.0}, {:.0})", node.position.x, node.position.y),
+            .child(Self::render_card(
+                [
+                    Self::render_section_header("Comment Info", IconName::Info, cx)
+                        .px_3()
+                        .pt_3()
+                        .into_any_element(),
+                    v_flex()
+                        .w_full()
+                        .p_3()
+                        .gap_2p5()
+                        .child(Self::render_info_row("Comment ID", &comment.id, cx))
+                        .child(Self::render_info_row(
+                            "Position",
+                            &format!("({:.0}, {:.0})", comment.position.x, comment.position.y),
+                            cx,
+                        ))
+                        .child(Self::render_info_row(
+                            "Size",
+                            &format!("{:.0} × {:.0} px", comment.size.width, comment.size.height),
+                            cx,
+                        ))
+                        .child(Self::render_info_row(
+                            "Contained Nodes",
+                            &comment.contained_node_ids.len().to_string(),
+                            cx,
+                        ))
+                        .into_any_element(),
+                ],
                 cx,
             ))
-            .child(Self::render_info_row(
-                "Size",
-                &format!("{:.0} × {:.0} px", node.size.width, node.size.height),
-                cx,
-            ))
+            .into_any_element()
     }
-
-    fn render_info_row<T>(
-        label: &str,
-        value: &str,
-        cx: &mut Context<T>,
-    ) -> impl IntoElement {
-        h_flex()
-            .w_full()
-            .gap_2()
-            .items_center()
-            .child(
-                div()
-                    .w(px(80.0))
-                    .flex_shrink_0()
-                    .text_xs()
-                    .font_medium()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(label.to_string()),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .px_2()
-                    .py_1p5()
-                    .bg(cx.theme().input)
-                    .border_1()
-                    .border_color(cx.theme().border.opacity(0.6))
-                    .rounded(px(4.0))
-                    .text_xs()
-                    .font_family("JetBrainsMono-Regular")
-                    .text_color(cx.theme().foreground)
-                    .child(value.to_string()),
-            )
-    }
-
-    fn format_property_name(key: &str) -> String {
-        // Convert snake_case to Title Case
-        key.split('_')
-            .map(|word| {
-                let mut chars = word.chars();
-                match chars.next() {
-                    None => String::new(),
-                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                }
-            })
-            .collect::<Vec<String>>()
-            .join(" ")
-    }
-
 }

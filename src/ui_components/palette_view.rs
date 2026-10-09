@@ -19,15 +19,15 @@ use ui::{
     v_flex, v_virtual_list, ActiveTheme, Icon, IconName, VirtualListScrollHandle,
 };
 
+use crate::core::definitions::PinDefinition;
 use crate::core::definitions::{NodeDefinition, NodeDefinitions};
 use crate::core::types::{BlueprintNode, PinType};
-use crate::core::definitions::PinDefinition;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::rendering::graph::NodeGraphRenderer;
 use crate::ui_components::node_library::{
-    build_item_sizes, build_palette_items, count_nodes, filter_compatible_palette_items,
-    filter_palette_items, PaletteItem, CATEGORY_HEADER_H, NODE_ENTRY_H,
+    build_item_sizes, build_palette_items, filter_compatible_palette_items, matching_node_count,
+    visible_items, PaletteItem, CATEGORY_HEADER_H, NODE_ENTRY_H,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,6 +54,9 @@ pub struct NodePaletteView {
     scrollbar_state: ScrollbarState,
     /// Tracks whether component nodes have been loaded
     component_nodes_loaded: bool,
+    /// Categories the user opened by hand. They show every node, even while a
+    /// search is narrowing the others to their matches.
+    expanded: std::collections::HashSet<String>,
 }
 
 impl NodePaletteView {
@@ -95,6 +98,7 @@ impl NodePaletteView {
             scroll_handle: VirtualListScrollHandle::new(),
             scrollbar_state: ScrollbarState::default(),
             component_nodes_loaded: false,
+            expanded: Default::default(),
         }
     }
 
@@ -104,7 +108,9 @@ impl NodePaletteView {
         if let Some(weak) = &self.canvas {
             return weak.upgrade();
         }
-        self.editor.upgrade().and_then(|e| e.read(cx).active_canvas().cloned())
+        self.editor
+            .upgrade()
+            .and_then(|e| e.read(cx).active_canvas().cloned())
     }
 
     /// Rebuild the palette items (called when prefab or macros change).
@@ -122,13 +128,12 @@ impl NodePaletteView {
             // (prevents a macro from containing itself).
             let editing_macro_id = editor_ref.current_editing_macro_id().map(str::to_owned);
             let local_macro_items =
-                build_local_macro_palette_items(&editor_ref.local_macros, editing_macro_id.as_deref());
+                build_local_macro_palette_items(&editor_ref.subgraphs, editing_macro_id.as_deref());
             all_items.extend(local_macro_items);
 
             // Custom event Dispatch nodes — from panel event defs
-            let dispatch_items = build_custom_event_dispatch_palette_items_from_panel(
-                &editor_ref.local_event_defs,
-            );
+            let dispatch_items =
+                build_custom_event_dispatch_palette_items_from_panel(&editor_ref.local_event_defs);
             all_items.extend(dispatch_items);
 
             // Engine events (#924): On / Send / Broadcast nodes for the
@@ -139,7 +144,8 @@ impl NodePaletteView {
                 .as_deref()
                 .and_then(crate::features::class_dirs::class_name_of)
                 .unwrap_or_else(|| "unnamed_blueprint".to_owned());
-            let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> = Default::default();
+            let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> =
+                Default::default();
             for (category, def) in crate::features::events::engine_events::event_node_definitions(
                 class_path.as_deref(),
                 &class_name,
@@ -148,13 +154,45 @@ impl NodePaletteView {
                 by_category.entry(category).or_default().push(def);
             }
             for (category, defs) in by_category {
-                all_items.push(PaletteItem::CategoryHeader {
-                    name: category,
-                    color: "#C0392B".to_string(),
-                    node_count: defs.len(),
-                });
+                all_items.push(PaletteItem::category(
+                    category,
+                    "#C0392B".to_string(),
+                    defs.len(),
+                ));
                 for def in defs {
-                    all_items.push(PaletteItem::NodeEntry { def, category_color: "#C0392B".to_string() });
+                    all_items.push(PaletteItem::NodeEntry {
+                        def,
+                        category_color: "#C0392B".to_string(),
+                    });
+                }
+            }
+
+            // Use the host's snapshot rather than this editor DLL's local
+            // inventory, which can differ from the registrations in the host.
+            // The typed EventDecl preserves structured payload pins hidden by
+            // Gamma's opaque byte descriptor.
+            if let Some(catalog) = cx.try_global::<plugin_editor_api::ComponentEventCatalog>() {
+                let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> =
+                    Default::default();
+                for (category, def) in
+                    crate::features::events::engine_events::component_event_node_definitions(
+                        &catalog.events,
+                    )
+                {
+                    by_category.entry(category).or_default().push(def);
+                }
+                for (category, defs) in by_category {
+                    all_items.push(PaletteItem::category(
+                        category,
+                        "#C0392B".to_string(),
+                        defs.len(),
+                    ));
+                    for def in defs {
+                        all_items.push(PaletteItem::NodeEntry {
+                            def,
+                            category_color: "#C0392B".to_string(),
+                        });
+                    }
                 }
             }
         }
@@ -167,7 +205,7 @@ impl NodePaletteView {
 /// Build palette items for all local macros, excluding `editing_macro_id` to
 /// prevent a macro from being placed inside itself.
 fn build_local_macro_palette_items(
-    macros: &[ui::graph::SubGraphDefinition],
+    macros: &[blueprint_graph::SubGraph],
     editing_macro_id: Option<&str>,
 ) -> Vec<PaletteItem> {
     use crate::core::definitions::{NodeDefinition, PinDefinition};
@@ -175,18 +213,21 @@ fn build_local_macro_palette_items(
 
     let visible: Vec<_> = macros
         .iter()
-        .filter(|m| Some(m.id.as_str()) != editing_macro_id)
+        .filter(|m| {
+            m.kind == blueprint_graph::SubGraphKind::Macro
+                && Some(m.id.as_str()) != editing_macro_id
+        })
         .collect();
 
     if visible.is_empty() {
         return Vec::new();
     }
 
-    let mut items = vec![PaletteItem::CategoryHeader {
-        name: "Local Macros".to_string(),
-        color: "#9B59B6".to_string(),
-        node_count: visible.len(),
-    }];
+    let mut items = vec![PaletteItem::category(
+        "Local Macros".to_string(),
+        "#9B59B6".to_string(),
+        visible.len(),
+    )];
 
     for m in visible {
         let inputs = m
@@ -194,11 +235,13 @@ fn build_local_macro_palette_items(
             .inputs
             .iter()
             .map(|p| {
-                let canonical = ui::graph::DataType::from_type_str(&p.data_type.to_string());
+                let canonical = blueprint_graph::DataType::from_type_str(&p.data_type.to_string());
                 PinDefinition {
                     id: p.id.clone(),
                     name: p.name.clone(),
-                    data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
+                    data_type: crate::core::types::PinDataType::from_type_str(
+                        canonical.to_string(),
+                    ),
                     pin_type: PinType::Input,
                 }
             })
@@ -208,11 +251,13 @@ fn build_local_macro_palette_items(
             .outputs
             .iter()
             .map(|p| {
-                let canonical = ui::graph::DataType::from_type_str(&p.data_type.to_string());
+                let canonical = blueprint_graph::DataType::from_type_str(&p.data_type.to_string());
                 PinDefinition {
                     id: p.id.clone(),
                     name: p.name.clone(),
-                    data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
+                    data_type: crate::core::types::PinDataType::from_type_str(
+                        canonical.to_string(),
+                    ),
                     pin_type: PinType::Output,
                 }
             })
@@ -220,7 +265,11 @@ fn build_local_macro_palette_items(
 
         items.push(PaletteItem::NodeEntry {
             def: NodeDefinition {
-                id: format!("macro:{}", m.id),
+                id: crate::core::subgraph_ref::SubGraphReference::new(
+                    m.id.clone(),
+                    blueprint_graph::SubGraphKind::Macro,
+                )
+                .encode(),
                 name: m.name.clone(),
                 icon: "📦".to_string(),
                 description: m.description.clone(),
@@ -246,11 +295,11 @@ fn build_custom_event_dispatch_palette_items_from_panel(
         return Vec::new();
     }
 
-    let mut items = vec![PaletteItem::CategoryHeader {
-        name: "Custom Events".to_string(),
-        color: "#E67E22".to_string(),
-        node_count: defs.len(),
-    }];
+    let mut items = vec![PaletteItem::category(
+        "Custom Events".to_string(),
+        "#E67E22".to_string(),
+        defs.len(),
+    )];
 
     for def in defs {
         let mut dispatch_inputs = vec![PinDefinition {
@@ -297,6 +346,16 @@ fn build_custom_event_dispatch_palette_items_from_panel(
 }
 
 impl NodePaletteView {
+    /// Clear the query when the quick palette opens; the dock palette keeps its query.
+    pub fn clear_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.search_input.read(cx).value().is_empty() {
+            self.search_input
+                .update(cx, |input, cx| input.set_value("", window, cx));
+        }
+        self.scroll_handle
+            .scroll_to_item(0, gpui::ScrollStrategy::Top);
+    }
+
     /// Return the focus handle of the search input so callers can focus it.
     pub fn search_focus_handle(&self, cx: &App) -> FocusHandle {
         self.search_input.read(cx).focus_handle(cx)
@@ -347,8 +406,15 @@ impl Render for NodePaletteView {
                 Hsla::from(Rgba { r, g, b, a })
             })
             .unwrap_or_else(|| cx.theme().border);
-        let visible = filter_palette_items(&items, &query);
-        let node_count = count_nodes(&visible);
+        // Folded by category: see `visible_items`. A list already narrowed to the
+        // nodes that fit a dragged wire opens every category.
+        let visible = visible_items(
+            &items,
+            &query,
+            &self.expanded,
+            connection_filter_type.is_some(),
+        );
+        let node_count = matching_node_count(&items, &query);
         let item_sizes = build_item_sizes(&visible);
 
         // Owned snapshot for the 'static virtual-list closure.
@@ -380,10 +446,7 @@ impl Render for NodePaletteView {
                                 h_flex()
                                     .gap_2()
                                     .items_center()
-                                    .child(
-                                        Icon::new(IconName::Search)
-                                            .size(px(14.0)),
-                                    )
+                                    .child(Icon::new(IconName::Search).size(px(14.0)))
                                     .child(
                                         div()
                                             .text_sm()
@@ -462,10 +525,15 @@ impl Render for NodePaletteView {
                                                 name,
                                                 color,
                                                 node_count,
+                                                expanded,
+                                                matched,
                                             } => palette_category_header(
+                                                ix,
                                                 name,
                                                 color,
                                                 *node_count,
+                                                *expanded,
+                                                *matched,
                                                 cx,
                                             )
                                             .into_any_element(),
@@ -527,30 +595,56 @@ pub fn hex_color(hex: &str) -> Rgba {
     }
 }
 
-/// Compact non-interactive category-header row.
+/// Category-header row: click to fold or unfold the category.
+///
+/// The look is the old non-interactive header (coloured accent bar, upper-case
+/// name, count on the right) plus a chevron and hover feedback. While a search
+/// narrows the category the count reads `matched / total`.
 fn palette_category_header(
+    ix: usize,
     name: &str,
     color: &str,
     node_count: usize,
+    expanded: bool,
+    matched: Option<usize>,
     cx: &mut Context<NodePaletteView>,
 ) -> impl IntoElement {
     let cat_color: Hsla = hex_color(color).into();
+    let toggle_name = name.to_string();
+    let count = match matched {
+        Some(matched) if matched < node_count => format!("{matched} / {node_count}"),
+        _ => node_count.to_string(),
+    };
+    let muted = cx.theme().muted_foreground;
 
     h_flex()
+        .id(("node-palette-view-category", ix as u64))
         .w_full()
         .h(px(CATEGORY_HEADER_H))
         .items_center()
         .justify_between()
-        .bg(cx.theme().muted.opacity(0.15))
+        .cursor_pointer()
+        .bg(cx.theme().muted.opacity(if expanded { 0.22 } else { 0.15 }))
         .border_b_1()
         .border_color(cx.theme().border.opacity(0.3))
+        .hover(|s| s.bg(cx.theme().muted.opacity(0.3)))
         // Coloured left-edge accent bar
         .child(
             div()
                 .w(px(3.0))
                 .h(px(CATEGORY_HEADER_H))
                 .flex_shrink_0()
-                .bg(cat_color.opacity(0.7)),
+                .bg(cat_color.opacity(if expanded { 0.9 } else { 0.7 })),
+        )
+        .child(
+            Icon::new(if expanded {
+                IconName::ChevronDown
+            } else {
+                IconName::ChevronRight
+            })
+            .size(px(12.0))
+            .text_color(muted)
+            .ml_2(),
         )
         .child(
             div()
@@ -558,15 +652,19 @@ fn palette_category_header(
                 .px_2()
                 .text_xs()
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(cx.theme().muted_foreground)
+                .text_color(if expanded {
+                    cx.theme().foreground
+                } else {
+                    muted
+                })
                 .child(name.to_uppercase()),
         )
-        .child(
-            div()
-                .px_3()
-                .text_xs()
-                .text_color(cx.theme().muted_foreground)
-                .child(node_count.to_string()),
+        .child(div().px_3().text_xs().text_color(muted).child(count))
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |view, _event, _window, cx| {
+                view.toggle_category(&toggle_name, cx);
+            }),
         )
 }
 
@@ -689,8 +787,11 @@ fn palette_node_row(
                         let place_pos = Point::new(base.x + stagger, base.y + stagger);
 
                         let node_clone =
-                            if let Some(macro_id) = def_now.id.strip_prefix("macro:") {
-                                canvas.create_macro_instance_node(macro_id.to_string(), place_pos, cx);
+                            if let Some(reference) = crate::core::subgraph_ref::SubGraphReference::decode(
+                                &def_now.id,
+                                &[],
+                            ) {
+                                canvas.create_macro_instance_node(reference.id, place_pos, cx);
                                 canvas.graph.nodes.last().cloned()
                             } else if let Some(uid) = def_now.id.strip_prefix("custom_event_dispatch:") {
                                 canvas.create_custom_event_dispatch_node(uid.to_string(), place_pos, cx);
@@ -718,4 +819,18 @@ fn palette_node_row(
                 }
             }),
         )
+}
+
+impl NodePaletteView {
+    /// Open the category if it was folded, fold it if the user had opened it.
+    ///
+    /// A category a search opened by itself is not "opened by hand": clicking its
+    /// header opens it fully (every node, not just the matches); clicking again
+    /// hands control back to the search.
+    fn toggle_category(&mut self, name: &str, cx: &mut Context<Self>) {
+        if !self.expanded.remove(name) {
+            self.expanded.insert(name.to_string());
+        }
+        cx.notify();
+    }
 }

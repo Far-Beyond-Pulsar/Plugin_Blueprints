@@ -80,6 +80,7 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let is_reroute = (in.flags & 1u) != 0u;
     let is_selected = (in.flags & 2u) != 0u;
     let is_running = (in.flags & 4u) != 0u;
+    let is_conversion = (in.flags & 8u) != 0u;
 
     if is_reroute {
         // Draw as a circle (not a rounded rect) with a centered indicator dot.
@@ -108,6 +109,23 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
         }
 
         return vec4(col.rgb, col.a * circle_aa);
+    }
+
+    if is_conversion {
+        let local_px = in.uv * in.size_px;
+        let d = sdf_rrect(local_px, in.size_px, min(in.size_px.y * 0.5, in.corner_r_px));
+        let aa = 1.0 - smoothstep(-0.5, 0.5, d);
+        if aa <= 0.0 { discard; }
+        let border = smoothstep(-BORDER_PX - 0.5, -BORDER_PX + 0.5, d)
+                   * smoothstep(-0.5, 0.5, -d);
+        // Conversion pills use the same slate fill as regular node bodies.
+        var base = in.body_color;
+        base = mix(base, in.border_color, border);
+        if is_selected {
+            let glow = smoothstep(SELECT_GLOW_PX, 0.0, d) * smoothstep(-0.5, 0.5, d);
+            base = vec4(base.rgb + in.border_color.rgb * glow * 0.25, base.a);
+        }
+        return vec4(base.rgb, base.a * aa);
     }
 
     let local_px = in.uv * in.size_px;

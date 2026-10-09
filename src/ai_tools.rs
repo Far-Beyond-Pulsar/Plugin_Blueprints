@@ -1,19 +1,20 @@
 use anyhow::{anyhow, Result};
+use blueprint_graph::ConnectionType;
 use gpui::{Point, Size};
 use plugin_editor_api::{AiToolDefinition, PluginError};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use tool_registry::{PluginToolRegistry, ToolContext, ToolRegistry};
 use tool_registry_macros::tool;
 use tracing::debug;
-use ui::graph::ConnectionType;
 
 use crate::core::definitions::NodeDefinitions;
 use crate::core::graph::BlueprintGraph;
-use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType};
+use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType, PinDataType};
 
 #[derive(Clone)]
 struct BlueprintAiSession {
@@ -22,13 +23,52 @@ struct BlueprintAiSession {
     dirty: bool,
 }
 
+pub(crate) struct AiGraphUpdate {
+    pub before: BlueprintGraph,
+    pub after: BlueprintGraph,
+    response: smol::channel::Sender<Result<AiGraphUpdateAck, String>>,
+}
+
+pub(crate) struct AiGraphUpdateAck {
+    pub graph: BlueprintGraph,
+    pub applied: bool,
+}
+
+impl AiGraphUpdate {
+    pub(crate) async fn respond(self, result: Result<AiGraphUpdateAck, String>) {
+        let _ = self.response.send(result).await;
+    }
+}
+
 #[derive(Default)]
 struct RuntimeState {
     active_file: Option<PathBuf>,
     sessions: HashMap<PathBuf, BlueprintAiSession>,
+    live_editors: HashMap<PathBuf, smol::channel::Sender<AiGraphUpdate>>,
 }
 
 static STATE: OnceLock<Mutex<RuntimeState>> = OnceLock::new();
+thread_local! {
+    static REQUESTED_FILE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
+
+struct RequestedFileScope(Option<PathBuf>);
+
+impl RequestedFileScope {
+    fn enter(file_path: &Path) -> Self {
+        let requested = normalize_file_key(file_path);
+        let previous = REQUESTED_FILE.with(|slot| slot.replace(Some(requested)));
+        Self(previous)
+    }
+}
+
+impl Drop for RequestedFileScope {
+    fn drop(&mut self) {
+        REQUESTED_FILE.with(|slot| {
+            slot.replace(self.0.take());
+        });
+    }
+}
 
 fn state() -> &'static Mutex<RuntimeState> {
     STATE.get_or_init(|| Mutex::new(RuntimeState::default()))
@@ -50,6 +90,10 @@ fn normalize_file_key(file_path: &Path) -> PathBuf {
         .unwrap_or_else(|_| candidate.to_path_buf())
 }
 
+pub(crate) fn same_file_key(left: &Path, right: &Path) -> bool {
+    normalize_file_key(left) == normalize_file_key(right)
+}
+
 pub fn upsert_session(file_path: PathBuf, graph: BlueprintGraph) {
     let key = normalize_file_key(&file_path);
     if let Ok(mut guard) = state().lock() {
@@ -65,6 +109,28 @@ pub fn upsert_session(file_path: PathBuf, graph: BlueprintGraph) {
     }
 }
 
+/// Register the UI-thread bridge used to apply AI edits to the live canvas.
+pub(crate) fn register_live_editor(
+    file_path: PathBuf,
+    graph: BlueprintGraph,
+) -> smol::channel::Receiver<AiGraphUpdate> {
+    let key = normalize_file_key(&file_path);
+    let (sender, receiver) = smol::channel::unbounded();
+    if let Ok(mut guard) = state().lock() {
+        guard.active_file = Some(key.clone());
+        guard.sessions.insert(
+            key.clone(),
+            BlueprintAiSession {
+                file_key: key.clone(),
+                graph,
+                dirty: false,
+            },
+        );
+        guard.live_editors.insert(key, sender);
+    }
+    receiver
+}
+
 fn set_active_file(file_path: &Path) {
     if let Ok(mut guard) = state().lock() {
         guard.active_file = Some(normalize_file_key(file_path));
@@ -76,37 +142,14 @@ fn resolve_session_key(guard: &RuntimeState, requested: &Path) -> Option<PathBuf
     if guard.sessions.contains_key(&requested) {
         return Some(requested);
     }
-
-    if let Some(active) = guard.active_file.as_ref() {
-        if guard.sessions.contains_key(active) {
-            return Some(active.clone());
-        }
-    }
-
-    if guard.sessions.len() == 1 {
-        return guard.sessions.keys().next().cloned();
-    }
-
     None
-}
-
-fn active_file() -> Result<PathBuf> {
-    state()
-        .lock()
-        .map_err(|_| anyhow!("AI session state lock poisoned"))?
-        .active_file
-        .clone()
-        .ok_or_else(|| anyhow!("No active blueprint file in AI session"))
 }
 
 fn with_session<R>(f: impl FnOnce(&BlueprintAiSession) -> Result<R>) -> Result<R> {
     let guard = state()
         .lock()
         .map_err(|_| anyhow!("AI session state lock poisoned"))?;
-    let requested = guard
-        .active_file
-        .clone()
-        .ok_or_else(|| anyhow!("No active blueprint file in AI session"))?;
+    let requested = requested_file(&guard)?;
     let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
         anyhow!(
             "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
@@ -124,21 +167,144 @@ fn with_session_mut<R>(f: impl FnOnce(&mut BlueprintAiSession) -> Result<R>) -> 
     let mut guard = state()
         .lock()
         .map_err(|_| anyhow!("AI session state lock poisoned"))?;
-    let requested = guard
-        .active_file
-        .clone()
-        .ok_or_else(|| anyhow!("No active blueprint file in AI session"))?;
+    let requested = requested_file(&guard)?;
     let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
         anyhow!(
             "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
             requested.display()
         )
     })?;
+    let route = guard
+        .live_editors
+        .get(&key)
+        .cloned()
+        .ok_or_else(|| anyhow!("No live Blueprint editor is attached to {}", key.display()))?;
     let session = guard
         .sessions
         .get_mut(&key)
         .ok_or_else(|| anyhow!("Blueprint is not open in editor: {}", key.display()))?;
-    f(session)
+    let before = session.graph.clone();
+    let was_dirty = session.dirty;
+    let result = match f(session) {
+        Ok(result) => result,
+        Err(error) => {
+            session.graph = before;
+            session.dirty = was_dirty;
+            return Err(error);
+        }
+    };
+    if !graphs_match(&session.graph, &before) {
+        let (response, receiver) = smol::channel::bounded(1);
+        if route
+            .send_blocking(AiGraphUpdate {
+                before: before.clone(),
+                after: session.graph.clone(),
+                response,
+            })
+            .is_err()
+        {
+            session.graph = before;
+            session.dirty = was_dirty;
+            return Err(anyhow!("Live Blueprint editor is no longer available"));
+        }
+        match receiver.recv_blocking() {
+            Ok(Ok(ack)) if ack.applied => {
+                session.graph = ack.graph;
+            }
+            Ok(Ok(ack)) => {
+                session.graph = ack.graph;
+                session.dirty = true;
+                return Err(anyhow!("The live graph changed since the AI snapshot. The session was refreshed; retry the edit."));
+            }
+            Ok(Err(error)) => {
+                session.graph = before;
+                session.dirty = was_dirty;
+                return Err(anyhow!(
+                    "Could not apply AI edit to live Blueprint: {error}"
+                ));
+            }
+            Err(_) => {
+                session.graph = before;
+                session.dirty = was_dirty;
+                return Err(anyhow!(
+                    "Live Blueprint editor did not acknowledge the AI edit"
+                ));
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn requested_file(guard: &RuntimeState) -> Result<PathBuf> {
+    REQUESTED_FILE
+        .with(|slot| slot.borrow().clone().or_else(|| guard.active_file.clone()))
+        .ok_or_else(|| anyhow!("No active blueprint file in AI session"))
+}
+
+fn graph_content_fingerprint(graph: &BlueprintGraph) -> String {
+    let nodes = graph
+        .nodes
+        .iter()
+        .map(|node| {
+            format!(
+                "{}|{}|{}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}|{:?}",
+                node.id,
+                node.definition_id,
+                node.title,
+                node.icon,
+                node.description,
+                node.position,
+                node.size,
+                node.inputs,
+                node.outputs,
+                node.properties,
+                node.is_selected,
+                node.color,
+                node.node_type
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let connections = graph
+        .connections
+        .iter()
+        .map(|connection| {
+            format!(
+                "{}|{}|{}|{}|{}|{:?}",
+                connection.id,
+                connection.source_node,
+                connection.source_pin,
+                connection.target_node,
+                connection.target_pin,
+                connection.connection_type
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let comments = graph
+        .comments
+        .iter()
+        .map(|comment| {
+            format!(
+                "{}|{}|{:?}|{:?}|{:?}|{:?}|{}",
+                comment.id,
+                comment.text,
+                comment.position,
+                comment.size,
+                comment.color,
+                comment.contained_node_ids,
+                comment.is_selected
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("{nodes}\n--connections--\n{connections}\n--comments--\n{comments}")
+}
+
+pub(crate) fn graphs_match(left: &BlueprintGraph, right: &BlueprintGraph) -> bool {
+    graph_content_fingerprint(left) == graph_content_fingerprint(right)
+        && left.selected_nodes == right.selected_nodes
+        && left.selected_comments == right.selected_comments
 }
 
 fn is_blueprint_file(file_path: &Path) -> bool {
@@ -209,6 +375,54 @@ fn update_comment_containment(graph: &mut BlueprintGraph) {
     }
 }
 
+fn propagate_reroute_types(
+    graph: &mut BlueprintGraph,
+    start_node_id: &str,
+    data_type: PinDataType,
+) {
+    let mut visited = HashSet::new();
+    let mut queue = VecDeque::from([start_node_id.to_owned()]);
+
+    while let Some(node_id) = queue.pop_front() {
+        if !visited.insert(node_id.clone()) {
+            continue;
+        }
+        let Some(node_index) = graph.nodes.iter().position(|node| node.id == node_id) else {
+            continue;
+        };
+        if graph.nodes[node_index].node_type != NodeType::Reroute {
+            continue;
+        }
+
+        let node = &mut graph.nodes[node_index];
+        for pin in &mut node.inputs {
+            pin.data_type = data_type.clone();
+        }
+        for pin in &mut node.outputs {
+            pin.data_type = data_type.clone();
+        }
+
+        for connection in &graph.connections {
+            let neighbor = if connection.source_node == node_id {
+                Some(&connection.target_node)
+            } else if connection.target_node == node_id {
+                Some(&connection.source_node)
+            } else {
+                None
+            };
+            if let Some(neighbor) = neighbor {
+                if graph
+                    .nodes
+                    .iter()
+                    .any(|node| node.id == *neighbor && node.node_type == NodeType::Reroute)
+                {
+                    queue.push_back(neighbor.clone());
+                }
+            }
+        }
+    }
+}
+
 fn parse_properties(value: Option<Value>) -> Result<HashMap<String, String>> {
     let Some(value) = value else {
         return Ok(HashMap::new());
@@ -228,16 +442,36 @@ fn parse_properties(value: Option<Value>) -> Result<HashMap<String, String>> {
     Ok(map)
 }
 
-fn parse_connection_type(kind: Option<String>) -> ConnectionType {
-    match kind
-        .unwrap_or_else(|| "data".to_string())
-        .trim()
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "execution" | "exec" => ConnectionType::Execution,
-        _ => ConnectionType::Data,
+fn parse_connection_type(
+    kind: Option<String>,
+    source_type: &PinDataType,
+    target_type: &PinDataType,
+) -> Result<ConnectionType> {
+    if source_type.is_execution() != target_type.is_execution() {
+        return Err(anyhow!("Execution pins can only connect to execution pins"));
     }
+
+    let expected = if target_type.is_execution() {
+        ConnectionType::Execution
+    } else {
+        ConnectionType::Data
+    };
+    let Some(kind) = kind else {
+        return Ok(expected);
+    };
+
+    let requested = match kind.trim().to_ascii_lowercase().as_str() {
+        "execution" | "exec" => ConnectionType::Execution,
+        "data" => ConnectionType::Data,
+        _ => return Err(anyhow!("connection_type must be `execution` or `data`")),
+    };
+    if std::mem::discriminant(&requested) != std::mem::discriminant(&expected) {
+        return Err(anyhow!(
+            "connection_type does not match the connected pin types (expected {:?})",
+            expected
+        ));
+    }
+    Ok(requested)
 }
 
 fn tool_registry() -> &'static ToolRegistry {
@@ -635,45 +869,103 @@ pub fn blueprint_add_connection(
     connection_type: Option<String>,
 ) -> Result<Value> {
     with_session_mut(|session| {
-        let source = session
+        let (source_type, source_node_type) = session
             .graph
             .nodes
             .iter()
             .find(|n| n.id == source_node)
-            .ok_or_else(|| anyhow!("Source node not found: {}", source_node))?;
-        let target = session
+            .ok_or_else(|| anyhow!("Source node not found: {}", source_node))
+            .and_then(|node| {
+                let pin = node
+                    .outputs
+                    .iter()
+                    .find(|pin| pin.id == source_pin)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Source pin '{}' not found on node '{}'",
+                            source_pin,
+                            source_node
+                        )
+                    })?;
+                Ok((pin.data_type.clone(), node.node_type.clone()))
+            })?;
+        let (target_type, target_node_type) = session
             .graph
             .nodes
             .iter()
             .find(|n| n.id == target_node)
-            .ok_or_else(|| anyhow!("Target node not found: {}", target_node))?;
+            .ok_or_else(|| anyhow!("Target node not found: {}", target_node))
+            .and_then(|node| {
+                let pin = node
+                    .inputs
+                    .iter()
+                    .find(|pin| pin.id == target_pin)
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Target pin '{}' not found on node '{}'",
+                            target_pin,
+                            target_node
+                        )
+                    })?;
+                Ok((pin.data_type.clone(), node.node_type.clone()))
+            })?;
 
-        if !source.outputs.iter().any(|pin| pin.id == source_pin) {
-            return Err(anyhow!(
-                "Source pin '{}' not found on node '{}'",
-                source_pin,
-                source_node
-            ));
-        }
-        if !target.inputs.iter().any(|pin| pin.id == target_pin) {
-            return Err(anyhow!(
-                "Target pin '{}' not found on node '{}'",
-                target_pin,
-                target_node
-            ));
-        }
-
-        let conn = Connection {
-            id: uuid::Uuid::new_v4().to_string(),
-            source_node,
-            source_pin,
-            target_node,
-            target_pin,
-            connection_type: parse_connection_type(connection_type),
+        let mut conn = Connection {
+            id: String::new(),
+            source_node: source_node.clone(),
+            source_pin: source_pin.clone(),
+            target_node: target_node.clone(),
+            target_pin: target_pin.clone(),
+            connection_type: parse_connection_type(connection_type, &source_type, &target_type)?,
         };
+
+        crate::features::connections::compatibility::validate_connection(&conn, &session.graph)
+            .map_err(|error| anyhow!("Invalid connection: {error}"))?;
+
+        if session.graph.connections.iter().any(|existing| {
+            existing.source_node == source_node
+                && existing.source_pin == source_pin
+                && existing.target_node == target_node
+                && existing.target_pin == target_pin
+        }) {
+            return Err(anyhow!("This connection already exists"));
+        }
+
+        conn.id = loop {
+            let candidate = uuid::Uuid::new_v4().to_string();
+            if !session
+                .graph
+                .connections
+                .iter()
+                .any(|existing| existing.id == candidate)
+            {
+                break candidate;
+            }
+        };
+
+        // Match interactive pin cardinality: execution and reroute outputs
+        // have one outgoing edge; data/execution inputs and reroute inputs
+        // have one incoming edge.
+        let source_is_reroute = source_node_type == NodeType::Reroute;
+        let target_is_reroute = target_node_type == NodeType::Reroute;
+        if source_type.is_execution() || source_is_reroute {
+            session.graph.connections.retain(|existing| {
+                !(existing.source_node == source_node && existing.source_pin == source_pin)
+            });
+        }
+        if source_type.is_execution() || target_is_reroute || !target_type.is_execution() {
+            session.graph.connections.retain(|existing| {
+                !(existing.target_node == target_node && existing.target_pin == target_pin)
+            });
+        }
 
         let conn_id = conn.id.clone();
         session.graph.connections.push(conn.clone());
+        if target_is_reroute {
+            propagate_reroute_types(&mut session.graph, &target_node, source_type);
+        } else if source_is_reroute {
+            propagate_reroute_types(&mut session.graph, &source_node, target_type);
+        }
         session.dirty = true;
 
         Ok(json!({ "ok": true, "connection_id": conn_id, "connection": connection_to_json(&conn) }))
@@ -791,6 +1083,7 @@ pub fn execute_compiled_tool(
     let started_at = Instant::now();
     debug!(tool = tool_name, file = %file_path.display(), "blueprint execute_compiled_tool start");
     set_active_file(file_path);
+    let _requested_file_scope = RequestedFileScope::enter(file_path);
     let ctx = ToolContext::new()
         .with_current_file(file_path)
         .with_workspace(file_path.parent().unwrap_or(file_path).to_path_buf());

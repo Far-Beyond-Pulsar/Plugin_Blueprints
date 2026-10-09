@@ -1,4 +1,4 @@
-//! HierarchyItem implementation for SubGraphDefinition (Macros)
+//! HierarchyItem implementation for SubGraph (Macros)
 //!
 //! This allows macros to be displayed in the HierarchicalTreeView component
 
@@ -15,10 +15,10 @@ pub struct MacroDrag {
     pub macro_name: String,
 }
 
-/// Wrapper for SubGraphDefinition that implements HierarchyItem
+/// Wrapper for SubGraph that implements HierarchyItem
 #[derive(Clone)]
 pub struct MacroHierarchyItem {
-    pub subgraph: ui::graph::SubGraphDefinition,
+    pub subgraph: blueprint_graph::SubGraph,
     pub index: usize,
     pub is_selected: bool,
     /// Weak back-ref so context-menu actions can reach the panel.
@@ -142,7 +142,7 @@ impl HierarchyItem for MacroHierarchyItem {
             if let Some(p) = panel.upgrade() {
                 p.update(cx, |panel, cx| {
                     let current = panel
-                        .local_macros
+                        .subgraphs
                         .iter()
                         .find(|m| m.id == macro_id)
                         .map(|m| m.name.clone())

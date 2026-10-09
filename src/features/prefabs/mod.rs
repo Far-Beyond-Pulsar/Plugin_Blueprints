@@ -27,7 +27,7 @@ pub struct PrefabAsset {
     #[serde(default)]
     pub blueprint_class: Option<BlueprintClassRef>,
     #[serde(default)]
-    pub script_graph: Option<ui::graph::GraphDescription>,
+    pub script_graph: Option<blueprint_graph::GraphDescription>,
 }
 
 /// One prefab component: the component record plus its **slot id**.
@@ -78,7 +78,11 @@ pub fn publish_class_updated(class_dir: &std::path::Path) {
     let id = std::fs::read_to_string(class_dir.join(CLASS_META_FILE))
         .ok()
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-        .and_then(|meta| meta.get("class_id").and_then(|v| v.as_str()).map(str::to_string));
+        .and_then(|meta| {
+            meta.get("class_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        });
     let mut event = plugin_editor_api::AssetUpdated::new(plugin_editor_api::AssetKind::Blueprint)
         .with_path(class_dir.to_path_buf());
     event.id = id;
@@ -401,8 +405,3 @@ impl BlueprintEditorPanel {
         self.is_dirty = true;
     }
 }
-
-
-
-
-

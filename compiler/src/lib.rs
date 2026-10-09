@@ -63,15 +63,16 @@
 //!   `on_event` and `remove_event_listener` are rejected with a pointer to
 //!   these.
 
+pub mod authored;
 pub mod palette;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use graphy::{ConnectionType, DataType, GraphDescription, NodeInstance};
 use pulsar_script_vm::{
-    verify, BinOp, Constant, DebugInfo, EventDecl, EventField, EventRef, EventSignature, Function, Import,
-    Instr, Module, NativeRegistry, Param, Reg, Signature, SourceLoc, Subscription, SubscriptionScope, Type,
-    TypeRegistry, UnOp, Variable,
+    verify, BinOp, CollOp, Constant, DebugInfo, EventDecl, EventField, EventRef, EventSignature,
+    Function, Import, Instr, Module, NativeRegistry, Param, Reg, RegisterSource, Signature,
+    SourceLoc, Subscription, SubscriptionScope, Type, TypeRegistry, UnOp, Variable,
 };
 use serde_json::Value as Json;
 
@@ -80,6 +81,16 @@ use serde_json::Value as Json;
 /// them when it binds a script instance to a placed class
 /// (`pulsar_class::SLOT_VARIABLE_PREFIX` is the same spelling).
 pub const SLOT_VARIABLE_PREFIX: &str = "__slot:";
+
+/// Prefix for a hidden handle to this script instance's component of a
+/// given class. Unlike `__slot:` variables, these resolve directly on the
+/// instance root entity and do not depend on prefab placement metadata.
+pub const SELF_COMPONENT_VARIABLE_PREFIX: &str = "__component:";
+
+/// The hidden handle variable for this instance's component of `class`.
+pub fn self_component_variable_name(class: &str) -> String {
+    format!("{SELF_COMPONENT_VARIABLE_PREFIX}{class}")
+}
 
 /// The hidden handle variable for component slot `slot_id`.
 pub fn slot_variable_name(slot_id: &str) -> String {
@@ -105,6 +116,9 @@ pub fn module_slots(module: &Module) -> Vec<(String, String)> {
 /// A class variable as the editor declares it.
 #[derive(Clone, Debug)]
 pub struct VariableSource {
+    /// The editor's stable id for the variable, kept across renames. State
+    /// carries over a reload by it; `None` falls back to the name.
+    pub id: Option<String>,
     pub name: String,
     /// Rust-style type name, e.g. `"f32"`, `"String"`, `"Health"`.
     pub type_name: String,
@@ -134,6 +148,8 @@ pub struct ClassSource<'a> {
     /// Every other engine event the graph may handle or send: the built-in
     /// events and other classes' and plugins' declared events.
     pub known_events: &'a [EventSignature],
+    /// The class's schema version (see `Module::class_version`).
+    pub version: u32,
 }
 
 /// The engine name of event `event` declared by class `class`.
@@ -199,7 +215,10 @@ const MAX_CODE: usize = 200_000;
 
 /// Compile a class. `natives` is the registry the module will be linked
 /// against: every native call is emitted with the signature found there.
-pub fn compile(source: &ClassSource<'_>, natives: &NativeRegistry) -> Result<Module, Vec<Diagnostic>> {
+pub fn compile(
+    source: &ClassSource<'_>,
+    natives: &NativeRegistry,
+) -> Result<Module, Vec<Diagnostic>> {
     let mut c = Compiler::new(source, natives);
     c.declare_variables();
     c.declare_engine_events();
@@ -209,7 +228,10 @@ pub fn compile(source: &ClassSource<'_>, natives: &NativeRegistry) -> Result<Mod
         return Err(c.diagnostics);
     }
     if let Err(err) = verify(&c.module) {
-        return Err(vec![Diagnostic { node: None, message: format!("internal compiler error: {err}") }]);
+        return Err(vec![Diagnostic {
+            node: None,
+            message: format!("internal compiler error: {err}"),
+        }]);
     }
     Ok(c.module)
 }
@@ -221,7 +243,9 @@ pub fn script_type(type_name: &str) -> Option<Type> {
     Some(match name {
         "()" => Type::Unit,
         "bool" => Type::Bool,
-        "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize" => Type::Int,
+        "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize" => {
+            Type::Int
+        }
         "f32" | "f64" => Type::Float,
         "String" | "str" => Type::Str,
         "Entity" | "pulsar_scenedb::Entity" => Type::Entity,
@@ -245,8 +269,14 @@ fn builtin_event(node_type: &str) -> Option<(&'static str, Vec<(&'static str, Ty
         "on_tick" => ("tick", vec![("delta_time", Type::Float)]),
         "on_end_play" => ("end_play", vec![]),
         "main" => ("main", vec![]),
-        "on_input_key" => ("on_input_key", vec![("key", Type::Str), ("pressed", Type::Bool)]),
-        "on_input_action" => ("on_input_action", vec![("action", Type::Str), ("pressed", Type::Bool)]),
+        "on_input_key" => (
+            "on_input_key",
+            vec![("key", Type::Str), ("pressed", Type::Bool)],
+        ),
+        "on_input_action" => (
+            "on_input_action",
+            vec![("action", Type::Str), ("pressed", Type::Bool)],
+        ),
         _ => return None,
     })
 }
@@ -270,6 +300,9 @@ struct Func {
     /// Registers holding node outputs that persist across the function:
     /// impure node results, event parameters, loop state.
     outputs: HashMap<PinKey, Reg>,
+    /// Every data output ever lowered, including pure values that are moved
+    /// into the per-node memo and later cleared.
+    register_sources: HashMap<PinKey, Reg>,
     /// Pure values computed for the node currently being emitted.
     memo: HashMap<PinKey, Reg>,
     /// Exec path from the event to the node being emitted.
@@ -284,6 +317,7 @@ impl Func {
             debug: DebugInfo::default(),
             lowering: Vec::new(),
             outputs: HashMap::new(),
+            register_sources: HashMap::new(),
             memo: HashMap::new(),
             path: Vec::new(),
         }
@@ -300,7 +334,10 @@ impl Func {
 
     fn emit(&mut self, instr: Instr) -> usize {
         if let Some(node) = self.lowering.last() {
-            self.debug.record(self.code.len() as u32, &SourceLoc::node(GRAPH_FILE, node.as_str()));
+            self.debug.record(
+                self.code.len() as u32,
+                &SourceLoc::node(GRAPH_FILE, node.as_str()),
+            );
         }
         self.code.push(instr);
         self.code.len() - 1
@@ -315,7 +352,9 @@ impl Func {
     fn patch(&mut self, at: usize, target: u32, otherwise: bool) {
         match &mut self.code[at] {
             Instr::Jump { target: t } => *t = target,
-            Instr::Branch { then, otherwise: o, .. } => {
+            Instr::Branch {
+                then, otherwise: o, ..
+            } => {
                 if otherwise {
                     *o = target;
                 } else {
@@ -379,7 +418,11 @@ impl<'a> Compiler<'a> {
         Self {
             source,
             natives,
-            module: Module::new(source.name),
+            module: {
+                let mut module = Module::new(source.name);
+                module.class_version = source.version;
+                module
+            },
             imports: HashMap::new(),
             vars: HashMap::new(),
             data_in,
@@ -392,7 +435,10 @@ impl<'a> Compiler<'a> {
     }
 
     fn error(&mut self, node: Option<&str>, message: impl Into<String>) {
-        self.diagnostics.push(Diagnostic { node: node.map(str::to_owned), message: message.into() });
+        self.diagnostics.push(Diagnostic {
+            node: node.map(str::to_owned),
+            message: message.into(),
+        });
     }
 
     fn node(&self, id: &str) -> Option<&'a NodeInstance> {
@@ -404,7 +450,13 @@ impl<'a> Compiler<'a> {
     fn declare_variables(&mut self) {
         for var in self.source.variables {
             let Some(ty) = script_type(&var.type_name) else {
-                self.error(None, format!("variable `{}`: type `{}` is not available to scripts", var.name, var.type_name));
+                self.error(
+                    None,
+                    format!(
+                        "variable `{}`: type `{}` is not available to scripts",
+                        var.name, var.type_name
+                    ),
+                );
                 continue;
             };
             let default = match &var.default {
@@ -417,23 +469,42 @@ impl<'a> Compiler<'a> {
                 },
                 None => None,
             };
-            self.add_var(&var.name, ty, default);
+            self.add_var(&var.name, var.id.clone(), ty, default);
         }
     }
 
-    fn add_var(&mut self, name: &str, ty: Type, default: Option<Constant>) -> u32 {
+    fn add_var(
+        &mut self,
+        name: &str,
+        id: Option<String>,
+        ty: Type,
+        default: Option<Constant>,
+    ) -> u32 {
         if let Some((index, _)) = self.vars.get(name) {
             return *index;
         }
         let index = self.module.variables.len() as u32;
-        self.module.variables.push(Variable { name: name.to_owned(), ty: ty.clone(), default });
+        self.module.variables.push(Variable {
+            name: name.to_owned(),
+            ty: ty.clone(),
+            default,
+            id,
+        });
         self.vars.insert(name.to_owned(), (index, ty));
         index
     }
 
     /// A per-instance variable backing one node's hidden state.
     fn hidden_var(&mut self, node: &str, purpose: &str, ty: Type) -> u32 {
-        self.add_var(&format!("__bp_{purpose}_{node}"), ty, None)
+        // Hidden state is identified by its purpose and the node that owns it;
+        // expanded macro nodes carry their expansion path in the node id, so
+        // two instances of one macro never share state.
+        self.add_var(
+            &format!("__bp_{purpose}_{node}"),
+            Some(format!("bp-state:{purpose}:{node}")),
+            ty,
+            None,
+        )
     }
 
     /// The class's custom events become engine events; index every event
@@ -459,9 +530,14 @@ impl<'a> Compiler<'a> {
                 self.error(None, format!("event `{name}` declared twice"));
                 continue;
             }
-            let decl = EventDecl { name: name.clone(), fields };
-            self.event_sigs.insert(name.clone(), EventSignature::from(&decl));
-            self.declared_by_uid.insert(event.uid.replace('-', "_"), name);
+            let decl = EventDecl {
+                name: name.clone(),
+                fields,
+            };
+            self.event_sigs
+                .insert(name.clone(), EventSignature::from(&decl));
+            self.declared_by_uid
+                .insert(event.uid.replace('-', "_"), name);
             self.module.events.push(decl);
         }
     }
@@ -470,7 +546,10 @@ impl<'a> Compiler<'a> {
         match self.event_sigs.get(name) {
             Some(sig) => Some(sig.clone()),
             None => {
-                self.error(Some(node), format!("no event `{name}` is declared in this project or by the engine"));
+                self.error(
+                    Some(node),
+                    format!("no event `{name}` is declared in this project or by the engine"),
+                );
                 None
             }
         }
@@ -492,14 +571,87 @@ impl<'a> Compiler<'a> {
                 continue;
             }
             let mut subscription = None;
-            let (name, params, param_pins) = if let Some(event) = node.node_type.strip_prefix("event::on::") {
-                let Some(sig) = self.event_sig(&node.id, event) else { continue };
+            let (name, params, param_pins) = if let Some(event) =
+                component_event_name(&node.node_type)
+            {
+                let Some(sig) = self.event_sig(&node.id, &event) else {
+                    continue;
+                };
+                let component_type = match node.properties.get("component_type") {
+                    Some(Json::String(name)) if !name.trim().is_empty() => name.as_str(),
+                    _ => {
+                        self.error(Some(&node.id), "component event node has no component_type");
+                        continue;
+                    }
+                };
+                let Some(variable) = self.component_subscription_variable(node, component_type)
+                else {
+                    continue;
+                };
+                subscription = Some((event.to_owned(), SubscriptionScope::Component(variable)));
+                let fn_name = format!("on_component_event__{}", sanitize(&event));
+                // The canonical port id is the event field name. Saved nodes
+                // can retain pin ids from an older palette definition (and
+                // some versions serialized extra non-payload outputs), so
+                // bind legacy ids by their declared pin name first, then by
+                // position. A single-field event can safely alias every data
+                // output: it has only one payload register to expose.
+                let old_output_pins: Vec<_> = node
+                    .outputs
+                    .iter()
+                    .filter(|pin| !matches!(pin.pin.data_type, DataType::Exec))
+                    .collect();
+                let mut old_output_ids: Vec<String> =
+                    old_output_pins.iter().map(|pin| pin.id.clone()).collect();
+                // Legacy graph files can keep a data connection after the
+                // node's serialized output-pin list has gone stale or empty.
+                // The source pin on that connection is still the stable id
+                // the compiler will later be asked to resolve.
+                for connection in self.source.graph.connections.iter().filter(|connection| {
+                    connection.source_node == node.id
+                        && connection.connection_type == ConnectionType::Data
+                }) {
+                    if !old_output_ids.contains(&connection.source_pin) {
+                        old_output_ids.push(connection.source_pin.clone());
+                    }
+                }
+                let pins = sig
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .map(|(index, field)| {
+                        let mut ids = vec![field.name.clone()];
+                        for (old_index, old_id) in old_output_ids.iter().enumerate() {
+                            let is_named_match = old_id == &field.name
+                                || old_output_pins
+                                    .iter()
+                                    .find(|pin| pin.id == *old_id)
+                                    .is_some_and(|pin| pin.pin.name == field.name);
+                            let is_positional_match = old_index == index;
+                            let is_single_payload_alias = sig.fields.len() == 1;
+                            if is_named_match || is_positional_match || is_single_payload_alias {
+                                if !ids.contains(old_id) {
+                                    ids.push(old_id.clone());
+                                }
+                            }
+                        }
+                        ids
+                    })
+                    .collect();
+                (fn_name, sig.field_types(), pins)
+            } else if let Some(event) = node.node_type.strip_prefix("event::on::") {
+                let Some(sig) = self.event_sig(&node.id, event) else {
+                    continue;
+                };
                 let declared_here = self.module.events.iter().any(|e| e.name == event);
                 let scope = match node.properties.get("scope") {
                     Some(Json::String(s)) if !s.trim().is_empty() => match parse_scope(s) {
                         Some(scope) => scope,
                         None => {
-                            self.error(Some(&node.id), format!("scope `{s}` is not self, global or class"));
+                            self.error(
+                                Some(&node.id),
+                                format!("scope `{s}` is not self, global or class"),
+                            );
                             continue;
                         }
                     },
@@ -510,6 +662,7 @@ impl<'a> Compiler<'a> {
                     SubscriptionScope::Self_ => "self",
                     SubscriptionScope::Global => "global",
                     SubscriptionScope::Class => "class",
+                    SubscriptionScope::Component(_) => "component",
                 };
                 let fn_name = format!("on_event__{}__{scope_tag}", sanitize(event));
                 let pins = sig.fields.iter().map(|f| vec![f.name.clone()]).collect();
@@ -521,7 +674,11 @@ impl<'a> Compiler<'a> {
                     .iter()
                     .map(|(p, _)| vec![(*p).to_owned(), format!("_{p}")])
                     .collect();
-                (name.to_owned(), params.into_iter().map(|(_, t)| t).collect::<Vec<_>>(), pins)
+                (
+                    name.to_owned(),
+                    params.into_iter().map(|(_, t)| t).collect::<Vec<_>>(),
+                    pins,
+                )
             } else if self.is_custom_event(node) {
                 let mut params = Vec::new();
                 let mut pins = Vec::new();
@@ -532,7 +689,13 @@ impl<'a> Compiler<'a> {
                                 params.push(ty);
                                 pins.push(vec![pin.id.clone()]);
                             }
-                            None => self.error(Some(&node.id), format!("event parameter type `{}` is not available to scripts", info.type_string)),
+                            None => self.error(
+                                Some(&node.id),
+                                format!(
+                                    "event parameter type `{}` is not available to scripts",
+                                    info.type_string
+                                ),
+                            ),
                         }
                     }
                 }
@@ -543,7 +706,11 @@ impl<'a> Compiler<'a> {
             // A custom event's handler also handles the engine event the
             // class declares for it, sent to this object.
             if subscription.is_none() {
-                if let Some(qualified) = node.node_type.strip_prefix("on_").and_then(|uid| self.declared_by_uid.get(uid)) {
+                if let Some(qualified) = node
+                    .node_type
+                    .strip_prefix("on_")
+                    .and_then(|uid| self.declared_by_uid.get(uid))
+                {
                     let declared = self.event_sigs[qualified].field_types();
                     if declared == params {
                         subscription = Some((qualified.clone(), SubscriptionScope::Self_));
@@ -553,15 +720,27 @@ impl<'a> Compiler<'a> {
             match by_name.get(&name) {
                 Some(&index) => {
                     if self.events[index].params != params {
-                        self.error(Some(&node.id), format!("event `{name}` declared twice with different parameters"));
+                        self.error(
+                            Some(&node.id),
+                            format!("event `{name}` declared twice with different parameters"),
+                        );
                         continue;
                     }
                     self.events[index].nodes.push(node.id.clone());
+                    if let Some(subscription) = subscription {
+                        self.events[index].subscriptions.push(subscription);
+                    }
                 }
                 None => {
                     by_name.insert(name.clone(), self.events.len());
                     let subscriptions = subscription.into_iter().collect();
-                    self.events.push(EventFn { name, params, nodes: vec![node.id.clone()], param_pins, subscriptions });
+                    self.events.push(EventFn {
+                        name,
+                        params,
+                        nodes: vec![node.id.clone()],
+                        param_pins,
+                        subscriptions,
+                    });
                 }
             }
         }
@@ -585,16 +764,29 @@ impl<'a> Compiler<'a> {
             });
         }
         if self.events.iter().any(|e| e.name == "tick")
-            || self.source.graph.nodes.values().any(|n| n.node_type == "get_delta_time")
+            || self
+                .source
+                .graph
+                .nodes
+                .values()
+                .any(|n| n.node_type == "get_delta_time")
         {
-            self.add_var(DELTA_TIME, Type::Float, None);
+            self.add_var(
+                DELTA_TIME,
+                Some("bp-state:delta_time".into()),
+                Type::Float,
+                None,
+            );
         }
     }
 
     fn is_custom_event(&self, node: &NodeInstance) -> bool {
         node.node_type.starts_with("on_")
             && builtin_event(&node.node_type).is_none()
-            && self.natives.get(&format!("std::{}", node.node_type)).is_none()
+            && self
+                .natives
+                .get(&format!("std::{}", node.node_type))
+                .is_none()
     }
 
     // ---- bodies --------------------------------------------------------
@@ -602,13 +794,19 @@ impl<'a> Compiler<'a> {
     fn compile_events(&mut self) {
         for index in 0..self.events.len() {
             let event = &self.events[index];
-            let (nodes, params, param_pins, name) =
-                (event.nodes.clone(), event.params.clone(), event.param_pins.clone(), event.name.clone());
+            let (nodes, params, param_pins, name) = (
+                event.nodes.clone(),
+                event.params.clone(),
+                event.param_pins.clone(),
+                event.name.clone(),
+            );
             let mut f = Func::new(&params);
             for (param, pins) in param_pins.iter().enumerate() {
                 for node in &nodes {
                     for pin in pins {
                         f.outputs.insert((node.clone(), pin.clone()), param as Reg);
+                        f.register_sources
+                            .insert((node.clone(), pin.clone()), param as Reg);
                     }
                 }
             }
@@ -625,9 +823,23 @@ impl<'a> Compiler<'a> {
             }
             f.emit(Instr::Return { value: None });
             let function = &mut self.module.functions[index];
+            let mut register_sources: Vec<_> = f
+                .register_sources
+                .iter()
+                .map(|((node, pin), register)| RegisterSource {
+                    register: *register,
+                    node: node.clone(),
+                    pin: pin.clone(),
+                })
+                .collect();
+            register_sources
+                .sort_by(|a, b| (a.register, &a.node, &a.pin).cmp(&(b.register, &b.node, &b.pin)));
+            let mut debug = f.debug;
+            debug.register_sources = register_sources;
             function.registers = f.registers;
             function.code = f.code;
-            function.debug = (!f.debug.ranges.is_empty()).then_some(f.debug);
+            function.debug =
+                (!debug.ranges.is_empty() || !debug.register_sources.is_empty()).then_some(debug);
         }
     }
 
@@ -649,7 +861,11 @@ impl<'a> Compiler<'a> {
     /// computed inside the chain only exist on its path, so the caller's
     /// memo is restored afterwards.
     fn follow(&mut self, f: &mut Func, node: &str, pin: &str) {
-        let targets = self.exec_out.get(&(node.to_owned(), pin.to_owned())).cloned().unwrap_or_default();
+        let targets = self
+            .exec_out
+            .get(&(node.to_owned(), pin.to_owned()))
+            .cloned()
+            .unwrap_or_default();
         let saved = std::mem::take(&mut f.memo);
         for target in targets {
             self.exec(f, &target);
@@ -659,7 +875,10 @@ impl<'a> Compiler<'a> {
 
     fn exec(&mut self, f: &mut Func, id: &str) {
         if f.path.iter().any(|n| n == id) {
-            self.error(Some(id), "execution loops back to this node; use a loop node instead");
+            self.error(
+                Some(id),
+                "execution loops back to this node; use a loop node instead",
+            );
             return;
         }
         if f.code.len() > MAX_CODE {
@@ -685,10 +904,16 @@ impl<'a> Compiler<'a> {
         if ty == "reroute" {
             return self.follow_all_exec(f, id);
         }
-        if let Some(var) = ty.strip_prefix("set_").filter(|v| self.vars.contains_key(*v)) {
+        if let Some(var) = ty
+            .strip_prefix("set_")
+            .filter(|v| self.vars.contains_key(*v))
+        {
             let (index, var_ty) = self.vars[var].clone();
             if let Some(value) = self.input(f, node, "value", &var_ty) {
-                f.emit(Instr::StoreVar { var: index, src: value });
+                f.emit(Instr::StoreVar {
+                    var: index,
+                    src: value,
+                });
                 for pin in data_outputs(node) {
                     f.outputs.insert((id.to_owned(), pin), value);
                 }
@@ -705,7 +930,10 @@ impl<'a> Compiler<'a> {
             self.emit_custom_event(f, node);
             return self.follow_all_exec(f, id);
         }
-        if let Some((kind, event)) = ty.strip_prefix("event::").and_then(|rest| rest.split_once("::")) {
+        if let Some((kind, event)) = ty
+            .strip_prefix("event::")
+            .and_then(|rest| rest.split_once("::"))
+        {
             if kind != "on" {
                 self.send_event(f, node, kind, event);
                 return self.follow_all_exec(f, id);
@@ -742,9 +970,14 @@ impl<'a> Compiler<'a> {
         }
         let is_value_node = ty.starts_with("comp_get_prop::")
             || ty.starts_with("get_component_ref::")
-            || matches!(ty, "find_object_by_stable_id" | "find_object_by_name" | "object_ref_literal")
+            || matches!(
+                ty,
+                "find_object_by_stable_id" | "find_object_by_name" | "object_ref_literal"
+            )
             || ty == "get_delta_time"
-            || ty.strip_prefix("get_").is_some_and(|v| self.vars.contains_key(v));
+            || ty
+                .strip_prefix("get_")
+                .is_some_and(|v| self.vars.contains_key(v));
         if is_value_node {
             // Value nodes placed on an exec wire: evaluate for their
             // outputs, then continue.
@@ -760,10 +993,207 @@ impl<'a> Compiler<'a> {
     /// A `std::<node_type>` call: arguments from the pins named after the
     /// native's parameters, the result into the node's `result` pin.
     fn std_call(&mut self, f: &mut Func, node: &'a NodeInstance) -> Option<Reg> {
+        self.std_call_expected(f, node, None, None)
+    }
+
+    /// Resolve the typed component-ref pin on an `event::on_component` node
+    /// to the per-instance module variable that already stores that live
+    /// reference. Prefab slot references use the same hidden `__slot:<uuid>`
+    /// variables populated by the class binder; component-typed Blueprint
+    /// variables can also be used directly.
+    fn component_subscription_variable(
+        &mut self,
+        node: &NodeInstance,
+        expected: &str,
+    ) -> Option<u32> {
+        let node_id = node.id.as_str();
+        let key = (node.id.clone(), "component_ref".to_owned());
+        let Some((mut source_id, mut source_pin)) = self.data_in.get(&key).cloned() else {
+            return Some(self.add_var(
+                &self_component_variable_name(expected),
+                Some(format!("bp-component:{expected}")),
+                Type::Component(expected.to_owned()),
+                None,
+            ));
+        };
+        let mut visited = HashSet::new();
+        loop {
+            if !visited.insert((source_id.clone(), source_pin.clone())) {
+                self.error(
+                    Some(node_id),
+                    "component_ref input contains a data-wire cycle",
+                );
+                return None;
+            }
+            let Some(source) = self.node(&source_id) else {
+                self.error(
+                    Some(node_id),
+                    "component_ref input comes from a missing node",
+                );
+                return None;
+            };
+            if source.node_type == "reroute" {
+                let upstream = data_inputs(source)
+                    .into_iter()
+                    .find_map(|pin| self.data_in.get(&(source_id.clone(), pin)).cloned());
+                let Some((next_id, next_pin)) = upstream else {
+                    self.error(Some(node_id), "component_ref reroute has no input");
+                    return None;
+                };
+                source_id = next_id;
+                source_pin = next_pin;
+                continue;
+            }
+            if let Some(rest) = source.node_type.strip_prefix("get_component_ref::") {
+                let source_type = rest.split("::").next().unwrap_or(rest);
+                if source_type != expected {
+                    self.error(
+                        Some(node_id),
+                        format!("component_ref is `{source_type}`, expected `{expected}`"),
+                    );
+                    return None;
+                }
+                let slot = source
+                    .properties
+                    .get("slot_id")
+                    .and_then(Json::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty());
+                let has_entity_input = data_inputs(source)
+                    .into_iter()
+                    .any(|pin| self.data_in.contains_key(&(source_id.clone(), pin)));
+                if slot.is_none() && has_entity_input {
+                    self.error(Some(node_id), "component event subscription cannot use a component reference resolved from a runtime entity input; use a root component or a prefab slot");
+                    return None;
+                }
+                if slot.is_none() {
+                    return Some(self.add_var(
+                        &self_component_variable_name(expected),
+                        Some(format!("bp-component:{expected}")),
+                        Type::Component(expected.to_owned()),
+                        None,
+                    ));
+                }
+                let slot = slot.unwrap_or_default();
+                let ty = Type::Component(expected.to_owned());
+                let variable = self.add_var(
+                    &slot_variable_name(slot),
+                    Some(format!("bp-slot:{slot}")),
+                    ty,
+                    None,
+                );
+                return Some(variable);
+            }
+            if let Some(name) = source.node_type.strip_prefix("get_") {
+                if let Some((variable, Type::Component(source_type))) = self.vars.get(name).cloned()
+                {
+                    if source_type == expected {
+                        return Some(variable);
+                    }
+                    self.error(
+                        Some(node_id),
+                        format!("component_ref is `{source_type}`, expected `{expected}`"),
+                    );
+                    return None;
+                }
+            }
+            self.error(
+                Some(node_id),
+                "component_ref must come from a component reference or component variable",
+            );
+            return None;
+        }
+    }
+
+    fn std_call_expected(
+        &mut self,
+        f: &mut Func,
+        node: &'a NodeInstance,
+        expected_output: Option<&Type>,
+        requested_pin: Option<&str>,
+    ) -> Option<Reg> {
         let id = node.id.as_str();
         let native_name = format!("std::{}", node.node_type);
-        let Some(native) = self.natives.get(&native_name).cloned() else {
-            self.error(Some(id), format!("`{}` is not available to scripts", node.node_type));
+        let native = self.natives.get(&native_name).cloned().or_else(|| {
+            let generic = self.natives.generic(&native_name)?.clone();
+            // A generic node's connected input values are concrete script
+            // types. Try those types (and their nested list/map/tuple types)
+            // against the template; the VM linker will independently check
+            // the resulting import signature.
+            let mut candidates = Vec::new();
+            if let Some(expected) = expected_output {
+                collect_script_types(expected, &mut candidates);
+            }
+            for pin in data_inputs(node) {
+                let Some((source_node, source_pin)) =
+                    self.data_in.get(&(id.to_owned(), pin.clone())).cloned()
+                else {
+                    continue;
+                };
+                let Some(reg) = self.value(f, &source_node, &source_pin) else {
+                    continue;
+                };
+                collect_script_types(f.ty(reg), &mut candidates);
+            }
+            candidates.sort_by_key(ToString::to_string);
+            candidates.dedup();
+            candidates.into_iter().find_map(|element| {
+                let sig = generic.signature(&element);
+                if expected_output.is_some_and(|expected| expected != &sig.ret) {
+                    return None;
+                }
+                let matches = generic
+                    .param_names
+                    .iter()
+                    .zip(&sig.params)
+                    .all(|(name, param)| {
+                        let pin = node
+                            .inputs
+                            .iter()
+                            .find(|p| p.id == *name || p.id.trim_start_matches('_') == name);
+                        let source = pin.and_then(|pin| {
+                            self.data_in.get(&(id.to_owned(), pin.id.clone())).cloned()
+                        });
+                        match source {
+                            Some((source_node, source_pin)) => {
+                                let upstream_generic =
+                                    self.node(&source_node).is_some_and(|source| {
+                                        self.natives
+                                            .generic(&format!("std::{}", source.node_type))
+                                            .is_some()
+                                    });
+                                upstream_generic
+                                    || self
+                                        .value(f, &source_node, &source_pin)
+                                        .is_some_and(|reg| f.ty(reg) == &param.ty)
+                            }
+                            None => true,
+                        }
+                    });
+                if !matches {
+                    return None;
+                }
+                generic.instantiate(&sig).ok().map(|mut native| {
+                    // Imports are keyed by name in a Module, so distinguish
+                    // concrete instantiations even when one graph uses more
+                    // than one element type for this node.
+                    native.name = format!("{native_name}@{element}");
+                    std::sync::Arc::new(native)
+                })
+            })
+        });
+        let Some(native) = native else {
+            if self.natives.generic(&native_name).is_some() {
+                self.error(
+                    Some(id),
+                    format!("cannot infer the type parameter for generic node `{}` from its connected inputs", node.node_type),
+                );
+            } else {
+                self.error(
+                    Some(id),
+                    format!("`{}` is not available to scripts", node.node_type),
+                );
+            }
             return None;
         };
         let mut args = Vec::with_capacity(native.sig.params.len());
@@ -776,17 +1206,58 @@ impl<'a> Compiler<'a> {
                 .unwrap_or_else(|| name.clone());
             args.push(self.input(f, node, &pin, &param.ty)?);
         }
-        let dst = (native.sig.ret != Type::Unit).then(|| self.output_reg(f, id, "result", native.sig.ret.clone()));
-        self.call(f, &native_name, args, dst);
-        dst
+        let split_outputs = match (&native.sig.ret, native.attr("outputs")) {
+            (Type::Tuple(types), Some(labels)) => {
+                let labels: Vec<_> = labels.split(',').map(str::trim).collect();
+                (labels.len() == types.len()).then_some((labels, types))
+            }
+            _ => None,
+        };
+        if let Some((labels, types)) = split_outputs {
+            let tuple = f.reg(native.sig.ret.clone());
+            self.call_with_signature(f, &native.name, args, Some(tuple), native.sig.clone());
+            let mut requested = None;
+            for (index, (label, ty)) in labels.iter().zip(types).enumerate() {
+                let output = self.output_reg(f, id, label, ty.clone());
+                f.emit(Instr::Collection {
+                    op: CollOp::TupleGet(index as u32),
+                    dst: output,
+                    args: vec![tuple],
+                });
+                if requested_pin == Some(*label) {
+                    requested = Some(output);
+                }
+            }
+            requested.or_else(|| {
+                requested_pin.is_none().then(|| {
+                    labels
+                        .first()
+                        .map(|label| self.output_reg(f, id, label, types[0].clone()))
+                })?
+            })
+        } else {
+            let dst = (native.sig.ret != Type::Unit)
+                .then(|| self.output_reg(f, id, "result", native.sig.ret.clone()));
+            self.call_with_signature(f, &native.name, args, dst, native.sig.clone());
+            dst
+        }
     }
 
-    fn component_call(&mut self, f: &mut Func, node: &'a NodeInstance, class: &str, method: &str) -> Option<Reg> {
+    fn component_call(
+        &mut self,
+        f: &mut Func,
+        node: &'a NodeInstance,
+        class: &str,
+        method: &str,
+    ) -> Option<Reg> {
         let id = node.id.as_str();
         let native_name = format!("{class}::{method}");
         let native = self.natives.get(&native_name).cloned();
         let Some(native) = native else {
-            self.error(Some(id), format!("`{native_name}` is not available to scripts"));
+            self.error(
+                Some(id),
+                format!("`{native_name}` is not available to scripts"),
+            );
             return None;
         };
         let component = self.component_input(f, node, class)?;
@@ -812,7 +1283,12 @@ impl<'a> Compiler<'a> {
             return None;
         };
         let mut args = Vec::with_capacity(native.sig.params.len());
-        for (index, (pin, param)) in native.param_names.iter().zip(&native.sig.params).enumerate() {
+        for (index, (pin, param)) in native
+            .param_names
+            .iter()
+            .zip(&native.sig.params)
+            .enumerate()
+        {
             let wired = self.data_in.contains_key(&(id.to_owned(), pin.clone()));
             let reg = match (&param.ty, index == 0 && native.receiver.is_some() && !wired) {
                 (Type::Component(class), true) => self.self_component(f, id, class)?,
@@ -822,7 +1298,10 @@ impl<'a> Compiler<'a> {
                 // The callee writes the argument back: never into the
                 // register some other node produced.
                 let copy = f.reg(param.ty.clone());
-                f.emit(Instr::Move { dst: copy, src: reg });
+                f.emit(Instr::Move {
+                    dst: copy,
+                    src: reg,
+                });
                 f.outputs.insert((id.to_owned(), pin.clone()), copy);
                 copy
             } else {
@@ -830,7 +1309,8 @@ impl<'a> Compiler<'a> {
             };
             args.push(reg);
         }
-        let dst = (native.sig.ret != Type::Unit).then(|| self.output_reg(f, id, "result", native.sig.ret.clone()));
+        let dst = (native.sig.ret != Type::Unit)
+            .then(|| self.output_reg(f, id, "result", native.sig.ret.clone()));
         self.call(f, name, args, dst);
         Some(())
     }
@@ -846,18 +1326,24 @@ impl<'a> Compiler<'a> {
             "to_class" => ("event::emit_to_class", vec![("class", Type::Str)]),
             _ => return self.error(Some(id), format!("unknown event node kind `{kind}`")),
         };
-        let Some(sig) = self.event_sig(id, event) else { return };
+        let Some(sig) = self.event_sig(id, event) else {
+            return;
+        };
         let mut args = Vec::new();
         let mut params = Vec::new();
         for (pin, ty) in &leading {
-            let Some(reg) = self.input(f, node, pin, ty) else { return };
+            let Some(reg) = self.input(f, node, pin, ty) else {
+                return;
+            };
             args.push(reg);
             params.push(Param::new(ty.clone()));
         }
         args.push(self.konst(f, Constant::Str(event.to_owned())));
         params.push(Param::new(Type::Str));
         for field in &sig.fields {
-            let Some(reg) = self.input(f, node, &field.name, &field.ty) else { return };
+            let Some(reg) = self.input(f, node, &field.name, &field.ty) else {
+                return;
+            };
             args.push(reg);
             params.push(Param::new(field.ty.clone()));
         }
@@ -878,7 +1364,14 @@ impl<'a> Compiler<'a> {
         let params = self.events[index].params.clone();
         let pins: Vec<String> = data_inputs(node);
         if pins.len() != params.len() {
-            return self.error(Some(id), format!("custom event takes {} values, the call passes {}", params.len(), pins.len()));
+            return self.error(
+                Some(id),
+                format!(
+                    "custom event takes {} values, the call passes {}",
+                    params.len(),
+                    pins.len()
+                ),
+            );
         }
         let mut args = Vec::new();
         for (pin, ty) in pins.iter().zip(&params) {
@@ -887,7 +1380,11 @@ impl<'a> Compiler<'a> {
                 None => return,
             }
         }
-        f.emit(Instr::Call { func: index as u32, args, dst: None });
+        f.emit(Instr::Call {
+            func: index as u32,
+            args,
+            dst: None,
+        });
     }
 
     // ---- flow intrinsics -----------------------------------------------
@@ -897,38 +1394,62 @@ impl<'a> Compiler<'a> {
         let id = node.id.as_str();
         match node.node_type.as_str() {
             "branch" | "switch_on_bool" => {
-                let pin = if node.node_type == "branch" { "condition" } else { "value" };
+                let pin = if node.node_type == "branch" {
+                    "condition"
+                } else {
+                    "value"
+                };
                 if let Some(cond) = self.input(f, node, pin, &Type::Bool) {
-                    self.if_else(f, cond, |c, f| c.follow(f, id, "True"), |c, f| c.follow(f, id, "False"));
+                    self.if_else(
+                        f,
+                        cond,
+                        |c, f| c.follow(f, id, "True"),
+                        |c, f| c.follow(f, id, "False"),
+                    );
                 }
             }
             "multi_branch" => {
                 let mut cases = Vec::new();
-                for (i, pin) in ["condition1", "condition2", "condition3"].iter().enumerate() {
+                for (i, pin) in ["condition1", "condition2", "condition3"]
+                    .iter()
+                    .enumerate()
+                {
                     cases.push((Case::Pin(pin), format!("Branch{}", i + 1)));
                 }
                 self.cases(f, node, cases, Some("Else"));
             }
             "switch_on_int" => {
                 if let Some(v) = self.input(f, node, "value", &Type::Int) {
-                    let cases = (0..4).map(|k| (Case::Eq(v, Constant::Int(k)), format!("Case{k}"))).collect();
+                    let cases = (0..4)
+                        .map(|k| (Case::Eq(v, Constant::Int(k)), format!("Case{k}")))
+                        .collect();
                     self.cases(f, node, cases, Some("Default"));
                 }
             }
             "switch_on_string" => {
                 if let Some(v) = self.input(f, node, "value", &Type::Str) {
                     let cases = (1..=3)
-                        .map(|k| (Case::Eq(v, Constant::Str(format!("option{k}"))), format!("Option{k}")))
+                        .map(|k| {
+                            (
+                                Case::Eq(v, Constant::Str(format!("option{k}"))),
+                                format!("Option{k}"),
+                            )
+                        })
                         .collect();
                     self.cases(f, node, cases, Some("Default"));
                 }
             }
             "range_switch" => {
                 if let Some(v) = self.input(f, node, "value", &Type::Float) {
-                    let cases = [(0.0, "Negative"), (10.0, "Low"), (50.0, "Medium"), (100.0, "High")]
-                        .into_iter()
-                        .map(|(limit, pin)| (Case::Lt(v, Constant::Float(limit)), pin.to_owned()))
-                        .collect();
+                    let cases = [
+                        (0.0, "Negative"),
+                        (10.0, "Low"),
+                        (50.0, "Medium"),
+                        (100.0, "High"),
+                    ]
+                    .into_iter()
+                    .map(|(limit, pin)| (Case::Lt(v, Constant::Float(limit)), pin.to_owned()))
+                    .collect();
                     self.cases(f, node, cases, Some("Extreme"));
                 }
             }
@@ -936,7 +1457,9 @@ impl<'a> Compiler<'a> {
                 if let Some(text) = self.input(f, node, "text", &Type::Str) {
                     let mut cases = Vec::new();
                     for k in 1..=3 {
-                        if let Some(pattern) = self.input(f, node, &format!("pattern{k}"), &Type::Str) {
+                        if let Some(pattern) =
+                            self.input(f, node, &format!("pattern{k}"), &Type::Str)
+                        {
                             cases.push((Case::Contains(text, pattern), format!("Contains{k}")));
                         }
                     }
@@ -949,17 +1472,33 @@ impl<'a> Compiler<'a> {
                 }
             }
             "for_loop" => {
-                let Some(count) = self.input(f, node, "count", &Type::Int) else { return true };
+                let Some(count) = self.input(f, node, "count", &Type::Int) else {
+                    return true;
+                };
                 let i = self.konst(f, Constant::Int(0));
                 let one = self.konst(f, Constant::Int(1));
                 let head = f.here();
                 let cond = f.reg(Type::Bool);
-                f.emit(Instr::Binary { op: BinOp::Lt, dst: cond, a: i, b: count });
-                let at = f.emit(Instr::Branch { cond, then: 0, otherwise: 0 });
+                f.emit(Instr::Binary {
+                    op: BinOp::Lt,
+                    dst: cond,
+                    a: i,
+                    b: count,
+                });
+                let at = f.emit(Instr::Branch {
+                    cond,
+                    then: 0,
+                    otherwise: 0,
+                });
                 let body = f.here();
                 f.patch(at, body, false);
                 self.follow(f, id, "Body");
-                f.emit(Instr::Binary { op: BinOp::Add, dst: i, a: i, b: one });
+                f.emit(Instr::Binary {
+                    op: BinOp::Add,
+                    dst: i,
+                    a: i,
+                    b: one,
+                });
                 f.emit(Instr::Jump { target: head });
                 let exit = f.here();
                 f.patch(at, exit, true);
@@ -974,25 +1513,43 @@ impl<'a> Compiler<'a> {
                 let active = self.hidden_var(id, "while_active", Type::Bool);
                 let busy = self.load(f, active, Type::Bool);
                 let idle = f.reg(Type::Bool);
-                f.emit(Instr::Unary { op: UnOp::Not, dst: idle, src: busy });
+                f.emit(Instr::Unary {
+                    op: UnOp::Not,
+                    dst: idle,
+                    src: busy,
+                });
                 self.if_then(f, idle, |c, f| {
                     let yes = c.konst(f, Constant::Bool(true));
-                    f.emit(Instr::StoreVar { var: active, src: yes });
+                    f.emit(Instr::StoreVar {
+                        var: active,
+                        src: yes,
+                    });
                     let head = f.here();
                     // Re-evaluate the condition every iteration.
                     f.memo.clear();
-                    let Some(cond) = c.input(f, node, "condition", &Type::Bool) else { return };
-                    let at = f.emit(Instr::Branch { cond, then: 0, otherwise: 0 });
+                    let Some(cond) = c.input(f, node, "condition", &Type::Bool) else {
+                        return;
+                    };
+                    let at = f.emit(Instr::Branch {
+                        cond,
+                        then: 0,
+                        otherwise: 0,
+                    });
                     let body = f.here();
                     f.patch(at, body, false);
                     c.follow(f, id, "Body");
                     let next_frame = c.konst(f, Constant::Float(0.0));
-                    f.emit(Instr::Wait { seconds: next_frame });
+                    f.emit(Instr::Wait {
+                        seconds: next_frame,
+                    });
                     f.emit(Instr::Jump { target: head });
                     let exit = f.here();
                     f.patch(at, exit, true);
                     let no = c.konst(f, Constant::Bool(false));
-                    f.emit(Instr::StoreVar { var: active, src: no });
+                    f.emit(Instr::StoreVar {
+                        var: active,
+                        src: no,
+                    });
                 });
             }
             "gate" => {
@@ -1006,7 +1563,10 @@ impl<'a> Compiler<'a> {
                 if let Some(close) = self.input(f, node, "close", &Type::Bool) {
                     let no = self.konst(f, Constant::Bool(false));
                     self.if_then(f, close, |_, f| {
-                        f.emit(Instr::StoreVar { var: state, src: no });
+                        f.emit(Instr::StoreVar {
+                            var: state,
+                            src: no,
+                        });
                     });
                 }
                 let is_open = self.load(f, state, Type::Bool);
@@ -1014,24 +1574,44 @@ impl<'a> Compiler<'a> {
             }
             "multi_gate" => {
                 let index = self.hidden_var(id, "multi_gate_index", Type::Int);
-                let Some(reset) = self.input(f, node, "reset", &Type::Bool) else { return true };
+                let Some(reset) = self.input(f, node, "reset", &Type::Bool) else {
+                    return true;
+                };
                 self.if_else(
                     f,
                     reset,
                     |c, f| {
                         let zero = c.konst(f, Constant::Int(0));
-                        f.emit(Instr::StoreVar { var: index, src: zero });
+                        f.emit(Instr::StoreVar {
+                            var: index,
+                            src: zero,
+                        });
                     },
                     |c, f| {
                         let current = c.load(f, index, Type::Int);
                         let four = c.konst(f, Constant::Int(4));
                         let one = c.konst(f, Constant::Int(1));
                         let slot = f.reg(Type::Int);
-                        f.emit(Instr::Binary { op: BinOp::Rem, dst: slot, a: current, b: four });
+                        f.emit(Instr::Binary {
+                            op: BinOp::Rem,
+                            dst: slot,
+                            a: current,
+                            b: four,
+                        });
                         let next = f.reg(Type::Int);
-                        f.emit(Instr::Binary { op: BinOp::Add, dst: next, a: current, b: one });
-                        f.emit(Instr::StoreVar { var: index, src: next });
-                        let cases = (0..4).map(|k| (Case::Eq(slot, Constant::Int(k)), format!("Output{k}"))).collect();
+                        f.emit(Instr::Binary {
+                            op: BinOp::Add,
+                            dst: next,
+                            a: current,
+                            b: one,
+                        });
+                        f.emit(Instr::StoreVar {
+                            var: index,
+                            src: next,
+                        });
+                        let cases = (0..4)
+                            .map(|k| (Case::Eq(slot, Constant::Int(k)), format!("Output{k}")))
+                            .collect();
                         c.cases(f, node, cases, None);
                     },
                 );
@@ -1040,13 +1620,27 @@ impl<'a> Compiler<'a> {
                 let state = self.hidden_var(id, "flip_flop", Type::Bool);
                 let current = self.load(f, state, Type::Bool);
                 let flipped = f.reg(Type::Bool);
-                f.emit(Instr::Unary { op: UnOp::Not, dst: flipped, src: current });
-                f.emit(Instr::StoreVar { var: state, src: flipped });
-                self.if_else(f, current, |c, f| c.follow(f, id, "A"), |c, f| c.follow(f, id, "B"));
+                f.emit(Instr::Unary {
+                    op: UnOp::Not,
+                    dst: flipped,
+                    src: current,
+                });
+                f.emit(Instr::StoreVar {
+                    var: state,
+                    src: flipped,
+                });
+                self.if_else(
+                    f,
+                    current,
+                    |c, f| c.follow(f, id, "A"),
+                    |c, f| c.follow(f, id, "B"),
+                );
             }
             "do_once" => {
                 let done = self.hidden_var(id, "do_once", Type::Bool);
-                let Some(reset) = self.input(f, node, "reset", &Type::Bool) else { return true };
+                let Some(reset) = self.input(f, node, "reset", &Type::Bool) else {
+                    return true;
+                };
                 self.if_else(
                     f,
                     reset,
@@ -1057,10 +1651,17 @@ impl<'a> Compiler<'a> {
                     |c, f| {
                         let was_done = c.load(f, done, Type::Bool);
                         let first = f.reg(Type::Bool);
-                        f.emit(Instr::Unary { op: UnOp::Not, dst: first, src: was_done });
+                        f.emit(Instr::Unary {
+                            op: UnOp::Not,
+                            dst: first,
+                            src: was_done,
+                        });
                         c.if_then(f, first, |c, f| {
                             let yes = c.konst(f, Constant::Bool(true));
-                            f.emit(Instr::StoreVar { var: done, src: yes });
+                            f.emit(Instr::StoreVar {
+                                var: done,
+                                src: yes,
+                            });
                             c.follow(f, id, "Then");
                         });
                     },
@@ -1071,34 +1672,63 @@ impl<'a> Compiler<'a> {
             // triggers and `retriggerable_delay` restarts the countdown.
             "delay" => {
                 let active = self.hidden_var(id, "delay_active", Type::Bool);
-                let Some(seconds) = self.seconds_input(f, node, "milliseconds") else { return true };
+                let Some(seconds) = self.seconds_input(f, node, "milliseconds") else {
+                    return true;
+                };
                 let busy = self.load(f, active, Type::Bool);
                 let idle = f.reg(Type::Bool);
-                f.emit(Instr::Unary { op: UnOp::Not, dst: idle, src: busy });
+                f.emit(Instr::Unary {
+                    op: UnOp::Not,
+                    dst: idle,
+                    src: busy,
+                });
                 self.if_then(f, idle, |c, f| {
                     let yes = c.konst(f, Constant::Bool(true));
-                    f.emit(Instr::StoreVar { var: active, src: yes });
+                    f.emit(Instr::StoreVar {
+                        var: active,
+                        src: yes,
+                    });
                     f.emit(Instr::Wait { seconds });
                     let no = c.konst(f, Constant::Bool(false));
-                    f.emit(Instr::StoreVar { var: active, src: no });
+                    f.emit(Instr::StoreVar {
+                        var: active,
+                        src: no,
+                    });
                     c.follow_all_exec(f, id);
                 });
             }
             "retriggerable_delay" => {
                 let active = self.hidden_var(id, "retrigger_active", Type::Bool);
                 let deadline = self.hidden_var(id, "retrigger_deadline", Type::Float);
-                let Some(seconds) = self.seconds_input(f, node, "delay_ms") else { return true };
+                let Some(seconds) = self.seconds_input(f, node, "delay_ms") else {
+                    return true;
+                };
                 let now = f.reg(Type::Float);
                 f.emit(Instr::Now { dst: now });
                 let until = f.reg(Type::Float);
-                f.emit(Instr::Binary { op: BinOp::Add, dst: until, a: now, b: seconds });
-                f.emit(Instr::StoreVar { var: deadline, src: until });
+                f.emit(Instr::Binary {
+                    op: BinOp::Add,
+                    dst: until,
+                    a: now,
+                    b: seconds,
+                });
+                f.emit(Instr::StoreVar {
+                    var: deadline,
+                    src: until,
+                });
                 let busy = self.load(f, active, Type::Bool);
                 let idle = f.reg(Type::Bool);
-                f.emit(Instr::Unary { op: UnOp::Not, dst: idle, src: busy });
+                f.emit(Instr::Unary {
+                    op: UnOp::Not,
+                    dst: idle,
+                    src: busy,
+                });
                 self.if_then(f, idle, |c, f| {
                     let yes = c.konst(f, Constant::Bool(true));
-                    f.emit(Instr::StoreVar { var: active, src: yes });
+                    f.emit(Instr::StoreVar {
+                        var: active,
+                        src: yes,
+                    });
                     // Wait until the (possibly extended) deadline passes.
                     let zero = c.konst(f, Constant::Float(0.0));
                     let head = f.here();
@@ -1106,10 +1736,24 @@ impl<'a> Compiler<'a> {
                     f.emit(Instr::Now { dst: now });
                     let target = c.load(f, deadline, Type::Float);
                     let remaining = f.reg(Type::Float);
-                    f.emit(Instr::Binary { op: BinOp::Sub, dst: remaining, a: target, b: now });
+                    f.emit(Instr::Binary {
+                        op: BinOp::Sub,
+                        dst: remaining,
+                        a: target,
+                        b: now,
+                    });
                     let pending = f.reg(Type::Bool);
-                    f.emit(Instr::Binary { op: BinOp::Gt, dst: pending, a: remaining, b: zero });
-                    let at = f.emit(Instr::Branch { cond: pending, then: 0, otherwise: 0 });
+                    f.emit(Instr::Binary {
+                        op: BinOp::Gt,
+                        dst: pending,
+                        a: remaining,
+                        b: zero,
+                    });
+                    let at = f.emit(Instr::Branch {
+                        cond: pending,
+                        then: 0,
+                        otherwise: 0,
+                    });
                     let wait = f.here();
                     f.patch(at, wait, false);
                     f.emit(Instr::Wait { seconds: remaining });
@@ -1117,14 +1761,19 @@ impl<'a> Compiler<'a> {
                     let done = f.here();
                     f.patch(at, done, true);
                     let no = c.konst(f, Constant::Bool(false));
-                    f.emit(Instr::StoreVar { var: active, src: no });
+                    f.emit(Instr::StoreVar {
+                        var: active,
+                        src: no,
+                    });
                     c.follow_all_exec(f, id);
                 });
             }
             "do_n" => {
                 let counter = self.hidden_var(id, "do_n", Type::Int);
-                let (Some(n), Some(reset)) = (self.input(f, node, "n", &Type::Int), self.input(f, node, "reset", &Type::Bool))
-                else {
+                let (Some(n), Some(reset)) = (
+                    self.input(f, node, "n", &Type::Int),
+                    self.input(f, node, "reset", &Type::Bool),
+                ) else {
                     return true;
                 };
                 self.if_else(
@@ -1132,17 +1781,33 @@ impl<'a> Compiler<'a> {
                     reset,
                     |c, f| {
                         let zero = c.konst(f, Constant::Int(0));
-                        f.emit(Instr::StoreVar { var: counter, src: zero });
+                        f.emit(Instr::StoreVar {
+                            var: counter,
+                            src: zero,
+                        });
                     },
                     |c, f| {
                         let count = c.load(f, counter, Type::Int);
                         let below = f.reg(Type::Bool);
-                        f.emit(Instr::Binary { op: BinOp::Lt, dst: below, a: count, b: n });
+                        f.emit(Instr::Binary {
+                            op: BinOp::Lt,
+                            dst: below,
+                            a: count,
+                            b: n,
+                        });
                         c.if_then(f, below, |c, f| {
                             let one = c.konst(f, Constant::Int(1));
                             let next = f.reg(Type::Int);
-                            f.emit(Instr::Binary { op: BinOp::Add, dst: next, a: count, b: one });
-                            f.emit(Instr::StoreVar { var: counter, src: next });
+                            f.emit(Instr::Binary {
+                                op: BinOp::Add,
+                                dst: next,
+                                a: count,
+                                b: one,
+                            });
+                            f.emit(Instr::StoreVar {
+                                var: counter,
+                                src: next,
+                            });
                             c.follow(f, id, "Then");
                         });
                     },
@@ -1159,7 +1824,12 @@ impl<'a> Compiler<'a> {
         let ms = self.coerce(f, &node.id, ms, &Type::Float)?;
         let thousand = self.konst(f, Constant::Float(1000.0));
         let seconds = f.reg(Type::Float);
-        f.emit(Instr::Binary { op: BinOp::Div, dst: seconds, a: ms, b: thousand });
+        f.emit(Instr::Binary {
+            op: BinOp::Div,
+            dst: seconds,
+            a: ms,
+            b: thousand,
+        });
         Some(seconds)
     }
 
@@ -1170,8 +1840,12 @@ impl<'a> Compiler<'a> {
     fn selector(&mut self, f: &mut Func, node: &'a NodeInstance) -> bool {
         let id = node.id.as_str();
         let name = format!("std::{}", node.node_type);
-        let Some(native) = self.natives.get(&name).cloned() else { return false };
-        let Some(labels) = native.attr("exec_outputs") else { return false };
+        let Some(native) = self.natives.get(&name).cloned() else {
+            return false;
+        };
+        let Some(labels) = native.attr("exec_outputs") else {
+            return false;
+        };
         let labels: Vec<String> = labels.split(',').map(str::to_owned).collect();
         let mut args = Vec::with_capacity(native.sig.params.len());
         for (pin, param) in native.param_names.iter().zip(&native.sig.params) {
@@ -1213,7 +1887,11 @@ impl<'a> Compiler<'a> {
         then: impl FnOnce(&mut Self, &mut Func),
         otherwise: impl FnOnce(&mut Self, &mut Func),
     ) {
-        let at = f.emit(Instr::Branch { cond, then: 0, otherwise: 0 });
+        let at = f.emit(Instr::Branch {
+            cond,
+            then: 0,
+            otherwise: 0,
+        });
         let then_pc = f.here();
         f.patch(at, then_pc, false);
         then(self, f);
@@ -1226,7 +1904,13 @@ impl<'a> Compiler<'a> {
     }
 
     /// `if case1 {pin1} else if case2 {pin2} .. else {default}`.
-    fn cases(&mut self, f: &mut Func, node: &'a NodeInstance, cases: Vec<(Case<'_>, String)>, default: Option<&str>) {
+    fn cases(
+        &mut self,
+        f: &mut Func,
+        node: &'a NodeInstance,
+        cases: Vec<(Case<'_>, String)>,
+        default: Option<&str>,
+    ) {
         let id = node.id.as_str();
         let mut ends = Vec::new();
         for (case, pin) in cases {
@@ -1238,13 +1922,23 @@ impl<'a> Compiler<'a> {
                 Case::Eq(value, constant) => {
                     let k = self.konst(f, constant);
                     let cond = f.reg(Type::Bool);
-                    f.emit(Instr::Binary { op: BinOp::Eq, dst: cond, a: value, b: k });
+                    f.emit(Instr::Binary {
+                        op: BinOp::Eq,
+                        dst: cond,
+                        a: value,
+                        b: k,
+                    });
                     cond
                 }
                 Case::Lt(value, constant) => {
                     let k = self.konst(f, constant);
                     let cond = f.reg(Type::Bool);
-                    f.emit(Instr::Binary { op: BinOp::Lt, dst: cond, a: value, b: k });
+                    f.emit(Instr::Binary {
+                        op: BinOp::Lt,
+                        dst: cond,
+                        a: value,
+                        b: k,
+                    });
                     cond
                 }
                 Case::Contains(text, pattern) => {
@@ -1253,7 +1947,11 @@ impl<'a> Compiler<'a> {
                     cond
                 }
             };
-            let at = f.emit(Instr::Branch { cond, then: 0, otherwise: 0 });
+            let at = f.emit(Instr::Branch {
+                cond,
+                then: 0,
+                otherwise: 0,
+            });
             let then_pc = f.here();
             f.patch(at, then_pc, false);
             self.follow(f, id, &pin);
@@ -1279,7 +1977,8 @@ impl<'a> Compiler<'a> {
             return reg;
         }
         let reg = f.reg(ty);
-        f.outputs.insert(key, reg);
+        f.outputs.insert(key.clone(), reg);
+        f.register_sources.insert(key, reg);
         reg
     }
 
@@ -1288,7 +1987,17 @@ impl<'a> Compiler<'a> {
     fn input(&mut self, f: &mut Func, node: &'a NodeInstance, pin: &str, ty: &Type) -> Option<Reg> {
         let key = (node.id.clone(), pin.to_owned());
         if let Some((src_node, src_pin)) = self.data_in.get(&key).cloned() {
-            let reg = self.value(f, &src_node, &src_pin)?;
+            let generic_output = self.node(&src_node).is_some_and(|source| {
+                self.natives
+                    .generic(&format!("std::{}", source.node_type))
+                    .is_some()
+            });
+            let reg = if generic_output {
+                let source = self.node(&src_node)?;
+                self.std_call_expected(f, source, Some(ty), Some(&src_pin))?
+            } else {
+                self.value(f, &src_node, &src_pin)?
+            };
             return self.coerce(f, &node.id, reg, ty);
         }
         if let Some(json) = node.properties.get(pin) {
@@ -1312,12 +2021,20 @@ impl<'a> Compiler<'a> {
         match (&have, ty) {
             (Type::Int, Type::Float) => {
                 let dst = f.reg(Type::Float);
-                f.emit(Instr::Unary { op: UnOp::IntToFloat, dst, src: reg });
+                f.emit(Instr::Unary {
+                    op: UnOp::IntToFloat,
+                    dst,
+                    src: reg,
+                });
                 Some(dst)
             }
             (_, Type::Str) if !matches!(have, Type::Object(_)) => {
                 let dst = f.reg(Type::Str);
-                f.emit(Instr::Unary { op: UnOp::ToStr, dst, src: reg });
+                f.emit(Instr::Unary {
+                    op: UnOp::ToStr,
+                    dst,
+                    src: reg,
+                });
                 Some(dst)
             }
             _ => {
@@ -1345,7 +2062,36 @@ impl<'a> Compiler<'a> {
             return None;
         };
         let ty = node.node_type.as_str();
-        let reg = if ty == "reroute" {
+        let reg = if let Some(conversion_id) = ty.strip_prefix("conversion:") {
+            let Some(native) = self.natives.get(conversion_id).cloned() else {
+                self.error(
+                    Some(id),
+                    format!("conversion function `{conversion_id}` is not available to scripts"),
+                );
+                return None;
+            };
+            if native.sig.params.len() != 1 || native.sig.ret == Type::Unit {
+                self.error(Some(id), format!("conversion function `{conversion_id}` must have one input and a value output"));
+                return None;
+            }
+            let source = data_inputs(node)
+                .into_iter()
+                .find(|input| self.data_in.contains_key(&(id.to_owned(), input.clone())));
+            let Some(source) = source else {
+                self.error(Some(id), "conversion node has no connected input");
+                return None;
+            };
+            let source_value = self.input(f, node, &source, &native.sig.params[0].ty)?;
+            let dst = f.reg(native.sig.ret.clone());
+            self.call_with_signature(
+                f,
+                &native.name,
+                vec![source_value],
+                Some(dst),
+                native.sig.clone(),
+            );
+            dst
+        } else if ty == "reroute" {
             let source = data_inputs(node)
                 .into_iter()
                 .next()
@@ -1355,7 +2101,10 @@ impl<'a> Compiler<'a> {
                 return None;
             };
             self.value(f, &src_node, &src_pin)?
-        } else if let Some(var) = ty.strip_prefix("get_").filter(|v| self.vars.contains_key(*v)) {
+        } else if let Some(var) = ty
+            .strip_prefix("get_")
+            .filter(|v| self.vars.contains_key(*v))
+        {
             let (index, var_ty) = self.vars[var].clone();
             self.load(f, index, var_ty)
         } else if ty == "get_delta_time" {
@@ -1393,7 +2142,9 @@ impl<'a> Compiler<'a> {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(str::to_owned);
-            let wired = data_inputs(node).into_iter().find(|p| self.data_in.contains_key(&(id.to_owned(), p.clone())));
+            let wired = data_inputs(node)
+                .into_iter()
+                .find(|p| self.data_in.contains_key(&(id.to_owned(), p.clone())));
             match (wired, slot) {
                 (Some(pin), _) => {
                     let entity = self.input(f, node, &pin, &Type::Entity)?;
@@ -1404,19 +2155,39 @@ impl<'a> Compiler<'a> {
                     // The class must be a script-visible component type.
                     self.native_sig(id, &format!("{class}::of"))?;
                     let ty = Type::Component(class.to_owned());
-                    let var = self.add_var(&slot_variable_name(&slot), ty.clone(), None);
+                    let var = self.add_var(
+                        &slot_variable_name(&slot),
+                        Some(format!("bp-slot:{slot}")),
+                        ty.clone(),
+                        None,
+                    );
                     self.load(f, var, ty)
                 }
             }
-        } else if matches!(ty, "find_object_by_stable_id" | "find_object_by_name" | "object_ref_literal") {
-            let native = if ty == "find_object_by_name" { "world::find_by_name" } else { "world::find_by_stable_id" };
+        } else if matches!(
+            ty,
+            "find_object_by_stable_id" | "find_object_by_name" | "object_ref_literal"
+        ) {
+            let native = if ty == "find_object_by_name" {
+                "world::find_by_name"
+            } else {
+                "world::find_by_stable_id"
+            };
             self.native_sig(id, native)?;
             let needle = if ty == "object_ref_literal" {
                 // `stable_id` property: a string, or the saved
                 // `{stable_id, class_name, component_index}` object.
-                let stable_id = match node.properties.get("stable_id").or_else(|| node.properties.get("object")) {
+                let stable_id = match node
+                    .properties
+                    .get("stable_id")
+                    .or_else(|| node.properties.get("object"))
+                {
                     Some(Json::String(s)) => s.clone(),
-                    Some(Json::Object(o)) => o.get("stable_id").and_then(Json::as_str).unwrap_or_default().to_owned(),
+                    Some(Json::Object(o)) => o
+                        .get("stable_id")
+                        .and_then(Json::as_str)
+                        .unwrap_or_default()
+                        .to_owned(),
                     _ => {
                         self.error(Some(id), "object reference without a stable id");
                         return None;
@@ -1450,7 +2221,12 @@ impl<'a> Compiler<'a> {
             let pin_ty = if pin == "result" && native.sig.ret != Type::Unit {
                 native.sig.ret.clone()
             } else {
-                match native.param_names.iter().zip(&native.sig.params).find(|(n, p)| *n == pin && p.inout) {
+                match native
+                    .param_names
+                    .iter()
+                    .zip(&native.sig.params)
+                    .find(|(n, p)| *n == pin && p.inout)
+                {
                     Some((_, param)) => param.ty.clone(),
                     None => {
                         self.error(Some(id), format!("`{name}` has no output `{pin}`"));
@@ -1474,18 +2250,35 @@ impl<'a> Compiler<'a> {
                 *f.memo.get(&key).expect("native_call defines every output")
             }
         } else if builtin_event(ty).is_some() || self.is_custom_event(node) {
-            self.error(Some(id), "event parameters can only be read inside that event");
+            self.error(
+                Some(id),
+                "event parameters can only be read inside that event",
+            );
             return None;
         } else {
-            let native = self.natives.get(&format!("std::{ty}")).cloned();
+            let native_name = format!("std::{ty}");
+            let native = self.natives.get(&native_name).cloned();
             match native {
                 Some(native) if node_has_exec_input(node) => {
                     // Impure: the value from its last execution.
                     self.output_reg(f, id, pin, native.sig.ret.clone())
                 }
                 Some(_) => {
-                    let reg = self.std_call(f, node)?;
+                    let reg = self.std_call_expected(f, node, None, Some(pin))?;
                     // Pure results are recomputed per consuming node.
+                    f.outputs.remove(&key);
+                    reg
+                }
+                None if self.natives.generic(&native_name).is_some()
+                    && node_has_exec_input(node) =>
+                {
+                    self.std_call(f, node)?;
+                    *f.outputs.get(&(id.to_owned(), pin.to_owned()))?
+                }
+                None if self.natives.generic(&native_name).is_some() => {
+                    let Some(reg) = self.std_call_expected(f, node, None, Some(pin)) else {
+                        return None;
+                    };
                     f.outputs.remove(&key);
                     reg
                 }
@@ -1495,15 +2288,24 @@ impl<'a> Compiler<'a> {
                 }
             }
         };
+        f.register_sources.insert(key.clone(), reg);
         f.memo.insert(key, reg);
         Some(reg)
     }
 
     /// The component reference a component node acts on: its
     /// `component_ref` input, or this entity's `class` component.
-    fn component_input(&mut self, f: &mut Func, node: &'a NodeInstance, class: &str) -> Option<Reg> {
+    fn component_input(
+        &mut self,
+        f: &mut Func,
+        node: &'a NodeInstance,
+        class: &str,
+    ) -> Option<Reg> {
         let ty = Type::Component(class.to_owned());
-        if self.data_in.contains_key(&(node.id.clone(), "component_ref".to_owned())) {
+        if self
+            .data_in
+            .contains_key(&(node.id.clone(), "component_ref".to_owned()))
+        {
             return self.input(f, node, "component_ref", &ty);
         }
         self.self_component(f, &node.id, class)
@@ -1540,11 +2342,21 @@ impl<'a> Compiler<'a> {
 
     /// Call an import with an explicit signature (a polymorphic native
     /// under a tagged name).
-    fn call_with_sig(&mut self, f: &mut Func, name: &str, sig: Signature, args: Vec<Reg>, dst: Option<Reg>) {
+    fn call_with_sig(
+        &mut self,
+        f: &mut Func,
+        name: &str,
+        sig: Signature,
+        args: Vec<Reg>,
+        dst: Option<Reg>,
+    ) {
         let import = match self.imports.get(name) {
             Some(&index) => index,
             None => {
-                self.module.imports.push(Import { name: name.to_owned(), sig });
+                self.module.imports.push(Import {
+                    name: name.to_owned(),
+                    sig,
+                });
                 let index = (self.module.imports.len() - 1) as u32;
                 self.imports.insert(name.to_owned(), index);
                 index
@@ -1554,11 +2366,29 @@ impl<'a> Compiler<'a> {
     }
 
     fn call(&mut self, f: &mut Func, name: &str, args: Vec<Reg>, dst: Option<Reg>) {
+        let sig = self
+            .natives
+            .get(name)
+            .map(|n| n.sig.clone())
+            .expect("checked by callers");
+        self.call_with_signature(f, name, args, dst, sig);
+    }
+
+    fn call_with_signature(
+        &mut self,
+        f: &mut Func,
+        name: &str,
+        args: Vec<Reg>,
+        dst: Option<Reg>,
+        sig: Signature,
+    ) {
         let import = match self.imports.get(name) {
             Some(&index) => index,
             None => {
-                let sig = self.natives.get(name).map(|n| n.sig.clone()).expect("checked by callers");
-                self.module.imports.push(Import { name: name.to_owned(), sig });
+                self.module.imports.push(Import {
+                    name: name.to_owned(),
+                    sig,
+                });
                 let index = (self.module.imports.len() - 1) as u32;
                 self.imports.insert(name.to_owned(), index);
                 index
@@ -1587,6 +2417,46 @@ impl<'a> Compiler<'a> {
     }
 }
 
+/// Return the canonical `ComponentType.event_name` for a component event node.
+/// Older saved graphs used `event:on_component:` with either `:` or `.` before
+/// the event name; current graphs use `event::on_component::Component.event`.
+fn component_event_name(node_type: &str) -> Option<String> {
+    if let Some(event) = node_type.strip_prefix("event::on_component::") {
+        return Some(event.to_owned());
+    }
+    // Saved graphs exist with several historical spellings, including
+    // `event:on_component:Class:event`, `event:on_component::Class.event`,
+    // and `event:on_component::Class::event`. Normalize at the compiler
+    // boundary so these nodes enter the same typed event-registration path
+    // as current `event::on_component::Class.event` nodes.
+    let legacy = node_type.strip_prefix("event:on_component")?;
+    let legacy = legacy.trim_start_matches([':', '.']);
+    let (component, event) = legacy
+        .rsplit_once("::")
+        .or_else(|| legacy.rsplit_once(':'))
+        .or_else(|| legacy.rsplit_once('.'))?;
+    let component = component.trim_matches([':', '.']);
+    let event = event.trim_matches([':', '.']);
+    (!component.is_empty() && !event.is_empty()).then(|| format!("{component}.{event}"))
+}
+
+/// Collect a concrete type and any type nested inside it. Generic templates
+/// such as `array_push<T>(list<T>, T)` can be inferred from either pin.
+fn collect_script_types(ty: &Type, out: &mut Vec<Type>) {
+    out.push(ty.clone());
+    match ty {
+        Type::List(element) => collect_script_types(element, out),
+        Type::Map(key, value) => {
+            collect_script_types(key, out);
+            collect_script_types(value, out);
+        }
+        Type::Tuple(items) => items
+            .iter()
+            .for_each(|item| collect_script_types(item, out)),
+        _ => {}
+    }
+}
+
 enum Case<'p> {
     /// A boolean input pin.
     Pin(&'p str),
@@ -1597,7 +2467,9 @@ enum Case<'p> {
 
 /// An identifier-safe version of an event name.
 fn sanitize(name: &str) -> String {
-    name.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect()
+    name.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect()
 }
 
 fn data_inputs(node: &NodeInstance) -> Vec<String> {
@@ -1617,7 +2489,9 @@ fn data_outputs(node: &NodeInstance) -> Vec<String> {
 }
 
 fn node_has_exec_input(node: &NodeInstance) -> bool {
-    node.inputs.iter().any(|p| matches!(p.pin.data_type, DataType::Exec))
+    node.inputs
+        .iter()
+        .any(|p| matches!(p.pin.data_type, DataType::Exec))
 }
 
 /// A literal for type `ty` from an editor property. `Ok(None)`: use the
@@ -1631,7 +2505,11 @@ fn constant(json: &Json, ty: &Type) -> Result<Option<Constant>, String> {
             _ => return Err(bad()),
         },
         Type::Int => match json {
-            Json::Number(n) => Constant::Int(n.as_i64().or_else(|| n.as_f64().map(|f| f as i64)).ok_or_else(bad)?),
+            Json::Number(n) => Constant::Int(
+                n.as_i64()
+                    .or_else(|| n.as_f64().map(|f| f as i64))
+                    .ok_or_else(bad)?,
+            ),
             Json::String(s) if s.trim().is_empty() => return Ok(None),
             Json::String(s) => Constant::Int(s.trim().parse().map_err(|_| bad())?),
             _ => return Err(bad()),
@@ -1646,8 +2524,58 @@ fn constant(json: &Json, ty: &Type) -> Result<Option<Constant>, String> {
             Json::String(s) => Constant::Str(s.clone()),
             other => Constant::Str(other.to_string()),
         },
-        // References and objects have no literals; they start at their
-        // default and are set through wires.
+        // A value type's literal, e.g. a Vec3 default typed into the node.
+        // The editor may store it as an array, an object keyed by component
+        // name, or text like `(0, 1, 0)`; all become the array form the type
+        // registers a decoder for, checked now so a bad value points at the
+        // node instead of failing at link time.
+        Type::Object(name) => {
+            let Some(components) = object_components(json).map_err(|_| bad())? else {
+                return Ok(None);
+            };
+            let text = Json::Array(components.into_iter().map(Json::from).collect()).to_string();
+            TypeRegistry::global()
+                .decode_value(name, &text)
+                .map_err(|e| format!("`{json}` is not a valid {ty}: {e}"))?;
+            Constant::Value {
+                ty: name.clone(),
+                json: text,
+            }
+        }
+        // References have no literals; they start at their default and are
+        // set through wires.
         _ => return Ok(None),
     }))
+}
+
+/// The numeric components of a value-type literal typed into the editor:
+/// `[x, y, z]`, `{"x": .., "y": .., "z": ..}`, or text such as `(0, 1, 0)`.
+/// `Ok(None)` for empty text (use the default); `Err` for anything else.
+fn object_components(json: &Json) -> Result<Option<Vec<f64>>, ()> {
+    let number = |v: &Json| match v {
+        Json::Number(n) => n.as_f64(),
+        Json::String(s) => s.trim().parse().ok(),
+        _ => None,
+    };
+    let components = match json {
+        Json::Array(items) => items.iter().map(number).collect::<Option<Vec<_>>>(),
+        Json::Object(map) => ["x", "y", "z", "w"]
+            .into_iter()
+            .map_while(|k| map.get(k))
+            .map(number)
+            .collect::<Option<Vec<_>>>()
+            .filter(|c| c.len() == map.len()),
+        Json::String(s) if s.trim().is_empty() => return Ok(None),
+        Json::String(s) => s
+            .trim()
+            .trim_matches(|c| matches!(c, '(' | ')' | '[' | ']'))
+            .split(',')
+            .map(|part| part.trim().parse().ok())
+            .collect::<Option<Vec<_>>>(),
+        _ => None,
+    };
+    components
+        .filter(|c| c.iter().all(|v| v.is_finite()))
+        .map(Some)
+        .ok_or(())
 }

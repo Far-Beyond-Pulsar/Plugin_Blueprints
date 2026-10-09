@@ -301,7 +301,9 @@ impl BlueprintEditorPanel {
                 .into_iter()
                 .filter(|e| {
                     e.node.title.to_lowercase().contains(&query)
-                        || format!("{:?}", e.node.node_type).to_lowercase().contains(&query)
+                        || format!("{:?}", e.node.node_type)
+                            .to_lowercase()
+                            .contains(&query)
                         || e.node.definition_id.to_lowercase().contains(&query)
                 })
                 .collect()
@@ -410,21 +412,35 @@ impl BlueprintEditorPanel {
                                                 .on_mouse_down(
                                                     gpui::MouseButton::Left,
                                                     cx.listener(move |panel, _, window, cx| {
-                                                        panel.clear_sidebar_selections(false, false, false, false);
+                                                        panel.clear_sidebar_selections(
+                                                            false, false, false, false,
+                                                        );
                                                         panel.graph.selected_nodes.clear();
-                                                        panel.graph.selected_nodes.push(node_id.clone());
+                                                        panel
+                                                            .graph
+                                                            .selected_nodes
+                                                            .push(node_id.clone());
 
                                                         // Switch to the owning tab if needed
-                                                        if node_tab_index != panel.active_tab_index {
-                                                            panel.switch_to_tab(node_tab_index, window, cx);
+                                                        if node_tab_index != panel.active_tab_index
+                                                        {
+                                                            panel.switch_to_tab(
+                                                                node_tab_index,
+                                                                window,
+                                                                cx,
+                                                            );
                                                         }
 
                                                         // Pan & select on the correct canvas
                                                         if let Some(ref canvas) = canvas_for_click {
                                                             canvas.update(cx, |canvas, _cx| {
                                                                 canvas.graph.selected_nodes.clear();
-                                                                canvas.graph.selected_nodes.push(node_id.clone());
-                                                                canvas.animate_pan_to_node(&node_id);
+                                                                canvas
+                                                                    .graph
+                                                                    .selected_nodes
+                                                                    .push(node_id.clone());
+                                                                canvas
+                                                                    .animate_pan_to_node(&node_id);
                                                             });
                                                         }
                                                         cx.notify();
@@ -451,7 +467,9 @@ impl BlueprintEditorPanel {
                                                                     cx.theme().muted.opacity(0.3)
                                                                 })
                                                                 .text_xs()
-                                                                .font_family("JetBrainsMono-Regular")
+                                                                .font_family(
+                                                                    "JetBrainsMono-Regular",
+                                                                )
                                                                 .text_color(if is_active_tab {
                                                                     cx.theme().accent
                                                                 } else {
@@ -466,7 +484,8 @@ impl BlueprintEditorPanel {
                                                         .text_color(cx.theme().muted_foreground)
                                                         .child(format!(
                                                             "({:.0}, {:.0})",
-                                                            entry.node.position.x, entry.node.position.y
+                                                            entry.node.position.x,
+                                                            entry.node.position.y
                                                         )),
                                                 )
                                                 .into_any_element()
@@ -576,13 +595,47 @@ impl BlueprintEditorPanel {
 
 impl Render for BlueprintEditorPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(error) = self.load_error.as_deref() {
+            return v_flex()
+                .size_full()
+                .items_center()
+                .justify_center()
+                .bg(cx.theme().background)
+                .child(
+                    v_flex()
+                        .w_full()
+                        .max_w(px(720.0))
+                        .gap_3()
+                        .p_6()
+                        .bg(cx.theme().sidebar)
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .rounded_md()
+                        .child(
+                            div()
+                                .text_lg()
+                                .text_color(cx.theme().danger)
+                                .child("Blueprint could not be opened"),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(error.to_string()),
+                        ),
+                )
+                .into_any_element();
+        }
+
         if self.workspace.is_none() {
             self.initialize_workspace(window, cx);
         }
 
         // Comment color bindings are per-canvas; refresh via the active canvas
         if let Some(c) = self.active_canvas().cloned() {
-            c.update(cx, |canvas, cx| canvas.refresh_comment_color_bindings(window, cx));
+            c.update(cx, |canvas, cx| {
+                canvas.refresh_comment_color_bindings(window, cx)
+            });
         }
 
         v_flex()
@@ -591,23 +644,33 @@ impl Render for BlueprintEditorPanel {
             .key_context("BlueprintEditor")
             .on_action(cx.listener(|panel, action: &DuplicateNode, _window, cx| {
                 let nid = action.node_id.clone();
-                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.duplicate_node(nid, cx)); }
+                if let Some(c) = panel.active_canvas().cloned() {
+                    c.update(cx, |canvas, cx| canvas.duplicate_node(nid, cx));
+                }
             }))
             .on_action(cx.listener(|panel, action: &DeleteNode, _window, cx| {
                 let nid = action.node_id.clone();
-                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.delete_node(nid, cx)); }
+                if let Some(c) = panel.active_canvas().cloned() {
+                    c.update(cx, |canvas, cx| canvas.delete_node(nid, cx));
+                }
             }))
             .on_action(cx.listener(|panel, action: &CopyNode, _window, cx| {
                 let nid = action.node_id.clone();
-                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.copy_node(nid, cx)); }
+                if let Some(c) = panel.active_canvas().cloned() {
+                    c.update(cx, |canvas, cx| canvas.copy_node(nid, cx));
+                }
             }))
             .on_action(cx.listener(|panel, _action: &PasteNode, _window, cx| {
-                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.paste_node(cx)); }
+                if let Some(c) = panel.active_canvas().cloned() {
+                    c.update(cx, |canvas, cx| canvas.paste_node(cx));
+                }
             }))
             .on_action(cx.listener(|panel, action: &DisconnectPin, _window, cx| {
                 let nid = action.node_id.clone();
                 let pid = action.pin_id.clone();
-                if let Some(c) = panel.active_canvas().cloned() { c.update(cx, |canvas, cx| canvas.disconnect_pin(nid, pid, cx)); }
+                if let Some(c) = panel.active_canvas().cloned() {
+                    c.update(cx, |canvas, cx| canvas.disconnect_pin(nid, pid, cx));
+                }
             }))
             .on_action(cx.listener(|panel, _action: &OpenAddNodeMenu, window, cx| {
                 if let Some(c) = panel.active_canvas().cloned() {
@@ -622,7 +685,7 @@ impl Render for BlueprintEditorPanel {
                 }
                 // TODO: route show_node_picker through active canvas
             }))
-            .child(ToolbarRenderer::render(self, cx))
+            .child(ToolbarRenderer::render(self, window, cx))
             .child(div().flex_1().min_h_0().map(|el| {
                 if let Some(workspace) = &self.workspace {
                     el.child(workspace.clone())
@@ -630,5 +693,6 @@ impl Render for BlueprintEditorPanel {
                     el.child(div().child("Initializing workspace..."))
                 }
             }))
+            .into_any_element()
     }
 }

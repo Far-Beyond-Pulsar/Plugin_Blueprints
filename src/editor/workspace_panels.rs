@@ -8,39 +8,66 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui::{
     dock::{Panel, PanelEvent},
-    h_flex, input::{InputEvent, InputState}, v_flex, ActiveTheme, PixelsExt,
+    h_flex,
+    input::{InputEvent, InputState},
+    v_flex, ActiveTheme, PixelsExt,
 };
 
 use crate::core::graph::BlueprintGraph;
+use crate::core::spatial_index::GraphSpatialIndex;
 use crate::core::types::BlueprintNode;
 use crate::editor::panel::{BlueprintEditorPanel, ResizeHandle};
 use crate::features::connections::operations::ConnectionDrag;
 use crate::features::events::panel::EventsRenderer;
 use crate::features::macros::panel::MacrosRenderer;
 use crate::features::prefabs::panel::PrefabHierarchyRenderer;
+use crate::features::traits::ImplementedTraitsRenderer;
 use crate::features::undo::UndoManager;
 use crate::features::variables::rendering::VariablesRenderer;
 use crate::rendering::graph::NodeGraphRenderer;
+use crate::ui_components::asset_inspector::{AssetInspectorRenderer, AssetInspectorSnapshot};
 use crate::ui_components::palette_view::NodePaletteView;
 use crate::ui_components::properties::PropertiesRenderer;
 use ui_common::reflected_properties_panel::PropertyStateManager;
 
-/// Variables Panel
-pub struct VariablesPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl VariablesPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
+macro_rules! editor_panel_shell {
+    ($panel:ident, $panel_name:literal, $title:literal) => {
+        pub struct $panel {
+            editor: WeakEntity<BlueprintEditorPanel>,
+            focus_handle: FocusHandle,
         }
-    }
+
+        impl $panel {
+            pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+                Self {
+                    editor,
+                    focus_handle: cx.focus_handle(),
+                }
+            }
+        }
+
+        impl EventEmitter<PanelEvent> for $panel {}
+
+        impl Focusable for $panel {
+            fn focus_handle(&self, _cx: &App) -> FocusHandle {
+                self.focus_handle.clone()
+            }
+        }
+
+        impl Panel for $panel {
+            fn panel_name(&self) -> &'static str {
+                $panel_name
+            }
+
+            fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
+                $title.into_any_element()
+            }
+        }
+    };
 }
 
-impl EventEmitter<PanelEvent> for VariablesPanel {}
+/// Variables Panel
+editor_panel_shell!(VariablesPanel, "variables", "Variables");
 
 impl Render for VariablesPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -55,38 +82,26 @@ impl Render for VariablesPanel {
     }
 }
 
-impl Focusable for VariablesPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
+/// Trait implementation assignments for the current Blueprint class.
+editor_panel_shell!(ImplementedTraitsPanel, "implemented-traits", "Traits");
 
-impl Panel for VariablesPanel {
-    fn panel_name(&self) -> &'static str {
-        "variables"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Variables".into_any_element()
-    }
-}
-
-/// Macros Panel
-pub struct MacrosPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl MacrosPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
+impl Render for ImplementedTraitsPanel {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(editor) = self.editor.upgrade() {
+            div()
+                .size_full()
+                .bg(cx.theme().sidebar)
+                .child(editor.update(cx, |editor, cx| {
+                    ImplementedTraitsRenderer::render(editor, window, cx)
+                }))
+        } else {
+            div().child("Editor not available")
         }
     }
 }
 
-impl EventEmitter<PanelEvent> for MacrosPanel {}
+/// Macros Panel
+editor_panel_shell!(MacrosPanel, "macros", "Macros");
 
 impl Render for MacrosPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -101,38 +116,8 @@ impl Render for MacrosPanel {
     }
 }
 
-impl Focusable for MacrosPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for MacrosPanel {
-    fn panel_name(&self) -> &'static str {
-        "macros"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Macros".into_any_element()
-    }
-}
-
 /// Events Panel
-pub struct EventsPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl EventsPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for EventsPanel {}
+editor_panel_shell!(EventsPanel, "events", "Events");
 
 impl Render for EventsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -147,38 +132,8 @@ impl Render for EventsPanel {
     }
 }
 
-impl Focusable for EventsPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for EventsPanel {
-    fn panel_name(&self) -> &'static str {
-        "events"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Events".into_any_element()
-    }
-}
-
 /// Compiler Panel
-pub struct CompilerPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl CompilerPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for CompilerPanel {}
+editor_panel_shell!(CompilerPanel, "compiler", "Compiler");
 
 impl Render for CompilerPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -192,38 +147,118 @@ impl Render for CompilerPanel {
     }
 }
 
-impl Focusable for CompilerPanel {
+/// Live view of the sections that will be written to the Blueprint save file.
+pub struct AssetInspectorPanel {
+    editor: WeakEntity<BlueprintEditorPanel>,
+    focus_handle: FocusHandle,
+    snapshot: AssetInspectorSnapshot,
+    refresh_task: Option<Task<()>>,
+    observed_canvas_ids: HashSet<String>,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl AssetInspectorPanel {
+    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
+        let mut panel = Self {
+            editor,
+            focus_handle: cx.focus_handle(),
+            snapshot: AssetInspectorSnapshot::default(),
+            refresh_task: None,
+            observed_canvas_ids: HashSet::new(),
+            _subscriptions: Vec::new(),
+        };
+
+        if let Some(editor_entity) = panel.editor.upgrade() {
+            panel
+                ._subscriptions
+                .push(cx.observe(&editor_entity, |panel, _, cx| {
+                    panel.schedule_preview_refresh(cx);
+                }));
+        }
+        panel.schedule_preview_refresh(cx);
+        panel
+    }
+
+    fn observe_canvases(
+        &mut self,
+        canvases: &[(String, Entity<GraphCanvasPanel>)],
+        cx: &mut Context<Self>,
+    ) {
+        for (tab_id, canvas) in canvases {
+            if self.observed_canvas_ids.insert(tab_id.clone()) {
+                self._subscriptions.push(cx.observe(canvas, |panel, _, cx| {
+                    panel.schedule_preview_refresh(cx);
+                }));
+            }
+        }
+    }
+
+    fn schedule_preview_refresh(&mut self, cx: &mut Context<Self>) {
+        let editor = self.editor.clone();
+        self.refresh_task = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(400))
+                .await;
+            let (snapshot, canvases) = if let Some(editor) = editor.upgrade() {
+                editor.update(cx, |editor, cx| {
+                    let snapshot = AssetInspectorRenderer::build_snapshot(editor, cx);
+                    (snapshot, editor.graph_panels.clone())
+                })
+            } else {
+                (
+                    AssetInspectorSnapshot {
+                        error: Some("Editor not available".to_string()),
+                        ..Default::default()
+                    },
+                    Vec::new(),
+                )
+            };
+            let _ = this.update(cx, |panel, cx| {
+                panel.observe_canvases(&canvases, cx);
+                panel.snapshot = snapshot;
+                panel.refresh_task = None;
+                cx.notify();
+            });
+        }));
+    }
+}
+
+impl EventEmitter<PanelEvent> for AssetInspectorPanel {}
+
+impl Render for AssetInspectorPanel {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(editor) = self.editor.upgrade() {
+            let snapshot = self.snapshot.clone();
+            div()
+                .size_full()
+                .bg(cx.theme().sidebar)
+                .child(editor.update(cx, |editor, cx| {
+                    AssetInspectorRenderer::render(editor, &snapshot, cx)
+                }))
+        } else {
+            div().child("Editor not available")
+        }
+    }
+}
+
+impl Focusable for AssetInspectorPanel {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Panel for CompilerPanel {
+impl Panel for AssetInspectorPanel {
     fn panel_name(&self) -> &'static str {
-        "compiler"
+        "asset-save-data"
     }
 
     fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Compiler".into_any_element()
+        "Save Data".into_any_element()
     }
 }
 
 /// Find Panel
-pub struct FindPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl FindPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for FindPanel {}
+editor_panel_shell!(FindPanel, "find", "Find");
 
 impl Render for FindPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -237,38 +272,8 @@ impl Render for FindPanel {
     }
 }
 
-impl Focusable for FindPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for FindPanel {
-    fn panel_name(&self) -> &'static str {
-        "find"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Find".into_any_element()
-    }
-}
-
 /// Properties Panel
-pub struct PropertiesPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl PropertiesPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for PropertiesPanel {}
+editor_panel_shell!(PropertiesPanel, "properties", "Properties");
 
 impl Render for PropertiesPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -285,38 +290,8 @@ impl Render for PropertiesPanel {
     }
 }
 
-impl Focusable for PropertiesPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for PropertiesPanel {
-    fn panel_name(&self) -> &'static str {
-        "properties"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Properties".into_any_element()
-    }
-}
-
 /// Prefab Hierarchy Panel
-pub struct PrefabHierarchyPanel {
-    editor: WeakEntity<BlueprintEditorPanel>,
-    focus_handle: FocusHandle,
-}
-
-impl PrefabHierarchyPanel {
-    pub fn new(editor: WeakEntity<BlueprintEditorPanel>, cx: &mut Context<Self>) -> Self {
-        Self {
-            editor,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-}
-
-impl EventEmitter<PanelEvent> for PrefabHierarchyPanel {}
+editor_panel_shell!(PrefabHierarchyPanel, "prefab-hierarchy", "Components");
 
 impl Render for PrefabHierarchyPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -328,22 +303,6 @@ impl Render for PrefabHierarchyPanel {
         } else {
             div().child("Editor not available")
         }
-    }
-}
-
-impl Focusable for PrefabHierarchyPanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for PrefabHierarchyPanel {
-    fn panel_name(&self) -> &'static str {
-        "prefab-hierarchy"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Components".into_any_element()
     }
 }
 
@@ -404,7 +363,7 @@ impl Panel for PalettePanel {
 /// Each open tab is its own `GraphCanvasPanel` entity. It owns the graph, the
 /// per-tab undo history, the GPU surface/renderer, and every piece of
 /// interaction state. The `panel` weak-ref is read-only access to shared data
-/// (library_manager, class_variables, local_macros) on the shell editor.
+/// (library_manager, class_variables, subgraphs) on the shell editor.
 pub struct GraphCanvasPanel {
     pub id: String,
     pub name: String,
@@ -422,12 +381,15 @@ pub struct GraphCanvasPanel {
 
     // ── GPU renderer (per-canvas) ──────────────────────────────────────────
     pub renderer: crate::rendering::gpu::BpRenderer,
+    /// Font metrics are stable for this renderer and reused across frames.
+    pub(crate) text_width_cache: HashMap<u32, HashMap<String, f32>>,
+    /// Spatial candidates and resolved wire geometry shared by rendering and input.
+    pub(crate) spatial_index: RefCell<GraphSpatialIndex>,
     pub surface: Option<gpui::WgpuSurfaceHandle>,
     pub canvas_origin: Rc<RefCell<Point<f32>>>,
     pub element_bounds: Option<Bounds<Pixels>>,
     pub graph_anim_start: std::time::Instant,
-    /// A throttled animation redraw is already scheduled.
-    pub anim_notify_pending: bool,
+    pub surface_animation: plugin_editor_api::surface_animation::SurfaceAnimation,
 
     // ── Runtime / debug ────────────────────────────────────────────────────
     pub running_nodes: HashSet<String>,
@@ -438,6 +400,8 @@ pub struct GraphCanvasPanel {
     pub show_graph_controls: bool,
     pub wire_active_test_mode: bool,
     pub wire_hidden_test_mode: bool,
+    /// Draw node connections as circuit-style right-angle routes.
+    pub electronic_connections: bool,
 
     // ── Context menus / overlays ───────────────────────────────────────────
     pub node_context_menu: Option<(String, Point<Pixels>)>,
@@ -454,6 +418,8 @@ pub struct GraphCanvasPanel {
     // ── Pin hover tooltip ──────────────────────────────────────────────────
     pub hovered_pin_tooltip: Option<String>,
     pub hovered_pin_tooltip_pos: Option<Point<Pixels>>,
+    /// Latest Play-in-Editor values keyed by opaque source node and pin ids.
+    pub debug_pin_values: HashMap<(String, String), String>,
     pub hovered_connection: Option<String>,
 
     // ── Clipboard ──────────────────────────────────────────────────────────
@@ -573,11 +539,13 @@ impl GraphCanvasPanel {
             undo_manager: UndoManager::new(),
             focus_handle: cx.focus_handle(),
             renderer: crate::rendering::gpu::BpRenderer::new(),
+            text_width_cache: HashMap::new(),
+            spatial_index: RefCell::new(GraphSpatialIndex::default()),
             surface: None,
             canvas_origin: Rc::new(RefCell::new(Point::new(0.0, 0.0))),
             element_bounds: None,
             graph_anim_start: std::time::Instant::now(),
-            anim_notify_pending: false,
+            surface_animation: Default::default(),
             running_nodes: HashSet::new(),
             breakpoints: HashSet::new(),
             debug_session: None,
@@ -586,6 +554,7 @@ impl GraphCanvasPanel {
             show_graph_controls: true,
             wire_active_test_mode: false,
             wire_hidden_test_mode: false,
+            electronic_connections: false,
             node_context_menu: None,
             pin_context_menu: None,
             quick_palette_open: false,
@@ -596,6 +565,7 @@ impl GraphCanvasPanel {
             quick_palette_view,
             hovered_pin_tooltip: None,
             hovered_pin_tooltip_pos: None,
+            debug_pin_values: HashMap::new(),
             hovered_connection: None,
             node_clipboard: None,
             dragging_node: None,
@@ -642,7 +612,7 @@ impl GraphCanvasPanel {
     }
 
     /// Read the shell editor's library manager (shared data).
-    pub fn library_manager(&self, cx: &App) -> Option<ui::graph::LibraryManager> {
+    pub fn library_manager(&self, cx: &App) -> Option<blueprint_graph::LibraryManager> {
         self.panel
             .upgrade()
             .map(|p| p.read(cx).library_manager.clone())
@@ -668,7 +638,12 @@ impl GraphCanvasPanel {
         value: serde_json::Value,
         cx: &mut Context<Self>,
     ) {
-        let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == node_id.as_ref()) else {
+        let Some(node) = self
+            .graph
+            .nodes
+            .iter_mut()
+            .find(|n| n.id == node_id.as_ref())
+        else {
             return;
         };
 
@@ -707,16 +682,22 @@ impl GraphCanvasPanel {
     /// Compute the pan offset that would center the node with `definition_id`
     /// in the viewport and start an animated transition.
     pub fn animate_pan_to_node_by_def_id(&mut self, definition_id: &str) {
-        let Some(node) = self.graph.nodes.iter().find(|n| n.definition_id == definition_id) else {
+        let Some(node) = self
+            .graph
+            .nodes
+            .iter()
+            .find(|n| n.definition_id == definition_id)
+        else {
             return;
         };
         self.animate_pan_to_node_inner(node.position, node.size);
     }
 
     fn animate_pan_to_node_inner(&mut self, position: Point<f32>, size: gpui::Size<f32>) {
-        let bounds = self.element_bounds.unwrap_or(
-            gpui::Bounds::from_corners(Default::default(), gpui::Point::new(px(1920.0), px(1080.0))),
-        );
+        let bounds = self.element_bounds.unwrap_or(gpui::Bounds::from_corners(
+            Default::default(),
+            gpui::Point::new(px(1920.0), px(1080.0)),
+        ));
         let vw = bounds.size.width.as_f32();
         let vh = bounds.size.height.as_f32();
         let zoom = self.graph.zoom_level;
@@ -724,10 +705,7 @@ impl GraphCanvasPanel {
             position.x + size.width / 2.0,
             position.y + size.height / 2.0,
         );
-        let target = Point::new(
-            (vw / 2.0) / zoom - center.x,
-            (vh / 2.0) / zoom - center.y,
-        );
+        let target = Point::new((vw / 2.0) / zoom - center.x, (vh / 2.0) / zoom - center.y);
         self.animate_pan_to(target);
     }
 }
@@ -738,9 +716,31 @@ impl Render for GraphCanvasPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.refresh_comment_color_bindings(window, cx);
         crate::rendering::input::refresh_graph_cursor(window, self);
-        div()
+        let mut root = div()
+            .relative()
             .size_full()
-            .child(NodeGraphRenderer::render(self, cx))
+            .child(NodeGraphRenderer::render(self, cx));
+        if let (Some(tooltip), Some(position)) = (
+            self.hovered_pin_tooltip.clone(),
+            self.hovered_pin_tooltip_pos,
+        ) {
+            root = root.child(
+                div()
+                    .absolute()
+                    .left(position.x)
+                    .top(position.y)
+                    .px_2()
+                    .py_1()
+                    .rounded_md()
+                    .bg(cx.theme().background)
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .text_sm()
+                    .text_color(cx.theme().foreground)
+                    .child(tooltip),
+            );
+        }
+        root
     }
 }
 
@@ -774,7 +774,10 @@ impl GraphCanvasPanel {
 
     fn snap_comment_size(size: gpui::Size<f32>) -> gpui::Size<f32> {
         let grid = 10.0;
-        gpui::Size::new((size.width / grid).round() * grid, (size.height / grid).round() * grid)
+        gpui::Size::new(
+            (size.width / grid).round() * grid,
+            (size.height / grid).round() * grid,
+        )
     }
 
     fn snap_comment_bounds(comment: &mut crate::core::types::BlueprintComment) {
@@ -783,39 +786,63 @@ impl GraphCanvasPanel {
         let r = ((comment.position.x + comment.size.width) / 10.0).round() * 10.0;
         let b = ((comment.position.y + comment.size.height) / 10.0).round() * 10.0;
         comment.position = Point::new(l, t);
-        comment.size = Self::snap_comment_size(gpui::Size::new((r - l).max(100.0), (b - t).max(50.0)));
+        comment.size =
+            Self::snap_comment_size(gpui::Size::new((r - l).max(100.0), (b - t).max(50.0)));
     }
 
-    pub(crate) fn refresh_comment_color_bindings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.comment_color_bindings_dirty { return; }
+    pub(crate) fn refresh_comment_color_bindings(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.comment_color_bindings_dirty {
+            return;
+        }
         self.subscriptions.clear();
         for comment in &self.graph.comments {
             if let Some(picker_state) = comment.color_picker_state.as_ref() {
                 let comment_id = comment.id.clone();
-                let sub = cx.subscribe_in(picker_state, window,
-                    move |this: &mut GraphCanvasPanel, _picker, event: &ui::color_picker::ColorPickerEvent, _window, cx| {
+                let sub = cx.subscribe_in(
+                    picker_state,
+                    window,
+                    move |this: &mut GraphCanvasPanel,
+                          _picker,
+                          event: &ui::color_picker::ColorPickerEvent,
+                          _window,
+                          cx| {
                         if let ui::color_picker::ColorPickerEvent::Change(Some(color)) = event {
-                            if let Some(c) = this.graph.comments.iter_mut().find(|c| c.id == comment_id) {
+                            if let Some(c) =
+                                this.graph.comments.iter_mut().find(|c| c.id == comment_id)
+                            {
                                 c.color = *color;
                                 this.is_dirty = true;
                                 cx.notify();
                             }
                         }
-                    });
+                    },
+                );
                 self.subscriptions.push(sub);
             }
         }
         self.comment_color_bindings_dirty = false;
     }
 
-    pub fn start_comment_drag(&mut self, comment_id: String, mouse_pos: Point<f32>, _cx: &mut Context<Self>) {
+    pub fn start_comment_drag(
+        &mut self,
+        comment_id: String,
+        mouse_pos: Point<f32>,
+        _cx: &mut Context<Self>,
+    ) {
         let Some(comment) = self.graph.comments.iter().find(|c| c.id == comment_id) else {
             return;
         };
 
         self.editing_comment = None;
         self.dragging_comment = Some(comment_id.clone());
-        self.drag_offset = Point::new(mouse_pos.x - comment.position.x, mouse_pos.y - comment.position.y);
+        self.drag_offset = Point::new(
+            mouse_pos.x - comment.position.x,
+            mouse_pos.y - comment.position.y,
+        );
         self.initial_drag_positions.clear();
         self.initial_comment_drag_positions.clear();
 
@@ -908,18 +935,92 @@ impl GraphCanvasPanel {
 
     pub fn update_comment_drag(&mut self, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
         if let Some(cid) = &self.dragging_comment.clone() {
-            let raw = Point::new(mouse_pos.x - self.drag_offset.x, mouse_pos.y - self.drag_offset.y);
+            let raw = Point::new(
+                mouse_pos.x - self.drag_offset.x,
+                mouse_pos.y - self.drag_offset.y,
+            );
             let new_pos = self.snap_comment_position(raw);
             if let Some(ip) = self.initial_comment_drag_positions.get(cid) {
                 let delta = Point::new(new_pos.x - ip.x, new_pos.y - ip.y);
-                for (id, ip) in &self.initial_comment_drag_positions.clone() {
-                    let np = self.snap_comment_position(Point::new(ip.x + delta.x, ip.y + delta.y));
-                    if let Some(c) = self.graph.comments.iter_mut().find(|c| c.id == *id) { c.position = np; }
+                let (
+                    comment_updates,
+                    node_updates,
+                    previous_comment_revision,
+                    previous_node_revision,
+                ) = {
+                    let mut spatial = self.spatial_index.borrow_mut();
+                    spatial.ensure_current(&self.graph);
+                    let comment_updates = self
+                        .initial_comment_drag_positions
+                        .iter()
+                        .filter_map(|(id, initial)| {
+                            spatial.comment_index(id).map(|index| {
+                                (
+                                    index,
+                                    crate::rendering::graph::NodeGraphRenderer::snap_to_grid(
+                                        Point::new(initial.x + delta.x, initial.y + delta.y),
+                                    ),
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    let node_updates = self
+                        .initial_drag_positions
+                        .iter()
+                        .filter_map(|(id, initial)| {
+                            spatial.node_index(id).map(|index| {
+                                (
+                                    index,
+                                    crate::rendering::graph::NodeGraphRenderer::snap_to_grid(
+                                        Point::new(initial.x + delta.x, initial.y + delta.y),
+                                    ),
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    (
+                        comment_updates,
+                        node_updates,
+                        self.graph.comments.revision(),
+                        self.graph.nodes.revision(),
+                    )
+                };
+                if !comment_updates.is_empty() {
+                    self.graph.comments.with_mut(|comments| {
+                        for &(index, position) in &comment_updates {
+                            if let Some(comment) = comments.get_mut(index) {
+                                comment.position = position;
+                            }
+                        }
+                    });
                 }
-                for (id, ip) in &self.initial_drag_positions.clone() {
-                    if let Some(n) = self.graph.nodes.iter_mut().find(|n| n.id == *id) {
-                        n.position = crate::rendering::graph::NodeGraphRenderer::snap_to_grid(
-                            Point::new(ip.x + delta.x, ip.y + delta.y));
+                if !node_updates.is_empty() {
+                    self.graph.nodes.with_mut(|nodes| {
+                        for &(index, position) in &node_updates {
+                            if let Some(node) = nodes.get_mut(index) {
+                                node.position = position;
+                            }
+                        }
+                    });
+                }
+                if !comment_updates.is_empty() || !node_updates.is_empty() {
+                    let comment_indices = comment_updates
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>();
+                    let node_indices = node_updates
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>();
+                    let mut spatial = self.spatial_index.borrow_mut();
+                    if !spatial.sync_geometry_after_batch(
+                        &self.graph,
+                        previous_node_revision,
+                        &node_indices,
+                        previous_comment_revision,
+                        &comment_indices,
+                    ) {
+                        spatial.ensure_current(&self.graph);
                     }
                 }
                 cx.notify();
@@ -927,7 +1028,9 @@ impl GraphCanvasPanel {
         }
     }
 
-    pub fn end_comment_drag(&mut self, cx: &mut Context<Self>) { self.end_entity_drag(cx); }
+    pub fn end_comment_drag(&mut self, cx: &mut Context<Self>) {
+        self.end_entity_drag(cx);
+    }
 
     pub fn update_comment_resize(&mut self, mouse_pos: Point<f32>, cx: &mut Context<Self>) {
         use crate::editor::panel::ResizeHandle;
@@ -936,72 +1039,89 @@ impl GraphCanvasPanel {
                 return;
             };
 
-            if let Some(c) = self.graph.comments.iter_mut().find(|c| c.id == *cid) {
-                let min_width = 100.0;
-                let min_height = 50.0;
-                let mut left = start_pos.x;
-                let mut top = start_pos.y;
-                let mut right = start_pos.x + start_size.width;
-                let mut bottom = start_pos.y + start_size.height;
+            let (comment_index, previous_revision) = {
+                let mut spatial = self.spatial_index.borrow_mut();
+                spatial.ensure_current(&self.graph);
+                (spatial.comment_index(cid), self.graph.comments.revision())
+            };
+            if let Some(comment_index) = comment_index {
+                if let Some(c) = self.graph.comments.get_mut(comment_index) {
+                    let min_width = 100.0;
+                    let min_height = 50.0;
+                    let mut left = start_pos.x;
+                    let mut top = start_pos.y;
+                    let mut right = start_pos.x + start_size.width;
+                    let mut bottom = start_pos.y + start_size.height;
 
-                match handle {
-                    ResizeHandle::TopLeft => {
-                        left = mouse_pos.x;
-                        top = mouse_pos.y;
-                    }
-                    ResizeHandle::TopRight => {
-                        right = mouse_pos.x;
-                        top = mouse_pos.y;
-                    }
-                    ResizeHandle::BottomLeft => {
-                        left = mouse_pos.x;
-                        bottom = mouse_pos.y;
-                    }
-                    ResizeHandle::BottomRight => {
-                        right = mouse_pos.x;
-                        bottom = mouse_pos.y;
-                    }
-                    ResizeHandle::Top => {
-                        top = mouse_pos.y;
-                    }
-                    ResizeHandle::Bottom => {
-                        bottom = mouse_pos.y;
-                    }
-                    ResizeHandle::Left => {
-                        left = mouse_pos.x;
-                    }
-                    ResizeHandle::Right => {
-                        right = mouse_pos.x;
-                    }
-                }
-
-                if right - left < min_width {
                     match handle {
-                        ResizeHandle::Left | ResizeHandle::TopLeft | ResizeHandle::BottomLeft => {
-                            left = right - min_width;
+                        ResizeHandle::TopLeft => {
+                            left = mouse_pos.x;
+                            top = mouse_pos.y;
                         }
-                        _ => {
-                            right = left + min_width;
+                        ResizeHandle::TopRight => {
+                            right = mouse_pos.x;
+                            top = mouse_pos.y;
+                        }
+                        ResizeHandle::BottomLeft => {
+                            left = mouse_pos.x;
+                            bottom = mouse_pos.y;
+                        }
+                        ResizeHandle::BottomRight => {
+                            right = mouse_pos.x;
+                            bottom = mouse_pos.y;
+                        }
+                        ResizeHandle::Top => {
+                            top = mouse_pos.y;
+                        }
+                        ResizeHandle::Bottom => {
+                            bottom = mouse_pos.y;
+                        }
+                        ResizeHandle::Left => {
+                            left = mouse_pos.x;
+                        }
+                        ResizeHandle::Right => {
+                            right = mouse_pos.x;
                         }
                     }
-                }
 
-                if bottom - top < min_height {
-                    match handle {
-                        ResizeHandle::Top | ResizeHandle::TopLeft | ResizeHandle::TopRight => {
-                            top = bottom - min_height;
-                        }
-                        _ => {
-                            bottom = top + min_height;
+                    if right - left < min_width {
+                        match handle {
+                            ResizeHandle::Left
+                            | ResizeHandle::TopLeft
+                            | ResizeHandle::BottomLeft => {
+                                left = right - min_width;
+                            }
+                            _ => {
+                                right = left + min_width;
+                            }
                         }
                     }
-                }
 
-                c.position = Point::new(left, top);
-                c.size = Size::new(right - left, bottom - top);
-                Self::snap_comment_bounds(c);
-                self.drag_offset = mouse_pos;
-                cx.notify();
+                    if bottom - top < min_height {
+                        match handle {
+                            ResizeHandle::Top | ResizeHandle::TopLeft | ResizeHandle::TopRight => {
+                                top = bottom - min_height;
+                            }
+                            _ => {
+                                bottom = top + min_height;
+                            }
+                        }
+                    }
+
+                    c.position = Point::new(left, top);
+                    c.size = Size::new(right - left, bottom - top);
+                    Self::snap_comment_bounds(c);
+                    self.drag_offset = mouse_pos;
+                    cx.notify();
+                }
+                let mut spatial = self.spatial_index.borrow_mut();
+                if !spatial.sync_comments_after_batch(
+                    &self.graph,
+                    previous_revision,
+                    &[comment_index],
+                ) {
+                    spatial.ensure_current(&self.graph);
+                }
             }
         }
     }
@@ -1025,7 +1145,8 @@ impl GraphCanvasPanel {
                 c.text = text;
                 self.is_dirty = true;
             }
-            self.editing_comment = None; cx.notify();
+            self.editing_comment = None;
+            cx.notify();
         }
     }
 
@@ -1061,8 +1182,50 @@ impl GraphCanvasPanel {
         self.add_comment(center, window, cx);
     }
 
-    pub fn add_comment(&mut self, position: Point<f32>, window: &mut Window, cx: &mut Context<Self>) {
-        let new_comment = crate::core::types::BlueprintComment::new(self.snap_comment_position(position), window, cx);
+    pub fn add_comment(
+        &mut self,
+        position: Point<f32>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let mut new_comment = crate::core::types::BlueprintComment::new(
+            self.snap_comment_position(position),
+            window,
+            cx,
+        );
+        let selected_nodes: Vec<_> = self
+            .graph
+            .nodes
+            .iter()
+            .filter(|node| self.graph.selected_nodes.contains(&node.id))
+            .collect();
+        if !selected_nodes.is_empty() {
+            const COMMENT_PADDING: f32 = 30.0;
+            let left = selected_nodes
+                .iter()
+                .map(|node| node.position.x)
+                .fold(f32::INFINITY, f32::min);
+            let top = selected_nodes
+                .iter()
+                .map(|node| node.position.y)
+                .fold(f32::INFINITY, f32::min);
+            let right = selected_nodes
+                .iter()
+                .map(|node| node.position.x + node.size.width)
+                .fold(f32::NEG_INFINITY, f32::max);
+            let bottom = selected_nodes
+                .iter()
+                .map(|node| node.position.y + node.size.height)
+                .fold(f32::NEG_INFINITY, f32::max);
+            new_comment.position = self
+                .snap_comment_position(Point::new(left - COMMENT_PADDING, top - COMMENT_PADDING));
+            new_comment.size = gpui::Size::new(
+                right - left + COMMENT_PADDING * 2.0,
+                bottom - top + COMMENT_PADDING * 2.0,
+            );
+            Self::snap_comment_bounds(&mut new_comment);
+            new_comment.update_contained_nodes(&self.graph.nodes);
+        }
         let mut cmd = crate::features::undo::AddCommentCommand::new(new_comment.clone());
         cmd.execute(self, cx);
         self.push_undo_command(crate::features::undo::Command::AddComment(cmd));
@@ -1071,29 +1234,78 @@ impl GraphCanvasPanel {
 
     pub fn copy_selected_entities(&mut self, _cx: &mut Context<Self>) {
         use crate::features::clipboard::ClipboardData;
-        if self.graph.selected_nodes.is_empty() && self.graph.selected_comments.is_empty() { return; }
-        let data = ClipboardData::from_selection(&self.graph.nodes, &self.graph.comments, &self.graph.connections, &self.graph.selected_nodes, &self.graph.selected_comments);
-        if let Ok(json) = data.to_json() { if let Ok(mut cb) = arboard::Clipboard::new() { let _ = cb.set_text(&json); } }
+        if self.graph.selected_nodes.is_empty() && self.graph.selected_comments.is_empty() {
+            return;
+        }
+        let data = ClipboardData::from_selection(
+            &self.graph.nodes,
+            &self.graph.comments,
+            &self.graph.connections,
+            &self.graph.selected_nodes,
+            &self.graph.selected_comments,
+        );
+        if let Ok(json) = data.to_json() {
+            if let Ok(mut cb) = arboard::Clipboard::new() {
+                let _ = cb.set_text(&json);
+            }
+        }
     }
 
     pub fn paste_entities(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         use crate::features::clipboard::ClipboardData;
-        let json = match arboard::Clipboard::new().ok().and_then(|mut cb| cb.get_text().ok()) { Some(t) => t, None => return };
-        let Ok(data) = ClipboardData::from_json(&json) else { return };
+        let json = match arboard::Clipboard::new()
+            .ok()
+            .and_then(|mut cb| cb.get_text().ok())
+        {
+            Some(t) => t,
+            None => return,
+        };
+        let Ok(data) = ClipboardData::from_json(&json) else {
+            return;
+        };
+        // The deserialized clipboard owns its strings. Release the raw JSON
+        // buffer before allocating graph entities to keep peak paste memory
+        // proportional to the resulting graph instead of both representations.
+        drop(json);
         let mwp = window.mouse_position();
-        let mep = crate::rendering::graph::NodeGraphRenderer::window_to_graph_element_pos(mwp, self);
+        let mep =
+            crate::rendering::graph::NodeGraphRenderer::window_to_graph_element_pos(mwp, self);
         let mgp = crate::rendering::graph::NodeGraphRenderer::screen_to_graph_pos(mep, &self.graph);
-        let mut mn_x = f32::MAX; let mut mn_y = f32::MAX; let mut mx_x = f32::MIN; let mut mx_y = f32::MIN;
-        for n in &data.nodes { mn_x = mn_x.min(n.position.0); mn_y = mn_y.min(n.position.1); mx_x = mx_x.max(n.position.0+n.size.0); mx_y = mx_y.max(n.position.1+n.size.1); }
-        for c in &data.comments { mn_x = mn_x.min(c.position.0); mn_y = mn_y.min(c.position.1); mx_x = mx_x.max(c.position.0+c.size.0); mx_y = mx_y.max(c.position.1+c.size.1); }
-        let off = if mn_x <= mx_x && mn_y <= mx_y { let sc = Point::new((mn_x+mx_x)/2.0,(mn_y+mx_y)/2.0); Point::new(mgp.x-sc.x, mgp.y-sc.y) } else { Point::new(50.0,50.0) };
+        let mut mn_x = f32::MAX;
+        let mut mn_y = f32::MAX;
+        let mut mx_x = f32::MIN;
+        let mut mx_y = f32::MIN;
+        for n in &data.nodes {
+            mn_x = mn_x.min(n.position.0);
+            mn_y = mn_y.min(n.position.1);
+            mx_x = mx_x.max(n.position.0 + n.size.0);
+            mx_y = mx_y.max(n.position.1 + n.size.1);
+        }
+        for c in &data.comments {
+            mn_x = mn_x.min(c.position.0);
+            mn_y = mn_y.min(c.position.1);
+            mx_x = mx_x.max(c.position.0 + c.size.0);
+            mx_y = mx_y.max(c.position.1 + c.size.1);
+        }
+        let off = if mn_x <= mx_x && mn_y <= mx_y {
+            let sc = Point::new((mn_x + mx_x) / 2.0, (mn_y + mx_y) / 2.0);
+            Point::new(mgp.x - sc.x, mgp.y - sc.y)
+        } else {
+            Point::new(50.0, 50.0)
+        };
         let (nodes, comments, conns) = data.to_graph_entities(off, window, cx);
-        self.graph.selected_nodes.clear(); self.graph.selected_comments.clear();
-        for n in &nodes { self.graph.nodes.push(n.clone()); self.graph.selected_nodes.push(n.id.clone()); }
-        for c in &comments { self.graph.comments.push(c.clone()); self.graph.selected_comments.push(c.id.clone()); }
-        for conn in &conns { self.graph.connections.push(conn.clone()); }
-        self.comment_color_bindings_dirty = true; cx.notify();
+        self.graph.selected_nodes.clear();
+        self.graph.selected_comments.clear();
+        self.graph
+            .selected_nodes
+            .extend(nodes.iter().map(|node| node.id.clone()));
+        self.graph.nodes.extend(nodes);
+        self.graph
+            .selected_comments
+            .extend(comments.iter().map(|comment| comment.id.clone()));
+        self.graph.comments.extend(comments);
+        self.graph.connections.extend(conns);
+        self.comment_color_bindings_dirty = true;
+        cx.notify();
     }
-
-
 }

@@ -9,8 +9,8 @@ use ui::workspace::Workspace;
 
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::{
-    CompilerPanel, EventsPanel, FindPanel, GraphCanvasPanel, MacrosPanel, PrefabHierarchyPanel,
-    PropertiesPanel, VariablesPanel,
+    AssetInspectorPanel, CompilerPanel, EventsPanel, FindPanel, GraphCanvasPanel,
+    ImplementedTraitsPanel, MacrosPanel, PrefabHierarchyPanel, PropertiesPanel, VariablesPanel,
 };
 
 impl BlueprintEditorPanel {
@@ -54,12 +54,17 @@ impl BlueprintEditorPanel {
             let dock_area_weak = workspace.dock_area().downgrade();
 
             let variables_panel = cx.new(|cx| VariablesPanel::new(editor_weak.clone(), cx));
+            let implemented_traits_panel =
+                cx.new(|cx| ImplementedTraitsPanel::new(editor_weak.clone(), cx));
             let macros_panel = cx.new(|cx| MacrosPanel::new(editor_weak.clone(), cx));
             let events_panel = cx.new(|cx| EventsPanel::new(editor_weak.clone(), cx));
             let prefab_hierarchy_panel =
                 cx.new(|cx| PrefabHierarchyPanel::new(editor_weak.clone(), cx));
             let compiler_panel = cx.new(|cx| CompilerPanel::new(editor_weak.clone(), cx));
+            let asset_inspector_panel =
+                cx.new(|cx| AssetInspectorPanel::new(editor_weak.clone(), cx));
             let find_panel = cx.new(|cx| FindPanel::new(editor_weak.clone(), cx));
+            self.find_panel = Some(find_panel.clone());
             let properties_panel = cx.new(|cx| PropertiesPanel::new(editor_weak.clone(), cx));
             let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = self
                 .open_tabs
@@ -131,7 +136,10 @@ impl BlueprintEditorPanel {
                         cx,
                     ),
                     DockItem::tabs(
-                        vec![Arc::new(variables_panel)],
+                        vec![
+                            Arc::new(variables_panel) as Arc<dyn ui::dock::PanelView>,
+                            Arc::new(implemented_traits_panel) as Arc<dyn ui::dock::PanelView>,
+                        ],
                         None,
                         &dock_area_weak,
                         window,
@@ -143,11 +151,12 @@ impl BlueprintEditorPanel {
                 cx,
             );
 
-            // Right sidebar: Properties / Compiler output (multi-tab)
+            // Right sidebar: live properties, compiler output, and serialized save data.
             let right = DockItem::tabs(
                 vec![
                     Arc::new(properties_panel) as Arc<dyn ui::dock::PanelView>,
                     Arc::new(compiler_panel) as Arc<dyn ui::dock::PanelView>,
+                    Arc::new(asset_inspector_panel) as Arc<dyn ui::dock::PanelView>,
                 ],
                 None,
                 &dock_area_weak,

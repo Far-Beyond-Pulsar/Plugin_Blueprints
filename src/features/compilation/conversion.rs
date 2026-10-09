@@ -6,12 +6,56 @@ use crate::{
     BlueprintComment, BlueprintGraph, BlueprintNode, Connection, NodeDefinitions, NodeType, Pin,
     PinType,
 };
+use blueprint_graph::{self as graph_types, GraphDescription, NodeInstance, PinInstance, Position};
 use gpui::*;
-use ui::graph::{self as graph_types, GraphDescription, NodeInstance, PinInstance, Position};
+
+/// Authored comment colors use normalized RGBA channels. GPUI stores the same
+/// colors as HSLA, so convert at the editor/schema boundary.
+fn hsla_to_rgba(color: gpui::Hsla) -> [f32; 4] {
+    let h = color.h;
+    let s = color.s;
+    let l = color.l;
+    let a = color.a;
+    if s == 0.0 {
+        return [l, l, l, a];
+    }
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
+    let p = 2.0 * l - q;
+    let hue_to_rgb = |mut t: f32| {
+        if t < 0.0 {
+            t += 1.0;
+        }
+        if t > 1.0 {
+            t -= 1.0;
+        }
+        if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 1.0 / 2.0 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        }
+    };
+    [
+        hue_to_rgb(h + 1.0 / 3.0),
+        hue_to_rgb(h),
+        hue_to_rgb(h - 1.0 / 3.0),
+        a,
+    ]
+}
 
 impl BlueprintEditorPanel {
     /// Convert current blueprint graph to graph description
-    pub(crate) fn convert_to_graph_description(&self, graph: &crate::core::graph::BlueprintGraph) -> Result<GraphDescription, String> {
+    pub(crate) fn convert_to_graph_description(
+        &self,
+        graph: &crate::core::graph::BlueprintGraph,
+    ) -> Result<GraphDescription, String> {
         self.convert_graph_to_description(graph)
     }
 
@@ -20,13 +64,22 @@ impl BlueprintEditorPanel {
         &self,
         graph: &BlueprintGraph,
     ) -> Result<GraphDescription, String> {
+        Self::convert_graph_to_description_for_subgraphs(graph, &self.subgraphs)
+    }
+
+    /// Convert a graph using only its captured subgraph definitions.
+    /// This path is pure so save tasks can prepare the serialized graph off the UI thread.
+    pub(crate) fn convert_graph_to_description_for_subgraphs(
+        graph: &BlueprintGraph,
+        subgraphs: &[blueprint_graph::SubGraph],
+    ) -> Result<GraphDescription, String> {
         let mut graph_desc = GraphDescription::new("Blueprint Graph");
 
         // Convert nodes
         for bp_node in &graph.nodes {
             let mut node_instance = NodeInstance::new(
                 &bp_node.id,
-                &self.get_node_type_from_blueprint(bp_node)?,
+                &Self::get_node_type_from_blueprint(bp_node, subgraphs)?,
                 Position {
                     x: bp_node.position.x,
                     y: bp_node.position.y,
@@ -61,17 +114,11 @@ impl BlueprintEditorPanel {
 
             // Convert properties
             for (key, value) in &bp_node.properties {
-                let prop_value = if let Ok(n) = value.parse::<f64>() {
-                    serde_json::json!(n)
-                } else if let Ok(b) = value.parse::<bool>() {
-                    serde_json::json!(b)
-                } else {
-                    serde_json::json!(value)
-                };
+                let prop_value = blueprint_compiler::authored::property_value_from_raw(value);
                 node_instance.set_property(key, prop_value);
             }
 
-            graph_desc.add_node(node_instance);
+            graph_desc.add_node(node_instance)?;
         }
 
         // Convert connections
@@ -98,7 +145,7 @@ impl BlueprintEditorPanel {
                 &connection.target_pin,
                 conn_type,
             );
-            graph_desc.add_connection(graph_connection);
+            graph_desc.add_connection(graph_connection)?;
         }
 
         // Convert comments
@@ -110,7 +157,7 @@ impl BlueprintEditorPanel {
                 text: c.text.clone(),
                 position: (c.position.x, c.position.y),
                 size: (c.size.width, c.size.height),
-                color: [c.color.h, c.color.s, c.color.l, c.color.a],
+                color: hsla_to_rgba(c.color),
                 contained_node_ids: c.contained_node_ids.clone(),
             })
             .collect();
@@ -119,8 +166,30 @@ impl BlueprintEditorPanel {
     }
 
     /// Get node type from blueprint node
-    fn get_node_type_from_blueprint(&self, bp_node: &BlueprintNode) -> Result<String, String> {
-        Ok(bp_node.definition_id.clone())
+    fn get_node_type_from_blueprint(
+        bp_node: &BlueprintNode,
+        subgraphs: &[blueprint_graph::SubGraph],
+    ) -> Result<String, String> {
+        if bp_node.node_type == NodeType::Conversion {
+            let conversion_id = bp_node
+                .properties
+                .get("conversion_id")
+                .map(String::as_str)
+                .or_else(|| bp_node.definition_id.strip_prefix("conversion:"))
+                .filter(|id| !id.is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "conversion node `{}` has no registered conversion id",
+                        bp_node.id
+                    )
+                })?;
+            return Ok(format!("conversion:{conversion_id}"));
+        }
+        Ok(
+            crate::core::subgraph_ref::SubGraphReference::decode(&bp_node.definition_id, subgraphs)
+                .map(|reference| reference.encode_for_compiler())
+                .unwrap_or_else(|| bp_node.definition_id.clone()),
+        )
     }
 
     /// Convert graph description to blueprint graph
@@ -140,7 +209,23 @@ impl BlueprintEditorPanel {
             let definition_id = node_instance.node_type.clone();
             let node_def = node_definitions.get_node_definition(&definition_id);
 
-            let (title, icon, description, node_type, color) = if definition_id == "reroute" {
+            let (title, icon, description, node_type, color) = if definition_id == "macro_entry" {
+                (
+                    "Subgraph Entry".to_string(),
+                    "▶".to_string(),
+                    "Entry point for a macro or collapsed graph".to_string(),
+                    NodeType::MacroEntry,
+                    Some("#7C3AED".to_string()),
+                )
+            } else if definition_id == "macro_exit" {
+                (
+                    "Subgraph Exit".to_string(),
+                    "◀".to_string(),
+                    "Exit point for a macro or collapsed graph".to_string(),
+                    NodeType::MacroExit,
+                    Some("#7C3AED".to_string()),
+                )
+            } else if definition_id == "reroute" {
                 (
                     "Reroute".to_string(),
                     "•".to_string(),
@@ -148,23 +233,39 @@ impl BlueprintEditorPanel {
                     NodeType::Reroute,
                     None,
                 )
+            } else if let Some(conversion_id) = definition_id.strip_prefix("conversion:") {
+                let conversion = pulsar_reflection::CONVERSION_REGISTRY.get(conversion_id);
+                (
+                    conversion
+                        .map_or_else(|| "Conversion".to_owned(), |info| info.label.to_owned()),
+                    String::new(),
+                    conversion.map_or_else(
+                        || format!("Registered conversion `{conversion_id}`"),
+                        |info| {
+                            format!(
+                                "Convert {} to {}",
+                                info.source_type_name, info.target_type_name
+                            )
+                        },
+                    ),
+                    NodeType::Conversion,
+                    None,
+                )
             } else if let Some(uid) = definition_id.strip_prefix("custom_event:") {
                 let event_def = self.local_event_defs.iter().find(|d| d.uid == uid);
-                let name = event_def
-                    .map(|d| d.name.clone())
-                    .unwrap_or_else(|| {
-                        uid.replace('-', " ")
-                            .split_whitespace()
-                            .map(|w| {
-                                let mut c = w.chars();
-                                match c.next() {
-                                    None => String::new(),
-                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    });
+                let name = event_def.map(|d| d.name.clone()).unwrap_or_else(|| {
+                    uid.replace('-', " ")
+                        .split_whitespace()
+                        .map(|w| {
+                            let mut c = w.chars();
+                            match c.next() {
+                                None => String::new(),
+                                Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                });
                 (
                     format!("On {}", name),
                     "📡".to_string(),
@@ -174,21 +275,19 @@ impl BlueprintEditorPanel {
                 )
             } else if let Some(uid) = definition_id.strip_prefix("custom_event_dispatch:") {
                 let event_def = self.local_event_defs.iter().find(|d| d.uid == uid);
-                let name = event_def
-                    .map(|d| d.name.clone())
-                    .unwrap_or_else(|| {
-                        uid.replace('-', " ")
-                            .split_whitespace()
-                            .map(|w| {
-                                let mut c = w.chars();
-                                match c.next() {
-                                    None => String::new(),
-                                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    });
+                let name = event_def.map(|d| d.name.clone()).unwrap_or_else(|| {
+                    uid.replace('-', " ")
+                        .split_whitespace()
+                        .map(|w| {
+                            let mut c = w.chars();
+                            match c.next() {
+                                None => String::new(),
+                                Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                });
                 (
                     format!("Dispatch {}", name),
                     "📡".to_string(),
@@ -196,12 +295,20 @@ impl BlueprintEditorPanel {
                     NodeType::CustomEventDispatch,
                     None,
                 )
-            } else if let Some(macro_id) = definition_id.strip_prefix("macro:") {
+            } else if let Some(reference) = crate::core::subgraph_ref::SubGraphReference::decode(
+                &definition_id,
+                &self.subgraphs,
+            ) {
+                let macro_id = reference.id.as_str();
                 let macro_name = self
-                    .local_macros
+                    .subgraphs
                     .iter()
-                    .find(|m| m.id == macro_id)
-                    .or_else(|| self.library_manager.get_subgraph(macro_id))
+                    .find(|m| m.id == macro_id && m.kind == reference.kind)
+                    .or_else(|| {
+                        self.library_manager
+                            .get_subgraph(macro_id)
+                            .filter(|subgraph| subgraph.kind == reference.kind)
+                    })
                     .map(|m| m.name.clone())
                     .unwrap_or_else(|| {
                         let name = macro_id.replace('-', " ");
@@ -219,8 +326,15 @@ impl BlueprintEditorPanel {
                 (
                     macro_name,
                     "📦".to_string(),
-                    format!("Instance of macro '{}'", macro_id),
-                    NodeType::MacroInstance,
+                    match reference.kind {
+                        blueprint_graph::SubGraphKind::Macro => {
+                            format!("Instance of macro '{}'", macro_id)
+                        }
+                        blueprint_graph::SubGraphKind::Collapsed => {
+                            format!("Collapsed graph '{}'", macro_id)
+                        }
+                    },
+                    NodeType::SubGraphCall,
                     Some("#9B59B6".to_string()),
                 )
             } else if let Some((title, is_event)) =
@@ -230,7 +344,11 @@ impl BlueprintEditorPanel {
                     title,
                     if is_event { "📡" } else { "📨" }.to_string(),
                     String::new(),
-                    if is_event { NodeType::Event } else { NodeType::Logic },
+                    if is_event {
+                        NodeType::Event
+                    } else {
+                        NodeType::Logic
+                    },
                     Some(if is_event { "#C0392B" } else { "#00A8E8" }.to_string()),
                 )
             } else if let Some(def) = node_def {
@@ -265,35 +383,42 @@ impl BlueprintEditorPanel {
                 )
             };
 
-                // Ensure custom event On nodes always have the __return__ header pin
-                let mut node_inputs: Vec<Pin> = node_instance
-                    .inputs
-                    .iter()
-                    .map(|pin_inst| {
-                        let pin = &pin_inst.pin;
-                        let canonical = graph_types::DataType::from_type_str(&pin.data_type.to_string());
-                        Pin {
-                            id: pin_inst.id.clone(),
-                            name: pin.name.clone(),
-                            pin_type: match pin.pin_type {
-                                graph_types::PinType::Input => PinType::Input,
-                                graph_types::PinType::Output => PinType::Output,
-                            },
-                            data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
-                        }
-                    })
-                    .collect();
-                if node_type == NodeType::CustomEvent
-                    && !node_inputs.iter().any(|p| p.id == "__return__")
-                {
-                    node_inputs.insert(0, Pin {
+            // Ensure custom event On nodes always have the __return__ header pin
+            let mut node_inputs: Vec<Pin> = node_instance
+                .inputs
+                .iter()
+                .map(|pin_inst| {
+                    let pin = &pin_inst.pin;
+                    let canonical =
+                        graph_types::DataType::from_type_str(&pin.data_type.to_string());
+                    Pin {
+                        id: pin_inst.id.clone(),
+                        name: pin.name.clone(),
+                        pin_type: match pin.pin_type {
+                            graph_types::PinType::Input => PinType::Input,
+                            graph_types::PinType::Output => PinType::Output,
+                        },
+                        data_type: crate::core::types::PinDataType::from_type_str(
+                            canonical.to_string(),
+                        ),
+                    }
+                })
+                .collect();
+            if node_type == NodeType::CustomEvent
+                && !node_inputs.iter().any(|p| p.id == "__return__")
+            {
+                node_inputs.insert(
+                    0,
+                    Pin {
                         id: "__return__".to_string(),
                         name: String::new(),
                         pin_type: PinType::Input,
                         data_type: crate::core::types::PinDataType::from_type_str("?"),
-                    });
-                }
-                let bp_node = BlueprintNode {
+                    },
+                );
+            }
+            let is_conversion = node_type == NodeType::Conversion;
+            let bp_node = BlueprintNode {
                 id: node_id.clone(),
                 definition_id,
                 title,
@@ -301,9 +426,13 @@ impl BlueprintEditorPanel {
                 node_type,
                 position: Point::new(node_instance.position.x, node_instance.position.y),
                 size: {
-                    let max_pins = node_instance.inputs.len().max(node_instance.outputs.len());
-                    let height = layout::node_height_for_pin_rows(max_pins);
-                    crate::Size::new(240.0, height)
+                    if is_conversion {
+                        crate::Size::new(116.0, 20.0)
+                    } else {
+                        let max_pins = node_instance.inputs.len().max(node_instance.outputs.len());
+                        let height = layout::node_height_for_pin_rows(max_pins);
+                        crate::Size::new(240.0, height)
+                    }
                 },
                 inputs: node_inputs,
                 outputs: node_instance
@@ -311,7 +440,8 @@ impl BlueprintEditorPanel {
                     .iter()
                     .map(|pin_inst| {
                         let pin = &pin_inst.pin;
-                        let canonical = graph_types::DataType::from_type_str(&pin.data_type.to_string());
+                        let canonical =
+                            graph_types::DataType::from_type_str(&pin.data_type.to_string());
                         Pin {
                             id: pin_inst.id.clone(),
                             name: pin.name.clone(),
@@ -319,7 +449,9 @@ impl BlueprintEditorPanel {
                                 graph_types::PinType::Input => PinType::Input,
                                 graph_types::PinType::Output => PinType::Output,
                             },
-                            data_type: crate::core::types::PinDataType::from_type_str(canonical.to_string()),
+                            data_type: crate::core::types::PinDataType::from_type_str(
+                                canonical.to_string(),
+                            ),
                         }
                     })
                     .collect(),
@@ -364,12 +496,12 @@ impl BlueprintEditorPanel {
             .comments
             .iter()
             .map(|c| {
-                let color = Hsla {
-                    h: c.color[0],
-                    s: c.color[1],
-                    l: c.color[2],
+                let color = Hsla::from(gpui::Rgba {
+                    r: c.color[0],
+                    g: c.color[1],
+                    b: c.color[2],
                     a: c.color[3],
-                };
+                });
                 let color_picker_state =
                     Some(cx.new(|cx| ui::color_picker::ColorPickerState::new(window, cx)));
 
@@ -387,9 +519,9 @@ impl BlueprintEditorPanel {
             .collect();
 
         Ok(BlueprintGraph {
-            nodes,
-            connections,
-            comments,
+            nodes: nodes.into(),
+            connections: connections.into(),
+            comments: comments.into(),
             selected_nodes: Vec::new(),
             selected_comments: Vec::new(),
             zoom_level: 1.0,

@@ -58,7 +58,7 @@ fn vs_main(inst: WireInst, @builtin(vertex_index) vi: u32) -> VOut {
 
     let t = select(f32(seg), f32(seg + 1u), use_t1) / f32(WIRE_SEGS);
 
-    let gp   = bezier(inst.start, inst.ctrl1, inst.ctrl2, inst.to, t);
+    let gp = bezier(inst.start, inst.ctrl1, inst.ctrl2, inst.to, t);
     let gtan = bezier_tangent(inst.start, inst.ctrl1, inst.ctrl2, inst.to, t);
 
     let slen = length(gtan * u.zoom);

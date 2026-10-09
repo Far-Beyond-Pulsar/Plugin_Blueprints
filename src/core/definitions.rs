@@ -78,16 +78,17 @@ pub(crate) fn extract_canonical_node_metadata(
 
     for node_meta in metadata.values_mut() {
         for param in node_meta.params.iter_mut() {
-            param.param_type = ui::graph::DataType::from_type_str(&param.param_type).to_string();
+            param.param_type =
+                blueprint_graph::DataType::from_type_str(&param.param_type).to_string();
         }
 
         if let Some(return_type) = node_meta.return_type.as_mut() {
             return_type.type_string =
-                ui::graph::DataType::from_type_str(&return_type.type_string).to_string();
+                blueprint_graph::DataType::from_type_str(&return_type.type_string).to_string();
         }
 
         for out in node_meta.output_params.iter_mut() {
-            out.param_type = ui::graph::DataType::from_type_str(&out.param_type).to_string();
+            out.param_type = blueprint_graph::DataType::from_type_str(&out.param_type).to_string();
         }
     }
 
@@ -102,8 +103,8 @@ impl NodeDefinitions {
             let metadata = extract_canonical_node_metadata();
 
             // Load sub-graph libraries
-            let mut lib_manager = ui::graph::LibraryManager::default();
-            if let Err(e) = lib_manager.load_all_libraries() {
+            let mut lib_manager = blueprint_graph::LibraryManager::default();
+            if let Err(e) = lib_manager.load_all_libraries(crate::io::libraries::load_directory) {
                 eprintln!("Failed to load sub-graph libraries: {}", e);
             }
 
@@ -114,7 +115,7 @@ impl NodeDefinitions {
 
     fn from_node_metadata_and_libraries(
         metadata: std::collections::HashMap<String, graphy::NodeMetadata>,
-        lib_manager: ui::graph::LibraryManager,
+        lib_manager: blueprint_graph::LibraryManager,
     ) -> NodeDefinitions {
         let mut categories_map: std::collections::HashMap<String, Vec<NodeDefinition>> =
             std::collections::HashMap::new();
@@ -124,6 +125,10 @@ impl NodeDefinitions {
             let category_name = format!("Macros/{}", library.name);
 
             for subgraph in &library.subgraphs {
+                if subgraph.kind != blueprint_graph::SubGraphKind::Macro {
+                    continue;
+                }
+
                 // Convert sub-graph inputs to pin definitions
                 let inputs: Vec<PinDefinition> = subgraph
                     .interface
@@ -131,7 +136,7 @@ impl NodeDefinitions {
                     .iter()
                     .map(|pin| {
                         let canonical =
-                            ui::graph::DataType::from_type_str(&pin.data_type.to_string());
+                            blueprint_graph::DataType::from_type_str(&pin.data_type.to_string());
                         PinDefinition {
                             id: pin.id.clone(),
                             name: pin.name.clone(),
@@ -148,7 +153,7 @@ impl NodeDefinitions {
                     .iter()
                     .map(|pin| {
                         let canonical =
-                            ui::graph::DataType::from_type_str(&pin.data_type.to_string());
+                            blueprint_graph::DataType::from_type_str(&pin.data_type.to_string());
                         PinDefinition {
                             id: pin.id.clone(),
                             name: pin.name.clone(),
@@ -159,7 +164,11 @@ impl NodeDefinitions {
                     .collect();
 
                 let node_def = NodeDefinition {
-                    id: format!("subgraph:{}", subgraph.id),
+                    id: crate::core::subgraph_ref::SubGraphReference::new(
+                        subgraph.id.clone(),
+                        subgraph.kind,
+                    )
+                    .encode(),
                     name: subgraph.name.clone(),
                     icon: "📦".to_string(), // Macro icon
                     description: subgraph.description.clone(),
@@ -184,9 +193,52 @@ impl NodeDefinitions {
         // Every other engine native (component and value-type methods and
         // properties, accessors, the script stdlib) as `native::` nodes.
         Self::populate_native_categories(&mut categories_map);
+        Self::populate_conversion_category(&mut categories_map);
 
         // Convert to NodeDefinitions
         Self::categories_to_definitions(categories_map)
+    }
+
+    fn populate_conversion_category(
+        categories: &mut std::collections::HashMap<String, Vec<NodeDefinition>>,
+    ) {
+        let conversions: Vec<NodeDefinition> = pulsar_reflection::CONVERSION_REGISTRY
+            .iter()
+            .map(|conversion| NodeDefinition {
+                id: format!("conversion:{}", conversion.id),
+                name: format!(
+                    "{} {} → {}",
+                    conversion.label, conversion.source_type_name, conversion.target_type_name
+                ),
+                icon: String::new(),
+                description: format!(
+                    "Convert {} to {}",
+                    conversion.source_type_name, conversion.target_type_name
+                ),
+                documentation: format!("Reflection registered conversion `{}`.", conversion.id),
+                inputs: vec![PinDefinition {
+                    id: "from".to_string(),
+                    name: String::new(),
+                    data_type: PinDataType::from_type_str(conversion.source_type_name),
+                    pin_type: PinType::Input,
+                }],
+                outputs: vec![PinDefinition {
+                    id: "into".to_string(),
+                    name: String::new(),
+                    data_type: PinDataType::from_type_str(conversion.target_type_name),
+                    pin_type: PinType::Output,
+                }],
+                properties: HashMap::from([(
+                    "conversion_id".to_string(),
+                    conversion.id.to_string(),
+                )]),
+                color: Some("#3D78A6".to_string()),
+                is_event: false,
+            })
+            .collect();
+        if !conversions.is_empty() {
+            categories.insert("Conversions".to_string(), conversions);
+        }
     }
 
     fn from_node_metadata(
@@ -209,7 +261,9 @@ impl NodeDefinitions {
             let pin = |id: &str, ty: &str, pin_type: PinType| PinDefinition {
                 id: id.to_string(),
                 name: id.to_string(),
-                data_type: PinDataType::from_type_str(ui::graph::DataType::from_type_str(ty).to_string()),
+                data_type: PinDataType::from_type_str(
+                    blueprint_graph::DataType::from_type_str(ty).to_string(),
+                ),
                 pin_type,
             };
             let mut inputs = Vec::new();
@@ -218,21 +272,36 @@ impl NodeDefinitions {
                 inputs.push(pin("exec", "execution", PinType::Input));
                 outputs.push(pin("exec_out", "execution", PinType::Output));
             }
-            inputs.extend(node.inputs.iter().map(|(id, ty)| pin(id, ty, PinType::Input)));
-            outputs.extend(node.outputs.iter().map(|(id, ty)| pin(id, ty, PinType::Output)));
+            inputs.extend(
+                node.inputs
+                    .iter()
+                    .map(|(id, ty)| pin(id, ty, PinType::Input)),
+            );
+            outputs.extend(
+                node.outputs
+                    .iter()
+                    .map(|(id, ty)| pin(id, ty, PinType::Output)),
+            );
             let description = format!("{} ({})", node.name, node.category);
-            categories_map.entry(node.category.clone()).or_default().push(NodeDefinition {
-                id: node.node_type.clone(),
-                name: node.name.clone(),
-                icon: "⚙️".to_string(),
-                documentation: if node.doc.is_empty() { description.clone() } else { node.doc.clone() },
-                description,
-                inputs,
-                outputs,
-                properties: HashMap::new(),
-                color: None,
-                is_event: false,
-            });
+            categories_map
+                .entry(node.category.clone())
+                .or_default()
+                .push(NodeDefinition {
+                    id: node.node_type.clone(),
+                    name: node.name.clone(),
+                    icon: "⚙️".to_string(),
+                    documentation: if node.doc.is_empty() {
+                        description.clone()
+                    } else {
+                        node.doc.clone()
+                    },
+                    description,
+                    inputs,
+                    outputs,
+                    properties: HashMap::new(),
+                    color: None,
+                    is_event: false,
+                });
         }
     }
 
@@ -287,7 +356,8 @@ impl NodeDefinitions {
 
             // Add regular inputs
             for param in node_meta.params.iter() {
-                let canonical = ui::graph::DataType::from_type_str(&param.param_type).to_string();
+                let canonical =
+                    blueprint_graph::DataType::from_type_str(&param.param_type).to_string();
                 inputs.push(PinDefinition {
                     id: param.name.to_string(),
                     name: param.name.to_string(),
@@ -308,7 +378,8 @@ impl NodeDefinitions {
 
             // Add multi-output params (Break nodes, etc.)
             for out in &node_meta.output_params {
-                let canonical = ui::graph::DataType::from_type_str(&out.param_type).to_string();
+                let canonical =
+                    blueprint_graph::DataType::from_type_str(&out.param_type).to_string();
                 outputs.push(PinDefinition {
                     id: out.name.clone(),
                     name: out.name.clone(),
@@ -322,7 +393,8 @@ impl NodeDefinitions {
             if node_meta.output_params.is_empty() {
                 if let Some(return_type) = &node_meta.return_type {
                     let canonical =
-                        ui::graph::DataType::from_type_str(&return_type.type_string).to_string();
+                        blueprint_graph::DataType::from_type_str(&return_type.type_string)
+                            .to_string();
                     if canonical != "()" && canonical != "execution" {
                         outputs.push(PinDefinition {
                             id: "result".to_string(),
@@ -376,6 +448,7 @@ impl NodeDefinitions {
 
     fn get_category_color(category: &str) -> String {
         match category {
+            "Conversions" => "#3D78A6".to_string(),
             "Math" | "Math/Vector" => "#4A90E2".to_string(),
             "Logic" => "#E2A04A".to_string(),
             "String" => "#7ED321".to_string(),

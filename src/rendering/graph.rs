@@ -14,17 +14,19 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::core::types::PinDataType as DataType;
 use gpui::prelude::*;
 use gpui::*;
-use crate::core::types::PinDataType as DataType;
 use ui::ActiveTheme;
 use ui::PixelsExt;
 
 use crate::core::graph::BlueprintGraph;
-use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType, Pin};
+use crate::core::spatial_index::GraphRect;
+use crate::core::types::{BlueprintComment, BlueprintNode, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
-use crate::rendering::gpu::{ GraphUniforms, NodeInstance, PinInstance, WireInstance, WireVertex,
+use crate::rendering::gpu::{
+    GraphUniforms, NodeInstance, PinInstance, TextAlign, WireInstance, WireVertex,
 };
 use crate::rendering::layout;
 
@@ -36,13 +38,23 @@ pub const PIN_ROW_H: f32 = layout::PIN_ROW_H;
 pub const PIN_GAP: f32 = layout::PIN_GAP;
 pub const PIN_SIZE: f32 = layout::PIN_SIZE;
 
-const WIRE_SEGS: usize = 32;
 const WIRE_THICKNESS: f32 = 2.8;
 const HEADER_FONT: f32 = 12.5;
 const PIN_FONT: f32 = 10.5;
-const HEADER_PAD_X: f32 = 9.0;
+const LOD_FULL: f32 = 0.35;
+const LOD_TITLES: f32 = 0.18;
+const HEADER_PAD_X: f32 = layout::HEADER_PAD_X;
 const COMMENT_TITLE_PAD_X: f32 = 12.0;
 const COMMENT_TITLE_PAD_Y: f32 = 6.0;
+
+mod context_menu;
+mod geometry;
+
+pub(crate) use geometry::bezier;
+use geometry::{
+    cached_text_width, category_color, pin_color, pin_gpos_id, pin_gpos_row, tessellate_line,
+    tessellate_wire, wire_phase,
+};
 
 pub struct NodeGraphRenderer;
 
@@ -93,30 +105,17 @@ impl NodeGraphRenderer {
         pin_id: Option<&str>,
         graph: &BlueprintGraph,
     ) -> Point<f32> {
-        if node.node_type == NodeType::Reroute {
-            let cx = node.position.x + node.size.width * 0.5;
-            let cy = node.position.y + node.size.height * 0.5;
-            return Self::graph_to_screen_pos(Point::new(cx, cy), graph);
-        }
-        // Special case: __return__ pin renders in the header (right side)
-        if pin_id == Some("__return__") {
-            let scr = Self::graph_to_screen_pos(node.position, graph);
-            let px_ = scr.x + (node.size.width - 24.0) * graph.zoom_level;
-            let py = scr.y + HEADER_H * 0.5 * graph.zoom_level;
-            return Point::new(px_, py);
-        }
-        let zoom = graph.zoom_level;
-        let scr = Self::graph_to_screen_pos(node.position, graph);
-        let py = scr.y
-            + (HEADER_H + SEP_H + BODY_PAD) * zoom
-            + row as f32 * (PIN_ROW_H + PIN_GAP) * zoom
-            + PIN_ROW_H * 0.5 * zoom;
-        let px_ = if is_input {
-            scr.x + BODY_PAD * zoom
-        } else {
-            scr.x + (node.size.width - BODY_PAD) * zoom
-        };
-        Point::new(px_, py)
+        geometry::pin_canvas_pos(node, is_input, row, pin_id, graph)
+    }
+
+    pub(crate) fn pin_canvas_pos_index(
+        node: &BlueprintNode,
+        is_input: bool,
+        row: usize,
+        pin_id: &str,
+        graph: &BlueprintGraph,
+    ) -> Point<f32> {
+        geometry::pin_canvas_pos_index(node, pin_id, is_input, row, graph)
     }
 
     pub fn calculate_pin_position(
@@ -125,311 +124,41 @@ impl NodeGraphRenderer {
         is_input: bool,
         graph: &BlueprintGraph,
     ) -> Option<Point<f32>> {
-        if node.node_type == NodeType::Reroute {
-            let cx = node.position.x + node.size.width * 0.5;
-            let cy = node.position.y + node.size.height * 0.5;
-            return Some(Self::graph_to_screen_pos(Point::new(cx, cy), graph));
-        }
-        let row = if is_input {
-            node.inputs.iter().position(|p| p.id == pin_id)?
-        } else {
-            node.outputs.iter().position(|p| p.id == pin_id)?
-        };
-        Some(Self::pin_canvas_pos(node, is_input, row, Some(pin_id), graph))
+        geometry::calculate_pin_position(node, pin_id, is_input, graph)
     }
 
     pub fn calculate_pin_position_graph_space(
         node: &BlueprintNode,
+        pin_id: &str,
         is_input: bool,
-        row: usize,
-        _graph: &BlueprintGraph,
-    ) -> Point<f32> {
-        let py = node.position.y
-            + HEADER_H
-            + SEP_H
-            + BODY_PAD
-            + row as f32 * (PIN_ROW_H + PIN_GAP)
-            + PIN_ROW_H * 0.5;
-        let px_ = if is_input {
-            node.position.x + BODY_PAD
-        } else {
-            node.position.x + node.size.width - BODY_PAD
-        };
-        Point::new(px_, py)
+    ) -> Option<Point<f32>> {
+        geometry::calculate_pin_position_graph_space(node, pin_id, is_input)
     }
 
-    /// Backwards-compat: is this node inside the viewport?
-    pub fn is_node_visible_simple(node: &BlueprintNode, graph: &BlueprintGraph) -> bool {
-        let pad = 260.0 / graph.zoom_level.max(0.05);
-        let vl = -graph.pan_offset.x - pad;
-        let vt = -graph.pan_offset.y - pad;
-        let vr = -graph.pan_offset.x + 3840.0 / graph.zoom_level + pad;
-        let vb = -graph.pan_offset.y + 2160.0 / graph.zoom_level + pad;
-        !(node.position.x > vr
-            || node.position.x + node.size.width < vl
-            || node.position.y > vb
-            || node.position.y + node.size.height < vt)
+    pub fn viewport_graph_bounds(
+        graph: &BlueprintGraph,
+        viewport_size: Size<f32>,
+        padding_px: f32,
+    ) -> (f32, f32, f32, f32) {
+        geometry::viewport_graph_bounds(graph, viewport_size, padding_px)
     }
 
-    pub fn is_connection_visible_simple(conn: &Connection, graph: &BlueprintGraph) -> bool {
-        let from = graph.nodes.iter().find(|n| n.id == conn.source_node);
-        let to = graph.nodes.iter().find(|n| n.id == conn.target_node);
-        match (from, to) {
-            (Some(f), Some(t)) => {
-                Self::is_node_visible_simple(f, graph) || Self::is_node_visible_simple(t, graph)
-            }
-            _ => false,
-        }
+    pub fn is_node_visible_simple(
+        node: &BlueprintNode,
+        graph: &BlueprintGraph,
+        viewport_size: Size<f32>,
+    ) -> bool {
+        geometry::is_node_visible_simple(node, graph, viewport_size)
     }
 
     pub fn parse_hex_color(hex: &str) -> Option<gpui::Hsla> {
-        let hex = hex.trim_start_matches('#');
-        let p = |s: &str| u8::from_str_radix(s, 16).ok().map(|v| v as f32 / 255.0);
-        if hex.len() == 6 {
-            Some(gpui::Hsla::from(gpui::Rgba {
-                r: p(&hex[0..2])?,
-                g: p(&hex[2..4])?,
-                b: p(&hex[4..6])?,
-                a: 1.0,
-            }))
-        } else if hex.len() == 8 {
-            Some(gpui::Hsla::from(gpui::Rgba {
-                r: p(&hex[0..2])?,
-                g: p(&hex[2..4])?,
-                b: p(&hex[4..6])?,
-                a: p(&hex[6..8])?,
-            }))
-        } else {
-            None
-        }
+        geometry::parse_hex_color(hex)
     }
 }
 
-// ─── colour helpers ───────────────────────────────────────────────────────────
-
-fn category_color(node: &BlueprintNode) -> [f32; 4] {
-    if let Some(ref hex) = node.color {
-        let h = hex.trim_start_matches('#');
-        let p = |s: &str| u8::from_str_radix(s, 16).ok().map(|v| v as f32 / 255.0);
-        if h.len() == 6 {
-            if let (Some(r), Some(g), Some(b)) = (p(&h[0..2]), p(&h[2..4]), p(&h[4..6])) {
-                return [r, g, b, 1.0];
-            }
-        }
-    }
-    match node.node_type {
-        NodeType::Event => [0.72, 0.12, 0.10, 1.0],
-        NodeType::Logic => [0.13, 0.38, 0.78, 1.0],
-        NodeType::Math => [0.16, 0.62, 0.28, 1.0],
-        NodeType::Object => [0.78, 0.42, 0.08, 1.0],
-        NodeType::Reroute => [0.40, 0.40, 0.42, 1.0],
-        NodeType::MacroEntry | NodeType::MacroExit => [0.44, 0.18, 0.72, 1.0],
-        NodeType::MacroInstance => [0.32, 0.12, 0.52, 1.0],
-        NodeType::CustomEvent => [0.90, 0.50, 0.10, 1.0],       // orange
-        NodeType::CustomEventDispatch => [0.10, 0.60, 0.85, 1.0], // cyan
-    }
-}
-
-fn pin_color(dt: &DataType) -> [f32; 4] {
-    dt.display_color()
-}
-
-fn wire_phase(conn: &Connection) -> f32 {
-    let mut h: u32 = 2166136261;
-    for b in conn
-        .source_node
-        .bytes()
-        .chain(conn.source_pin.bytes())
-        .chain(conn.target_node.bytes())
-        .chain(conn.target_pin.bytes())
-    {
-        h ^= b as u32;
-        h = h.wrapping_mul(16777619);
-    }
-    (h as f32 / u32::MAX as f32) * 2.0
-}
-
-// ─── geometry helpers — all positions in GRAPH SPACE ─────────────────────────
-// The GPU vertex shaders apply graph→screen transform (pan+zoom).
-// CPU must NOT pre-apply pan or zoom to positions used by the GPU pipelines.
-// Exception: text positions are in screen space because text.wgsl uses NDC direct.
-
-/// Graph-space pin centre for a given node row (input or output side).
-/// No pan or zoom applied — the GPU shader handles the transform.
-fn pin_gpos_row(node: &BlueprintNode, is_input: bool, row: usize) -> (f32, f32) {
-    if node.node_type == NodeType::Reroute {
-        let cx = node.position.x + node.size.width * 0.5;
-        let cy = node.position.y + node.size.height * 0.5;
-        return (cx, cy);
-    }
-    let py = node.position.y
-        + HEADER_H
-        + SEP_H
-        + BODY_PAD
-        + row as f32 * (PIN_ROW_H + PIN_GAP)
-        + PIN_ROW_H * 0.5;
-    let px = if is_input {
-        node.position.x + BODY_PAD
-    } else {
-        node.position.x + node.size.width - BODY_PAD
-    };
-    (px, py)
-}
-
-/// Graph-space pin centre addressed by pin ID.
-fn pin_gpos_id(node: &BlueprintNode, pin_id: &str, is_input: bool) -> Option<(f32, f32)> {
-    if node.node_type == NodeType::Reroute {
-        let cx = node.position.x + node.size.width * 0.5;
-        let cy = node.position.y + node.size.height * 0.5;
-        return Some((cx, cy));
-    }
-    if pin_id == "__return__" {
-        return Some((
-            node.position.x + node.size.width - 24.0,
-            node.position.y + HEADER_H * 0.5,
-        ));
-    }
-    let row = if is_input {
-        node.inputs.iter().position(|p| p.id == pin_id)?
-    } else {
-        node.outputs.iter().position(|p| p.id == pin_id)?
-    };
-    Some(pin_gpos_row(node, is_input, row))
-}
-
-pub(crate) fn bezier(
-    p0: (f32, f32),
-    p1: (f32, f32),
-    p2: (f32, f32),
-    p3: (f32, f32),
-    t: f32,
-) -> (f32, f32) {
-    let u = 1.0 - t;
-    let a = u * u * u;
-    let b = 3.0 * u * u * t;
-    let c = 3.0 * u * t * t;
-    let d = t * t * t;
-    (
-        a * p0.0 + b * p1.0 + c * p2.0 + d * p3.0,
-        a * p0.1 + b * p1.1 + c * p2.1 + d * p3.1,
-    )
-}
-
-/// Tessellate a bezier wire into thick-quad segments — positions in GRAPH SPACE.
-/// half_thick is in graph units (not multiplied by zoom — shader handles scale).
-fn tessellate_wire(
-    from: (f32, f32),
-    to: (f32, f32),
-    color: [f32; 4],
-    half_thick: f32,
-) -> Vec<WireVertex> {
-    let hd = (to.0 - from.0).abs();
-    // Control point offset in graph units — keeps wire shape consistent at all zoom levels.
-    let ctl = (hd * 0.45).max(55.0).min(220.0);
-    let c1 = (from.0 + ctl, from.1);
-    let c2 = (to.0 - ctl, to.1);
-    let mut out = Vec::with_capacity(WIRE_SEGS * 6);
-    let mut prev = from;
-    for i in 1..=WIRE_SEGS {
-        let t = i as f32 / WIRE_SEGS as f32;
-        let cur = bezier(from, c1, c2, to, t);
-        let dx = cur.0 - prev.0;
-        let dy = cur.1 - prev.1;
-        let len = (dx * dx + dy * dy).sqrt();
-        let (nx, ny) = if len > 0.0 {
-            (-dy / len * half_thick, dx / len * half_thick)
-        } else {
-            (0.0, half_thick)
-        };
-        let v0 = (i - 1) as f32 / WIRE_SEGS as f32;
-        let v1 = i as f32 / WIRE_SEGS as f32;
-        out.push(WireVertex {
-            pos: [prev.0 + nx, prev.1 + ny],
-            uv: [0.0, v0],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [prev.0 - nx, prev.1 - ny],
-            uv: [1.0, v0],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [cur.0 + nx, cur.1 + ny],
-            uv: [0.0, v1],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [cur.0 + nx, cur.1 + ny],
-            uv: [0.0, v1],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [prev.0 - nx, prev.1 - ny],
-            uv: [1.0, v0],
-            color,
-        });
-        out.push(WireVertex {
-            pos: [cur.0 - nx, cur.1 - ny],
-            uv: [1.0, v1],
-            color,
-        });
-        prev = cur;
-    }
-    out
-}
-
-/// Tessellate a straight line segment — no bezier, no S-curves.
-/// Used for the selection box where all edges must be perfectly straight.
-fn tessellate_line(
-    from: (f32, f32),
-    to: (f32, f32),
-    color: [f32; 4],
-    half_thick: f32,
-) -> Vec<WireVertex> {
-    let dx = to.0 - from.0;
-    let dy = to.1 - from.1;
-    let len = (dx * dx + dy * dy).sqrt();
-    if len < 0.0001 {
-        return vec![];
-    }
-    let (nx, ny) = (-dy / len * half_thick, dx / len * half_thick);
-    vec![
-        WireVertex {
-            pos: [from.0 + nx, from.1 + ny],
-            uv: [0.0, 0.0],
-            color,
-        },
-        WireVertex {
-            pos: [from.0 - nx, from.1 - ny],
-            uv: [1.0, 0.0],
-            color,
-        },
-        WireVertex {
-            pos: [to.0 + nx, to.1 + ny],
-            uv: [0.0, 1.0],
-            color,
-        },
-        WireVertex {
-            pos: [to.0 + nx, to.1 + ny],
-            uv: [0.0, 1.0],
-            color,
-        },
-        WireVertex {
-            pos: [from.0 - nx, from.1 - ny],
-            uv: [1.0, 0.0],
-            color,
-        },
-        WireVertex {
-            pos: [to.0 - nx, to.1 - ny],
-            uv: [1.0, 1.0],
-            color,
-        },
-    ]
-}
+type TextCall = (String, f32, f32, f32, [f32; 4], TextAlign);
 
 // ─── main render ──────────────────────────────────────────────────────────────
-
-type TextCall = (String, f32, f32, f32, [f32; 4], bool); // (text, x, y, size, color, center)
 
 impl NodeGraphRenderer {
     pub fn render(
@@ -459,6 +188,7 @@ impl NodeGraphRenderer {
         let pan_y = canvas.graph.pan_offset.y;
         let wire_active_mode = canvas.wire_active_test_mode;
         let wire_hidden_mode = canvas.wire_hidden_test_mode;
+        let electronic_connections = canvas.electronic_connections;
         let anim_time = canvas.graph_anim_start.elapsed().as_secs_f32();
 
         // viewport culling
@@ -470,20 +200,104 @@ impl NodeGraphRenderer {
                     b.size.height.as_f32().max(1.0),
                 )
             })
-            .unwrap_or((3840.0, 2160.0));
-        let pad = (260.0 / zoom.max(0.05)).max(120.0);
-        let (vl, vt, vr, vb) = (
-            -pan_x - pad,
-            -pan_y - pad,
-            -pan_x + vw / zoom + pad,
-            -pan_y + vh / zoom + pad,
-        );
-        let visible = |n: &BlueprintNode| {
-            !(n.position.x > vr
-                || n.position.x + n.size.width < vl
-                || n.position.y > vb
-                || n.position.y + n.size.height < vt)
+            .unwrap_or((1.0, 1.0));
+        let (vl, vt, vr, vb) =
+            geometry::viewport_graph_bounds(&canvas.graph, Size::new(vw, vh), 260.0);
+        let viewport_rect = GraphRect {
+            min_x: vl,
+            min_y: vt,
+            max_x: vr,
+            max_y: vb,
         };
+        let (visible_node_indices, visible_comment_indices) = {
+            let mut spatial = canvas.spatial_index.borrow_mut();
+            spatial.ensure_current(&canvas.graph);
+            (
+                spatial.nodes_intersecting(viewport_rect, false),
+                spatial.comments_intersecting(viewport_rect, false),
+            )
+        };
+
+        // Measure only labels in the viewport. The index bounds include the
+        // existing viewport culling margin, so labels from nearby nodes remain
+        // eligible without a graph-wide scan.
+        let mut width_updates = Vec::new();
+        if zoom >= LOD_TITLES {
+            let (renderer, text_width_cache) = (&mut canvas.renderer, &mut canvas.text_width_cache);
+            for &index in &visible_node_indices {
+                let Some(node) = canvas.graph.nodes.get(index) else {
+                    continue;
+                };
+                if node.node_type == NodeType::Reroute {
+                    continue;
+                }
+                let title_width =
+                    cached_text_width(renderer, text_width_cache, &node.title, HEADER_FONT);
+                let header_output = (zoom >= LOD_FULL).then(|| {
+                    node.outputs
+                        .iter()
+                        .find(|pin| pin.id == "__return__")
+                        .map(|pin| {
+                            if pin.name.is_empty() {
+                                0.0
+                            } else {
+                                cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
+                            }
+                        })
+                        .unwrap_or_default()
+                });
+                let rows = if zoom >= LOD_FULL {
+                    node.inputs.len().max(node.outputs.len())
+                } else {
+                    0
+                };
+                let mut pin_label_rows = Vec::with_capacity(rows);
+                for row in 0..rows {
+                    let input_width = node
+                        .inputs
+                        .get(row)
+                        .filter(|pin| !pin.name.is_empty())
+                        .map_or(0.0, |pin| {
+                            cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
+                        });
+                    let output_width = node
+                        .outputs
+                        .get(row)
+                        .filter(|pin| pin.id != "__return__" && !pin.name.is_empty())
+                        .map_or(0.0, |pin| {
+                            cached_text_width(renderer, text_width_cache, &pin.name, PIN_FONT)
+                        });
+                    pin_label_rows.push((input_width, output_width));
+                }
+                let width = layout::node_width_for_labels(
+                    node.size.width,
+                    title_width,
+                    header_output,
+                    &pin_label_rows,
+                );
+                if width > node.size.width {
+                    width_updates.push((index, width));
+                }
+            }
+        }
+        if !width_updates.is_empty() {
+            let previous_revision = canvas.graph.nodes.revision();
+            let changed_indices = width_updates
+                .iter()
+                .map(|(index, _)| *index)
+                .collect::<Vec<_>>();
+            canvas.graph.nodes.with_mut(|nodes| {
+                for (index, width) in width_updates {
+                    if let Some(node) = nodes.get_mut(index) {
+                        node.size.width = width;
+                    }
+                }
+            });
+            let mut spatial = canvas.spatial_index.borrow_mut();
+            if !spatial.sync_nodes_after_batch(&canvas.graph, previous_revision, &changed_indices) {
+                spatial.ensure_current(&canvas.graph);
+            }
+        }
 
         let dragging_conn = canvas.dragging_connection.clone();
         let selected_nodes: std::collections::HashSet<&str> = canvas
@@ -499,23 +313,20 @@ impl NodeGraphRenderer {
                 || (wire_active_mode && selected_nodes.contains(node_id))
         };
 
-        let mut comment_instances: Vec<crate::rendering::gpu::CommentInstance> = Vec::new();
-        let mut comment_text_calls: Vec<TextCall> = Vec::new();
-        let mut comment_refs: Vec<&BlueprintComment> = canvas
-            .graph
-            .comments
+        let mut comment_instances: Vec<crate::rendering::gpu::CommentInstance> =
+            Vec::with_capacity(visible_comment_indices.len());
+        let mut comment_text_calls: Vec<TextCall> =
+            Vec::with_capacity(visible_comment_indices.len());
+        let mut comment_refs: Vec<&BlueprintComment> = visible_comment_indices
             .iter()
-            .filter(|comment| {
-                comment.position.x + comment.size.width >= vl
-                    && comment.position.x <= vr
-                    && comment.position.y + comment.size.height >= vt
-                    && comment.position.y <= vb
-            })
+            .filter_map(|&index| canvas.graph.comments.get(index))
             .collect();
         comment_refs.sort_by(|a, b| {
             let area_a = a.size.width * a.size.height;
             let area_b = b.size.width * b.size.height;
-            area_b.partial_cmp(&area_a).unwrap_or(std::cmp::Ordering::Equal)
+            area_b
+                .partial_cmp(&area_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         for comment in comment_refs {
@@ -549,22 +360,33 @@ impl NodeGraphRenderer {
                     scr.y + 16.0 * zoom,
                     12.5 * zoom,
                     text_rgba,
-                    false,
+                    TextAlign::Left,
                 ));
             }
         }
 
-        let mut node_instances: Vec<NodeInstance> = Vec::new();
-        let mut pin_instances: Vec<PinInstance> = Vec::new();
-        let mut text_calls: Vec<TextCall> = Vec::new();
+        let visible_pin_count = if zoom >= LOD_FULL {
+            visible_node_indices
+                .iter()
+                .filter_map(|&index| canvas.graph.nodes.get(index))
+                .map(|node| node.inputs.len().saturating_add(node.outputs.len()))
+                .fold(0_usize, usize::saturating_add)
+        } else {
+            0
+        };
+        let mut node_instances: Vec<NodeInstance> = Vec::with_capacity(visible_node_indices.len());
+        let mut pin_instances: Vec<PinInstance> = Vec::with_capacity(visible_pin_count);
+        let mut text_calls: Vec<TextCall> =
+            Vec::with_capacity(visible_node_indices.len().saturating_add(visible_pin_count));
 
-        for node in &canvas.graph.nodes {
-            if !visible(node) {
+        for index in visible_node_indices {
+            let Some(node) = canvas.graph.nodes.get(index) else {
                 continue;
-            }
+            };
 
             let is_sel = selected_nodes.contains(node.id.as_str());
             let is_reroute = node.node_type == NodeType::Reroute;
+            let is_conversion = node.node_type == NodeType::Conversion;
             let cat = category_color(node);
             let hdr = [
                 (cat[0] * 0.85 + 0.12).min(1.0),
@@ -585,15 +407,28 @@ impl NodeGraphRenderer {
             };
             let sep = [0.086, 0.098, 0.116, 1.0];
 
-            let (gw, gh) = if is_reroute {
-                (layout::snap_to_grid(node.size.width), layout::snap_to_grid(node.size.height))
+            let (gw, gh) = if is_reroute || is_conversion {
+                (
+                    layout::snap_to_grid(node.size.width),
+                    layout::snap_to_grid(node.size.height),
+                )
             } else {
                 let max_rows = node.inputs.len().max(node.outputs.len()).max(1);
-                (layout::snap_to_grid(node.size.width), layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)))
+                (
+                    layout::snap_to_grid(node.size.width),
+                    layout::snap_to_grid(layout::node_height_for_pin_rows(max_rows)),
+                )
             };
-            let hdr_frac = (HEADER_H + SEP_H) / gh;
+            let hdr_frac = if is_conversion {
+                0.0
+            } else {
+                (HEADER_H + SEP_H) / gh
+            };
             let is_running = node_is_active(node.id.as_str());
-            let flags = (is_reroute as u32) | ((is_sel as u32) << 1) | ((is_running as u32) << 2);
+            let flags = (is_reroute as u32)
+                | ((is_sel as u32) << 1)
+                | ((is_running as u32) << 2)
+                | ((is_conversion as u32) << 3);
 
             node_instances.push(NodeInstance {
                 pos: [node.position.x, node.position.y],
@@ -603,18 +438,39 @@ impl NodeGraphRenderer {
                 border_color: bord,
                 sep_color: sep,
                 header_h_frac: hdr_frac,
-                corner_r: 6.8 / zoom,
+                corner_r: if is_conversion { gh * 0.5 } else { 6.8 / zoom },
                 flags,
                 _pad: 0,
             });
 
             // ── LOD: above this zoom level render pins, text, and labels.
             // Below it we only draw node bodies and wires — much cheaper at scale.
-            const LOD_FULL: f32 = 0.35;
-            const LOD_TITLES: f32 = 0.18; // show title text but still no pins
+            // Titles can remain visible at lower zoom while pin labels are culled.
 
             // Node title
-            if zoom >= LOD_TITLES && !is_reroute {
+            if zoom >= LOD_TITLES && is_conversion {
+                let scr = Self::graph_to_screen_pos(node.position, &canvas.graph);
+                let label = node.title.to_ascii_uppercase();
+                let x = scr.x + gw * zoom * 0.5;
+                let y = scr.y + gh * zoom * 0.5 + 6.0 * zoom;
+                let label_color = [0.76, 0.78, 0.82, 1.0];
+                text_calls.push((
+                    label.clone(),
+                    x,
+                    y,
+                    18.0 * zoom,
+                    label_color,
+                    TextAlign::Center,
+                ));
+                text_calls.push((
+                    label,
+                    x + 0.8 * zoom,
+                    y,
+                    18.0 * zoom,
+                    label_color,
+                    TextAlign::Center,
+                ));
+            } else if zoom >= LOD_TITLES && !is_reroute {
                 let scr = Self::graph_to_screen_pos(node.position, &canvas.graph);
                 text_calls.push((
                     node.title.clone(),
@@ -622,7 +478,7 @@ impl NodeGraphRenderer {
                     scr.y + HEADER_H * zoom * 0.5 + HEADER_FONT * zoom * 0.35,
                     HEADER_FONT * zoom,
                     [0.88, 0.90, 0.95, 0.98],
-                    false,
+                    TextAlign::Left,
                 ));
             }
 
@@ -655,17 +511,13 @@ impl NodeGraphRenderer {
                             center: [cgx, cgy],
                             size: PIN_SIZE,
                             _pad0: 0.0,
-                            color: if is_special {
-                                [1.0, 0.2, 0.2, 1.0]
-                            } else {
-                                pc
-                            },
+                            color: if is_special { [1.0, 0.2, 0.2, 1.0] } else { pc },
                             kind: if is_special { 2 } else { exe as u32 },
                             is_input: is_input as u32,
                             compatible: compat as u32,
                             _pad1: 0,
                         });
-                        if !pin.name.is_empty() && !is_reroute {
+                        if !pin.name.is_empty() && !is_reroute && !is_conversion {
                             let scr_x = (cgx + pan_x) * zoom;
                             let scr_y = (cgy + pan_y) * zoom;
                             let lx = if is_input {
@@ -679,11 +531,14 @@ impl NodeGraphRenderer {
                                 scr_y + PIN_FONT * zoom * 0.45,
                                 PIN_FONT * zoom,
                                 [0.78, 0.81, 0.87, 0.98],
-                                !is_input,
+                                if is_input {
+                                    TextAlign::Left
+                                } else {
+                                    TextAlign::Right
+                                },
                             ));
                         }
                     }
-
                 }
             }
         }
@@ -692,22 +547,21 @@ impl NodeGraphRenderer {
 
         // ── Bezier wire instances — one struct per connection, GPU does all tessellation ──
         // No CPU bezier evaluation: just compute four control points and hand off to GPU.
-        let mut wire_instances: Vec<WireInstance> = Vec::new();
+        let visible_wire_indices = canvas
+            .spatial_index
+            .borrow()
+            .wires_intersecting(viewport_rect);
+        let mut wire_instances: Vec<WireInstance> = if electronic_connections {
+            Vec::new()
+        } else {
+            Vec::with_capacity(visible_wire_indices.len())
+        };
+        let mut electronic_wire_instances: Vec<WireInstance> = if electronic_connections {
+            Vec::with_capacity(visible_wire_indices.len())
+        } else {
+            Vec::new()
+        };
         let half_thick = WIRE_THICKNESS * 0.5; // graph-space half-thickness; shader × zoom → px
-
-        let node_map: std::collections::HashMap<&str, &BlueprintNode> = canvas
-            .graph
-            .nodes
-            .iter()
-            .map(|n| (n.id.as_str(), n))
-            .collect();
-        let vis_ids: std::collections::HashSet<&str> = canvas
-            .graph
-            .nodes
-            .iter()
-            .filter(|n| visible(n))
-            .map(|n| n.id.as_str())
-            .collect();
 
         // Helper: build a WireInstance from two graph-space endpoints.
         let make_wire = |fp: (f32, f32),
@@ -732,17 +586,27 @@ impl NodeGraphRenderer {
             }
         };
 
-        for conn in &canvas.graph.connections {
-            if !vis_ids.contains(conn.source_node.as_str())
-                && !vis_ids.contains(conn.target_node.as_str())
-            {
+        for index in visible_wire_indices {
+            let Some(conn) = canvas.graph.connections.get(index) else {
                 continue;
-            }
-            let (fn_, tn) = (
-                node_map.get(conn.source_node.as_str()),
-                node_map.get(conn.target_node.as_str()),
-            );
-            if let (Some(fn_), Some(tn)) = (fn_, tn) {
+            };
+            let (wire_geometry, source_index, target_index) = {
+                let spatial = canvas.spatial_index.borrow();
+                (
+                    spatial.wire(index),
+                    spatial.node_index(&conn.source_node),
+                    spatial.node_index(&conn.target_node),
+                )
+            };
+            let (Some(wire_geometry), Some(source_index), Some(target_index)) =
+                (wire_geometry, source_index, target_index)
+            else {
+                continue;
+            };
+            if let (Some(fn_), Some(tn)) = (
+                canvas.graph.nodes.get(source_index),
+                canvas.graph.nodes.get(target_index),
+            ) {
                 let src = fn_
                     .outputs
                     .iter()
@@ -772,18 +636,26 @@ impl NodeGraphRenderer {
                     fc = [0.98, 0.84, 0.10, fc[3]];
                     thick *= 1.12;
                 }
-                if let (Some(fp), Some(tp)) = (
-                    pin_gpos_id(fn_, &conn.source_pin, false),
-                    pin_gpos_id(tn, &conn.target_pin, true),
-                ) {
-                    wire_instances.push(make_wire(fp, tp, fc, thick, wire_flags, wire_phase(conn)));
+                let wire = make_wire(
+                    (wire_geometry.from.x, wire_geometry.from.y),
+                    (wire_geometry.to.x, wire_geometry.to.y),
+                    fc,
+                    thick,
+                    wire_flags,
+                    wire_phase(conn),
+                );
+                if electronic_connections {
+                    electronic_wire_instances.push(wire);
+                } else {
+                    wire_instances.push(wire);
                 }
             }
         }
 
         // Drag wire preview — source pin in graph space, mouse pos converted from canvas space.
         if let Some(ref drag) = canvas.dragging_connection.clone() {
-            if let Some(fn_) = node_map.get(drag.source_node.as_str()) {
+            let source_index = canvas.spatial_index.borrow().node_index(&drag.source_node);
+            if let Some(fn_) = source_index.and_then(|index| canvas.graph.nodes.get(index)) {
                 if let Some(fp) = pin_gpos_id(fn_, &drag.source_pin, false) {
                     let dc = pin_color(&drag.source_pin_type);
                     let mp = drag.current_mouse_pos;
@@ -803,14 +675,19 @@ impl NodeGraphRenderer {
                     } else {
                         0.70
                     };
-                    wire_instances.push(make_wire(
+                    let wire = make_wire(
                         fp,
                         tp,
                         [dc[0], dc[1], dc[2], drag_alpha],
                         half_thick * 0.85,
                         drag_flags,
                         0.0,
-                    ));
+                    );
+                    if electronic_connections {
+                        electronic_wire_instances.push(wire);
+                    } else {
+                        wire_instances.push(wire);
+                    }
                 }
             }
         }
@@ -842,7 +719,7 @@ impl NodeGraphRenderer {
         // wgpu_surface() composites the GPU texture into the GPUI scene.
         // It must be present in the element tree for anything to appear.
         // On the first frame bp_surface is None so we show a dark placeholder;
-        // the canvas prepaint creates the surface and requests a re-render,
+        // the surface driver creates the surface and requests a re-render,
         // so frame 2 immediately shows the GPU output.
         let gpu_display: AnyElement = if let Some(ref s) = canvas.surface {
             wgpu_surface(s.clone())
@@ -863,104 +740,83 @@ impl NodeGraphRenderer {
                 .into_any_element()
         };
 
-        // ── Canvas: creates surface in prepaint (has window), renders in paint ─
-        let driver = {
-            let pe_pre = canvas_entity.clone();
-            let pe_paint = canvas_entity.clone();
-            gpui::canvas(
-                // Prepaint: surface creation (first frame only).
-                // Called before paint — window is available here.
-                move |bounds, window, cx| {
-                    // Capture element bounds for coordinate conversion
-                    let ox = bounds.origin.x.as_f32();
-                    let oy = bounds.origin.y.as_f32();
-                    let sw = bounds.size.width.as_f32() as u32;
-                    let sh = bounds.size.height.as_f32() as u32;
+        // Retain GPU inputs between state changes; animation only publishes a surface.
+        let driver = plugin_editor_api::surface_animation::surface_animation(
+            &canvas_entity,
+            &mut canvas.surface_animation,
+            std::time::Duration::from_millis(33),
+            move |canvas, geometry, window, cx| {
+                let bounds = geometry.bounds;
+                // Capture element bounds for coordinate conversion
+                let ox = bounds.origin.x.as_f32();
+                let oy = bounds.origin.y.as_f32();
+                let sw = bounds.size.width.as_f32() as u32;
+                let sh = bounds.size.height.as_f32() as u32;
 
-                    pe_pre.update(cx, |canvas, cx| {
-                        *canvas.canvas_origin.borrow_mut() = Point::new(ox, oy);
-                        let b = gpui::Bounds {
-                            origin: gpui::Point {
-                                x: px(ox),
-                                y: px(oy),
-                            },
-                            size: gpui::Size {
-                                width: px(sw as f32),
-                                height: px(sh as f32),
-                            },
-                        };
-                        canvas.element_bounds = Some(b);
+                *canvas.canvas_origin.borrow_mut() = Point::new(ox, oy);
+                let b = gpui::Bounds {
+                    origin: gpui::Point {
+                        x: px(ox),
+                        y: px(oy),
+                    },
+                    size: gpui::Size {
+                        width: px(sw as f32),
+                        height: px(sh as f32),
+                    },
+                };
+                canvas.element_bounds = Some(b);
 
-                        // Create surface on first call — triggers re-render via notify
-                        if canvas.surface.is_none() {
-                            if let Some(s) = window.create_wgpu_surface(
-                                sw.max(64),
-                                sh.max(64),
-                                wgpu::TextureFormat::Bgra8UnormSrgb,
-                            ) {
-                                canvas.surface = Some(s);
-                                cx.notify(); // re-render to pick up wgpu_surface() element
-                            }
-                        }
-                    });
-                },
-                // Paint: render GPU frame every frame.
-                move |_bounds, _pre, _window, cx| {
-                    pe_paint.update(cx, |canvas, cx| {
-                        let Some(ref surface) = canvas.surface else {
-                            return;
-                        };
-                        if surface.is_resize_pending() {
-                            return;
-                        }
-                        let Some((view, (w, h))) = surface.back_view_with_size() else {
-                            return;
-                        };
+                // Create surface on first call — triggers re-render via notify
+                if canvas.surface.is_none() {
+                    if let Some(s) = window.create_wgpu_surface(
+                        sw.max(64),
+                        sh.max(64),
+                        wgpu::TextureFormat::Bgra8UnormSrgb,
+                    ) {
+                        canvas.surface = Some(s);
+                        cx.notify(); // re-render to pick up wgpu_surface() element
+                    }
+                }
 
-                        canvas.renderer.render_frame(
-                                            surface.device(),
-                                            surface.queue(),
-                                            &view,
-                                            w,
-                                            h,
-                                            surface.format(),
-                                            &uniforms,
-                                            &comment_instances,
-                                            &node_instances,
-                                            &wire_instances, // one struct per bezier connection
-                            &line_verts,     // selection box straight lines only
-                            &pin_instances,
-                            &text_calls,
-                        );
-                        drop(view);
-                        surface.swap_buffers();
-                        if !canvas.running_nodes.is_empty()
-                            || (canvas.wire_active_test_mode
-                                && !canvas.graph.selected_nodes.is_empty())
-                        {
-                            // Running-node glow animates, but a full redraw
-                            // re-lays-out the editor tree: cap it at ~30 Hz.
-                            if !canvas.anim_notify_pending {
-                                canvas.anim_notify_pending = true;
-                                cx.spawn(async move |this, cx| {
-                                    cx.background_executor()
-                                        .timer(std::time::Duration::from_millis(33))
-                                        .await;
-                                    let _ = this.update(cx, |this, cx| {
-                                        this.anim_notify_pending = false;
-                                        cx.notify();
-                                    });
-                                })
-                                .detach();
-                            }
-                        }
-                    });
-                },
-            )
-            .absolute()
-            .inset_0()
-            .size_full()
-        };
+                let Some(ref surface) = canvas.surface else {
+                    return false;
+                };
+                if surface.is_resize_pending() {
+                    return true;
+                }
+                let Some((view, (w, h))) = surface.back_view_with_size() else {
+                    return false;
+                };
+
+                let mut uniforms = uniforms;
+                uniforms.time = canvas.graph_anim_start.elapsed().as_secs_f32();
+                uniforms.viewport = [bounds.size.width.as_f32(), bounds.size.height.as_f32()];
+                canvas.renderer.render_frame(
+                    surface.device(),
+                    surface.queue(),
+                    &view,
+                    w,
+                    h,
+                    surface.format(),
+                    &uniforms,
+                    &comment_instances,
+                    &node_instances,
+                    &wire_instances, // one struct per bezier connection
+                    &electronic_wire_instances,
+                    &line_verts, // selection box straight lines only
+                    &pin_instances,
+                    &text_calls,
+                );
+                drop(view);
+                surface.swap_buffers();
+
+                !canvas.running_nodes.is_empty()
+                    || (canvas.wire_active_test_mode && !canvas.graph.selected_nodes.is_empty())
+            },
+        )
+        .absolute()
+        .inset_0()
+        .size_full();
 
         // Wrap the canvas in DropAreas so sidebars can drag items directly onto the graph.
         ui::drop_area::DropArea::<crate::features::prefabs::ComponentDrag>::new(
@@ -993,7 +849,7 @@ impl NodeGraphRenderer {
                     .track_focus(&focus_handle)
                     .key_context("BlueprintGraph")
                     .child(gpu_display) // wgpu_surface() or dark placeholder — MUST be first
-                    .child(driver) // invisible canvas that drives GPU rendering
+                    .child(driver) // retained driver for GPU rendering
                     // GPUI-only overlays (palette + context menus) sit on top
                     .child(Self::render_quick_palette_overlay_inner(
                         canvas.quick_palette_open,
@@ -1133,16 +989,12 @@ impl NodeGraphRenderer {
                 .snap_to_window_with_margin(px(4.0))
                 .anchor(gpui::Corner::TopLeft)
                 .child(
-                    div()
-                        .occlude()
-                        .w(px(title_w))
-                        .h(px(title_h * 0.68))
-                        .child(
-                            ui::input::TextInput::new(&canvas.comment_text_input)
-                                .appearance(false)
-                                .bordered(false)
-                                .focus_bordered(false),
-                        ),
+                    div().occlude().w(px(title_w)).h(px(title_h * 0.68)).child(
+                        ui::input::TextInput::new(&canvas.comment_text_input)
+                            .appearance(false)
+                            .bordered(false)
+                            .focus_bordered(false),
+                    ),
                 ),
         )
         .with_priority(2)
@@ -1167,13 +1019,13 @@ impl NodeGraphRenderer {
         }
         let macro_id = canvas.id.clone();
 
-        // local_macros live on the shared panel
-        let local_macros = canvas
+        // subgraphs live on the shared panel
+        let subgraphs = canvas
             .panel
             .upgrade()
-            .map(|p| p.read(cx).local_macros.clone())
+            .map(|p| p.read(cx).subgraphs.clone())
             .unwrap_or_default();
-        let macro_def = match local_macros.iter().find(|m| m.id == macro_id) {
+        let macro_def = match subgraphs.iter().find(|m| m.id == macro_id) {
             Some(m) => m.clone(),
             None => return div().into_any_element(),
         };
@@ -1184,11 +1036,13 @@ impl NodeGraphRenderer {
             .upgrade()
             .map(|p| {
                 let r = p.read(cx);
-                (r.variable_name_input.clone(), r.variable_type_dropdown.clone())
+                (
+                    r.variable_name_input.clone(),
+                    r.variable_type_dropdown.clone(),
+                )
             })
             .unzip();
-        let (Some(name_input_shared), Some(type_dd_shared)) = (name_input_opt, type_dd_opt)
-        else {
+        let (Some(name_input_shared), Some(type_dd_shared)) = (name_input_opt, type_dd_opt) else {
             return div().into_any_element();
         };
 
@@ -1245,11 +1099,7 @@ impl NodeGraphRenderer {
                                     .panel
                                     .upgrade()
                                     .map(|p| {
-                                        p.read(cx)
-                                            .variable_name_input
-                                            .read(cx)
-                                            .text()
-                                            .to_string()
+                                        p.read(cx).variable_name_input.read(cx).text().to_string()
                                     })
                                     .unwrap_or_default()
                                     .trim()
@@ -1267,7 +1117,9 @@ impl NodeGraphRenderer {
                                     .unwrap_or_else(|| "f32".to_string());
                                 if !name.is_empty() {
                                     if let Some(p) = canvas.panel.upgrade() {
-                                        p.update(cx, |panel, cx| panel.add_macro_pin(&mid2, name, type_str, is_input, cx));
+                                        p.update(cx, |panel, cx| {
+                                            panel.add_macro_pin(&mid2, name, type_str, is_input, cx)
+                                        });
                                     }
                                 }
                                 canvas.macro_pin_add_mode = None;
@@ -1326,7 +1178,11 @@ impl NodeGraphRenderer {
                             .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
                                 pe_add.update(cx, |canvas, cx| {
                                     canvas.macro_pin_add_mode = Some(true);
-                                    if let Some(p) = canvas.panel.upgrade() { p.update(cx, |panel, cx| panel.start_creating_variable(window, cx)); };
+                                    if let Some(p) = canvas.panel.upgrade() {
+                                        p.update(cx, |panel, cx| {
+                                            panel.start_creating_variable(window, cx)
+                                        });
+                                    };
                                     cx.notify();
                                 });
                             })
@@ -1378,7 +1234,9 @@ impl NodeGraphRenderer {
                                 .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
                                     pe2.update(cx, |canvas, cx| {
                                         if let Some(p) = canvas.panel.upgrade() {
-                                            p.update(cx, |panel, cx| panel.remove_macro_pin(&mid2, &pin_id, true, cx));
+                                            p.update(cx, |panel, cx| {
+                                                panel.remove_macro_pin(&mid2, &pin_id, true, cx)
+                                            });
                                         }
                                     });
                                 })
@@ -1415,7 +1273,11 @@ impl NodeGraphRenderer {
                             .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
                                 pe_add.update(cx, |canvas, cx| {
                                     canvas.macro_pin_add_mode = Some(false);
-                                    if let Some(p) = canvas.panel.upgrade() { p.update(cx, |panel, cx| panel.start_creating_variable(window, cx)); };
+                                    if let Some(p) = canvas.panel.upgrade() {
+                                        p.update(cx, |panel, cx| {
+                                            panel.start_creating_variable(window, cx)
+                                        });
+                                    };
                                     cx.notify();
                                 });
                             })
@@ -1467,7 +1329,9 @@ impl NodeGraphRenderer {
                                 .on_mouse_down(gpui::MouseButton::Left, move |_, _, cx| {
                                     pe2.update(cx, |canvas, cx| {
                                         if let Some(p) = canvas.panel.upgrade() {
-                                            p.update(cx, |panel, cx| panel.remove_macro_pin(&mid2, &pin_id, false, cx));
+                                            p.update(cx, |panel, cx| {
+                                                panel.remove_macro_pin(&mid2, &pin_id, false, cx)
+                                            });
                                         }
                                     });
                                 })
@@ -1886,205 +1750,5 @@ impl NodeGraphRenderer {
             );
 
         hud.into_any_element()
-    }
-
-    // ── Node context menu ─────────────────────────────────────────────────────
-
-    fn render_node_context_menu(
-        canvas: &GraphCanvasPanel,
-        cx: &mut Context<GraphCanvasPanel>,
-    ) -> AnyElement {
-        let Some((ref node_id, pos)) = canvas.node_context_menu else {
-            return div().into_any_element();
-        };
-        let node_id = node_id.clone();
-        let has_bp = canvas.has_breakpoint(&node_id);
-        let bp_label = if has_bp {
-            "Remove Breakpoint"
-        } else {
-            "Add Breakpoint  ⏹"
-        };
-
-        let pe = cx.entity().clone();
-        let pe2 = pe.clone();
-        let pe3 = pe.clone();
-        let pe4 = pe.clone();
-        let nid_dup = node_id.clone();
-        let nid_copy = node_id.clone();
-        let nid_del = node_id.clone();
-        let nid_bp = node_id.clone();
-
-        deferred(
-            anchored()
-                .position(pos)
-                .snap_to_window_with_margin(px(8.0))
-                .anchor(gpui::Corner::TopLeft)
-                .child(
-                    div()
-                        .occlude()
-                        .w(px(200.0))
-                        .bg(cx.theme().popover)
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .shadow_lg()
-                        .rounded(px(6.0))
-                        .py(px(4.0))
-                        // ── Breakpoint section ─────────────────────────────────
-                        .child(Self::menu_item_colored(
-                            bp_label,
-                            if has_bp {
-                                gpui::rgba(0xFF9999FF)
-                            } else {
-                                gpui::rgba(0xFF6666FF)
-                            },
-                            cx,
-                            {
-                                let pe = pe4.clone();
-                                move |_, _, cx| {
-                                    pe.update(cx, |canvas, cx| {
-                                        canvas.toggle_breakpoint(nid_bp.clone(), cx);
-                                        canvas.node_context_menu = None;
-                                        cx.notify();
-                                    });
-                                }
-                            },
-                        ))
-                        .child(Self::menu_divider(cx))
-                        // ── Standard edit actions ──────────────────────────────
-                        .child(Self::menu_item("Duplicate Node", cx, {
-                            let pe = pe.clone();
-                            move |_, _, cx| {
-                                pe.update(cx, |canvas, cx| {
-                                    canvas.duplicate_node(nid_dup.clone(), cx);
-                                    canvas.node_context_menu = None;
-                                    cx.notify();
-                                });
-                            }
-                        }))
-                        .child(Self::menu_item("Copy Node", cx, {
-                            let pe = pe2.clone();
-                            move |_, _, cx| {
-                                pe.update(cx, |canvas, cx| {
-                                    canvas.copy_node(nid_copy.clone(), cx);
-                                    canvas.node_context_menu = None;
-                                    cx.notify();
-                                });
-                            }
-                        }))
-                        .child(Self::menu_divider(cx))
-                        .child(Self::menu_item("Delete Node", cx, {
-                            let pe = pe3.clone();
-                            move |_, _, cx| {
-                                pe.update(cx, |canvas, cx| {
-                                    canvas.delete_node(nid_del.clone(), cx);
-                                    canvas.node_context_menu = None;
-                                    cx.notify();
-                                });
-                            }
-                        }))
-                        .on_mouse_down_out(move |_, _, cx| {
-                            pe.update(cx, |canvas, cx| {
-                                canvas.node_context_menu = None;
-                                cx.notify();
-                            });
-                        }),
-                ),
-        )
-        .with_priority(2)
-        .into_any_element()
-    }
-
-    // ── Pin context menu ──────────────────────────────────────────────────────
-
-    fn render_pin_context_menu(
-        canvas: &GraphCanvasPanel,
-        cx: &mut Context<GraphCanvasPanel>,
-    ) -> AnyElement {
-        let Some((ref node_id, ref pin_id, pos)) = canvas.pin_context_menu else {
-            return div().into_any_element();
-        };
-        let node_id = node_id.clone();
-        let pin_id = pin_id.clone();
-        let pe = cx.entity().clone();
-        let pe2 = pe.clone();
-
-        deferred(
-            anchored()
-                .position(pos)
-                .snap_to_window_with_margin(px(8.0))
-                .anchor(gpui::Corner::TopLeft)
-                .child(
-                    div()
-                        .occlude()
-                        .w(px(180.0))
-                        .bg(cx.theme().popover)
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .shadow_lg()
-                        .rounded(px(6.0))
-                        .py(px(4.0))
-                        .child(Self::menu_item("Disconnect Pin", cx, {
-                            let pe = pe.clone();
-                            move |_, _, cx| {
-                                pe.update(cx, |canvas, cx| {
-                                    canvas.disconnect_pin(node_id.clone(), pin_id.clone(), cx);
-                                    canvas.pin_context_menu = None;
-                                    cx.notify();
-                                });
-                            }
-                        }))
-                        .on_mouse_down_out(move |_, _, cx| {
-                            pe2.update(cx, |canvas, cx| {
-                                canvas.pin_context_menu = None;
-                                cx.notify();
-                            });
-                        }),
-                ),
-        )
-        .with_priority(2)
-        .into_any_element()
-    }
-
-    // ── Shared menu primitives ────────────────────────────────────────────────
-
-    fn menu_item(
-        label: &str,
-        cx: &mut Context<GraphCanvasPanel>,
-        handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
-    ) -> impl IntoElement {
-        div()
-            .px(px(12.0))
-            .py(px(6.0))
-            .text_sm()
-            .text_color(cx.theme().popover_foreground)
-            .cursor_pointer()
-            .hover(|s| s.bg(cx.theme().accent.opacity(0.12)))
-            .on_mouse_down(gpui::MouseButton::Left, handler)
-            .child(label.to_string())
-    }
-
-    fn menu_item_colored(
-        label: &str,
-        color: gpui::Rgba,
-        cx: &mut Context<GraphCanvasPanel>,
-        handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
-    ) -> impl IntoElement {
-        div()
-            .px(px(12.0))
-            .py(px(6.0))
-            .text_sm()
-            .text_color(color)
-            .cursor_pointer()
-            .hover(|s| s.bg(gpui::rgba(0xFF000020)))
-            .on_mouse_down(gpui::MouseButton::Left, handler)
-            .child(label.to_string())
-    }
-
-    fn menu_divider(cx: &mut Context<GraphCanvasPanel>) -> impl IntoElement {
-        div()
-            .my(px(4.0))
-            .mx(px(8.0))
-            .h(px(1.0))
-            .bg(cx.theme().border)
     }
 }

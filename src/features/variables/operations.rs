@@ -8,11 +8,11 @@
 //! - Type enumeration
 
 use super::types::{ClassVariable, TypeItem, VariableDrag};
+use crate::core::types::PinDataType as DataType;
 use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
-use crate::core::types::PinDataType as DataType;
 
 impl BlueprintEditorPanel {
     /// Start creating a new variable
@@ -60,6 +60,8 @@ impl BlueprintEditorPanel {
 
         if !name.is_empty() {
             let variable = ClassVariable {
+                id: uuid::Uuid::new_v4().to_string(),
+                description: String::new(),
                 name,
                 var_type: selected_type,
                 default_value: None,

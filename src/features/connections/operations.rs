@@ -1,9 +1,12 @@
 //! Connection operations - dragging and managing connections between nodes
 
+use std::collections::HashMap;
+
+use crate::core::spatial_index::GraphRect;
+use crate::core::types::PinDataType as GraphDataType;
 use crate::core::types::{BlueprintNode, Connection, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use gpui::*;
-use crate::core::types::PinDataType as GraphDataType;
 
 /// Connection drag state
 #[derive(Clone, Debug)]
@@ -28,7 +31,10 @@ impl GraphCanvasPanel {
             // Allow dragging from special header/fn-ptr pins even though they're in inputs
             let is_special = pin_id == "__return__" || pin_id == "__fn_ptr__";
             let pin = if is_special {
-                node.inputs.iter().chain(node.outputs.iter()).find(|p| p.id == pin_id)
+                node.inputs
+                    .iter()
+                    .chain(node.outputs.iter())
+                    .find(|p| p.id == pin_id)
             } else {
                 node.outputs.iter().find(|p| p.id == pin_id)
             };
@@ -154,9 +160,9 @@ impl GraphCanvasPanel {
 
                         // Create new connection
                         let connection_type = if pin_data_type == GraphDataType::execution() {
-                            ui::graph::ConnectionType::Execution
+                            blueprint_graph::ConnectionType::Execution
                         } else {
-                            ui::graph::ConnectionType::Data
+                            blueprint_graph::ConnectionType::Data
                         };
 
                         let connection = Connection {
@@ -309,62 +315,23 @@ impl GraphCanvasPanel {
     }
 
     fn pin_graph_position(
-        &self,
         node: &BlueprintNode,
         pin_id: &str,
         is_input: bool,
     ) -> Option<Point<f32>> {
-        let row = if is_input {
-            node.inputs.iter().position(|p| p.id == pin_id)
-        } else {
-            node.outputs.iter().position(|p| p.id == pin_id)
-        };
-
-        row.map(|row| {
-            crate::rendering::graph::NodeGraphRenderer::calculate_pin_position_graph_space(
-                node,
-                is_input,
-                row,
-                &self.graph,
-            )
-        })
+        crate::rendering::graph::NodeGraphRenderer::calculate_pin_position_graph_space(
+            node, pin_id, is_input,
+        )
     }
 
-    fn connection_endpoints(&self, connection: &Connection) -> Option<(Point<f32>, Point<f32>)> {
-        let from_node = self.graph.nodes.iter().find(|n| n.id == connection.source_node)?;
-        let to_node = self.graph.nodes.iter().find(|n| n.id == connection.target_node)?;
-
-        let from_pos = self.pin_graph_position(from_node, &connection.source_pin, false)
-            .unwrap_or_else(|| {
-                Point::new(
-                    from_node.position.x + from_node.size.width,
-                    from_node.position.y + from_node.size.height / 2.0,
-                )
-            });
-
-        let to_pos = self.pin_graph_position(to_node, &connection.target_pin, true)
-            .unwrap_or_else(|| {
-                Point::new(
-                    to_node.position.x,
-                    to_node.position.y + to_node.size.height / 2.0,
-                )
-            });
-
-        Some((from_pos, to_pos))
-    }
-
-    fn bezier_control_points(
-        from_pos: Point<f32>,
-        to_pos: Point<f32>,
-    ) -> (Point<f32>, Point<f32>) {
+    fn bezier_control_points(from_pos: Point<f32>, to_pos: Point<f32>) -> (Point<f32>, Point<f32>) {
         const CONTROL_POINT_DISTANCE_RATIO: f32 = 0.45;
         const MIN_CONTROL_POINT_OFFSET: f32 = 55.0;
         const MAX_CONTROL_POINT_OFFSET: f32 = 220.0;
 
         let horizontal_distance = (to_pos.x - from_pos.x).abs();
-        let control_point_offset =
-            (horizontal_distance * CONTROL_POINT_DISTANCE_RATIO)
-                .clamp(MIN_CONTROL_POINT_OFFSET, MAX_CONTROL_POINT_OFFSET);
+        let control_point_offset = (horizontal_distance * CONTROL_POINT_DISTANCE_RATIO)
+            .clamp(MIN_CONTROL_POINT_OFFSET, MAX_CONTROL_POINT_OFFSET);
 
         (
             Point::new(from_pos.x + control_point_offset, from_pos.y),
@@ -393,17 +360,10 @@ impl GraphCanvasPanel {
             ((point.x - start.0) * dx + (point.y - start.1) * dy) / segment_length_sq;
         let projection = unbounded_projection.clamp(0.0, 1.0);
 
-        (
-            start.0 + projection * dx,
-            start.1 + projection * dy,
-        )
+        (start.0 + projection * dx, start.1 + projection * dy)
     }
 
-    fn point_distance_to_segment(
-        point: Point<f32>,
-        start: (f32, f32),
-        end: (f32, f32),
-    ) -> f32 {
+    fn point_distance_to_segment(point: Point<f32>, start: (f32, f32), end: (f32, f32)) -> f32 {
         let (closest_x, closest_y) = Self::closest_point_on_segment(point, start, end);
         Self::distance_between_points(point, Point::new(closest_x, closest_y))
     }
@@ -439,15 +399,37 @@ impl GraphCanvasPanel {
         false
     }
 
+    fn point_in_bezier_bounds(
+        point: Point<f32>,
+        from_pos: Point<f32>,
+        to_pos: Point<f32>,
+        padding: f32,
+    ) -> bool {
+        let (control_1, control_2) = Self::bezier_control_points(from_pos, to_pos);
+        let min_x = from_pos.x.min(control_1.x).min(control_2.x).min(to_pos.x) - padding;
+        let max_x = from_pos.x.max(control_1.x).max(control_2.x).max(to_pos.x) + padding;
+        let min_y = from_pos.y.min(control_1.y).min(control_2.y).min(to_pos.y) - padding;
+        let max_y = from_pos.y.max(control_1.y).max(control_2.y).max(to_pos.y) + padding;
+        point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
+    }
+
     /// Find connection near a point (for double-click reroute creation)
     pub fn find_connection_near_point(&self, point: Point<f32>) -> Option<Connection> {
         const CLICK_THRESHOLD: f32 = 30.0;
-
-        for connection in &self.graph.connections {
-            if let Some((from_pos, to_pos)) = self.connection_endpoints(connection) {
-                if Self::point_near_bezier(point, from_pos, to_pos, CLICK_THRESHOLD) {
-                    return Some(connection.clone());
-                }
+        let candidates = {
+            let mut spatial = self.spatial_index.borrow_mut();
+            spatial.ensure_current(&self.graph);
+            spatial.wires_intersecting(GraphRect::around(point, CLICK_THRESHOLD))
+        };
+        for index in candidates {
+            let Some(connection) = self.graph.connections.get(index) else {
+                continue;
+            };
+            let Some(wire) = self.spatial_index.borrow().wire(index) else {
+                continue;
+            };
+            if Self::point_near_bezier(point, wire.from, wire.to, CLICK_THRESHOLD) {
+                return Some(connection.clone());
             }
         }
 
@@ -461,13 +443,24 @@ impl GraphCanvasPanel {
     pub fn find_connection_near_point_precise(&self, point: Point<f32>) -> Option<Connection> {
         const SAMPLES: usize = 48;
         const THRESHOLD: f32 = 12.0;
-
-        for connection in &self.graph.connections {
-            if let Some((from_pos, to_pos)) = self.connection_endpoints(connection) {
-                if self.is_point_near_bezier_curve(point, from_pos, to_pos, SAMPLES, THRESHOLD)
-                {
-                    return Some(connection.clone());
-                }
+        let candidates = {
+            let mut spatial = self.spatial_index.borrow_mut();
+            spatial.ensure_current(&self.graph);
+            spatial.wires_intersecting(GraphRect::around(point, THRESHOLD))
+        };
+        for index in candidates {
+            let Some(connection) = self.graph.connections.get(index) else {
+                continue;
+            };
+            let Some(wire) = self.spatial_index.borrow().wire(index) else {
+                continue;
+            };
+            // The tree stores the cubic's conservative control-hull AABB;
+            // only local candidates pay for the precise curve distance test.
+            if Self::point_in_bezier_bounds(point, wire.from, wire.to, THRESHOLD)
+                && self.is_point_near_bezier_curve(point, wire.from, wire.to, SAMPLES, THRESHOLD)
+            {
+                return Some(connection.clone());
             }
         }
 

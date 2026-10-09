@@ -1,14 +1,63 @@
 //! Macro operations — creating, opening, editing, and placing macro instances.
 
+mod collapsed;
+
 use crate::core::graph::BlueprintGraph;
+use crate::core::types::PinDataType as DataType;
 use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::GraphTab;
 use crate::rendering::layout;
 use gpui::*;
 use std::collections::HashMap;
-use crate::core::types::PinDataType as DataType;
 use ui::PixelsExt;
+
+/// Keep one boundary node of the requested role and redirect any connected
+/// duplicate sentinels to it. Older collapsed graphs could acquire a second,
+/// empty macro entry/exit when opened because their sentinel IDs differ from
+/// those generated for macros.
+pub(crate) fn normalize_subgraph_boundary(
+    graph: &mut BlueprintGraph,
+    node_type: NodeType,
+) -> Option<String> {
+    let sentinel_ids: Vec<String> = graph
+        .nodes
+        .iter()
+        .filter(|node| node.node_type == node_type)
+        .map(|node| node.id.clone())
+        .collect();
+    let keep_id = sentinel_ids
+        .iter()
+        .max_by_key(|id| {
+            graph
+                .connections
+                .iter()
+                .filter(|connection| {
+                    connection.source_node.as_str() == id.as_str()
+                        || connection.target_node.as_str() == id.as_str()
+                })
+                .count()
+        })?
+        .clone();
+
+    for duplicate_id in sentinel_ids
+        .iter()
+        .filter(|id| id.as_str() != keep_id.as_str())
+    {
+        for connection in &mut graph.connections {
+            if connection.source_node.as_str() == duplicate_id.as_str() {
+                connection.source_node = keep_id.clone();
+            }
+            if connection.target_node.as_str() == duplicate_id.as_str() {
+                connection.target_node = keep_id.clone();
+            }
+        }
+    }
+    graph
+        .nodes
+        .retain(|node| node.node_type != node_type || node.id == keep_id);
+    Some(keep_id)
+}
 
 impl BlueprintEditorPanel {
     // ─── Queries ──────────────────────────────────────────────────────────────
@@ -45,7 +94,10 @@ impl BlueprintEditorPanel {
         }
 
         // Flush the current active canvas into its tab before leaving.
-        let active_tab_id = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone());
+        let active_tab_id = self
+            .open_tabs
+            .get(self.active_tab_index)
+            .map(|t| t.id.clone());
         if let Some(tab_id) = active_tab_id {
             if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
                 let live = canvas.read(cx).graph.clone();
@@ -56,20 +108,42 @@ impl BlueprintEditorPanel {
             }
         }
 
-        // Push an empty tab for the new macro.
+        // Materialize the saved graph before opening the tab. Collapsed graphs
+        // are stored with their body in the same subgraph format as macros;
+        // starting from an empty graph made the call node look like it had no
+        // contents when opened.
+        let saved_graph = self
+            .subgraphs
+            .iter()
+            .find(|definition| definition.id == macro_id)
+            .map(|definition| definition.graph.clone());
+        let Some(saved_graph) = saved_graph else {
+            tracing::warn!(
+                "Could not open subgraph '{}': definition was not found",
+                macro_name
+            );
+            return;
+        };
+        let mut graph = match self.convert_graph_description_to_blueprint(&saved_graph, window, cx)
+        {
+            Ok(graph) => graph,
+            Err(error) => {
+                tracing::warn!("Could not load graph '{}': {}", macro_name, error);
+                return;
+            }
+        };
+        normalize_subgraph_boundary(&mut graph, NodeType::MacroEntry);
+        normalize_subgraph_boundary(&mut graph, NodeType::MacroExit);
+        // Keep the editor shell's legacy graph snapshot aligned with the tab
+        // being opened. Collapsed subgraphs skip macro interface sync below,
+        // so that sync cannot be relied on to update this shadow state.
+        self.graph = graph.clone();
+
+        // Push the populated tab for the macro or collapsed graph.
         let new_tab = GraphTab {
             id: macro_id.clone(),
             name: macro_name.clone(),
-            graph: BlueprintGraph {
-                nodes: Vec::new(),
-                connections: Vec::new(),
-                comments: Vec::new(),
-                selected_nodes: Vec::new(),
-                selected_comments: Vec::new(),
-                zoom_level: 1.0,
-                pan_offset: Point::new(0.0, 0.0),
-                virtualization_stats: crate::VirtualizationStats::default(),
-            },
+            graph,
             is_main: false,
             is_dirty: false,
             is_library_macro: false,
@@ -121,7 +195,7 @@ impl BlueprintEditorPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(local) = self.local_macros.iter().find(|m| m.id == macro_id) {
+        if let Some(local) = self.subgraphs.iter().find(|m| m.id == macro_id) {
             self.open_local_macro(local.id.clone(), local.name.clone(), window, cx);
             return;
         }
@@ -151,7 +225,7 @@ impl BlueprintEditorPanel {
 
     /// Return the library ID that owns `macro_id`, or `None` if it is a local macro.
     pub fn get_macro_library_id(&self, macro_id: &str) -> Option<String> {
-        if self.local_macros.iter().any(|m| m.id == macro_id) {
+        if self.subgraphs.iter().any(|m| m.id == macro_id) {
             return None;
         }
         self.library_manager
@@ -182,36 +256,48 @@ impl BlueprintEditorPanel {
 
     /// Create a new empty local macro and open it for editing.
     pub fn create_new_local_macro(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let macro_name = format!("Macro {}", self.local_macros.len() + 1);
+        let macro_count = self
+            .subgraphs
+            .iter()
+            .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro)
+            .count();
+        let macro_name = format!("Macro {}", macro_count + 1);
         let macro_id = uuid::Uuid::new_v4().to_string();
 
-        let macro_def = ui::graph::SubGraphDefinition {
+        let macro_def = blueprint_graph::SubGraph {
             id: macro_id.clone(),
+            kind: blueprint_graph::SubGraphKind::Macro,
             name: macro_name.clone(),
             description: "New macro".to_string(),
-            graph: ui::graph::GraphDescription::new(&macro_name),
-            interface: ui::graph::SubGraphInterface {
+            graph: blueprint_graph::GraphDescription::new(&macro_name),
+            interface: blueprint_graph::SubGraphInterface {
                 inputs: Vec::new(),
                 outputs: Vec::new(),
             },
-            metadata: ui::graph::SubGraphMetadata {
+            metadata: blueprint_graph::SubGraphMetadata {
                 created_at: chrono::Utc::now().to_rfc3339(),
                 modified_at: chrono::Utc::now().to_rfc3339(),
                 author: Some(String::new()),
                 tags: Vec::new(),
             },
-            macro_config: ui::graph::MacroConfiguration::default(),
+            macro_config: blueprint_graph::MacroConfiguration::default(),
         };
 
-        self.local_macros.push(macro_def);
+        self.subgraphs.push(macro_def);
         self.open_local_macro(macro_id, macro_name, window, cx);
         self.invalidate_palette(cx);
     }
 
     /// Rename a local macro in-place.
     pub fn rename_local_macro(&mut self, macro_id: &str, new_name: String, cx: &mut Context<Self>) {
-        if let Some(m) = self.local_macros.iter_mut().find(|m| m.id == macro_id) {
+        if let Some(m) = self
+            .subgraphs
+            .iter_mut()
+            .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+        {
             m.name = new_name.clone();
+        } else {
+            return;
         }
         // Update the tab name too.
         if let Some(tab) = self.open_tabs.iter_mut().find(|t| t.id == macro_id) {
@@ -223,7 +309,14 @@ impl BlueprintEditorPanel {
 
     /// Delete a local macro and all its open tabs.
     pub fn delete_local_macro(&mut self, macro_id: &str, cx: &mut Context<Self>) {
-        self.local_macros.retain(|m| m.id != macro_id);
+        if !self
+            .subgraphs
+            .iter()
+            .any(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+        {
+            return;
+        }
+        self.subgraphs.retain(|m| m.id != macro_id);
         let before = self.open_tabs.len();
         self.open_tabs.retain(|t| t.id != macro_id);
         if self.open_tabs.len() < before {
@@ -249,17 +342,24 @@ impl BlueprintEditorPanel {
         is_input: bool,
         cx: &mut Context<Self>,
     ) {
-        let pin = ui::graph::SubGraphPin {
+        if !self
+            .subgraphs
+            .iter()
+            .any(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+        {
+            return;
+        }
+        let pin = blueprint_graph::SubGraphPin {
             id: uuid::Uuid::new_v4().to_string(),
             name: pin_name,
-            data_type: ui::graph::DataType::from_type_str(&type_str),
+            data_type: blueprint_graph::DataType::from_type_str(&type_str),
             description: None,
             default_value: None,
             is_instance_editable: false,
             category: None,
         };
 
-        if let Some(m) = self.local_macros.iter_mut().find(|m| m.id == macro_id) {
+        if let Some(m) = self.subgraphs.iter_mut().find(|m| m.id == macro_id) {
             if is_input {
                 m.interface.inputs.push(pin);
             } else {
@@ -281,7 +381,14 @@ impl BlueprintEditorPanel {
         is_input: bool,
         cx: &mut Context<Self>,
     ) {
-        if let Some(m) = self.local_macros.iter_mut().find(|m| m.id == macro_id) {
+        if !self
+            .subgraphs
+            .iter()
+            .any(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+        {
+            return;
+        }
+        if let Some(m) = self.subgraphs.iter_mut().find(|m| m.id == macro_id) {
             if is_input {
                 m.interface.inputs.retain(|p| p.id != pin_id);
             } else {
@@ -314,7 +421,12 @@ impl BlueprintEditorPanel {
             return;
         }
 
-        let Some(macro_def) = self.local_macros.iter().find(|m| m.id == macro_id).cloned() else {
+        let Some(macro_def) = self
+            .subgraphs
+            .iter()
+            .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+            .cloned()
+        else {
             return;
         };
 
@@ -350,7 +462,12 @@ impl BlueprintEditorPanel {
         // Does NOT replace the whole graph — only touches the sentinel nodes.
         let apply = |graph: &mut BlueprintGraph| {
             // Entry node
-            if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == entry_id) {
+            let existing_entry_id = normalize_subgraph_boundary(graph, NodeType::MacroEntry);
+            if let Some(node) = graph
+                .nodes
+                .iter_mut()
+                .find(|n| Some(n.id.as_str()) == existing_entry_id.as_deref())
+            {
                 node.title = macro_def.name.clone();
                 node.outputs = entry_outputs.clone();
                 let rows = node.outputs.len().max(1);
@@ -378,7 +495,12 @@ impl BlueprintEditorPanel {
             }
 
             // Exit node
-            if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == exit_id) {
+            let existing_exit_id = normalize_subgraph_boundary(graph, NodeType::MacroExit);
+            if let Some(node) = graph
+                .nodes
+                .iter_mut()
+                .find(|n| Some(n.id.as_str()) == existing_exit_id.as_deref())
+            {
                 node.title = format!("{} (Return)", macro_def.name);
                 node.inputs = exit_inputs.clone();
                 let rows = node.inputs.len().max(1);
@@ -424,31 +546,54 @@ impl BlueprintEditorPanel {
             cx.defer(move |cx| {
                 canvas.update(cx, |canvas_panel, cx| {
                     // Entry sentinel
-                    if let Some(node) = canvas_panel.graph.nodes.iter_mut().find(|n| n.id == entry_id_d) {
+                    let existing_entry_id =
+                        normalize_subgraph_boundary(&mut canvas_panel.graph, NodeType::MacroEntry);
+                    if let Some(node) = canvas_panel
+                        .graph
+                        .nodes
+                        .iter_mut()
+                        .find(|n| Some(n.id.as_str()) == existing_entry_id.as_deref())
+                    {
                         node.title = macro_name_d.clone();
                         node.outputs = entry_outputs_d.clone();
                         let rows = node.outputs.len().max(1);
                         node.size.height = layout::node_height_for_pin_rows(rows);
                     } else {
                         let rows = entry_outputs_d.len().max(1);
-                        canvas_panel.graph.nodes.insert(0, BlueprintNode {
-                            id: entry_id_d.clone(),
-                            definition_id: "macro_entry".to_string(),
-                            title: macro_name_d.clone(),
-                            icon: "▶".to_string(),
-                            node_type: NodeType::MacroEntry,
-                            position: Point::new(60.0, 180.0),
-                            size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
-                            inputs: vec![],
-                            outputs: entry_outputs_d.clone(),
-                            properties: HashMap::new(),
-                            is_selected: false,
-                            description: format!("Entry — provides inputs into '{}'", macro_name_d),
-                            color: Some("#7C3AED".to_string()),
-                        });
+                        canvas_panel.graph.nodes.insert(
+                            0,
+                            BlueprintNode {
+                                id: entry_id_d.clone(),
+                                definition_id: "macro_entry".to_string(),
+                                title: macro_name_d.clone(),
+                                icon: "▶".to_string(),
+                                node_type: NodeType::MacroEntry,
+                                position: Point::new(60.0, 180.0),
+                                size: gpui::Size::new(
+                                    180.0,
+                                    layout::node_height_for_pin_rows(rows),
+                                ),
+                                inputs: vec![],
+                                outputs: entry_outputs_d.clone(),
+                                properties: HashMap::new(),
+                                is_selected: false,
+                                description: format!(
+                                    "Entry — provides inputs into '{}'",
+                                    macro_name_d
+                                ),
+                                color: Some("#7C3AED".to_string()),
+                            },
+                        );
                     }
                     // Exit sentinel
-                    if let Some(node) = canvas_panel.graph.nodes.iter_mut().find(|n| n.id == exit_id_d) {
+                    let existing_exit_id =
+                        normalize_subgraph_boundary(&mut canvas_panel.graph, NodeType::MacroExit);
+                    if let Some(node) = canvas_panel
+                        .graph
+                        .nodes
+                        .iter_mut()
+                        .find(|n| Some(n.id.as_str()) == existing_exit_id.as_deref())
+                    {
                         node.title = format!("{} (Return)", macro_name_d);
                         node.inputs = exit_inputs_d.clone();
                         let rows = node.inputs.len().max(1);
@@ -479,9 +624,9 @@ impl BlueprintEditorPanel {
         cx.notify();
     }
 
-    // ─── MacroInstance placement ───────────────────────────────────────────────
+    // ─── Subgraph call placement ───────────────────────────────────────────────
 
-    /// Create a `MacroInstance` node at `position` for the local macro identified
+    /// Create a subgraph call node at `position` for the local macro identified
     /// by `macro_id`.  Rejects the operation silently if the active tab IS that
     /// macro (prevents a macro from containing itself).
     /// Delegate macro instance creation to the active canvas.
@@ -500,16 +645,29 @@ impl BlueprintEditorPanel {
         }
     }
 
-    /// Update the pins of every `MacroInstance` node that references `macro_id`
+    /// Update the pins of every macro call node that references `macro_id`
     /// across all tab snapshots AND all live canvas graphs.
     pub fn sync_all_macro_instances(&mut self, macro_id: &str, cx: &mut Context<Self>) {
-        let def_prefix = format!("macro:{}", macro_id);
-        let Some(macro_def) = self.local_macros.iter().find(|m| m.id == macro_id).cloned() else {
+        let macro_ref = crate::core::subgraph_ref::SubGraphReference::new(
+            macro_id,
+            blueprint_graph::SubGraphKind::Macro,
+        );
+        let Some(macro_def) = self
+            .subgraphs
+            .iter()
+            .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+            .cloned()
+        else {
             return;
         };
 
         let rebuild_node = |node: &mut BlueprintNode| {
-            if node.definition_id == def_prefix && node.node_type == NodeType::MacroInstance {
+            if crate::core::subgraph_ref::definition_id_matches(
+                &node.definition_id,
+                &macro_ref,
+                &self.subgraphs,
+            ) && node.node_type == NodeType::SubGraphCall
+            {
                 node.inputs = macro_def
                     .interface
                     .inputs
@@ -550,24 +708,40 @@ impl BlueprintEditorPanel {
         let canvases: Vec<Entity<crate::editor::workspace_panels::GraphCanvasPanel>> =
             self.graph_panels.iter().map(|(_, c)| c.clone()).collect();
         for canvas in canvases {
-            let def_prefix_d = def_prefix.clone();
+            let macro_ref_d = macro_ref.clone();
+            let subgraphs = self.subgraphs.clone();
             let macro_def_d = macro_def.clone();
             cx.defer(move |cx| {
                 canvas.update(cx, |canvas_panel, cx| {
                     for node in canvas_panel.graph.nodes.iter_mut() {
-                        if node.definition_id == def_prefix_d && node.node_type == NodeType::MacroInstance {
-                            node.inputs = macro_def_d.interface.inputs.iter().map(|p| Pin {
-                                id: p.id.clone(),
-                                name: p.name.clone(),
-                                pin_type: PinType::Input,
-                                data_type: DataType::from_type_str(p.data_type.to_string()),
-                            }).collect();
-                            node.outputs = macro_def_d.interface.outputs.iter().map(|p| Pin {
-                                id: p.id.clone(),
-                                name: p.name.clone(),
-                                pin_type: PinType::Output,
-                                data_type: DataType::from_type_str(p.data_type.to_string()),
-                            }).collect();
+                        if crate::core::subgraph_ref::definition_id_matches(
+                            &node.definition_id,
+                            &macro_ref_d,
+                            &subgraphs,
+                        ) && node.node_type == NodeType::SubGraphCall
+                        {
+                            node.inputs = macro_def_d
+                                .interface
+                                .inputs
+                                .iter()
+                                .map(|p| Pin {
+                                    id: p.id.clone(),
+                                    name: p.name.clone(),
+                                    pin_type: PinType::Input,
+                                    data_type: DataType::from_type_str(p.data_type.to_string()),
+                                })
+                                .collect();
+                            node.outputs = macro_def_d
+                                .interface
+                                .outputs
+                                .iter()
+                                .map(|p| Pin {
+                                    id: p.id.clone(),
+                                    name: p.name.clone(),
+                                    pin_type: PinType::Output,
+                                    data_type: DataType::from_type_str(p.data_type.to_string()),
+                                })
+                                .collect();
                             let rows = node.inputs.len().max(node.outputs.len()).max(1);
                             node.size.height = layout::node_height_for_pin_rows(rows);
                         }
@@ -603,7 +777,7 @@ impl BlueprintEditorPanel {
 // ─── Canvas-side macro operations ────────────────────────────────────────────
 
 impl crate::editor::workspace_panels::GraphCanvasPanel {
-    /// Place a MacroInstance node built from an already-resolved macro definition.
+    /// Place a subgraph call node built from an already-resolved macro definition.
     pub fn create_macro_instance_node(
         &mut self,
         macro_id: String,
@@ -613,9 +787,9 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         // Get the macro definition from the shared panel
         let macro_def = self.panel.upgrade().and_then(|p| {
             p.read(cx)
-                .local_macros
+                .subgraphs
                 .iter()
-                .find(|m| m.id == macro_id)
+                .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
                 .cloned()
         });
         let Some(macro_def) = macro_def else { return };
@@ -645,10 +819,14 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         let max_rows = inputs.len().max(outputs.len()).max(1);
         let node = crate::core::types::BlueprintNode {
             id: uuid::Uuid::new_v4().to_string(),
-            definition_id: format!("macro:{}", macro_id),
+            definition_id: crate::core::subgraph_ref::SubGraphReference::new(
+                macro_id.clone(),
+                blueprint_graph::SubGraphKind::Macro,
+            )
+            .encode(),
             title: macro_def.name.clone(),
             icon: "📦".to_string(),
-            node_type: crate::core::types::NodeType::MacroInstance,
+            node_type: crate::core::types::NodeType::SubGraphCall,
             position,
             size: gpui::Size::new(200.0, layout::node_height_for_pin_rows(max_rows)),
             inputs,

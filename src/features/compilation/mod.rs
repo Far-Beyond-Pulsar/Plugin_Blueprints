@@ -9,3 +9,4 @@
 pub mod compiler;
 pub mod conversion;
 pub mod panel;
+mod trait_contracts;

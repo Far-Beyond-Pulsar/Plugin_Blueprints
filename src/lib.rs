@@ -38,8 +38,16 @@ pub use core::definitions::*;
 pub use core::events::*;
 pub use core::graph::*;
 pub use core::types::*;
+// Public for the `spatial_index_stress` benchmark example (#1072).
+#[doc(hidden)]
+pub use core::spatial_index::{GraphRect, GraphSpatialIndex};
 pub use editor::panel::BlueprintEditorPanel;
 pub use features::viewport::parse_hex_color;
+
+#[cfg(feature = "builtin")]
+mod builtin_provider;
+#[cfg(feature = "builtin")]
+pub use builtin_provider::BlueprintEditorBuiltinProvider;
 
 pub fn upsert_ai_session(file_path: PathBuf, graph: BlueprintGraph) {
     ai_tools::upsert_session(file_path, graph);
@@ -51,6 +59,49 @@ pub fn execute_compiled_tool(
     tool_args: serde_json::Value,
 ) -> Result<serde_json::Value, PluginError> {
     ai_tools::execute_compiled_tool(file_path, tool_name, tool_args)
+}
+
+/// Shared `.class` file metadata for the dynamic and built-in editor providers.
+pub(crate) fn blueprint_file_type() -> FileTypeDefinition {
+    FileTypeDefinition {
+        id: FileTypeId::new("class"),
+        extension: "class".to_string(),
+        display_name: "Blueprint Class".to_string(),
+        icon: ui::IconName::Component,
+        color: gpui::rgb(0x9C27B0).into(),
+        structure: FileStructure::FolderBased {
+            marker_file: "graph_save.json".to_string(),
+            template_structure: vec![PathTemplate::Folder {
+                path: "events".into(),
+            }],
+        },
+        default_content: json!({
+            "format_version": 2,
+            "main_graph": {
+                "nodes": {},
+                "connections": [],
+                "metadata": {
+                    "name": "EventGraph",
+                    "description": "",
+                    "version": "1.0.0",
+                    "created_at": plugin_editor_api::CREATION_TIMESTAMP_PLACEHOLDER,
+                    "modified_at": plugin_editor_api::CREATION_TIMESTAMP_PLACEHOLDER
+                },
+                "comments": []
+            },
+            "subgraphs": [],
+            "variables": [],
+            "blueprint_metadata": {
+                "blueprint_type": "Generic",
+                "parent_class": null,
+                "description": "",
+                "category": "Uncategorized",
+                "tags": []
+            }
+        }),
+        creation_directory: None,
+        categories: vec!["Blueprints".to_string()],
+    }
 }
 
 /// Storage for editor instances owned by the plugin
@@ -87,44 +138,7 @@ impl EditorPlugin for BlueprintEditorPlugin {
     }
 
     fn file_types(&self) -> Vec<FileTypeDefinition> {
-        vec![FileTypeDefinition {
-            id: FileTypeId::new("class"),
-            extension: "class".to_string(),
-            display_name: "Blueprint Class".to_string(),
-            icon: ui::IconName::Component,
-            color: gpui::rgb(0x9C27B0).into(),
-            structure: FileStructure::FolderBased {
-                marker_file: "graph_save.json".to_string(),
-                template_structure: vec![PathTemplate::Folder {
-                    path: "events".into(),
-                }],
-            },
-            default_content: json!({
-                "format_version": 1,
-                "main_graph": {
-                    "nodes": {},
-                    "connections": [],
-                    "metadata": {
-                        "name": "EventGraph",
-                        "description": "",
-                        "version": "1.0.0",
-                        "created_at": "2024-01-01T00:00:00+00:00",
-                        "modified_at": "2024-01-01T00:00:00+00:00"
-                    },
-                    "comments": []
-                },
-                "local_macros": [],
-                "variables": [],
-                "blueprint_metadata": {
-                    "blueprint_type": "Generic",
-                    "parent_class": null,
-                    "description": "",
-                    "category": "Uncategorized",
-                    "tags": []
-                }
-            }),
-            categories: vec!["Blueprints".to_string()],
-        }]
+        vec![blueprint_file_type()]
     }
 
     fn editors(&self) -> Vec<EditorMetadata> {
@@ -163,18 +177,21 @@ impl BlueprintEditorPlugin {
                 }
                 Err(e) => {
                     tracing::error!("create_blueprint_editor: new_with_path FAILED: {}", e);
-                    let p = BlueprintEditorPanel::new(window, cx);
-                    tracing::warn!(
-                        "create_blueprint_editor: fell back to empty panel, graph has {} nodes",
-                        p.graph.nodes.len(),
-                    );
-                    p
+                    BlueprintEditorPanel::new_with_load_error(
+                        file_path_clone.clone(),
+                        e.to_string(),
+                        window,
+                        cx,
+                    )
                 }
             }
         });
 
-        let graph_snapshot = panel.read(cx).graph.clone();
-        ai_tools::upsert_session(file_path.clone(), graph_snapshot);
+        if panel.read(cx).load_error.is_none() {
+            panel.update(cx, |panel, cx| {
+                panel.attach_ai_graph_updates(file_path.clone(), cx);
+            });
+        }
 
         let panel_arc: Arc<dyn ui::dock::PanelView> = Arc::new(panel.clone());
 
@@ -204,9 +221,10 @@ impl BlueprintEditorPlugin {
 
 impl EditorPluginEditor for BlueprintEditorPlugin {
     fn register_editors(&'static self, registry: &mut EditorFactoryRegistry) {
-        registry.register_fn(EditorId::new("blueprint-editor"), |file_path, window, cx| {
-            self.create_blueprint_editor(file_path, window, cx)
-        });
+        registry.register_fn(
+            EditorId::new("blueprint-editor"),
+            |file_path, window, cx| self.create_blueprint_editor(file_path, window, cx),
+        );
     }
 }
 
@@ -258,12 +276,33 @@ impl ScriptLanguage for BlueprintLanguage {
         validation::validate_project_classes(project_root)
     }
 
+    fn validate_project_with_component_events(
+        &self,
+        project_root: &std::path::Path,
+        component_events: &[plugin_editor_api::ComponentEventMetadata],
+    ) -> Result<(), String> {
+        validation::validate_project_classes_with_component_events(project_root, component_events)
+    }
+
     fn compile_project(
         &self,
         project_root: &std::path::Path,
         natives: &plugin_editor_api::NativeRegistry,
     ) -> Vec<plugin_editor_api::CompileDiagnostic> {
         validation::compile_project_classes(project_root, natives)
+    }
+
+    fn compile_project_with_component_events(
+        &self,
+        project_root: &std::path::Path,
+        natives: &plugin_editor_api::NativeRegistry,
+        component_events: &[plugin_editor_api::ComponentEventMetadata],
+    ) -> Vec<plugin_editor_api::CompileDiagnostic> {
+        validation::compile_project_classes_with_component_events(
+            project_root,
+            natives,
+            component_events,
+        )
     }
 }
 

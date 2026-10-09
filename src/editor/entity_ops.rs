@@ -67,20 +67,36 @@ impl GraphCanvasPanel {
             }
 
             for id in node_ids {
-                if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
+                if let Some(node) = self
+                    .graph
+                    .nodes
+                    .iter()
+                    .find(|n| n.id.as_str() == id.as_str())
+                {
                     self.initial_drag_positions.insert(id, node.position);
                 }
             }
             for id in comment_ids {
-                if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
-                    self.initial_comment_drag_positions.insert(id, comment.position);
+                if let Some(comment) = self
+                    .graph
+                    .comments
+                    .iter()
+                    .find(|c| c.id.as_str() == id.as_str())
+                {
+                    self.initial_comment_drag_positions
+                        .insert(id, comment.position);
                 }
             }
         } else {
             // Single drag
             match &dragged_entity {
                 EntitySelection::Node(id) => {
-                    if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
+                    if let Some(node) = self
+                        .graph
+                        .nodes
+                        .iter()
+                        .find(|n| n.id.as_str() == id.as_str())
+                    {
                         self.initial_drag_positions
                             .insert(id.clone(), node.position);
                     }
@@ -95,14 +111,24 @@ impl GraphCanvasPanel {
         // Set drag offset
         match &dragged_entity {
             EntitySelection::Node(id) => {
-                if let Some(node) = self.graph.nodes.iter().find(|n| n.id.as_str() == id.as_str()) {
+                if let Some(node) = self
+                    .graph
+                    .nodes
+                    .iter()
+                    .find(|n| n.id.as_str() == id.as_str())
+                {
                     let pos = node.position;
                     self.drag_offset = Point::new(mouse_pos.x - pos.x, mouse_pos.y - pos.y);
                     self.dragging_node = Some(id.clone());
                 }
             }
             EntitySelection::Comment(id) => {
-                if let Some(comment) = self.graph.comments.iter().find(|c| c.id.as_str() == id.as_str()) {
+                if let Some(comment) = self
+                    .graph
+                    .comments
+                    .iter()
+                    .find(|c| c.id.as_str() == id.as_str())
+                {
                     let pos = comment.position;
                     self.drag_offset = Point::new(mouse_pos.x - pos.x, mouse_pos.y - pos.y);
                     self.dragging_comment = Some(id.clone());
@@ -147,28 +173,87 @@ impl GraphCanvasPanel {
                 let delta =
                     Point::new(snapped_pos.x - initial_pos.x, snapped_pos.y - initial_pos.y);
 
-                // Move all nodes in the selection
-                for (node_id, initial_position) in &self.initial_drag_positions.clone() {
-                    if let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id.as_str() == node_id) {
-                        let new_pos =
-                            Point::new(initial_position.x + delta.x, initial_position.y + delta.y);
-                        node.position = NodeGraphRenderer::snap_to_grid(new_pos);
-                    }
+                let (
+                    node_updates,
+                    comment_updates,
+                    previous_node_revision,
+                    previous_comment_revision,
+                ) = {
+                    let mut spatial = self.spatial_index.borrow_mut();
+                    spatial.ensure_current(&self.graph);
+                    let node_updates = self
+                        .initial_drag_positions
+                        .iter()
+                        .filter_map(|(id, initial)| {
+                            spatial.node_index(id).map(|index| {
+                                (
+                                    index,
+                                    NodeGraphRenderer::snap_to_grid(Point::new(
+                                        initial.x + delta.x,
+                                        initial.y + delta.y,
+                                    )),
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    let comment_updates = self
+                        .initial_comment_drag_positions
+                        .iter()
+                        .filter_map(|(id, initial)| {
+                            spatial.comment_index(id).map(|index| {
+                                (
+                                    index,
+                                    NodeGraphRenderer::snap_to_grid(Point::new(
+                                        initial.x + delta.x,
+                                        initial.y + delta.y,
+                                    )),
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    (
+                        node_updates,
+                        comment_updates,
+                        self.graph.nodes.revision(),
+                        self.graph.comments.revision(),
+                    )
+                };
+                if !node_updates.is_empty() {
+                    self.graph.nodes.with_mut(|nodes| {
+                        for &(index, position) in &node_updates {
+                            if let Some(node) = nodes.get_mut(index) {
+                                node.position = position;
+                            }
+                        }
+                    });
                 }
-
-                // Move all comments in the selection
-                for (comment_id, initial_position) in &self.initial_comment_drag_positions.clone() {
-                    let new_pos =
-                        Point::new(initial_position.x + delta.x, initial_position.y + delta.y);
-                    let snapped_pos = self.snap_comment_position(new_pos);
-
-                    if let Some(comment) = self
-                        .graph
-                        .comments
-                        .iter_mut()
-                        .find(|c| c.id.as_str() == comment_id.as_str())
-                    {
-                        comment.position = snapped_pos;
+                if !comment_updates.is_empty() {
+                    self.graph.comments.with_mut(|comments| {
+                        for &(index, position) in &comment_updates {
+                            if let Some(comment) = comments.get_mut(index) {
+                                comment.position = position;
+                            }
+                        }
+                    });
+                }
+                if !node_updates.is_empty() || !comment_updates.is_empty() {
+                    let node_indices = node_updates
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>();
+                    let comment_indices = comment_updates
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>();
+                    let mut spatial = self.spatial_index.borrow_mut();
+                    if !spatial.sync_geometry_after_batch(
+                        &self.graph,
+                        previous_node_revision,
+                        &node_indices,
+                        previous_comment_revision,
+                        &comment_indices,
+                    ) {
+                        spatial.ensure_current(&self.graph);
                     }
                 }
 

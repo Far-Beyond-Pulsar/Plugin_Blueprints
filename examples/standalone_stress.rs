@@ -13,9 +13,9 @@ use blueprint_editor_plugin::{
     BlueprintEditorPanel, BlueprintGraph, BlueprintNode, Connection, NodeType, Pin, PinDataType,
     PinType, VirtualizationStats,
 };
+use blueprint_graph::ConnectionType;
 use gpui::*;
 use std::collections::HashMap;
-use ui::graph::ConnectionType;
 use ui::{Assets, Root, Theme, ThemeMode};
 
 // ── tuning knobs ─────────────────────────────────────────────────────────────
@@ -459,9 +459,9 @@ fn build_stress_graph() -> BlueprintGraph {
     );
 
     BlueprintGraph {
-        nodes,
-        connections,
-        comments: Vec::new(),
+        nodes: nodes.into(),
+        connections: connections.into(),
+        comments: Vec::new().into(),
         selected_nodes: Vec::new(),
         selected_comments: Vec::new(),
         // Zoomed far out to show the broad shape; zoom in to inspect detail.

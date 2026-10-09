@@ -4,8 +4,8 @@
 //   grid    — full-screen quad, uniform-only
 //   comments— instanced comment quads (6 verts × comment count)
 //   nodes   — instanced node quads (6 verts × node count)
-//   bezier  — instanced bezier wires (WIRE_SEGS*6 verts × connection count)
-//             GPU evaluates cubic bezier in vertex shader — zero CPU tessellation
+//   bezier  — instanced cubic Bezier wires
+//   angular — instanced 45-degree chamfered wires with exact elbow joins
 //   lines   — vertex-buffer straight quads for selection-box outline (tiny)
 //   pins    — instanced pin quads (6 verts × pin count)
 //   text    — glyph atlas, one quad per visible character
@@ -43,8 +43,8 @@ struct CommentState {
     shadow: Vec<u8>,
 }
 
-/// Instanced bezier wire pipeline — one instance per connection.
-struct BezierState {
+/// Instanced wire pipeline — one instance per connection.
+struct WireState {
     pipeline: wgpu::RenderPipeline,
     uni_buf: wgpu::Buffer,
     uni_bg: wgpu::BindGroup,
@@ -78,7 +78,8 @@ pub struct BpRenderer {
     grid: Option<GridState>,
     comments: Option<CommentState>,
     nodes: Option<NodeState>,
-    bezier: Option<BezierState>,
+    bezier: Option<WireState>,
+    angular: Option<WireState>,
     lines: Option<LineState>,
     pins: Option<PinState>,
     text: TextRenderer,
@@ -91,18 +92,25 @@ impl BpRenderer {
             comments: None,
             nodes: None,
             bezier: None,
+            angular: None,
             lines: None,
             pins: None,
             text: TextRenderer::new(),
         }
     }
 
+    /// Measure text with the same glyph metrics used by the graph renderer.
+    pub fn measure_text_width(&mut self, text: &str, size_px: f32) -> f32 {
+        self.text.atlas.measure_width(text, size_px)
+    }
+
     /// Called every frame by `graph.rs`.
     ///
     /// - `comment_instances`: one per visible comment box
-    /// - `wire_instances`: one per bezier connection — GPU evaluates the curve
+    /// - `wire_instances`: cubic Bezier connections
+    /// - `electronic_wire_instances`: 45-degree angular connections
     /// - `line_verts`:     pre-tessellated straight quads (selection box only)
-    /// - `text_calls`:     (text, screen_x, screen_y, size_px, rgba, center)
+    /// - `text_calls`:     (text, screen_x, screen_y, size_px, rgba, alignment)
     pub fn render_frame(
         &mut self,
         device: &wgpu::Device,
@@ -115,15 +123,17 @@ impl BpRenderer {
         comment_instances: &[CommentInstance],
         nodes: &[NodeInstance],
         wire_instances: &[WireInstance],
+        electronic_wire_instances: &[WireInstance],
         line_verts: &[WireVertex],
         pins: &[PinInstance],
-        text_calls: &[(String, f32, f32, f32, [f32; 4], bool)],
+        text_calls: &[(String, f32, f32, f32, [f32; 4], TextAlign)],
     ) {
         if self.grid.is_none() {
             self.grid = Some(Self::create_grid(device, fmt));
             self.comments = Some(Self::create_comments(device, fmt));
             self.nodes = Some(Self::create_nodes(device, fmt));
             self.bezier = Some(Self::create_bezier(device, fmt));
+            self.angular = Some(Self::create_angular(device, fmt));
             self.lines = Some(Self::create_lines(device, fmt));
             self.pins = Some(Self::create_pins(device, fmt));
         }
@@ -207,6 +217,27 @@ impl BpRenderer {
                 }
             }
 
+            // ── 3b. Electronic wire instances ─────────────────────────────────
+            // Dedicated shader creates exact chamfered elbows and miter joins.
+            if !electronic_wire_instances.is_empty() {
+                if let Some(es) = &mut self.angular {
+                    queue.write_buffer(&es.uni_buf, 0, uni_bytes);
+                    let bytes = bytemuck::cast_slice(electronic_wire_instances);
+                    let grew = Self::ensure_buf(
+                        device,
+                        &mut es.inst_buf,
+                        &mut es.inst_cap,
+                        bytes,
+                        wgpu::BufferUsages::VERTEX,
+                    );
+                    super::delta::delta_write(queue, &es.inst_buf, &mut es.shadow, bytes, grew);
+                    pass.set_pipeline(&es.pipeline);
+                    pass.set_bind_group(0, &es.uni_bg, &[]);
+                    pass.set_vertex_buffer(0, es.inst_buf.slice(..));
+                    pass.draw(0..WIRE_SEGS * 6, 0..electronic_wire_instances.len() as u32);
+                }
+            }
+
             // ── 4. Straight line segments (selection box) ──────────────────────
             if !line_verts.is_empty() {
                 if let Some(ls) = &mut self.lines {
@@ -269,13 +300,8 @@ impl BpRenderer {
 
             // ── 7. Text ─────────────────────────────────────────────────────────
             // Queue all text calls, then flush into this render pass.
-            for (text, sx, sy, size, color, center) in text_calls {
-                let align = if *center {
-                    TextAlign::Center
-                } else {
-                    TextAlign::Left
-                };
-                self.text.queue(text, *sx, *sy, *size, *color, align);
+            for (text, sx, sy, size, color, align) in text_calls {
+                self.text.queue(text, *sx, *sy, *size, *color, *align);
             }
             // Need a shared uniform buffer/BGL for the text pipeline.
             // Lazily use the grid pipeline's uni_buf since it has the same layout.
@@ -546,16 +572,29 @@ impl BpRenderer {
         }
     }
 
-    // ── bezier wire pipeline (instanced) ─────────────────────────────────────
-    fn create_bezier(device: &wgpu::Device, fmt: wgpu::TextureFormat) -> BezierState {
+    // ── bezier/angular instanced wire pipelines ───────────────────────────────
+    fn create_bezier(device: &wgpu::Device, fmt: wgpu::TextureFormat) -> WireState {
+        Self::create_wire_pipeline(device, fmt, "bezier", include_str!("shaders/bezier.wgsl"))
+    }
+
+    fn create_angular(device: &wgpu::Device, fmt: wgpu::TextureFormat) -> WireState {
+        Self::create_wire_pipeline(device, fmt, "angular", include_str!("shaders/angular.wgsl"))
+    }
+
+    fn create_wire_pipeline(
+        device: &wgpu::Device,
+        fmt: wgpu::TextureFormat,
+        label: &'static str,
+        shader_source: &'static str,
+    ) -> WireState {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("bezier"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/bezier.wgsl").into()),
+            label: Some(label),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
         });
         let bgl = Self::uni_bind_group_layout(device);
         let (uni_buf, uni_bg) = Self::uni_buf_and_bg(device, &bgl);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("bezier_layout"),
+            label: Some(label),
             bind_group_layouts: &[Some(&bgl)],
             immediate_size: 0,
         });
@@ -580,7 +619,7 @@ impl BpRenderer {
         };
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("bezier"),
+            label: Some(label),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -601,15 +640,20 @@ impl BpRenderer {
             cache: None,
         });
 
+        let instance_label = if label == "angular" {
+            "angular_inst"
+        } else {
+            "bezier_inst"
+        };
         let init_cap = 4096 * std::mem::size_of::<WireInstance>() as u64;
         let inst_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("bezier_inst"),
+            label: Some(instance_label),
             size: init_cap,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        BezierState {
+        WireState {
             pipeline,
             uni_buf,
             uni_bg,

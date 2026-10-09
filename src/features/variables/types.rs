@@ -6,9 +6,17 @@ use ui::dropdown::DropdownItem;
 /// Represents a class variable with name, type, and optional default value
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ClassVariable {
+    #[serde(default = "new_variable_id")]
+    pub id: String,
     pub name: String,
     pub var_type: String,
     pub default_value: Option<String>,
+    #[serde(default)]
+    pub description: String,
+}
+
+fn new_variable_id() -> String {
+    uuid::Uuid::new_v4().to_string()
 }
 
 /// Drag data for variables - used when dragging variables from the panel to the graph
@@ -44,7 +52,8 @@ impl DropdownItem for TypeItem {
 
     fn display_title(&self) -> Option<AnyElement> {
         // Get the color for this type
-        let pin_color = crate::core::types::PinDataType::from_type_str(self.type_str.clone()).display_color();
+        let pin_color =
+            crate::core::types::PinDataType::from_type_str(self.type_str.clone()).display_color();
 
         Some(
             ui::h_flex()

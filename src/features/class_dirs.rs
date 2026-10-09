@@ -12,7 +12,9 @@ const GRAPH_FILE: &str = "graph_save.json";
 
 /// `name` without a trailing `.class` extension.
 pub fn strip_class_ext(name: &str) -> &str {
-    name.strip_suffix(".class").filter(|n| !n.is_empty()).unwrap_or(name)
+    name.strip_suffix(".class")
+        .filter(|n| !n.is_empty())
+        .unwrap_or(name)
 }
 
 /// The class name of the class directory `dir` (`Door.class/` → `Door`).
@@ -26,7 +28,11 @@ fn is_class_dir(dir: &Path) -> bool {
 }
 
 fn skip_when_searching(name: &str) -> bool {
-    name.starts_with('.') || matches!(name, "target" | "node_modules" | "Content" | "build" | "dist")
+    name.starts_with('.')
+        || matches!(
+            name,
+            "target" | "node_modules" | "Content" | "build" | "dist"
+        )
 }
 
 /// The project a class directory belongs to: `<project>` for
@@ -35,7 +41,10 @@ fn skip_when_searching(name: &str) -> bool {
 pub fn project_root_of(class_dir: &Path) -> Option<PathBuf> {
     let parent = class_dir.parent()?;
     if parent.file_name().and_then(|n| n.to_str()) == Some("classes") {
-        if let Some(src) = parent.parent().filter(|p| p.file_name().and_then(|n| n.to_str()) == Some("src")) {
+        if let Some(src) = parent
+            .parent()
+            .filter(|p| p.file_name().and_then(|n| n.to_str()) == Some("src"))
+        {
             if let Some(root) = src.parent() {
                 return Some(root.to_path_buf());
             }
@@ -50,17 +59,27 @@ pub fn project_root_of(class_dir: &Path) -> Option<PathBuf> {
 /// Every class directory of the project at `root`, sorted.
 pub fn project_class_dirs(root: &Path) -> Vec<PathBuf> {
     let mut found: Vec<PathBuf> = std::fs::read_dir(root.join("src").join("classes"))
-        .map(|entries| entries.flatten().map(|e| e.path()).filter(|p| is_class_dir(p)).collect())
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| is_class_dir(p))
+                .collect()
+        })
         .unwrap_or_default();
     let mut stack = vec![(root.to_path_buf(), 0usize)];
     while let Some((dir, depth)) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if !path.is_dir() {
                 continue;
             }
-            let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
             if skip_when_searching(name) {
                 continue;
             }
@@ -83,12 +102,54 @@ pub fn sibling_class_dirs(class_dir: &Path) -> Vec<PathBuf> {
     if let Some(root) = project_root_of(class_dir) {
         return project_class_dirs(&root);
     }
-    let Some(parent) = class_dir.parent() else { return Vec::new() };
+    let Some(parent) = class_dir.parent() else {
+        return Vec::new();
+    };
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(parent)
-        .map(|entries| entries.flatten().map(|e| e.path()).filter(|p| is_class_dir(p)).collect())
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| is_class_dir(p))
+                .collect()
+        })
         .unwrap_or_default();
     dirs.sort();
     dirs
+}
+
+/// This language's id, as written next to the artifacts it produces.
+pub const LANGUAGE_ID: &str = "blueprint";
+
+/// The file under `events/.build/` that names the language that produced
+/// the class's compiled module.
+const LANGUAGE_MARKER: &str = "language";
+
+/// Whether this language may compile `dir`. A class has exactly one language:
+/// a class that also has TypeScript source, or whose compiled module was
+/// written by another language, is refused rather than overwritten.
+pub fn check_language(dir: &Path) -> Result<(), String> {
+    if dir.join("class.ts").is_file() {
+        return Err(
+            "this class has both `graph_save.json` (Blueprint) and `class.ts` (TypeScript): \
+                    a class has one language, so remove one of them"
+                .to_owned(),
+        );
+    }
+    match std::fs::read_to_string(dir.join("events").join(".build").join(LANGUAGE_MARKER)) {
+        Ok(other) if other.trim() != LANGUAGE_ID && !other.trim().is_empty() => Err(format!(
+            "its compiled module was written by the `{}` language; delete `events/.build` to compile it as a Blueprint",
+            other.trim()
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// Record that this language produced `dir`'s compiled module.
+pub fn mark_language(dir: &Path) -> std::io::Result<()> {
+    let build = dir.join("events").join(".build");
+    std::fs::create_dir_all(&build)?;
+    std::fs::write(build.join(LANGUAGE_MARKER), LANGUAGE_ID)
 }
 
 #[cfg(test)]
@@ -101,7 +162,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let root = dir.as_path();
         std::fs::create_dir_all(root.join("Pulsar")).unwrap();
-        for dir in ["src/classes/Door", "content/blueprints/Lamp.class", "Enemy.class"] {
+        for dir in [
+            "src/classes/Door",
+            "content/blueprints/Lamp.class",
+            "Enemy.class",
+        ] {
             std::fs::create_dir_all(root.join(dir)).unwrap();
             std::fs::write(root.join(dir).join(GRAPH_FILE), "{}").unwrap();
         }

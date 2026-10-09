@@ -52,7 +52,9 @@ impl HierarchyItem for VariableHierarchyItem {
         V: Render,
     {
         // Get the type color
-        let pin_color = crate::core::types::PinDataType::from_type_str(self.variable.var_type.clone()).display_color();
+        let pin_color =
+            crate::core::types::PinDataType::from_type_str(self.variable.var_type.clone())
+                .display_color();
 
         Some(
             Hsla {
@@ -95,7 +97,9 @@ impl HierarchyItem for VariableHierarchyItem {
         V: Render,
     {
         // Type badge
-        let pin_color = crate::core::types::PinDataType::from_type_str(self.variable.var_type.clone()).display_color();
+        let pin_color =
+            crate::core::types::PinDataType::from_type_str(self.variable.var_type.clone())
+                .display_color();
 
         Some(
             // Type badge only - delete handled via context menu

@@ -171,7 +171,7 @@ impl ClipboardData {
 
     /// Serialize to JSON string
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
+        serde_json::to_string(self)
     }
 
     /// Deserialize from JSON string
@@ -181,7 +181,7 @@ impl ClipboardData {
 
     /// Convert back to graph entities with new IDs and offset positions
     pub fn to_graph_entities<E: 'static>(
-        &self,
+        self,
         offset: Point<f32>,
         window: &mut Window,
         cx: &mut Context<E>,
@@ -189,7 +189,8 @@ impl ClipboardData {
         use crate::core::types::PinDataType as DataType;
 
         // Generate ID mapping (old ID -> new ID)
-        let mut id_map: HashMap<String, String> = HashMap::new();
+        let mut id_map: HashMap<String, String> =
+            HashMap::with_capacity(self.nodes.len() + self.comments.len());
         for node in &self.nodes {
             id_map.insert(node.id.clone(), uuid::Uuid::new_v4().to_string());
         }
@@ -198,109 +199,100 @@ impl ClipboardData {
         }
 
         // Convert nodes
-        let nodes: Vec<BlueprintNode> = self
-            .nodes
-            .iter()
-            .filter_map(|snode| {
-                let new_id = id_map.get(&snode.id)?;
-                Some(BlueprintNode {
-                    id: new_id.clone(),
-                    definition_id: snode.definition_id.clone(),
-                    title: snode.title.clone(),
-                    icon: snode.icon.clone(),
-                    node_type: snode.node_type.clone(),
-                    position: Point::new(snode.position.0 + offset.x, snode.position.1 + offset.y),
-                    size: Size::new(snode.size.0, snode.size.1),
-                    inputs: snode
-                        .inputs
-                        .iter()
-                        .map(|pin| crate::core::types::Pin {
-                            id: pin.id.clone(),
-                            name: pin.name.clone(),
-                            pin_type: pin.pin_type.clone(),
-                            data_type: DataType::from_type_str(&pin.data_type),
-                        })
-                        .collect(),
-                    outputs: snode
-                        .outputs
-                        .iter()
-                        .map(|pin| crate::core::types::Pin {
-                            id: pin.id.clone(),
-                            name: pin.name.clone(),
-                            pin_type: pin.pin_type.clone(),
-                            data_type: DataType::from_type_str(&pin.data_type),
-                        })
-                        .collect(),
-                    properties: snode.properties.clone(),
-                    is_selected: false,
-                    description: snode.description.clone(),
-                    color: snode.color.clone(),
-                })
+        let mut nodes: Vec<BlueprintNode> = Vec::with_capacity(self.nodes.len());
+        nodes.extend(self.nodes.into_iter().filter_map(|snode| {
+            let new_id = id_map.get(&snode.id)?;
+            Some(BlueprintNode {
+                id: new_id.clone(),
+                definition_id: snode.definition_id,
+                title: snode.title,
+                icon: snode.icon,
+                node_type: snode.node_type,
+                position: Point::new(snode.position.0 + offset.x, snode.position.1 + offset.y),
+                size: Size::new(snode.size.0, snode.size.1),
+                inputs: snode
+                    .inputs
+                    .into_iter()
+                    .map(|pin| crate::core::types::Pin {
+                        id: pin.id,
+                        name: pin.name,
+                        pin_type: pin.pin_type,
+                        data_type: DataType::from_type_str(&pin.data_type),
+                    })
+                    .collect(),
+                outputs: snode
+                    .outputs
+                    .into_iter()
+                    .map(|pin| crate::core::types::Pin {
+                        id: pin.id,
+                        name: pin.name,
+                        pin_type: pin.pin_type,
+                        data_type: DataType::from_type_str(&pin.data_type),
+                    })
+                    .collect(),
+                properties: snode.properties,
+                is_selected: false,
+                description: snode.description,
+                color: snode.color,
             })
-            .collect();
+        }));
 
         // Convert comments
-        let comments: Vec<BlueprintComment> = self
-            .comments
-            .iter()
-            .filter_map(|scomment| {
-                let new_id = id_map.get(&scomment.id)?;
+        let mut comments: Vec<BlueprintComment> = Vec::with_capacity(self.comments.len());
+        comments.extend(self.comments.into_iter().filter_map(|scomment| {
+            let new_id = id_map.get(&scomment.id)?;
 
-                // Update contained node IDs to use new IDs
-                let new_contained_ids: Vec<String> = scomment
-                    .contained_node_ids
-                    .iter()
-                    .filter_map(|old_id| id_map.get(old_id).cloned())
-                    .collect();
+            // Update contained node IDs to use new IDs
+            let new_contained_ids: Vec<String> = scomment
+                .contained_node_ids
+                .into_iter()
+                .filter_map(|old_id| id_map.get(&old_id).cloned())
+                .collect();
 
-                Some(BlueprintComment {
-                    id: new_id.clone(),
-                    text: scomment.text.clone(),
-                    position: Point::new(
-                        scomment.position.0 + offset.x,
-                        scomment.position.1 + offset.y,
-                    ),
-                    size: Size::new(scomment.size.0, scomment.size.1),
-                    color: Hsla {
-                        h: scomment.color.0,
-                        s: scomment.color.1,
-                        l: scomment.color.2,
-                        a: scomment.color.3,
-                    },
-                    contained_node_ids: new_contained_ids,
-                    is_selected: false,
-                    color_picker_state: Some(
-                        cx.new(|cx| ui::color_picker::ColorPickerState::new(window, cx)),
-                    ),
-                })
+            Some(BlueprintComment {
+                id: new_id.clone(),
+                text: scomment.text,
+                position: Point::new(
+                    scomment.position.0 + offset.x,
+                    scomment.position.1 + offset.y,
+                ),
+                size: Size::new(scomment.size.0, scomment.size.1),
+                color: Hsla {
+                    h: scomment.color.0,
+                    s: scomment.color.1,
+                    l: scomment.color.2,
+                    a: scomment.color.3,
+                },
+                contained_node_ids: new_contained_ids,
+                is_selected: false,
+                color_picker_state: Some(
+                    cx.new(|cx| ui::color_picker::ColorPickerState::new(window, cx)),
+                ),
             })
-            .collect();
+        }));
 
         // Convert connections (update IDs to new ones)
-        let connections: Vec<Connection> = self
-            .connections
-            .iter()
-            .filter_map(|sconn| {
-                let new_source = id_map.get(&sconn.source_node)?;
-                let new_target = id_map.get(&sconn.target_node)?;
+        let mut connections: Vec<Connection> = Vec::with_capacity(self.connections.len());
+        connections.extend(self.connections.into_iter().filter_map(|sconn| {
+            let new_source = id_map.get(&sconn.source_node)?;
+            let new_target = id_map.get(&sconn.target_node)?;
 
-                // Parse connection type
-                let connection_type = if sconn.connection_type.contains("Execution") {
-                    ui::graph::ConnectionType::Execution
-                } else {
-                    ui::graph::ConnectionType::Data
-                };
+            // Parse connection type
+            let connection_type = if sconn.connection_type.contains("Execution") {
+                blueprint_graph::ConnectionType::Execution
+            } else {
+                blueprint_graph::ConnectionType::Data
+            };
 
-                Some(Connection {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    source_node: new_source.clone(),
-                    source_pin: sconn.source_pin.clone(),
-                    target_node: new_target.clone(),
-                    target_pin: sconn.target_pin.clone(),
-                    connection_type,
-                })
+            Some(Connection {
+                id: uuid::Uuid::new_v4().to_string(),
+                source_node: new_source.clone(),
+                source_pin: sconn.source_pin,
+                target_node: new_target.clone(),
+                target_pin: sconn.target_pin,
+                connection_type,
             })
-            .collect();
+        }));
 
         (nodes, comments, connections)
     }

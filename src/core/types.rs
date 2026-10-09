@@ -82,6 +82,22 @@ impl PinDataType {
         self.runtime_type().map(|info| info.type_id)
     }
 
+    /// Pin colours for the script math value types. Presentation metadata:
+    /// the VM and reflection know nothing about colours, and these types
+    /// have no `#[reflect(color)]` of their own. Vectors share a warm hue
+    /// family; rotations and matrices are
+    /// distinct.
+    fn math_type_color(type_name: &str) -> Option<[f32; 4]> {
+        Some(match type_name {
+            "Vec2" => [0.98, 0.78, 0.18, 1.0],
+            "Vec3" | "DVec3" => [0.98, 0.62, 0.10, 1.0],
+            "Vec4" => [0.95, 0.45, 0.10, 1.0],
+            "Quat" => [0.66, 0.40, 0.95, 1.0],
+            "Mat4" => [0.30, 0.70, 0.78, 1.0],
+            _ => return None,
+        })
+    }
+
     /// Resolve this type's display color as RGBA in `[0.0, 1.0]`.
     ///
     /// The single source of truth for pin/badge color: execution pins are
@@ -91,6 +107,9 @@ impl PinDataType {
     pub fn display_color(&self) -> [f32; 4] {
         if self.is_execution() {
             return [1.0, 0.0, 0.0, 1.0];
+        }
+        if let Some(color) = Self::math_type_color(&self.type_name) {
+            return color;
         }
         match self.runtime_type() {
             Some(info) => info.resolve_color(),
@@ -215,11 +234,13 @@ pub enum NodeType {
     Logic,
     Math,
     Object,
-    Reroute,       // Visual pass-through node for organizing connections
-    MacroEntry,    // Entry point for macro graphs (replaces generic subgraph_input)
-    MacroExit,     // Exit point for macro graphs (replaces generic subgraph_output)
-    MacroInstance, // Instance of a macro in parent graph
-    CustomEvent,   // On-node for a custom event definition (definition_id: "custom_event:<uid>")
+    Reroute,    // Visual pass-through node for organizing connections
+    Conversion, // Typed conversion node rendered as a FROM/INTO pill
+    MacroEntry, // Entry point for macro graphs (replaces generic subgraph_input)
+    MacroExit,  // Exit point for macro graphs (replaces generic subgraph_output)
+    #[serde(alias = "MacroInstance")]
+    SubGraphCall, // Call to a macro or collapsed subgraph
+    CustomEvent, // On-node for a custom event definition (definition_id: "custom_event:<uid>")
     CustomEventDispatch, // Dispatch node for a custom event (definition_id: "custom_event_dispatch:<uid>")
 }
 
@@ -255,7 +276,7 @@ pub struct Connection {
     pub source_pin: String,
     pub target_node: String,
     pub target_pin: String,
-    pub connection_type: ui::graph::ConnectionType,
+    pub connection_type: blueprint_graph::ConnectionType,
 }
 
 // ============================================================================
@@ -369,10 +390,51 @@ pub struct VirtualizationStats {
 // ============================================================================
 
 impl BlueprintNode {
+    /// Construct a graph node for one reflection-registered conversion.
+    pub fn from_conversion(
+        conversion: &pulsar_reflection::ConversionInfo,
+        position: Point<f32>,
+    ) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            definition_id: format!("conversion:{}", conversion.id),
+            title: conversion.label.to_string(),
+            icon: String::new(),
+            node_type: NodeType::Conversion,
+            position,
+            // Two 10px graph-grid units; the renderer snaps this to 20px.
+            size: Size::new(116.0, 20.0),
+            inputs: vec![Pin {
+                id: "from".to_string(),
+                name: String::new(),
+                pin_type: PinType::Input,
+                data_type: PinDataType::from_type_str(conversion.source_type_name),
+            }],
+            outputs: vec![Pin {
+                id: "into".to_string(),
+                name: String::new(),
+                pin_type: PinType::Output,
+                data_type: PinDataType::from_type_str(conversion.target_type_name),
+            }],
+            properties: HashMap::from([("conversion_id".to_string(), conversion.id.to_string())]),
+            is_selected: false,
+            description: format!(
+                "Convert {} to {}",
+                conversion.source_type_name, conversion.target_type_name
+            ),
+            color: None,
+        }
+    }
+
     pub fn from_definition(
         definition: &crate::core::definitions::NodeDefinition,
         position: Point<f32>,
     ) -> Self {
+        if let Some(conversion_id) = definition.id.strip_prefix("conversion:") {
+            if let Some(conversion) = pulsar_reflection::CONVERSION_REGISTRY.get(conversion_id) {
+                return Self::from_conversion(conversion, position);
+            }
+        }
         let inputs: Vec<Pin> = definition
             .inputs
             .iter()

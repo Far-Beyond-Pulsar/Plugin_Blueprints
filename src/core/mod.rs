@@ -14,6 +14,8 @@ pub mod events;
 pub mod graph;
 pub mod graph_entity;
 pub mod serialization;
+pub mod spatial_index;
+pub mod subgraph_ref;
 pub mod types;
 
 // Re-export commonly used types for convenience

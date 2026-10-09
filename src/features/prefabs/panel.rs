@@ -6,11 +6,9 @@ use pulsar_reflection::REGISTRY;
 use std::any::Any;
 use std::sync::Arc;
 use ui::{
-    button::Button,
-    dropdown::SearchableList, h_flex,
-    popover::Popover,
-    scroll::ScrollbarAxis, v_flex, ActiveTheme, CollapsibleSection, HierarchicalTreeView,
-    HierarchyConfig, HierarchyLayout, IconName, Sizable, StyledExt,
+    button::Button, dropdown::SearchableList, h_flex, popover::Popover, scroll::ScrollbarAxis,
+    v_flex, ActiveTheme, CollapsibleSection, HierarchicalTreeView, HierarchyConfig,
+    HierarchyLayout, IconName, Sizable, StyledExt,
 };
 use ui_common::properties_inspector;
 pub struct PrefabHierarchyRenderer;
@@ -27,10 +25,7 @@ impl PrefabHierarchyRenderer {
     }
 
     /// Get all children indices of a component
-    fn get_children(
-        components: &[super::PrefabComponent],
-        parent_index: usize,
-    ) -> Vec<usize> {
+    fn get_children(components: &[super::PrefabComponent], parent_index: usize) -> Vec<usize> {
         components
             .iter()
             .enumerate()
@@ -413,8 +408,13 @@ impl PrefabPropertiesRenderer {
         let class_name = component.class_name.clone();
         let state_key = Self::state_key(index, &class_name);
         let mut missing_in_registry = false;
-        let mut row_data: Vec<(AnyElement, Option<String>, Option<String>, bool, Option<usize>)> =
-            Vec::new();
+        let mut row_data: Vec<(
+            AnyElement,
+            Option<String>,
+            Option<String>,
+            bool,
+            Option<usize>,
+        )> = Vec::new();
 
         if let Some(instance) = REGISTRY.create_instance(&class_name) {
             for prop in instance.get_properties() {
@@ -442,9 +442,15 @@ impl PrefabPropertiesRenderer {
                 let prop_name_for_wb = prop.name.to_string();
                 let write_back = Arc::new(
                     move |new_val: Box<dyn Any + Send>, _window: &mut Window, cx: &mut App| {
-                        if let Ok(json) = pulsar_reflection::RUNTIME_TYPE_REGISTRY.serialize_json_for_any(new_val.as_ref()) {
+                        if let Ok(json) = pulsar_reflection::RUNTIME_TYPE_REGISTRY
+                            .serialize_json_for_any(new_val.as_ref())
+                        {
                             panel_for_wb.update(cx, |panel, cx| {
-                                panel.update_prefab_component_property(index, &prop_name_for_wb, json);
+                                panel.update_prefab_component_property(
+                                    index,
+                                    &prop_name_for_wb,
+                                    json,
+                                );
                                 cx.notify();
                             });
                         }
@@ -500,10 +506,7 @@ impl PrefabPropertiesRenderer {
                             Self::render_categorized_rows(panel, index, categorized, cx);
                         uncategorized.extend(category_elements);
 
-                        v_flex()
-                            .gap_2()
-                            .children(uncategorized)
-                            .into_any_element()
+                        v_flex().gap_2().children(uncategorized).into_any_element()
                     }),
             )
             .into_any_element()
@@ -523,83 +526,86 @@ impl PrefabPropertiesRenderer {
 
         categorized_rows
             .into_iter()
-            .map(|(category_name, category_rows, category_color_hex, default_collapsed, _)| {
-                let category_key = (component_index, category_name.clone());
+            .map(
+                |(category_name, category_rows, category_color_hex, default_collapsed, _)| {
+                    let category_key = (component_index, category_name.clone());
 
-                let is_collapsed = if panel.prefab_collapsed_categories.contains(&category_key) {
-                    true
-                } else if panel.prefab_expanded_categories.contains(&category_key) {
-                    false
-                } else {
-                    default_collapsed
-                };
+                    let is_collapsed = if panel.prefab_collapsed_categories.contains(&category_key)
+                    {
+                        true
+                    } else if panel.prefab_expanded_categories.contains(&category_key) {
+                        false
+                    } else {
+                        default_collapsed
+                    };
 
-                let toggle_key = category_key.clone();
-                let was_collapsed = is_collapsed;
-                let accent = category_color_hex
-                    .as_deref()
-                    .and_then(crate::features::viewport::coordinates::parse_hex_color);
+                    let toggle_key = category_key.clone();
+                    let was_collapsed = is_collapsed;
+                    let accent = category_color_hex
+                        .as_deref()
+                        .and_then(crate::features::viewport::coordinates::parse_hex_color);
 
-                v_flex()
-                    .w_full()
-                    .gap_1()
-                    .p_2()
-                    .rounded(px(6.0))
-                    .border_1()
-                    .when_some(accent, |el, color| {
-                        el.border_color(color.opacity(0.7)).bg(color.opacity(0.08))
-                    })
-                    .when(accent.is_none(), |el| {
-                        el.border_color(cx.theme().border)
-                            .bg(cx.theme().border.opacity(0.08))
-                    })
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .items_center()
-                            .justify_between()
-                            .cursor_pointer()
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |this, _event, _window, cx| {
-                                    if was_collapsed {
-                                        this.prefab_collapsed_categories.remove(&toggle_key);
-                                        this.prefab_expanded_categories
-                                            .insert(toggle_key.clone());
+                    v_flex()
+                        .w_full()
+                        .gap_1()
+                        .p_2()
+                        .rounded(px(6.0))
+                        .border_1()
+                        .when_some(accent, |el, color| {
+                            el.border_color(color.opacity(0.7)).bg(color.opacity(0.08))
+                        })
+                        .when(accent.is_none(), |el| {
+                            el.border_color(cx.theme().border)
+                                .bg(cx.theme().border.opacity(0.08))
+                        })
+                        .child(
+                            h_flex()
+                                .w_full()
+                                .items_center()
+                                .justify_between()
+                                .cursor_pointer()
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _event, _window, cx| {
+                                        if was_collapsed {
+                                            this.prefab_collapsed_categories.remove(&toggle_key);
+                                            this.prefab_expanded_categories
+                                                .insert(toggle_key.clone());
+                                        } else {
+                                            this.prefab_expanded_categories.remove(&toggle_key);
+                                            this.prefab_collapsed_categories
+                                                .insert(toggle_key.clone());
+                                        }
+                                        cx.notify();
+                                    }),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .when_some(accent, |el, color| el.text_color(color))
+                                        .when(accent.is_none(), |el| {
+                                            el.text_color(cx.theme().muted_foreground)
+                                        })
+                                        .child(category_name),
+                                )
+                                .child(
+                                    ui::Icon::new(if is_collapsed {
+                                        IconName::ChevronRight
                                     } else {
-                                        this.prefab_expanded_categories.remove(&toggle_key);
-                                        this.prefab_collapsed_categories
-                                            .insert(toggle_key.clone());
-                                    }
-                                    cx.notify();
-                                }),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::SEMIBOLD)
+                                        IconName::ChevronDown
+                                    })
+                                    .xsmall()
                                     .when_some(accent, |el, color| el.text_color(color))
                                     .when(accent.is_none(), |el| {
                                         el.text_color(cx.theme().muted_foreground)
-                                    })
-                                    .child(category_name),
-                            )
-                            .child(
-                                ui::Icon::new(if is_collapsed {
-                                    IconName::ChevronRight
-                                } else {
-                                    IconName::ChevronDown
-                                })
-                                .xsmall()
-                                .when_some(accent, |el, color| el.text_color(color))
-                                .when(accent.is_none(), |el| {
-                                    el.text_color(cx.theme().muted_foreground)
-                                }),
-                            ),
-                    )
-                    .when(!is_collapsed, |el| el.children(category_rows))
-                    .into_any_element()
-            })
+                                    }),
+                                ),
+                        )
+                        .when(!is_collapsed, |el| el.children(category_rows))
+                        .into_any_element()
+                },
+            )
             .collect()
     }
 }

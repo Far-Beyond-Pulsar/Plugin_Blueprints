@@ -2,8 +2,8 @@
 //!
 //! Mirrors MacroHierarchyItem — lets events display in HierarchicalTreeView.
 
-use crate::editor::panel::RenameTarget;
 use crate::core::graph::EventDefinition;
+use crate::editor::panel::RenameTarget;
 use gpui::*;
 use std::sync::Arc;
 use ui::{input::InputState, menu::popup_menu::PopupMenu, HierarchyItem, IconName};

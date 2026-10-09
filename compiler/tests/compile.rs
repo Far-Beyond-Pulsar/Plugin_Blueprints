@@ -7,7 +7,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use blueprint_compiler::{compile, ClassSource, Diagnostic, VariableSource};
-use graphy::{Connection, ConnectionType, DataType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position};
+use graphy::{
+    Connection, ConnectionType, DataType, GraphDescription, NodeInstance, Pin, PinInstance,
+    PinType, Position,
+};
 use pulsar_reflection::Reflectable;
 use pulsar_scenedb::{component_methods, Entity, World};
 use pulsar_script_vm::{
@@ -34,7 +37,12 @@ impl Graph {
     fn node(&mut self, id: &str, node_type: &str, pins: &[P]) -> &mut Self {
         let pin = |id: &str, data_type: DataType, pin_type: PinType| PinInstance {
             id: id.into(),
-            pin: Pin { id: id.into(), name: id.into(), data_type, pin_type },
+            pin: Pin {
+                id: id.into(),
+                name: id.into(),
+                data_type,
+                pin_type,
+            },
         };
         let mut node = NodeInstance {
             id: id.into(),
@@ -47,10 +55,20 @@ impl Graph {
         };
         for p in pins {
             match p {
-                P::ExecIn => node.inputs.push(pin("exec", DataType::Exec, PinType::Input)),
-                P::ExecOut(name) => node.outputs.push(pin(name, DataType::Exec, PinType::Output)),
-                P::In(name, ty) => node.inputs.push(pin(name, DataType::typed(*ty), PinType::Input)),
-                P::Out(name, ty) => node.outputs.push(pin(name, DataType::typed(*ty), PinType::Output)),
+                P::ExecIn => node
+                    .inputs
+                    .push(pin("exec", DataType::Exec, PinType::Input)),
+                P::ExecOut(name) => node
+                    .outputs
+                    .push(pin(name, DataType::Exec, PinType::Output)),
+                P::In(name, ty) => {
+                    node.inputs
+                        .push(pin(name, DataType::typed(*ty), PinType::Input))
+                }
+                P::Out(name, ty) => {
+                    node.outputs
+                        .push(pin(name, DataType::typed(*ty), PinType::Output))
+                }
             }
         }
         self.nodes.push(node);
@@ -100,7 +118,16 @@ impl Graph {
     }
 
     fn set_var(&mut self, id: &str, var: &str, ty: &'static str) -> &mut Self {
-        self.node(id, &format!("set_{var}"), &[P::ExecIn, P::In("value", ty), P::ExecOut("exec_out"), P::Out("value", ty)])
+        self.node(
+            id,
+            &format!("set_{var}"),
+            &[
+                P::ExecIn,
+                P::In("value", ty),
+                P::ExecOut("exec_out"),
+                P::Out("value", ty),
+            ],
+        )
     }
 
     fn get_var(&mut self, id: &str, var: &str, ty: &'static str) -> &mut Self {
@@ -108,7 +135,15 @@ impl Graph {
     }
 
     fn add(&mut self, id: &str) -> &mut Self {
-        self.node(id, "add", &[P::In("a", "i64"), P::In("b", "i64"), P::Out("result", "i64")])
+        self.node(
+            id,
+            "add",
+            &[
+                P::In("a", "i64"),
+                P::In("b", "i64"),
+                P::Out("result", "i64"),
+            ],
+        )
     }
 
     /// `log = append(log, text)` on the exec wire.
@@ -116,7 +151,15 @@ impl Graph {
         let get = format!("{id}_get");
         let append = format!("{id}_append");
         self.get_var(&get, "log", "String");
-        self.node(&append, "append", &[P::In("a", "String"), P::In("b", "String"), P::Out("result", "String")]);
+        self.node(
+            &append,
+            "append",
+            &[
+                P::In("a", "String"),
+                P::In("b", "String"),
+                P::Out("result", "String"),
+            ],
+        );
         self.prop(&append, "b", json!(text));
         self.data(&get, "value", &append, "a");
         self.set_var(id, "log", "String");
@@ -145,20 +188,37 @@ script_component!(Health);
 fn natives() -> NativeRegistry {
     let mut r = NativeRegistry::with_engine_natives();
     let mut add = |n: NativeFn| r.register(n).unwrap();
-    add(NativeFn::builder("std::add").pure().params(["a", "b"]).build(|a: i64, b: i64| a + b));
-    add(NativeFn::builder("std::append").pure().params(["a", "b"]).build(|a: String, b: String| a + &b));
-    add(NativeFn::builder("std::less").pure().params(["a", "b"]).build(|a: i64, b: i64| a < b));
+    add(NativeFn::builder("std::add")
+        .pure()
+        .params(["a", "b"])
+        .build(|a: i64, b: i64| a + b));
+    add(NativeFn::builder("std::append")
+        .pure()
+        .params(["a", "b"])
+        .build(|a: String, b: String| a + &b));
+    add(NativeFn::builder("std::less")
+        .pure()
+        .params(["a", "b"])
+        .build(|a: i64, b: i64| a < b));
     // An impure node with a result (has an exec input in the graph).
     add(NativeFn::builder("std::roll").build(|| 4i64));
     r
 }
 
 fn var(name: &str, ty: &str, default: Option<serde_json::Value>) -> VariableSource {
-    VariableSource { name: name.into(), type_name: ty.into(), default }
+    VariableSource {
+        id: Some(format!("var-{name}")),
+        name: name.into(),
+        type_name: ty.into(),
+        default,
+    }
 }
 
 fn log_vars() -> Vec<VariableSource> {
-    vec![var("log", "String", None), var("count", "i64", Some(json!(0)))]
+    vec![
+        var("log", "String", None),
+        var("count", "i64", Some(json!(0))),
+    ]
 }
 
 struct Run {
@@ -172,30 +232,69 @@ impl Run {
     fn new(graph: &Graph, variables: &[VariableSource]) -> Self {
         let registry = natives();
         let g = graph.build();
-        let module = compile(&ClassSource { name: "Test", graph: &g, variables, events: &[], known_events: &[] }, &registry)
-            .unwrap_or_else(|d| panic!("compile failed: {d:?}"));
+        let module = compile(
+            &ClassSource {
+                name: "Test",
+                graph: &g,
+                variables,
+                events: &[],
+                known_events: &[],
+                version: 0,
+            },
+            &registry,
+        )
+        .unwrap_or_else(|d| panic!("compile failed: {d:?}"));
         let program = Program::link(Arc::new(module), &registry).expect("link");
         let mut world = World::new();
         let entity = world.spawn();
-        Self { program, world, entity, vm: Vm::new() }
+        Self {
+            program,
+            world,
+            entity,
+            vm: Vm::new(),
+        }
     }
 
     fn call(&mut self, instance: &mut Instance, name: &str, args: &[Value]) {
-        let func = self.program.entry(name).unwrap_or_else(|| panic!("no entry {name}"));
+        let func = self
+            .program
+            .entry(name)
+            .unwrap_or_else(|| panic!("no entry {name}"));
         let mut host = Host::new(&mut self.world, self.entity);
         self.vm
-            .call(&self.program, instance, func, args, &mut host, &mut Budget::new(100_000))
+            .call(
+                &self.program,
+                instance,
+                func,
+                args,
+                &mut host,
+                &mut Budget::new(100_000),
+            )
             .unwrap_or_else(|e| panic!("{name} failed: {e}"));
     }
 
     fn var(&self, instance: &Instance, name: &str) -> Value {
-        self.program.var(instance, self.program.variable(name).unwrap()).unwrap().clone()
+        self.program
+            .var(instance, self.program.variable(name).unwrap())
+            .unwrap()
+            .clone()
     }
 }
 
 fn errors(graph: &Graph, variables: &[VariableSource]) -> Vec<Diagnostic> {
     let g = graph.build();
-    compile(&ClassSource { name: "Test", graph: &g, variables, events: &[], known_events: &[] }, &natives()).expect_err("compile should fail")
+    compile(
+        &ClassSource {
+            name: "Test",
+            graph: &g,
+            variables,
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &natives(),
+    )
+    .expect_err("compile should fail")
 }
 
 // ---- tests ------------------------------------------------------------------
@@ -203,8 +302,13 @@ fn errors(graph: &Graph, variables: &[VariableSource]) -> Vec<Diagnostic> {
 #[test]
 fn begin_play_sets_a_variable_from_a_pure_chain() {
     let mut g = Graph::default();
-    g.event("bp", "begin_play").set_var("set", "count", "i64").get_var("get", "count", "i64").add("add");
-    g.prop("add", "b", json!(5)).data("get", "value", "add", "a").data("add", "result", "set", "value");
+    g.event("bp", "begin_play")
+        .set_var("set", "count", "i64")
+        .get_var("get", "count", "i64")
+        .add("add");
+    g.prop("add", "b", json!(5))
+        .data("get", "value", "add", "a")
+        .data("add", "result", "set", "value");
     g.exec("bp", "Body", "set");
     let mut run = Run::new(&g, &log_vars());
     let mut i = run.program.instantiate();
@@ -218,27 +322,57 @@ fn begin_play_sets_a_variable_from_a_pure_chain() {
 #[test]
 fn instructions_map_to_their_graph_nodes() {
     let mut g = Graph::default();
-    g.event("bp", "begin_play").set_var("set", "count", "i64").get_var("get", "count", "i64").add("add");
-    g.prop("add", "b", json!(5)).data("get", "value", "add", "a").data("add", "result", "set", "value");
+    g.event("bp", "begin_play")
+        .set_var("set", "count", "i64")
+        .get_var("get", "count", "i64")
+        .add("add");
+    g.prop("add", "b", json!(5))
+        .data("get", "value", "add", "a")
+        .data("add", "result", "set", "value");
     g.exec("bp", "Body", "set");
     let registry = natives();
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Test", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(
+        &ClassSource {
+            name: "Test",
+            graph: &built,
+            variables: &vars,
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap();
     let (_, f) = module.function("begin_play").unwrap();
     let debug = f.debug.as_ref().expect("debug info");
     for pc in 0..f.code.len() {
-        let loc = f.location(pc).unwrap_or_else(|| panic!("pc {pc} has no location"));
+        let loc = f
+            .location(pc)
+            .unwrap_or_else(|| panic!("pc {pc} has no location"));
         assert_eq!(loc.file, blueprint_compiler::GRAPH_FILE);
     }
     let node_at = |pred: &dyn Fn(&pulsar_script_vm::Instr) -> bool| {
         let pc = f.code.iter().position(|i| pred(i)).unwrap();
         f.location(pc).unwrap().node.clone()
     };
-    assert_eq!(node_at(&|i| matches!(i, pulsar_script_vm::Instr::StoreVar { .. })), "set");
-    assert_eq!(node_at(&|i| matches!(i, pulsar_script_vm::Instr::LoadVar { .. })), "get");
-    assert_eq!(node_at(&|i| matches!(i, pulsar_script_vm::Instr::CallNative { .. })), "add");
-    assert_eq!(node_at(&|i| matches!(i, pulsar_script_vm::Instr::Return { .. })), "bp");
+    assert_eq!(
+        node_at(&|i| matches!(i, pulsar_script_vm::Instr::StoreVar { .. })),
+        "set"
+    );
+    assert_eq!(
+        node_at(&|i| matches!(i, pulsar_script_vm::Instr::LoadVar { .. })),
+        "get"
+    );
+    assert_eq!(
+        node_at(&|i| matches!(i, pulsar_script_vm::Instr::CallNative { .. })),
+        "add"
+    );
+    assert_eq!(
+        node_at(&|i| matches!(i, pulsar_script_vm::Instr::Return { .. })),
+        "bp"
+    );
     assert!(debug.ranges.len() >= 4);
     // It survives the module file and verification.
     let back = pulsar_script_vm::Module::from_json(&module.to_json().unwrap()).unwrap();
@@ -249,19 +383,48 @@ fn instructions_map_to_their_graph_nodes() {
 #[test]
 fn tick_receives_delta_time() {
     let mut g = Graph::default();
-    g.event("tick", "on_tick").node("dt", "get_delta_time", &[P::Out("result", "f32")]);
-    g.set_var("set", "elapsed", "f64").get_var("get", "elapsed", "f64");
-    g.node("sum", "fadd", &[P::In("a", "f64"), P::In("b", "f64"), P::Out("result", "f64")]);
-    g.data("get", "value", "sum", "a").data("dt", "result", "sum", "b").data("sum", "result", "set", "value");
+    g.event("tick", "on_tick")
+        .node("dt", "get_delta_time", &[P::Out("result", "f32")]);
+    g.set_var("set", "elapsed", "f64")
+        .get_var("get", "elapsed", "f64");
+    g.node(
+        "sum",
+        "fadd",
+        &[
+            P::In("a", "f64"),
+            P::In("b", "f64"),
+            P::Out("result", "f64"),
+        ],
+    );
+    g.data("get", "value", "sum", "a")
+        .data("dt", "result", "sum", "b")
+        .data("sum", "result", "set", "value");
     g.exec("tick", "Body", "set");
     let vars = [var("elapsed", "f64", None)];
     let registry = {
         let mut r = natives();
-        r.register(NativeFn::builder("std::fadd").pure().params(["a", "b"]).build(|a: f64, b: f64| a + b)).unwrap();
+        r.register(
+            NativeFn::builder("std::fadd")
+                .pure()
+                .params(["a", "b"])
+                .build(|a: f64, b: f64| a + b),
+        )
+        .unwrap();
         r
     };
     let built = g.build();
-    let module = compile(&ClassSource { name: "Ticker", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(
+        &ClassSource {
+            name: "Ticker",
+            graph: &built,
+            variables: &vars,
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -270,17 +433,42 @@ fn tick_receives_delta_time() {
     let tick = program.entry("tick").unwrap();
     for dt in [0.5, 0.25] {
         let mut host = Host::new(&mut world, e);
-        vm.call(&program, &mut inst, tick, &[Value::Float(dt)], &mut host, &mut Budget::new(1000)).unwrap();
+        vm.call(
+            &program,
+            &mut inst,
+            tick,
+            &[Value::Float(dt)],
+            &mut host,
+            &mut Budget::new(1000),
+        )
+        .unwrap();
     }
-    assert_eq!(program.var(&inst, program.variable("elapsed").unwrap()), Some(&Value::Float(0.75)));
+    assert_eq!(
+        program.var(&inst, program.variable("elapsed").unwrap()),
+        Some(&Value::Float(0.75))
+    );
 }
 
 #[test]
 fn branches_take_one_path() {
     let mut g = Graph::default();
-    g.node("bp", "on_check", &[P::ExecOut("Body"), P::Out("flag", "bool")]);
-    g.node("br", "branch", &[P::ExecIn, P::In("condition", "bool"), P::ExecOut("True"), P::ExecOut("False")]);
-    g.data("bp", "flag", "br", "condition").exec("bp", "Body", "br");
+    g.node(
+        "bp",
+        "on_check",
+        &[P::ExecOut("Body"), P::Out("flag", "bool")],
+    );
+    g.node(
+        "br",
+        "branch",
+        &[
+            P::ExecIn,
+            P::In("condition", "bool"),
+            P::ExecOut("True"),
+            P::ExecOut("False"),
+        ],
+    );
+    g.data("bp", "flag", "br", "condition")
+        .exec("bp", "Body", "br");
     g.log("yes", "Y").log("no", "N");
     g.exec("br", "True", "yes").exec("br", "False", "no");
     let mut run = Run::new(&g, &log_vars());
@@ -295,16 +483,38 @@ fn branches_take_one_path() {
 fn loops_run_their_body_every_iteration() {
     let mut g = Graph::default();
     g.event("bp", "begin_play");
-    g.node("for", "for_loop", &[P::ExecIn, P::In("count", "i64"), P::ExecOut("Body")]).prop("for", "count", json!(7));
+    g.node(
+        "for",
+        "for_loop",
+        &[P::ExecIn, P::In("count", "i64"), P::ExecOut("Body")],
+    )
+    .prop("for", "count", json!(7));
     g.log("body", "x");
     g.exec("bp", "Body", "for").exec("for", "Body", "body");
     // while count < 3 { count += 1 }
     g.event("bp2", "on_count");
-    g.get_var("c1", "count", "i64").node("lt", "less", &[P::In("a", "i64"), P::In("b", "i64"), P::Out("result", "bool")]);
+    g.get_var("c1", "count", "i64").node(
+        "lt",
+        "less",
+        &[
+            P::In("a", "i64"),
+            P::In("b", "i64"),
+            P::Out("result", "bool"),
+        ],
+    );
     g.prop("lt", "b", json!(3)).data("c1", "value", "lt", "a");
-    g.node("wh", "while_loop", &[P::ExecIn, P::In("condition", "bool"), P::ExecOut("Body")]).data("lt", "result", "wh", "condition");
-    g.get_var("c2", "count", "i64").add("inc").prop("inc", "b", json!(1)).data("c2", "value", "inc", "a");
-    g.set_var("setc", "count", "i64").data("inc", "result", "setc", "value");
+    g.node(
+        "wh",
+        "while_loop",
+        &[P::ExecIn, P::In("condition", "bool"), P::ExecOut("Body")],
+    )
+    .data("lt", "result", "wh", "condition");
+    g.get_var("c2", "count", "i64")
+        .add("inc")
+        .prop("inc", "b", json!(1))
+        .data("c2", "value", "inc", "a");
+    g.set_var("setc", "count", "i64")
+        .data("inc", "result", "setc", "value");
     g.exec("bp2", "Body", "wh").exec("wh", "Body", "setc");
 
     let mut run = Run::new(&g, &log_vars());
@@ -316,29 +526,49 @@ fn loops_run_their_body_every_iteration() {
     // zero-second wait that the runtime resumes on the next tick.
     use pulsar_script_vm::Completion;
     let on_count = run.program.entry("on_count").unwrap();
-    let mut step = |run: &mut Run, i: &mut Instance, resume: Option<pulsar_script_vm::Continuation>| {
-        let mut host = Host::new(&mut run.world, run.entity);
-        let mut budget = Budget::new(1000);
-        match resume {
-            None => run.vm.start(&run.program, i, on_count, &[], &mut host, &mut budget),
-            Some(c) => run.vm.resume(&run.program, i, c, &mut host, &mut budget),
-        }
-        .unwrap()
-    };
+    let mut step =
+        |run: &mut Run, i: &mut Instance, resume: Option<pulsar_script_vm::Continuation>| {
+            let mut host = Host::new(&mut run.world, run.entity);
+            let mut budget = Budget::new(1000);
+            match resume {
+                None => run
+                    .vm
+                    .start(&run.program, i, on_count, &[], &mut host, &mut budget),
+                Some(c) => run.vm.resume(&run.program, i, c, &mut host, &mut budget),
+            }
+            .unwrap()
+        };
     let mut next = step(&mut run, &mut i, None);
     let mut frames = 1;
-    while let Completion::Waiting { seconds, continuation } = next {
+    while let Completion::Waiting {
+        seconds,
+        continuation,
+    } = next
+    {
         assert_eq!(seconds, 0.0);
-        assert_eq!(run.var(&i, "count"), Value::Int(frames), "one iteration per frame");
+        assert_eq!(
+            run.var(&i, "count"),
+            Value::Int(frames),
+            "one iteration per frame"
+        );
         // Triggering again while the loop runs is ignored.
-        assert!(matches!(step(&mut run, &mut i, None), Completion::Returned(_)));
+        assert!(matches!(
+            step(&mut run, &mut i, None),
+            Completion::Returned(_)
+        ));
         next = step(&mut run, &mut i, Some(continuation));
         frames += 1;
     }
     assert_eq!(run.var(&i, "count"), Value::Int(3));
-    assert_eq!(frames, 4, "three iterations, then a frame that sees the condition false");
+    assert_eq!(
+        frames, 4,
+        "three iterations, then a frame that sees the condition false"
+    );
     // Finished: a new trigger starts a new loop (the condition is false now).
-    assert!(matches!(step(&mut run, &mut i, None), Completion::Returned(_)));
+    assert!(matches!(
+        step(&mut run, &mut i, None),
+        Completion::Returned(_)
+    ));
 }
 
 #[test]
@@ -347,17 +577,43 @@ fn an_endless_while_loop_does_not_exhaust_the_budget() {
     // while true { log "x" }
     let mut g = Graph::default();
     g.event("bp", "begin_play");
-    g.node("wh", "while_loop", &[P::ExecIn, P::In("condition", "bool"), P::ExecOut("Body")]).prop("wh", "condition", json!(true));
+    g.node(
+        "wh",
+        "while_loop",
+        &[P::ExecIn, P::In("condition", "bool"), P::ExecOut("Body")],
+    )
+    .prop("wh", "condition", json!(true));
     g.log("body", "x");
     g.exec("bp", "Body", "wh").exec("wh", "Body", "body");
     let mut run = Run::new(&g, &log_vars());
     let mut i = run.program.instantiate();
     let begin = run.program.entry("begin_play").unwrap();
     let mut host = Host::new(&mut run.world, run.entity);
-    let mut next = run.vm.start(&run.program, &mut i, begin, &[], &mut host, &mut Budget::new(100)).unwrap();
+    let mut next = run
+        .vm
+        .start(
+            &run.program,
+            &mut i,
+            begin,
+            &[],
+            &mut host,
+            &mut Budget::new(100),
+        )
+        .unwrap();
     for _ in 0..1000 {
-        let Completion::Waiting { continuation, .. } = next else { panic!("the loop ended") };
-        next = run.vm.resume(&run.program, &mut i, continuation, &mut host, &mut Budget::new(100)).unwrap();
+        let Completion::Waiting { continuation, .. } = next else {
+            panic!("the loop ended")
+        };
+        next = run
+            .vm
+            .resume(
+                &run.program,
+                &mut i,
+                continuation,
+                &mut host,
+                &mut Budget::new(100),
+            )
+            .unwrap();
     }
     assert!(matches!(next, Completion::Waiting { .. }));
 }
@@ -366,11 +622,24 @@ fn an_endless_while_loop_does_not_exhaust_the_budget() {
 fn sequence_and_merging_paths() {
     let mut g = Graph::default();
     g.event("bp", "begin_play");
-    g.node("seq", "sequence", &[P::ExecIn, P::ExecOut("Then0"), P::ExecOut("Then1"), P::ExecOut("Then2"), P::ExecOut("Then3")]);
+    g.node(
+        "seq",
+        "sequence",
+        &[
+            P::ExecIn,
+            P::ExecOut("Then0"),
+            P::ExecOut("Then1"),
+            P::ExecOut("Then2"),
+            P::ExecOut("Then3"),
+        ],
+    );
     g.log("a", "A").log("b", "B").log("tail", "!");
-    g.exec("bp", "Body", "seq").exec("seq", "Then0", "a").exec("seq", "Then1", "b");
+    g.exec("bp", "Body", "seq")
+        .exec("seq", "Then0", "a")
+        .exec("seq", "Then1", "b");
     // Both chains continue into the same node: it runs once per path.
-    g.exec("a", "exec_out", "tail").exec("b", "exec_out", "tail");
+    g.exec("a", "exec_out", "tail")
+        .exec("b", "exec_out", "tail");
     let mut run = Run::new(&g, &log_vars());
     let mut i = run.program.instantiate();
     run.call(&mut i, "begin_play", &[]);
@@ -381,8 +650,16 @@ fn sequence_and_merging_paths() {
 fn stateful_flow_nodes_are_per_instance() {
     let mut g = Graph::default();
     g.event("ev", "on_fire");
-    g.node("once", "do_once", &[P::ExecIn, P::In("reset", "bool"), P::ExecOut("Then")]);
-    g.node("ff", "flip_flop", &[P::ExecIn, P::ExecOut("A"), P::ExecOut("B")]);
+    g.node(
+        "once",
+        "do_once",
+        &[P::ExecIn, P::In("reset", "bool"), P::ExecOut("Then")],
+    );
+    g.node(
+        "ff",
+        "flip_flop",
+        &[P::ExecIn, P::ExecOut("A"), P::ExecOut("B")],
+    );
     g.log("o", "o").log("fa", "a").log("fb", "b");
     g.exec("ev", "Body", "once").exec("once", "Then", "o");
     g.exec("o", "exec_out", "ff");
@@ -406,10 +683,22 @@ fn stateful_flow_nodes_are_per_instance() {
 fn switches_pick_the_matching_case() {
     let mut g = Graph::default();
     g.node("ev", "on_pick", &[P::ExecOut("Body"), P::Out("n", "i64")]);
-    g.node("sw", "switch_on_int", &[P::ExecIn, P::In("value", "i64"), P::ExecOut("Case0"), P::ExecOut("Case1"), P::ExecOut("Default")]);
+    g.node(
+        "sw",
+        "switch_on_int",
+        &[
+            P::ExecIn,
+            P::In("value", "i64"),
+            P::ExecOut("Case0"),
+            P::ExecOut("Case1"),
+            P::ExecOut("Default"),
+        ],
+    );
     g.data("ev", "n", "sw", "value").exec("ev", "Body", "sw");
     g.log("c0", "0").log("c1", "1").log("d", "d");
-    g.exec("sw", "Case0", "c0").exec("sw", "Case1", "c1").exec("sw", "Default", "d");
+    g.exec("sw", "Case0", "c0")
+        .exec("sw", "Case1", "c1")
+        .exec("sw", "Default", "d");
     let mut run = Run::new(&g, &log_vars());
     let mut i = run.program.instantiate();
     for n in [1, 0, 9] {
@@ -423,15 +712,35 @@ fn impure_results_and_custom_events() {
     let mut g = Graph::default();
     // begin_play: n = roll(); dispatch on_add(n + 1)
     g.event("bp", "begin_play");
-    g.node("roll", "roll", &[P::ExecIn, P::ExecOut("exec_out"), P::Out("result", "i64")]);
-    g.add("plus").prop("plus", "b", json!(1)).data("roll", "result", "plus", "a");
-    g.node("emit", "emit_custom_event", &[P::ExecIn, P::In("amount", "i64"), P::ExecOut("exec_out")]);
-    g.prop("emit", "event_uid", json!("add-it")).data("plus", "result", "emit", "amount");
-    g.exec("bp", "Body", "roll").exec("roll", "exec_out", "emit");
+    g.node(
+        "roll",
+        "roll",
+        &[P::ExecIn, P::ExecOut("exec_out"), P::Out("result", "i64")],
+    );
+    g.add("plus")
+        .prop("plus", "b", json!(1))
+        .data("roll", "result", "plus", "a");
+    g.node(
+        "emit",
+        "emit_custom_event",
+        &[P::ExecIn, P::In("amount", "i64"), P::ExecOut("exec_out")],
+    );
+    g.prop("emit", "event_uid", json!("add-it"))
+        .data("plus", "result", "emit", "amount");
+    g.exec("bp", "Body", "roll")
+        .exec("roll", "exec_out", "emit");
     // on_add_it(amount): count = count + amount
-    g.node("handler", "on_add_it", &[P::ExecOut("Body"), P::Out("amount", "i64")]);
-    g.get_var("c", "count", "i64").add("sum").data("c", "value", "sum", "a").data("handler", "amount", "sum", "b");
-    g.set_var("set", "count", "i64").data("sum", "result", "set", "value");
+    g.node(
+        "handler",
+        "on_add_it",
+        &[P::ExecOut("Body"), P::Out("amount", "i64")],
+    );
+    g.get_var("c", "count", "i64")
+        .add("sum")
+        .data("c", "value", "sum", "a")
+        .data("handler", "amount", "sum", "b");
+    g.set_var("set", "count", "i64")
+        .data("sum", "result", "set", "value");
     g.exec("handler", "Body", "set");
     let mut run = Run::new(&g, &log_vars());
     let mut i = run.program.instantiate();
@@ -443,20 +752,65 @@ fn impure_results_and_custom_events() {
 fn component_nodes_default_to_this_entity() {
     let mut g = Graph::default();
     g.event("bp", "begin_play");
-    g.node("call", "comp_call::Health::damage", &[P::ExecIn, P::In("component_ref", "Health"), P::In("amount", "f32"), P::ExecOut("exec_out"), P::Out("return_value", "f32")]);
+    g.node(
+        "call",
+        "comp_call::Health::damage",
+        &[
+            P::ExecIn,
+            P::In("component_ref", "Health"),
+            P::In("amount", "f32"),
+            P::ExecOut("exec_out"),
+            P::Out("return_value", "f32"),
+        ],
+    );
     g.prop("call", "amount", json!(2.5));
-    g.node("set", "comp_set_prop::Health::value", &[P::ExecIn, P::In("component_ref", "Health"), P::In("value", "f32"), P::ExecOut("exec_out")]);
-    g.node("get", "comp_get_prop::Health::value", &[P::In("component_ref", "Health"), P::Out("value", "f32")]);
-    g.node("double", "fadd2", &[P::In("a", "f64"), P::Out("result", "f64")]);
-    g.data("get", "value", "double", "a").data("double", "result", "set", "value");
+    g.node(
+        "set",
+        "comp_set_prop::Health::value",
+        &[
+            P::ExecIn,
+            P::In("component_ref", "Health"),
+            P::In("value", "f32"),
+            P::ExecOut("exec_out"),
+        ],
+    );
+    g.node(
+        "get",
+        "comp_get_prop::Health::value",
+        &[P::In("component_ref", "Health"), P::Out("value", "f32")],
+    );
+    g.node(
+        "double",
+        "fadd2",
+        &[P::In("a", "f64"), P::Out("result", "f64")],
+    );
+    g.data("get", "value", "double", "a")
+        .data("double", "result", "set", "value");
     g.exec("bp", "Body", "call").exec("call", "exec_out", "set");
     let registry = {
         let mut r = natives();
-        r.register(NativeFn::builder("std::fadd2").pure().params(["a"]).build(|a: f64| a * 2.0)).unwrap();
+        r.register(
+            NativeFn::builder("std::fadd2")
+                .pure()
+                .params(["a"])
+                .build(|a: f64| a * 2.0),
+        )
+        .unwrap();
         r
     };
     let built = g.build();
-    let module = compile(&ClassSource { name: "Hurt", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(
+        &ClassSource {
+            name: "Hurt",
+            graph: &built,
+            variables: &[],
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -464,7 +818,14 @@ fn component_nodes_default_to_this_entity() {
     let mut inst = program.instantiate();
     let mut host = Host::new(&mut world, e);
     Vm::new()
-        .call(&program, &mut inst, program.entry("begin_play").unwrap(), &[], &mut host, &mut Budget::new(1000))
+        .call(
+            &program,
+            &mut inst,
+            program.entry("begin_play").unwrap(),
+            &[],
+            &mut host,
+            &mut Budget::new(1000),
+        )
         .unwrap();
     assert_eq!(world.get::<Health>(e).unwrap().value, 15.0);
 }
@@ -473,24 +834,38 @@ fn component_nodes_default_to_this_entity() {
 fn diagnostics() {
     // Unknown node.
     let mut g = Graph::default();
-    g.event("bp", "begin_play").node("x", "no_such_node", &[P::ExecIn, P::ExecOut("exec_out")]).exec("bp", "Body", "x");
+    g.event("bp", "begin_play")
+        .node("x", "no_such_node", &[P::ExecIn, P::ExecOut("exec_out")])
+        .exec("bp", "Body", "x");
     let d = errors(&g, &[]);
-    assert!(d.iter().any(|d| d.node.as_deref() == Some("x") && d.message.contains("not available")), "{d:?}");
+    assert!(
+        d.iter()
+            .any(|d| d.node.as_deref() == Some("x") && d.message.contains("not available")),
+        "{d:?}"
+    );
 
     // Exec cycle without a loop node.
     let mut g = Graph::default();
     g.event("bp", "begin_play").log("a", "a").log("b", "b");
-    g.exec("bp", "Body", "a").exec("a", "exec_out", "b").exec("b", "exec_out", "a");
+    g.exec("bp", "Body", "a")
+        .exec("a", "exec_out", "b")
+        .exec("b", "exec_out", "a");
     let d = errors(&g, &log_vars());
     assert!(d.iter().any(|d| d.message.contains("loops back")), "{d:?}");
 
     // Type mismatch on a wire.
     let mut g = Graph::default();
-    g.event("bp", "begin_play").get_var("get", "log", "String").set_var("set", "count", "i64");
-    g.data("get", "value", "set", "value").exec("bp", "Body", "set");
+    g.event("bp", "begin_play")
+        .get_var("get", "log", "String")
+        .set_var("set", "count", "i64");
+    g.data("get", "value", "set", "value")
+        .exec("bp", "Body", "set");
     let d = errors(&g, &log_vars());
-    assert!(d.iter().any(|d| d.message.contains("expected int, got string")), "{d:?}");
-
+    assert!(
+        d.iter()
+            .any(|d| d.message.contains("expected int, got string")),
+        "{d:?}"
+    );
 
     // Unknown variable type.
     let d = errors(&Graph::default(), &[var("v", "Vec<Mystery>", None)]);
@@ -513,7 +888,14 @@ impl V2 {
     }
 }
 
-pulsar_script_vm::script_value_type!(V2);
+pulsar_script_vm::script_value_type!(
+    V2,
+    "V2",
+    decode = |text| {
+        let [x, y]: [f32; 2] = serde_json::from_str(text).map_err(|e| e.to_string())?;
+        Ok(V2 { x, y })
+    }
+);
 
 #[test]
 fn native_nodes_call_any_registered_native() {
@@ -523,26 +905,80 @@ fn native_nodes_call_any_registered_native() {
     //   count = FloatToInt(length(v''))  via a pure native chain into set_count
     let mut g = Graph::default();
     g.event("bp", "begin_play");
-    g.node("dmg", "native::Health::damage", &[P::ExecIn, P::In("self", "Health"), P::In("amount", "f64"), P::ExecOut("exec_out"), P::Out("result", "f64")]);
+    g.node(
+        "dmg",
+        "native::Health::damage",
+        &[
+            P::ExecIn,
+            P::In("self", "Health"),
+            P::In("amount", "f64"),
+            P::ExecOut("exec_out"),
+            P::Out("result", "f64"),
+        ],
+    );
     g.prop("dmg", "amount", json!(1.0));
-    g.node("sx", "native::V2::set_x", &[P::In("self", "V2"), P::In("value", "f64"), P::Out("self", "V2")]);
+    g.node(
+        "sx",
+        "native::V2::set_x",
+        &[
+            P::In("self", "V2"),
+            P::In("value", "f64"),
+            P::Out("self", "V2"),
+        ],
+    );
     g.prop("sx", "value", json!(3.0));
-    g.node("sy", "native::V2::set_y", &[P::In("self", "V2"), P::In("value", "f64"), P::Out("self", "V2")]);
-    g.prop("sy", "value", json!(4.0)).data("sx", "self", "sy", "self");
-    g.node("len", "native::V2::length", &[P::In("self", "V2"), P::Out("result", "f64")]).data("sy", "self", "len", "self");
-    g.node("round", "to_int", &[P::In("x", "f64"), P::Out("result", "i64")]).data("len", "result", "round", "x");
-    g.set_var("set", "count", "i64").data("round", "result", "set", "value");
+    g.node(
+        "sy",
+        "native::V2::set_y",
+        &[
+            P::In("self", "V2"),
+            P::In("value", "f64"),
+            P::Out("self", "V2"),
+        ],
+    );
+    g.prop("sy", "value", json!(4.0))
+        .data("sx", "self", "sy", "self");
+    g.node(
+        "len",
+        "native::V2::length",
+        &[P::In("self", "V2"), P::Out("result", "f64")],
+    )
+    .data("sy", "self", "len", "self");
+    g.node(
+        "round",
+        "to_int",
+        &[P::In("x", "f64"), P::Out("result", "i64")],
+    )
+    .data("len", "result", "round", "x");
+    g.set_var("set", "count", "i64")
+        .data("round", "result", "set", "value");
     g.exec("bp", "Body", "dmg").exec("dmg", "exec_out", "set");
 
     let registry = {
         let mut r = natives();
-        r.register(NativeFn::builder("std::to_int").pure().params(["x"]).build(|x: f64| x.round() as i64)).unwrap();
+        r.register(
+            NativeFn::builder("std::to_int")
+                .pure()
+                .params(["x"])
+                .build(|x: f64| x.round() as i64),
+        )
+        .unwrap();
         r
     };
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Natives", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry)
-        .unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(
+        &ClassSource {
+            name: "Natives",
+            graph: &built,
+            variables: &vars,
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap_or_else(|d| panic!("{d:?}"));
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -550,10 +986,20 @@ fn native_nodes_call_any_registered_native() {
     let mut inst = program.instantiate();
     let mut host = Host::new(&mut world, e);
     Vm::new()
-        .call(&program, &mut inst, program.entry("begin_play").unwrap(), &[], &mut host, &mut Budget::new(1000))
+        .call(
+            &program,
+            &mut inst,
+            program.entry("begin_play").unwrap(),
+            &[],
+            &mut host,
+            &mut Budget::new(1000),
+        )
         .unwrap();
     assert_eq!(world.get::<Health>(e).unwrap().value, 9.0);
-    assert_eq!(program.var(&inst, program.variable("count").unwrap()), Some(&Value::Int(5)));
+    assert_eq!(
+        program.var(&inst, program.variable("count").unwrap()),
+        Some(&Value::Int(5))
+    );
 }
 
 #[test]
@@ -561,29 +1007,50 @@ fn palette_lists_methods_by_reference_type_and_globally() {
     use blueprint_compiler::palette::{methods_for, native_nodes};
     let nodes = native_nodes(&natives());
     // pulsar_std functions keep their own nodes.
-    assert!(nodes.iter().all(|n| !n.node_type.starts_with("native::std::")));
+    assert!(nodes
+        .iter()
+        .all(|n| !n.node_type.starts_with("native::std::")));
 
-    let health: Vec<_> = methods_for(&nodes, "Health").map(|n| n.node_type.as_str()).collect();
+    let health: Vec<_> = methods_for(&nodes, "Health")
+        .map(|n| n.node_type.as_str())
+        .collect();
     assert!(health.contains(&"native::Health::damage"), "{health:?}");
     assert!(health.contains(&"native::Health::get_value"), "{health:?}");
 
-    let damage = nodes.iter().find(|n| n.node_type == "native::Health::damage").unwrap();
+    let damage = nodes
+        .iter()
+        .find(|n| n.node_type == "native::Health::damage")
+        .unwrap();
     assert_eq!(damage.category, "Components/Health");
     assert_eq!(damage.name, "Damage");
     assert!(damage.exec);
-    assert_eq!(damage.inputs, [("self".to_string(), "Health".to_string()), ("amount".to_string(), "f64".to_string())]);
+    assert_eq!(
+        damage.inputs,
+        [
+            ("self".to_string(), "Health".to_string()),
+            ("amount".to_string(), "f64".to_string())
+        ]
+    );
     assert_eq!(damage.outputs, [("result".to_string(), "f64".to_string())]);
 
-    let set_x = nodes.iter().find(|n| n.node_type == "native::V2::set_x").unwrap();
+    let set_x = nodes
+        .iter()
+        .find(|n| n.node_type == "native::V2::set_x")
+        .unwrap();
     assert_eq!(set_x.category, "Types/V2");
     assert!(!set_x.exec, "value-type setters are pure");
     assert_eq!(set_x.outputs, [("self".to_string(), "V2".to_string())]);
 
     // Associated functions and the stdlib are in the global list too.
-    let of = nodes.iter().find(|n| n.node_type == "native::Health::of").unwrap();
+    let of = nodes
+        .iter()
+        .find(|n| n.node_type == "native::Health::of")
+        .unwrap();
     assert_eq!(of.category, "Components/Health");
     assert!(of.receiver.is_none());
-    assert!(nodes.iter().any(|n| n.node_type == "native::math::sin" && n.category == "Math"));
+    assert!(nodes
+        .iter()
+        .any(|n| n.node_type == "native::math::sin" && n.category == "Math"));
 }
 
 #[test]
@@ -591,24 +1058,63 @@ fn component_refs_on_other_objects_and_scene_lookups() {
     // on_hit: find_object_by_name("target") -> get_component_ref::Health::0 -> set value
     let mut g = Graph::default();
     g.event("ev", "on_hit");
-    g.node("find", "find_object_by_name", &[P::In("name", "String"), P::Out("object", "Entity")]).prop("find", "name", json!("target"));
-    g.node("ref", "get_component_ref::Health::0", &[P::In("object", "Entity"), P::Out("component", "Health")]).data("find", "object", "ref", "object");
-    g.node("set", "comp_set_prop::Health::value", &[P::ExecIn, P::In("component_ref", "Health"), P::In("value", "f32"), P::ExecOut("exec_out")]);
-    g.prop("set", "value", json!(42.0)).data("ref", "component", "set", "component_ref").exec("ev", "Body", "set");
+    g.node(
+        "find",
+        "find_object_by_name",
+        &[P::In("name", "String"), P::Out("object", "Entity")],
+    )
+    .prop("find", "name", json!("target"));
+    g.node(
+        "ref",
+        "get_component_ref::Health::0",
+        &[P::In("object", "Entity"), P::Out("component", "Health")],
+    )
+    .data("find", "object", "ref", "object");
+    g.node(
+        "set",
+        "comp_set_prop::Health::value",
+        &[
+            P::ExecIn,
+            P::In("component_ref", "Health"),
+            P::In("value", "f32"),
+            P::ExecOut("exec_out"),
+        ],
+    );
+    g.prop("set", "value", json!(42.0))
+        .data("ref", "component", "set", "component_ref")
+        .exec("ev", "Body", "set");
     // Stand-in for pulsar_game's world lookup: the entity at index 1.
     let registry = {
         let mut r = natives();
-        r.register(NativeFn::builder("world::find_by_name").side_effect_free().params(["name"]).build(
-            |host: &mut Host<'_>, name: String| {
-                assert_eq!(name, "target");
-                host.world.query::<&Health>().map(|(e, _)| e).find(|e| e.index() == 1).unwrap_or(Entity::DANGLING)
-            },
-        ))
+        r.register(
+            NativeFn::builder("world::find_by_name")
+                .side_effect_free()
+                .params(["name"])
+                .build(|host: &mut Host<'_>, name: String| {
+                    assert_eq!(name, "target");
+                    host.world()
+                        .query::<&Health>()
+                        .map(|(e, _)| e)
+                        .find(|e| e.index() == 1)
+                        .unwrap_or(Entity::DANGLING)
+                }),
+        )
         .unwrap();
         r
     };
     let built = g.build();
-    let module = compile(&ClassSource { name: "Hit", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(
+        &ClassSource {
+            name: "Hit",
+            graph: &built,
+            variables: &[],
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap_or_else(|d| panic!("{d:?}"));
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let me = world.spawn();
@@ -617,7 +1123,16 @@ fn component_refs_on_other_objects_and_scene_lookups() {
     world.insert(target, Health { value: 1.0 });
     let mut inst = program.instantiate();
     let mut host = Host::new(&mut world, me);
-    Vm::new().call(&program, &mut inst, program.entry("on_hit").unwrap(), &[], &mut host, &mut Budget::new(1000)).unwrap();
+    Vm::new()
+        .call(
+            &program,
+            &mut inst,
+            program.entry("on_hit").unwrap(),
+            &[],
+            &mut host,
+            &mut Budget::new(1000),
+        )
+        .unwrap();
     assert_eq!(world.get::<Health>(target).unwrap().value, 42.0);
     assert_eq!(world.get::<Health>(me).unwrap().value, 1.0);
 }
@@ -635,31 +1150,115 @@ fn component_refs_read_slot_handles() {
     //         old-style node (no slot) -> damage(1)
     let mut g = Graph::default();
     g.event("ev", "on_hit");
-    g.node("second", "get_component_ref::Health::1", &[P::Out("component", "Health")]).prop("second", "slot_id", json!(CHILD_SLOT));
-    g.node("first", "get_component_ref::Health::0", &[P::Out("component", "Health")]).prop("first", "slot_id", json!(ROOT_SLOT));
-    g.node("again", "get_component_ref::Health::1", &[P::Out("component", "Health")]).prop("again", "slot_id", json!(CHILD_SLOT));
-    g.node("old", "get_component_ref::Health::0", &[P::Out("component", "Health")]);
-    g.node("set2", "comp_set_prop::Health::value", &[P::ExecIn, P::In("component_ref", "Health"), P::In("value", "f32"), P::ExecOut("exec_out")]);
-    g.node("set1", "comp_set_prop::Health::value", &[P::ExecIn, P::In("component_ref", "Health"), P::In("value", "f32"), P::ExecOut("exec_out")]);
-    g.node("hit", "comp_call::Health::damage", &[P::ExecIn, P::In("component_ref", "Health"), P::In("amount", "f32"), P::ExecOut("exec_out"), P::Out("result", "f32")]);
-    g.node("hit2", "comp_call::Health::damage", &[P::ExecIn, P::In("component_ref", "Health"), P::In("amount", "f32"), P::ExecOut("exec_out"), P::Out("result", "f32")]);
-    g.prop("set2", "value", json!(5.0)).prop("set1", "value", json!(7.0)).prop("hit", "amount", json!(1.0)).prop("hit2", "amount", json!(2.0));
+    g.node(
+        "second",
+        "get_component_ref::Health::1",
+        &[P::Out("component", "Health")],
+    )
+    .prop("second", "slot_id", json!(CHILD_SLOT));
+    g.node(
+        "first",
+        "get_component_ref::Health::0",
+        &[P::Out("component", "Health")],
+    )
+    .prop("first", "slot_id", json!(ROOT_SLOT));
+    g.node(
+        "again",
+        "get_component_ref::Health::1",
+        &[P::Out("component", "Health")],
+    )
+    .prop("again", "slot_id", json!(CHILD_SLOT));
+    g.node(
+        "old",
+        "get_component_ref::Health::0",
+        &[P::Out("component", "Health")],
+    );
+    g.node(
+        "set2",
+        "comp_set_prop::Health::value",
+        &[
+            P::ExecIn,
+            P::In("component_ref", "Health"),
+            P::In("value", "f32"),
+            P::ExecOut("exec_out"),
+        ],
+    );
+    g.node(
+        "set1",
+        "comp_set_prop::Health::value",
+        &[
+            P::ExecIn,
+            P::In("component_ref", "Health"),
+            P::In("value", "f32"),
+            P::ExecOut("exec_out"),
+        ],
+    );
+    g.node(
+        "hit",
+        "comp_call::Health::damage",
+        &[
+            P::ExecIn,
+            P::In("component_ref", "Health"),
+            P::In("amount", "f32"),
+            P::ExecOut("exec_out"),
+            P::Out("result", "f32"),
+        ],
+    );
+    g.node(
+        "hit2",
+        "comp_call::Health::damage",
+        &[
+            P::ExecIn,
+            P::In("component_ref", "Health"),
+            P::In("amount", "f32"),
+            P::ExecOut("exec_out"),
+            P::Out("result", "f32"),
+        ],
+    );
+    g.prop("set2", "value", json!(5.0))
+        .prop("set1", "value", json!(7.0))
+        .prop("hit", "amount", json!(1.0))
+        .prop("hit2", "amount", json!(2.0));
     g.data("second", "component", "set2", "component_ref");
     g.data("first", "component", "set1", "component_ref");
     g.data("old", "component", "hit", "component_ref");
     g.data("again", "component", "hit2", "component_ref");
-    g.exec("ev", "Body", "set2").exec("set2", "exec_out", "set1").exec("set1", "exec_out", "hit").exec("hit", "exec_out", "hit2");
+    g.exec("ev", "Body", "set2")
+        .exec("set2", "exec_out", "set1")
+        .exec("set1", "exec_out", "hit")
+        .exec("hit", "exec_out", "hit2");
 
     let registry = natives();
     let built = g.build();
-    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(
+        &ClassSource {
+            name: "Slots",
+            graph: &built,
+            variables: &[],
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap_or_else(|d| panic!("{d:?}"));
 
     // One hidden handle per slot, typed by the slot's component class; no
     // native call by UUID.
     let mut slots = blueprint_compiler::module_slots(&module);
     slots.sort();
-    assert_eq!(slots, [(ROOT_SLOT.to_string(), "Health".to_string()), (CHILD_SLOT.to_string(), "Health".to_string())]);
-    assert!(module.imports.iter().all(|i| !i.name.contains("slot")), "{:?}", module.imports);
+    assert_eq!(
+        slots,
+        [
+            (ROOT_SLOT.to_string(), "Health".to_string()),
+            (CHILD_SLOT.to_string(), "Health".to_string())
+        ]
+    );
+    assert!(
+        module.imports.iter().all(|i| !i.name.contains("slot")),
+        "{:?}",
+        module.imports
+    );
 
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
@@ -671,15 +1270,38 @@ fn component_refs_read_slot_handles() {
     // What the engine does at bind time: fill each handle from the placement.
     let health = pulsar_scenedb::component_id::<Health>();
     for (slot, entity) in [(ROOT_SLOT, root), (CHILD_SLOT, child)] {
-        let var = program.variable(&blueprint_compiler::slot_variable_name(slot)).unwrap();
+        let var = program
+            .variable(&blueprint_compiler::slot_variable_name(slot))
+            .unwrap();
         program
-            .set_var(&mut inst, var, Value::Component(pulsar_scenedb::ComponentRef::new(entity, health)))
+            .set_var(
+                &mut inst,
+                var,
+                Value::Component(pulsar_scenedb::ComponentRef::new(entity, health)),
+            )
             .unwrap();
     }
     let mut host = Host::new(&mut world, root);
-    Vm::new().call(&program, &mut inst, program.entry("on_hit").unwrap(), &[], &mut host, &mut Budget::new(1000)).unwrap();
-    assert_eq!(world.get::<Health>(child).unwrap().value, 3.0, "child slot: set 5, then damaged by 2 through the same handle");
-    assert_eq!(world.get::<Health>(root).unwrap().value, 6.0, "root slot set 7, then the old by-class node damaged it by 1");
+    Vm::new()
+        .call(
+            &program,
+            &mut inst,
+            program.entry("on_hit").unwrap(),
+            &[],
+            &mut host,
+            &mut Budget::new(1000),
+        )
+        .unwrap();
+    assert_eq!(
+        world.get::<Health>(child).unwrap().value,
+        3.0,
+        "child slot: set 5, then damaged by 2 through the same handle"
+    );
+    assert_eq!(
+        world.get::<Health>(root).unwrap().value,
+        6.0,
+        "root slot set 7, then the old by-class node damaged it by 1"
+    );
 }
 
 /// An unfilled slot handle is `none`: using it fails instead of silently
@@ -688,21 +1310,64 @@ fn component_refs_read_slot_handles() {
 fn unbound_slot_handles_do_not_fall_back() {
     let mut g = Graph::default();
     g.event("ev", "on_hit");
-    g.node("second", "get_component_ref::Health::1", &[P::Out("component", "Health")]).prop("second", "slot_id", json!("7d1a9b24-5c3e-4f11-8e2d-3a9c0b7e6f02"));
-    g.node("hit", "comp_call::Health::damage", &[P::ExecIn, P::In("component_ref", "Health"), P::In("amount", "f32"), P::ExecOut("exec_out"), P::Out("result", "f32")]);
-    g.prop("hit", "amount", json!(1.0)).data("second", "component", "hit", "component_ref").exec("ev", "Body", "hit");
+    g.node(
+        "second",
+        "get_component_ref::Health::1",
+        &[P::Out("component", "Health")],
+    )
+    .prop(
+        "second",
+        "slot_id",
+        json!("7d1a9b24-5c3e-4f11-8e2d-3a9c0b7e6f02"),
+    );
+    g.node(
+        "hit",
+        "comp_call::Health::damage",
+        &[
+            P::ExecIn,
+            P::In("component_ref", "Health"),
+            P::In("amount", "f32"),
+            P::ExecOut("exec_out"),
+            P::Out("result", "f32"),
+        ],
+    );
+    g.prop("hit", "amount", json!(1.0))
+        .data("second", "component", "hit", "component_ref")
+        .exec("ev", "Body", "hit");
     let registry = natives();
     let built = g.build();
-    let module = compile(&ClassSource { name: "Slots", graph: &built, variables: &[], events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(
+        &ClassSource {
+            name: "Slots",
+            graph: &built,
+            variables: &[],
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let me = world.spawn();
     world.insert(me, Health { value: 1.0 });
     let mut inst = program.instantiate();
     let mut host = Host::new(&mut world, me);
-    let result = Vm::new().call(&program, &mut inst, program.entry("on_hit").unwrap(), &[], &mut host, &mut Budget::new(1000));
+    let result = Vm::new().call(
+        &program,
+        &mut inst,
+        program.entry("on_hit").unwrap(),
+        &[],
+        &mut host,
+        &mut Budget::new(1000),
+    );
     assert!(result.is_err(), "a none handle must not resolve");
-    assert_eq!(world.get::<Health>(me).unwrap().value, 1.0, "the entity's own component was not touched");
+    assert_eq!(
+        world.get::<Health>(me).unwrap().value,
+        1.0,
+        "the entity's own component was not touched"
+    );
 }
 
 #[test]
@@ -712,12 +1377,34 @@ fn delays_suspend_until_game_time_passes() {
     let mut g = Graph::default();
     g.event("ev", "on_fire");
     g.log("a", "a").log("b", "b");
-    g.node("wait", "delay", &[P::ExecIn, P::In("milliseconds", "i64"), P::ExecOut("Completed")]).prop("wait", "milliseconds", json!(500));
-    g.exec("ev", "Body", "a").exec("a", "exec_out", "wait").exec("wait", "Completed", "b");
+    g.node(
+        "wait",
+        "delay",
+        &[
+            P::ExecIn,
+            P::In("milliseconds", "i64"),
+            P::ExecOut("Completed"),
+        ],
+    )
+    .prop("wait", "milliseconds", json!(500));
+    g.exec("ev", "Body", "a")
+        .exec("a", "exec_out", "wait")
+        .exec("wait", "Completed", "b");
     let registry = natives();
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Delay", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(
+        &ClassSource {
+            name: "Delay",
+            graph: &built,
+            variables: &vars,
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -727,18 +1414,46 @@ fn delays_suspend_until_game_time_passes() {
     let log = program.variable("log").unwrap();
 
     let start = |vm: &mut Vm, inst: &mut Instance, world: &mut World, t: f64| {
-        vm.start(&program, inst, fire, &[], &mut Host::at_time(world, e, t), &mut Budget::new(1000)).unwrap()
+        vm.start(
+            &program,
+            inst,
+            fire,
+            &[],
+            &mut Host::at_time(world, e, t),
+            &mut Budget::new(1000),
+        )
+        .unwrap()
     };
-    let Completion::Waiting { seconds, continuation } = start(&mut vm, &mut inst, &mut world, 0.0) else { panic!() };
+    let Completion::Waiting {
+        seconds,
+        continuation,
+    } = start(&mut vm, &mut inst, &mut world, 0.0)
+    else {
+        panic!()
+    };
     assert_eq!(seconds, 0.5);
     // Firing again while the delay counts down is ignored.
-    assert!(matches!(start(&mut vm, &mut inst, &mut world, 0.1), Completion::Returned(_)));
+    assert!(matches!(
+        start(&mut vm, &mut inst, &mut world, 0.1),
+        Completion::Returned(_)
+    ));
     assert_eq!(program.var(&inst, log), Some(&Value::from("aa")));
-    let done = vm.resume(&program, &mut inst, continuation, &mut Host::at_time(&mut world, e, 0.5), &mut Budget::new(1000)).unwrap();
+    let done = vm
+        .resume(
+            &program,
+            &mut inst,
+            continuation,
+            &mut Host::at_time(&mut world, e, 0.5),
+            &mut Budget::new(1000),
+        )
+        .unwrap();
     assert!(matches!(done, Completion::Returned(_)));
     assert_eq!(program.var(&inst, log), Some(&Value::from("aab")));
     // Ready again.
-    assert!(matches!(start(&mut vm, &mut inst, &mut world, 1.0), Completion::Waiting { .. }));
+    assert!(matches!(
+        start(&mut vm, &mut inst, &mut world, 1.0),
+        Completion::Waiting { .. }
+    ));
 }
 
 #[test]
@@ -746,13 +1461,30 @@ fn retriggerable_delays_restart_their_countdown() {
     use pulsar_script_vm::Completion;
     let mut g = Graph::default();
     g.event("ev", "on_fire");
-    g.node("wait", "retriggerable_delay", &[P::ExecIn, P::In("delay_ms", "i64"), P::ExecOut("Completed")]).prop("wait", "delay_ms", json!(1000));
+    g.node(
+        "wait",
+        "retriggerable_delay",
+        &[P::ExecIn, P::In("delay_ms", "i64"), P::ExecOut("Completed")],
+    )
+    .prop("wait", "delay_ms", json!(1000));
     g.log("done", "!");
-    g.exec("ev", "Body", "wait").exec("wait", "Completed", "done");
+    g.exec("ev", "Body", "wait")
+        .exec("wait", "Completed", "done");
     let registry = natives();
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Retrigger", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap();
+    let module = compile(
+        &ClassSource {
+            name: "Retrigger",
+            graph: &built,
+            variables: &vars,
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap();
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -762,26 +1494,68 @@ fn retriggerable_delays_restart_their_countdown() {
     let log = program.variable("log").unwrap();
 
     let mut host = Host::at_time(&mut world, e, 0.0);
-    let Completion::Waiting { seconds, continuation } =
-        vm.start(&program, &mut inst, fire, &[], &mut host, &mut Budget::new(1000)).unwrap()
+    let Completion::Waiting {
+        seconds,
+        continuation,
+    } = vm
+        .start(
+            &program,
+            &mut inst,
+            fire,
+            &[],
+            &mut host,
+            &mut Budget::new(1000),
+        )
+        .unwrap()
     else {
         panic!()
     };
     assert_eq!(seconds, 1.0);
     // Retrigger at t=0.8: the running countdown now ends at 1.8.
     let mut host = Host::at_time(&mut world, e, 0.8);
-    assert!(matches!(vm.start(&program, &mut inst, fire, &[], &mut host, &mut Budget::new(1000)).unwrap(), Completion::Returned(_)));
+    assert!(matches!(
+        vm.start(
+            &program,
+            &mut inst,
+            fire,
+            &[],
+            &mut host,
+            &mut Budget::new(1000)
+        )
+        .unwrap(),
+        Completion::Returned(_)
+    ));
     // Resumed at 1.0 it waits the remaining 0.8s instead of completing.
     let mut host = Host::at_time(&mut world, e, 1.0);
-    let Completion::Waiting { seconds, continuation } =
-        vm.resume(&program, &mut inst, continuation, &mut host, &mut Budget::new(1000)).unwrap()
+    let Completion::Waiting {
+        seconds,
+        continuation,
+    } = vm
+        .resume(
+            &program,
+            &mut inst,
+            continuation,
+            &mut host,
+            &mut Budget::new(1000),
+        )
+        .unwrap()
     else {
         panic!("should keep waiting")
     };
     assert!((seconds - 0.8).abs() < 1e-9, "{seconds}");
     assert_eq!(program.var(&inst, log), Some(&Value::from("")));
     let mut host = Host::at_time(&mut world, e, 1.8);
-    assert!(matches!(vm.resume(&program, &mut inst, continuation, &mut host, &mut Budget::new(1000)).unwrap(), Completion::Returned(_)));
+    assert!(matches!(
+        vm.resume(
+            &program,
+            &mut inst,
+            continuation,
+            &mut host,
+            &mut Budget::new(1000)
+        )
+        .unwrap(),
+        Completion::Returned(_)
+    ));
     assert_eq!(program.var(&inst, log), Some(&Value::from("!")));
 }
 
@@ -797,7 +1571,10 @@ fn other_flow_nodes_jump_where_their_selector_says() {
                 .params(["n", "result"])
                 .build_raw(
                     pulsar_script_vm::Signature::new(
-                        [pulsar_script_vm::Param::new(pulsar_script_vm::Type::Int), pulsar_script_vm::Param::inout(pulsar_script_vm::Type::Int)],
+                        [
+                            pulsar_script_vm::Param::new(pulsar_script_vm::Type::Int),
+                            pulsar_script_vm::Param::inout(pulsar_script_vm::Type::Int),
+                        ],
                         pulsar_script_vm::Type::Int,
                     ),
                     Box::new(|_, args| {
@@ -810,15 +1587,41 @@ fn other_flow_nodes_jump_where_their_selector_says() {
         .unwrap();
     let mut g = Graph::default();
     g.node("ev", "on_pick", &[P::ExecOut("Body"), P::Out("n", "i64")]);
-    g.node("pick", "pick", &[P::ExecIn, P::In("n", "i64"), P::ExecOut("X"), P::ExecOut("Y"), P::ExecOut("Z"), P::Out("result", "i64")]);
+    g.node(
+        "pick",
+        "pick",
+        &[
+            P::ExecIn,
+            P::In("n", "i64"),
+            P::ExecOut("X"),
+            P::ExecOut("Y"),
+            P::ExecOut("Z"),
+            P::Out("result", "i64"),
+        ],
+    );
     g.data("ev", "n", "pick", "n").exec("ev", "Body", "pick");
     g.log("x", "x").log("y", "y").log("z", "z");
-    g.exec("pick", "X", "x").exec("pick", "Y", "y").exec("pick", "Z", "z");
+    g.exec("pick", "X", "x")
+        .exec("pick", "Y", "y")
+        .exec("pick", "Z", "z");
     // count = result, after the chosen chain
-    g.set_var("setc", "count", "i64").data("pick", "result", "setc", "value").exec("z", "exec_out", "setc");
+    g.set_var("setc", "count", "i64")
+        .data("pick", "result", "setc", "value")
+        .exec("z", "exec_out", "setc");
     let built = g.build();
     let vars = log_vars();
-    let module = compile(&ClassSource { name: "Pick", graph: &built, variables: &vars, events: &[], known_events: &[] }, &registry).unwrap_or_else(|d| panic!("{d:?}"));
+    let module = compile(
+        &ClassSource {
+            name: "Pick",
+            graph: &built,
+            variables: &vars,
+            events: &[],
+            known_events: &[],
+            version: 0,
+        },
+        &registry,
+    )
+    .unwrap_or_else(|d| panic!("{d:?}"));
     let program = Program::link(Arc::new(module), &registry).unwrap();
     let mut world = World::new();
     let e = world.spawn();
@@ -826,10 +1629,25 @@ fn other_flow_nodes_jump_where_their_selector_says() {
     let pick = program.entry("on_pick").unwrap();
     for n in [4, 0, 5] {
         let mut host = Host::new(&mut world, e);
-        Vm::new().call(&program, &mut inst, pick, &[Value::Int(n)], &mut host, &mut Budget::new(1000)).unwrap();
+        Vm::new()
+            .call(
+                &program,
+                &mut inst,
+                pick,
+                &[Value::Int(n)],
+                &mut host,
+                &mut Budget::new(1000),
+            )
+            .unwrap();
     }
-    assert_eq!(program.var(&inst, program.variable("log").unwrap()), Some(&Value::from("yxz")));
-    assert_eq!(program.var(&inst, program.variable("count").unwrap()), Some(&Value::Int(50)));
+    assert_eq!(
+        program.var(&inst, program.variable("log").unwrap()),
+        Some(&Value::from("yxz"))
+    );
+    assert_eq!(
+        program.var(&inst, program.variable("count").unwrap()),
+        Some(&Value::Int(50))
+    );
 }
 
 // ---- engine events (#924) ----------------------------------------------------
@@ -839,7 +1657,8 @@ mod engine_events {
     use blueprint_compiler::palette::{event_nodes, PaletteEvent};
     use blueprint_compiler::EventSource;
     use pulsar_script_vm::{
-        EventCatalog, EventField, EventRef, EventSignature, EventSink, EventTarget, SubscriptionScope, Type,
+        EventCatalog, EventField, EventRef, EventSignature, EventSink, EventTarget,
+        SubscriptionScope, Type,
     };
     use std::sync::Mutex;
 
@@ -856,7 +1675,11 @@ mod engine_events {
     }
 
     fn level_loaded() -> EventSignature {
-        EventSignature { id: 8, name: "LevelLoaded".into(), fields: vec![EventField::new("level", Type::Str)] }
+        EventSignature {
+            id: 8,
+            name: "LevelLoaded".into(),
+            fields: vec![EventField::new("level", Type::Str)],
+        }
     }
 
     struct Catalog(Vec<EventSignature>);
@@ -873,7 +1696,10 @@ mod engine_events {
     struct Sink(Mutex<Vec<(EventTarget, String, Vec<Value>)>>);
     impl EventSink for Sink {
         fn emit(&self, target: EventTarget, name: &str, fields: &[Value]) -> Result<(), String> {
-            self.0.lock().unwrap().push((target, name.into(), fields.to_vec()));
+            self.0
+                .lock()
+                .unwrap()
+                .push((target, name.into(), fields.to_vec()));
             Ok(())
         }
     }
@@ -884,14 +1710,26 @@ mod engine_events {
     /// Opened to the Door class.
     fn door_graph() -> Graph {
         let mut g = Graph::default();
-        g.node("on_hit", "event::on::Hit", &[
-            P::ExecOut("Body"),
-            P::Out("entity", "Entity"),
-            P::Out("other", "Entity"),
-            P::Out("impulse", "f64"),
-        ]);
+        g.node(
+            "on_hit",
+            "event::on::Hit",
+            &[
+                P::ExecOut("Body"),
+                P::Out("entity", "Entity"),
+                P::Out("other", "Entity"),
+                P::Out("impulse", "f64"),
+            ],
+        );
         g.get_var("hits_get", "hits", "i64");
-        g.node("one", "add", &[P::In("a", "i64"), P::In("b", "i64"), P::Out("result", "i64")]);
+        g.node(
+            "one",
+            "add",
+            &[
+                P::In("a", "i64"),
+                P::In("b", "i64"),
+                P::Out("result", "i64"),
+            ],
+        );
         g.prop("one", "b", json!(1));
         g.data("hits_get", "value", "one", "a");
         g.set_var("hits_set", "hits", "i64");
@@ -902,21 +1740,53 @@ mod engine_events {
         g.exec("hits_set", "exec_out", "other_set");
 
         // The class's own custom event handler (`on_<uid>`).
-        g.node("on_opened", "on_opened_uid", &[P::ExecOut("Body"), P::Out("by", "Entity"), P::Out("code", "i64")]);
+        g.node(
+            "on_opened",
+            "on_opened_uid",
+            &[
+                P::ExecOut("Body"),
+                P::Out("by", "Entity"),
+                P::Out("code", "i64"),
+            ],
+        );
         g.set_var("code_set", "code", "i64");
         g.data("on_opened", "code", "code_set", "value");
         g.exec("on_opened", "Body", "code_set");
 
         g.event("bp", "begin_play");
         g.get_var("last_get", "last", "Entity");
-        g.node("send", "event::send::Door.Opened", &[P::ExecIn, P::In("target", "Entity"), P::In("by", "Entity"), P::In("code", "i64"), P::ExecOut("exec_out")]);
+        g.node(
+            "send",
+            "event::send::Door.Opened",
+            &[
+                P::ExecIn,
+                P::In("target", "Entity"),
+                P::In("by", "Entity"),
+                P::In("code", "i64"),
+                P::ExecOut("exec_out"),
+            ],
+        );
         g.data("last_get", "value", "send", "target");
         g.prop("send", "code", json!(42));
         g.exec("bp", "Body", "send");
-        g.node("bcast", "event::broadcast::LevelLoaded", &[P::ExecIn, P::In("level", "String"), P::ExecOut("exec_out")]);
+        g.node(
+            "bcast",
+            "event::broadcast::LevelLoaded",
+            &[P::ExecIn, P::In("level", "String"), P::ExecOut("exec_out")],
+        );
         g.prop("bcast", "level", json!("x.level"));
         g.exec("send", "exec_out", "bcast");
-        g.node("toclass", "event::to_class::Door.Opened", &[P::ExecIn, P::In("class", "String"), P::In("by", "Entity"), P::In("code", "i64"), P::ExecOut("exec_out")]);
+        g.node(
+            "toclass",
+            "event::to_class::Door.Opened",
+            &[
+                P::ExecIn,
+                P::In("class", "String"),
+                P::In("by", "Entity"),
+                P::In("code", "i64"),
+                P::ExecOut("exec_out"),
+            ],
+        );
         g.prop("toclass", "class", json!("Door"));
         g.prop("toclass", "code", json!(7));
         g.exec("bcast", "exec_out", "toclass");
@@ -924,14 +1794,21 @@ mod engine_events {
     }
 
     fn door_vars() -> Vec<VariableSource> {
-        vec![var("hits", "i64", None), var("last", "Entity", None), var("code", "i64", None)]
+        vec![
+            var("hits", "i64", None),
+            var("last", "Entity", None),
+            var("code", "i64", None),
+        ]
     }
 
     fn door_events() -> Vec<EventSource> {
         vec![EventSource {
             uid: "opened-uid".into(),
             name: "Opened".into(),
-            fields: vec![("by".into(), "Entity".into()), ("code".into(), "i64".into())],
+            fields: vec![
+                ("by".into(), "Entity".into()),
+                ("code".into(), "i64".into()),
+            ],
         }]
     }
 
@@ -942,7 +1819,14 @@ mod engine_events {
         let vars = door_vars();
         let events = door_events();
         let known = [hit(), level_loaded()];
-        let source = ClassSource { name: "Door", graph: &graph, variables: &vars, events: &events, known_events: &known };
+        let source = ClassSource {
+            name: "Door",
+            graph: &graph,
+            variables: &vars,
+            events: &events,
+            known_events: &known,
+            version: 0,
+        };
         let module = compile(&source, &registry).unwrap_or_else(|d| panic!("{d:?}"));
 
         assert_eq!(module.events.len(), 1);
@@ -951,19 +1835,43 @@ mod engine_events {
             .subscriptions
             .iter()
             .map(|s| {
-                let EventRef::Name(name) = &s.event else { panic!() };
-                (name.clone(), s.scope, module.functions[s.handler as usize].name.clone())
+                let EventRef::Name(name) = &s.event else {
+                    panic!()
+                };
+                (
+                    name.clone(),
+                    s.scope,
+                    module.functions[s.handler as usize].name.clone(),
+                )
             })
             .collect();
-        assert!(subs.contains(&("Hit".into(), SubscriptionScope::Self_, "on_event__Hit__self".into())), "{subs:?}");
-        assert!(subs.contains(&("Door.Opened".into(), SubscriptionScope::Self_, "on_opened_uid".into())), "{subs:?}");
+        assert!(
+            subs.contains(&(
+                "Hit".into(),
+                SubscriptionScope::Self_,
+                "on_event__Hit__self".into()
+            )),
+            "{subs:?}"
+        );
+        assert!(
+            subs.contains(&(
+                "Door.Opened".into(),
+                SubscriptionScope::Self_,
+                "on_opened_uid".into()
+            )),
+            "{subs:?}"
+        );
 
         // Links against the engine's catalog (the class's own events are
         // declared by the engine first; here the catalog knows them).
         let mut catalog = known.to_vec();
         catalog.push(EventSignature::from(&module.events[0]));
-        let program = pulsar_script_vm::Program::link_with_events(Arc::new(module), &registry, Some(&Catalog(catalog)))
-            .unwrap_or_else(|e| panic!("{e}"));
+        let program = pulsar_script_vm::Program::link_with_events(
+            Arc::new(module),
+            &registry,
+            Some(&Catalog(catalog)),
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
 
         // Run the Hit handler, then begin_play.
         let mut world = World::new();
@@ -974,17 +1882,42 @@ mod engine_events {
         let mut vm = Vm::new();
         let on_hit = program.subscriptions()[0].handler;
         let mut host = Host::new(&mut world, me).with_events(Some(&sink));
-        vm.call(&program, &mut instance, on_hit, &[Value::Entity(me), Value::Entity(hitter), Value::Float(1.0)], &mut host, &mut Budget::new(10_000))
-            .unwrap();
-        assert_eq!(program.var(&instance, program.variable("hits").unwrap()), Some(&Value::Int(1)));
+        vm.call(
+            &program,
+            &mut instance,
+            on_hit,
+            &[Value::Entity(me), Value::Entity(hitter), Value::Float(1.0)],
+            &mut host,
+            &mut Budget::new(10_000),
+        )
+        .unwrap();
+        assert_eq!(
+            program.var(&instance, program.variable("hits").unwrap()),
+            Some(&Value::Int(1))
+        );
         let begin = program.entry("begin_play").unwrap();
-        vm.call(&program, &mut instance, begin, &[], &mut host, &mut Budget::new(10_000)).unwrap();
+        vm.call(
+            &program,
+            &mut instance,
+            begin,
+            &[],
+            &mut host,
+            &mut Budget::new(10_000),
+        )
+        .unwrap();
         let sent = sink.0.lock().unwrap().clone();
         assert_eq!(sent.len(), 3);
-        assert_eq!(sent[0].0, EventTarget::Entity(hitter), "sent to the last hitter");
+        assert_eq!(
+            sent[0].0,
+            EventTarget::Entity(hitter),
+            "sent to the last hitter"
+        );
         assert_eq!(sent[0].1, "Door.Opened");
         assert_eq!(sent[0].2[1], Value::Int(42));
-        assert_eq!((sent[1].0.clone(), sent[1].1.as_str()), (EventTarget::Global, "LevelLoaded"));
+        assert_eq!(
+            (sent[1].0.clone(), sent[1].1.as_str()),
+            (EventTarget::Global, "LevelLoaded")
+        );
         assert_eq!(sent[1].2, vec![Value::Str("x.level".into())]);
         assert_eq!(sent[2].0, EventTarget::Class("Door".into()));
     }
@@ -995,44 +1928,641 @@ mod engine_events {
         let vars = door_vars();
         let known = [hit(), level_loaded()];
         let mut g = Graph::default();
-        g.node("on_ll", "event::on::LevelLoaded", &[P::ExecOut("Body"), P::Out("level", "String")]);
+        g.node(
+            "on_ll",
+            "event::on::LevelLoaded",
+            &[P::ExecOut("Body"), P::Out("level", "String")],
+        );
         g.node("on_hit_class", "event::on::Hit", &[P::ExecOut("Body")]);
         g.prop("on_hit_class", "scope", json!("class"));
         let graph = g.build();
-        let module = compile(&ClassSource { name: "S", graph: &graph, variables: &vars, events: &[], known_events: &known }, &registry)
-            .unwrap_or_else(|d| panic!("{d:?}"));
+        let module = compile(
+            &ClassSource {
+                name: "S",
+                graph: &graph,
+                variables: &vars,
+                events: &[],
+                known_events: &known,
+                version: 0,
+            },
+            &registry,
+        )
+        .unwrap_or_else(|d| panic!("{d:?}"));
         let scopes: Vec<SubscriptionScope> = module.subscriptions.iter().map(|s| s.scope).collect();
-        assert!(scopes.contains(&SubscriptionScope::Global), "LevelLoaded defaults to global");
-        assert!(scopes.contains(&SubscriptionScope::Class), "the scope property wins");
+        assert!(
+            scopes.contains(&SubscriptionScope::Global),
+            "LevelLoaded defaults to global"
+        );
+        assert!(
+            scopes.contains(&SubscriptionScope::Class),
+            "the scope property wins"
+        );
 
         let mut g = Graph::default();
         g.node("on_nope", "event::on::Nope", &[P::ExecOut("Body")]);
         g.node("old", "emit_event", &[P::ExecIn]);
         let graph = g.build();
-        let errors = compile(&ClassSource { name: "S", graph: &graph, variables: &vars, events: &[], known_events: &known }, &registry)
-            .unwrap_err();
+        let errors = compile(
+            &ClassSource {
+                name: "S",
+                graph: &graph,
+                variables: &vars,
+                events: &[],
+                known_events: &known,
+                version: 0,
+            },
+            &registry,
+        )
+        .unwrap_err();
         let text: Vec<String> = errors.iter().map(ToString::to_string).collect();
-        assert!(text.iter().any(|e| e.contains("no event `Nope`")), "{text:?}");
+        assert!(
+            text.iter().any(|e| e.contains("no event `Nope`")),
+            "{text:?}"
+        );
         assert!(text.iter().any(|e| e.contains("placeholder")), "{text:?}");
     }
 
     #[test]
     fn palette_lists_event_nodes_by_category() {
         let events = [
-            PaletteEvent { signature: hit(), category: "Physics".into(), declared_here: false },
-            PaletteEvent { signature: level_loaded(), category: "Lifecycle".into(), declared_here: false },
+            PaletteEvent {
+                signature: hit(),
+                category: "Physics".into(),
+                declared_here: false,
+            },
+            PaletteEvent {
+                signature: level_loaded(),
+                category: "Lifecycle".into(),
+                declared_here: false,
+            },
         ];
         let nodes = event_nodes(&events);
         assert_eq!(nodes.len(), 8);
-        let on_hit = nodes.iter().find(|n| n.node_type == "event::on::Hit").unwrap();
+        let on_hit = nodes
+            .iter()
+            .find(|n| n.node_type == "event::on::Hit")
+            .unwrap();
         assert_eq!(on_hit.category, "Events/Physics");
         assert!(on_hit.is_event);
-        assert_eq!(on_hit.properties, vec![("scope".to_owned(), "self".to_owned())]);
+        assert_eq!(
+            on_hit.properties,
+            vec![("scope".to_owned(), "self".to_owned())]
+        );
         assert_eq!(on_hit.outputs[1], ("other".to_owned(), "Entity".to_owned()));
-        let send = nodes.iter().find(|n| n.node_type == "event::send::Hit").unwrap();
+        let send = nodes
+            .iter()
+            .find(|n| n.node_type == "event::send::Hit")
+            .unwrap();
         assert_eq!(send.name, "Send Hit to");
         assert_eq!(send.inputs[0], ("target".to_owned(), "Entity".to_owned()));
-        let ll = nodes.iter().find(|n| n.node_type == "event::on::LevelLoaded").unwrap();
+        let ll = nodes
+            .iter()
+            .find(|n| n.node_type == "event::on::LevelLoaded")
+            .unwrap();
         assert_eq!(ll.properties[0].1, "global");
+    }
+}
+
+// ---- value-type literals on unconnected pins ------------------------------------
+
+/// `count = round(V2::length(<literal>))` for each way the editor may store
+/// a value-type default.
+#[test]
+fn unconnected_value_type_pins_use_their_literal() {
+    for literal in [json!([3, 4]), json!({"x": 3, "y": 4}), json!("(3, 4)")] {
+        let mut g = Graph::default();
+        g.event("bp", "begin_play");
+        g.node(
+            "len",
+            "native::V2::length",
+            &[P::In("self", "V2"), P::Out("result", "f64")],
+        );
+        g.prop("len", "self", literal.clone());
+        g.node(
+            "round",
+            "to_int",
+            &[P::In("x", "f64"), P::Out("result", "i64")],
+        )
+        .data("len", "result", "round", "x");
+        g.set_var("set", "count", "i64")
+            .data("round", "result", "set", "value");
+        g.exec("bp", "Body", "set");
+
+        let registry = {
+            let mut r = natives();
+            r.register(
+                NativeFn::builder("std::to_int")
+                    .pure()
+                    .params(["x"])
+                    .build(|x: f64| x.round() as i64),
+            )
+            .unwrap();
+            r
+        };
+        let built = g.build();
+        let vars = log_vars();
+        let module = compile(
+            &ClassSource {
+                name: "Literal",
+                graph: &built,
+                variables: &vars,
+                events: &[],
+                known_events: &[],
+                version: 0,
+            },
+            &registry,
+        )
+        .unwrap_or_else(|d| panic!("{literal}: {d:?}"));
+        assert!(
+            module
+                .constants
+                .iter()
+                .any(|c| matches!(c, pulsar_script_vm::Constant::Value { ty, .. } if ty == "V2")),
+            "{literal}: literal must be a pooled constant"
+        );
+        let program = Program::link(Arc::new(module), &registry).unwrap();
+        let mut world = World::new();
+        let e = world.spawn();
+        let mut inst = program.instantiate();
+        let mut host = Host::new(&mut world, e);
+        Vm::new()
+            .call(
+                &program,
+                &mut inst,
+                program.entry("begin_play").unwrap(),
+                &[],
+                &mut host,
+                &mut Budget::new(1000),
+            )
+            .unwrap();
+        assert_eq!(
+            program.var(&inst, program.variable("count").unwrap()),
+            Some(&Value::Int(5)),
+            "{literal}"
+        );
+    }
+}
+
+#[test]
+fn malformed_value_type_literals_are_reported_on_their_node() {
+    for literal in [
+        json!([1]),
+        json!([1, "x"]),
+        json!({"x": 1}),
+        json!("not numbers"),
+        json!(true),
+    ] {
+        let mut g = Graph::default();
+        g.event("bp", "begin_play");
+        g.node(
+            "len",
+            "native::V2::length",
+            &[P::In("self", "V2"), P::Out("result", "f64")],
+        );
+        g.prop("len", "self", literal.clone());
+        g.node(
+            "round",
+            "to_int",
+            &[P::In("x", "f64"), P::Out("result", "i64")],
+        )
+        .data("len", "result", "round", "x");
+        g.set_var("set", "count", "i64")
+            .data("round", "result", "set", "value");
+        g.exec("bp", "Body", "set");
+        let registry = {
+            let mut r = natives();
+            r.register(
+                NativeFn::builder("std::to_int")
+                    .pure()
+                    .params(["x"])
+                    .build(|x: f64| x.round() as i64),
+            )
+            .unwrap();
+            r
+        };
+        let built = g.build();
+        let vars = log_vars();
+        let diagnostics = compile(
+            &ClassSource {
+                name: "Literal",
+                graph: &built,
+                variables: &vars,
+                events: &[],
+                known_events: &[],
+                version: 0,
+            },
+            &registry,
+        )
+        .expect_err(&literal.to_string());
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.node.as_deref() == Some("len") && d.message.contains("is not a valid")),
+            "{literal}: {diagnostics:?}"
+        );
+    }
+}
+
+// ---- conformance fixtures --------------------------------------------------------
+//
+// Blueprint graphs compiled to modules for `pulsar_script_conformance`, which
+// runs each interpreted and as generated Rust and compares them. They cover the
+// stateful flow nodes (per-instance hidden state), delays, loops that wait, and
+// selector natives. The checked-in JSON must match what the compiler emits now;
+// regenerate it with
+// `cargo test -p blueprint_compiler regenerate_conformance_fixtures -- --ignored`.
+
+mod conformance_fixtures {
+    use super::*;
+
+    fn compiled(name: &str, g: &Graph) -> pulsar_script_vm::Module {
+        let built = g.build();
+        let vars = log_vars();
+        compile(
+            &ClassSource {
+                name,
+                graph: &built,
+                variables: &vars,
+                events: &[],
+                known_events: &[],
+                version: 0,
+            },
+            &conformance_natives(),
+        )
+        .unwrap_or_else(|d| panic!("{name}: {d:?}"))
+    }
+
+    /// The natives the graphs import. `pulsar_script_conformance` registers
+    /// the same ones.
+    fn conformance_natives() -> NativeRegistry {
+        let mut r = natives();
+        r.register(
+            NativeFn::builder("std::to_int")
+                .pure()
+                .params(["x"])
+                .build(|x: f64| x.round() as i64),
+        )
+        .unwrap();
+        r.register(
+            NativeFn::builder("std::pick")
+                .attr("exec_outputs", "X,Y,Z")
+                .params(["n", "result"])
+                .build_raw(
+                    pulsar_script_vm::Signature::new(
+                        [
+                            pulsar_script_vm::Param::new(pulsar_script_vm::Type::Int),
+                            pulsar_script_vm::Param::inout(pulsar_script_vm::Type::Int),
+                        ],
+                        pulsar_script_vm::Type::Int,
+                    ),
+                    Box::new(|_, args| {
+                        let n = args[0].as_int().unwrap();
+                        args[1] = Value::Int(n * 10);
+                        Ok(Value::Int(n % 3))
+                    }),
+                ),
+        )
+        .unwrap();
+        r
+    }
+
+    pub fn modules() -> Vec<pulsar_script_vm::Module> {
+        let mut out = Vec::new();
+
+        // Stateful flow nodes: each owns hidden per-instance state.
+        let mut g = Graph::default();
+        g.event("ev", "on_fire");
+        g.node(
+            "once",
+            "do_once",
+            &[P::ExecIn, P::In("reset", "bool"), P::ExecOut("Then")],
+        )
+        .prop("once", "reset", json!(false));
+        g.node(
+            "ff",
+            "flip_flop",
+            &[P::ExecIn, P::ExecOut("A"), P::ExecOut("B")],
+        );
+        g.node(
+            "dn",
+            "do_n",
+            &[
+                P::ExecIn,
+                P::In("n", "i64"),
+                P::In("reset", "bool"),
+                P::ExecOut("Then"),
+            ],
+        )
+        .prop("dn", "n", json!(2))
+        .prop("dn", "reset", json!(false));
+        g.node(
+            "mg",
+            "multi_gate",
+            &[
+                P::ExecIn,
+                P::In("reset", "bool"),
+                P::ExecOut("Output0"),
+                P::ExecOut("Output1"),
+                P::ExecOut("Output2"),
+                P::ExecOut("Output3"),
+            ],
+        )
+        .prop("mg", "reset", json!(false));
+        g.log("lo", "o")
+            .log("la", "a")
+            .log("lb", "b")
+            .log("ln", "n");
+        g.log("m0", "0")
+            .log("m1", "1")
+            .log("m2", "2")
+            .log("m3", "3");
+        g.exec("ev", "Body", "once").exec("once", "Then", "lo");
+        g.exec("ev", "Body", "ff")
+            .exec("ff", "A", "la")
+            .exec("ff", "B", "lb");
+        g.exec("ev", "Body", "dn").exec("dn", "Then", "ln");
+        g.exec("ev", "Body", "mg");
+        g.exec("mg", "Output0", "m0")
+            .exec("mg", "Output1", "m1")
+            .exec("mg", "Output2", "m2")
+            .exec("mg", "Output3", "m3");
+        // A gate driven by event parameters, and a do_once with a wired reset.
+        g.node(
+            "ctl",
+            "on_ctl",
+            &[
+                P::ExecOut("Body"),
+                P::Out("open", "bool"),
+                P::Out("close", "bool"),
+            ],
+        );
+        g.node(
+            "gt",
+            "gate",
+            &[
+                P::ExecIn,
+                P::In("open", "bool"),
+                P::In("close", "bool"),
+                P::ExecOut("Then"),
+            ],
+        );
+        g.data("ctl", "open", "gt", "open")
+            .data("ctl", "close", "gt", "close")
+            .exec("ctl", "Body", "gt");
+        g.log("lg", "g").exec("gt", "Then", "lg");
+        g.node(
+            "rst",
+            "on_reset",
+            &[P::ExecOut("Body"), P::Out("reset", "bool")],
+        );
+        g.node(
+            "once2",
+            "do_once",
+            &[P::ExecIn, P::In("reset", "bool"), P::ExecOut("Then")],
+        );
+        g.data("rst", "reset", "once2", "reset")
+            .exec("rst", "Body", "once2");
+        g.log("lr", "r").exec("once2", "Then", "lr");
+        out.push(compiled("bp_state", &g));
+
+        // Delays: one, a retriggerable one, and two in a row (separate state).
+        let mut g = Graph::default();
+        g.event("ev", "on_fire");
+        g.log("a", "a").log("b", "b");
+        g.node(
+            "wait",
+            "delay",
+            &[
+                P::ExecIn,
+                P::In("milliseconds", "i64"),
+                P::ExecOut("Completed"),
+            ],
+        )
+        .prop("wait", "milliseconds", json!(500));
+        g.exec("ev", "Body", "a")
+            .exec("a", "exec_out", "wait")
+            .exec("wait", "Completed", "b");
+        g.event("rt", "on_retrigger");
+        g.node(
+            "rwait",
+            "retriggerable_delay",
+            &[P::ExecIn, P::In("delay_ms", "i64"), P::ExecOut("Completed")],
+        )
+        .prop("rwait", "delay_ms", json!(1000));
+        g.log("rdone", "!")
+            .exec("rt", "Body", "rwait")
+            .exec("rwait", "Completed", "rdone");
+        g.event("two", "on_two");
+        g.node(
+            "d1",
+            "delay",
+            &[
+                P::ExecIn,
+                P::In("milliseconds", "i64"),
+                P::ExecOut("Completed"),
+            ],
+        )
+        .prop("d1", "milliseconds", json!(200));
+        g.node(
+            "d2",
+            "delay",
+            &[
+                P::ExecIn,
+                P::In("milliseconds", "i64"),
+                P::ExecOut("Completed"),
+            ],
+        )
+        .prop("d2", "milliseconds", json!(300));
+        g.log("lx", "x").log("ly", "y");
+        g.exec("two", "Body", "d1")
+            .exec("d1", "Completed", "lx")
+            .exec("lx", "exec_out", "d2")
+            .exec("d2", "Completed", "ly");
+        out.push(compiled("bp_delays", &g));
+
+        // Loops (a while loop waits one frame per iteration), branches, sequences.
+        let mut g = Graph::default();
+        g.event("bp", "begin_play");
+        g.node(
+            "for",
+            "for_loop",
+            &[P::ExecIn, P::In("count", "i64"), P::ExecOut("Body")],
+        )
+        .prop("for", "count", json!(4));
+        g.log("body", "x")
+            .exec("bp", "Body", "for")
+            .exec("for", "Body", "body");
+        g.event("bp2", "on_count");
+        g.get_var("c1", "count", "i64").node(
+            "lt",
+            "less",
+            &[
+                P::In("a", "i64"),
+                P::In("b", "i64"),
+                P::Out("result", "bool"),
+            ],
+        );
+        g.prop("lt", "b", json!(3)).data("c1", "value", "lt", "a");
+        g.node(
+            "wh",
+            "while_loop",
+            &[P::ExecIn, P::In("condition", "bool"), P::ExecOut("Body")],
+        )
+        .data("lt", "result", "wh", "condition");
+        g.get_var("c2", "count", "i64")
+            .add("inc")
+            .prop("inc", "b", json!(1))
+            .data("c2", "value", "inc", "a");
+        g.set_var("setc", "count", "i64")
+            .data("inc", "result", "setc", "value");
+        g.exec("bp2", "Body", "wh").exec("wh", "Body", "setc");
+        g.node(
+            "chk",
+            "on_check",
+            &[P::ExecOut("Body"), P::Out("flag", "bool")],
+        );
+        g.node(
+            "br",
+            "branch",
+            &[
+                P::ExecIn,
+                P::In("condition", "bool"),
+                P::ExecOut("True"),
+                P::ExecOut("False"),
+            ],
+        );
+        g.data("chk", "flag", "br", "condition")
+            .exec("chk", "Body", "br");
+        g.log("yes", "Y")
+            .log("no", "N")
+            .exec("br", "True", "yes")
+            .exec("br", "False", "no");
+        g.event("sq", "on_seq");
+        g.node(
+            "seq",
+            "sequence",
+            &[P::ExecIn, P::ExecOut("Then0"), P::ExecOut("Then1")],
+        );
+        g.log("sa", "A").log("sb", "B").log("st", "!");
+        g.exec("sq", "Body", "seq")
+            .exec("seq", "Then0", "sa")
+            .exec("seq", "Then1", "sb");
+        g.exec("sa", "exec_out", "st").exec("sb", "exec_out", "st");
+        out.push(compiled("bp_loops", &g));
+
+        // A selector native choosing among exec outputs, with an inout result.
+        let mut g = Graph::default();
+        g.node("ev", "on_pick", &[P::ExecOut("Body"), P::Out("n", "i64")]);
+        g.node(
+            "pick",
+            "pick",
+            &[
+                P::ExecIn,
+                P::In("n", "i64"),
+                P::ExecOut("X"),
+                P::ExecOut("Y"),
+                P::ExecOut("Z"),
+                P::Out("result", "i64"),
+            ],
+        );
+        g.data("ev", "n", "pick", "n").exec("ev", "Body", "pick");
+        g.log("x", "x").log("y", "y").log("z", "z");
+        g.exec("pick", "X", "x")
+            .exec("pick", "Y", "y")
+            .exec("pick", "Z", "z");
+        g.set_var("setc", "count", "i64")
+            .data("pick", "result", "setc", "value")
+            .exec("z", "exec_out", "setc");
+        out.push(compiled("bp_pick", &g));
+
+        // The same behaviour as the TypeScript `Beacon` class of `pulsar_script_ts`'s
+        // parity test: do-once, flip-flop, do-n and a delay that ignores re-triggers
+        // while it counts down, each logging a letter.
+        let mut g = Graph::default();
+        g.event("ev", "on_fire");
+        g.node(
+            "once",
+            "do_once",
+            &[P::ExecIn, P::In("reset", "bool"), P::ExecOut("Then")],
+        )
+        .prop("once", "reset", json!(false));
+        g.node(
+            "ff",
+            "flip_flop",
+            &[P::ExecIn, P::ExecOut("A"), P::ExecOut("B")],
+        );
+        g.node(
+            "dn",
+            "do_n",
+            &[
+                P::ExecIn,
+                P::In("n", "i64"),
+                P::In("reset", "bool"),
+                P::ExecOut("Then"),
+            ],
+        )
+        .prop("dn", "n", json!(2))
+        .prop("dn", "reset", json!(false));
+        g.node(
+            "wait",
+            "delay",
+            &[
+                P::ExecIn,
+                P::In("milliseconds", "i64"),
+                P::ExecOut("Completed"),
+            ],
+        )
+        .prop("wait", "milliseconds", json!(500));
+        g.log("lo", "o")
+            .log("la", "a")
+            .log("lb", "b")
+            .log("ln", "n")
+            .log("ld", "d");
+        g.exec("ev", "Body", "once").exec("once", "Then", "lo");
+        g.exec("ev", "Body", "ff")
+            .exec("ff", "A", "la")
+            .exec("ff", "B", "lb");
+        g.exec("ev", "Body", "dn").exec("dn", "Then", "ln");
+        g.exec("ev", "Body", "wait").exec("wait", "Completed", "ld");
+        out.push(compiled("bp_beacon", &g));
+        out
+    }
+
+    fn dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../../crates/core/pulsar_script_conformance/fixtures")
+    }
+
+    #[test]
+    fn conformance_fixtures_are_current() {
+        let dir = dir();
+        if !dir.is_dir() {
+            return; // built outside the Pulsar-Native monorepo
+        }
+        for module in modules() {
+            let path = dir.join(format!("{}.module.json", module.name));
+            let committed = std::fs::read_to_string(&path)
+                .unwrap_or_else(|_| panic!("{} is missing", path.display()));
+            assert_eq!(
+                pulsar_script_vm::Module::from_json(&committed).unwrap(),
+                module,
+                "{}: run the ignored `regenerate_conformance_fixtures` test",
+                module.name
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "writes the checked-in conformance fixtures"]
+    fn regenerate_conformance_fixtures() {
+        let dir = dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        for module in modules() {
+            std::fs::write(
+                dir.join(format!("{}.module.json", module.name)),
+                module.to_json().unwrap() + "\n",
+            )
+            .unwrap();
+        }
     }
 }
