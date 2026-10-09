@@ -13,4 +13,4 @@ serde_json = "1.0"
 
 [dev-dependencies]
 pulsar_reflection = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection", rev = "2dab12bfb147d813e508e1db0b5220ba9ba167ae" }
-pulsar_scenedb = { git = "https://github.com/Far-Beyond-Pulsar/SceneDB", rev = "0801d2638a66b81692df6a03130c3dcf1b3f1dbf" }
+pulsar_scenedb = { git = "https://github.com/Far-Beyond-Pulsar/SceneDB", rev = "685b1b0aa212b64912549efd583c93480bea027f" }
