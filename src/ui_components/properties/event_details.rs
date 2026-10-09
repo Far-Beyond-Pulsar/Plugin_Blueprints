@@ -285,7 +285,7 @@ impl PropertiesRenderer {
                     "remove-event-field-{}-{}",
                     event_uid, field_index
                 ))
-                .icon(IconName::Xmark)
+                .icon(IconName::Close)
                 .ghost()
                 .xsmall()
                 .on_click(on_remove),

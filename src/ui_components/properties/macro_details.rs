@@ -298,7 +298,7 @@ impl PropertiesRenderer {
                     "remove-macro-pin-{}-{}-{}",
                     macro_id, pin_index, is_input
                 ))
-                .icon(IconName::Xmark)
+                .icon(IconName::Close)
                 .ghost()
                 .xsmall()
                 .on_click(on_remove),

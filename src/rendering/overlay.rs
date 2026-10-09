@@ -175,7 +175,7 @@ pub fn render_debug_overlay(
                                 )
                                 .child(
                                     Button::new("close_debug_overlay")
-                                        .icon(IconName::X)
+                                        .icon(IconName::Close)
                                         .ghost()
                                         .xsmall()
                                         .on_click(cx.listener(|panel, _, _, cx| {
@@ -321,7 +321,7 @@ pub fn render_graph_controls(
                         )
                         .child(
                             Button::new("close_graph_controls")
-                                .icon(IconName::X)
+                                .icon(IconName::Close)
                                 .ghost()
                                 .xsmall()
                                 .on_click(cx.listener(|panel, _, _, cx| {
