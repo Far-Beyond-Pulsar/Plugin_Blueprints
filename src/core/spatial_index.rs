@@ -607,3 +607,503 @@ fn wire_bounds(from: Point<f32>, to: Point<f32>) -> GraphRect {
         ),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::types::{BlueprintComment, NodeType, Pin, PinDataType, PinType};
+    use crate::rendering::graph::bezier;
+    use blueprint_graph::ConnectionType;
+    use gpui::{Hsla, Size};
+    use std::collections::BTreeSet;
+
+    // Deterministic generator so failures reproduce.
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn next_u32(&mut self) -> u32 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (self.0 >> 33) as u32
+        }
+
+        fn unit(&mut self) -> f32 {
+            self.next_u32() as f32 / (1u64 << 31) as f32
+        }
+
+        fn below(&mut self, n: usize) -> usize {
+            self.next_u32() as usize % n
+        }
+    }
+
+    fn pin(id: &str, pin_type: PinType) -> Pin {
+        Pin {
+            id: id.to_string(),
+            name: id.to_string(),
+            pin_type,
+            data_type: PinDataType::from_type_str("f32"),
+        }
+    }
+
+    fn node(id: &str, x: f32, y: f32) -> BlueprintNode {
+        BlueprintNode {
+            id: id.to_string(),
+            definition_id: "test".to_string(),
+            title: id.to_string(),
+            icon: String::new(),
+            node_type: NodeType::Logic,
+            position: Point::new(x, y),
+            size: Size::new(160.0, 80.0),
+            inputs: vec![pin("in0", PinType::Input), pin("in1", PinType::Input)],
+            outputs: vec![pin("out0", PinType::Output), pin("out1", PinType::Output)],
+            properties: HashMap::new(),
+            is_selected: false,
+            description: String::new(),
+            color: None,
+        }
+    }
+
+    fn reroute(id: &str, x: f32, y: f32) -> BlueprintNode {
+        let mut node = BlueprintNode::create_reroute(Point::new(x, y));
+        node.id = id.to_string();
+        node
+    }
+
+    fn connection(index: usize, from: (&str, &str), to: (&str, &str)) -> Connection {
+        Connection {
+            id: format!("c{index}"),
+            source_node: from.0.to_string(),
+            source_pin: from.1.to_string(),
+            target_node: to.0.to_string(),
+            target_pin: to.1.to_string(),
+            connection_type: ConnectionType::Data,
+        }
+    }
+
+    fn comment(id: &str, x: f32, y: f32, width: f32, height: f32) -> BlueprintComment {
+        BlueprintComment {
+            id: id.to_string(),
+            text: id.to_string(),
+            position: Point::new(x, y),
+            size: Size::new(width, height),
+            color: Hsla::default(),
+            contained_node_ids: Vec::new(),
+            is_selected: false,
+            color_picker_state: None,
+        }
+    }
+
+    fn graph(
+        nodes: Vec<BlueprintNode>,
+        connections: Vec<Connection>,
+        comments: Vec<BlueprintComment>,
+    ) -> BlueprintGraph {
+        BlueprintGraph {
+            nodes: nodes.into(),
+            connections: connections.into(),
+            comments: comments.into(),
+            zoom_level: 1.0,
+            ..Default::default()
+        }
+    }
+
+    /// `node_count` nodes scattered over a grid, `connection_count` random
+    /// wires between them (including reroutes and the `__return__` header
+    /// pin), and a few comments.
+    fn random_graph(node_count: usize, connection_count: usize, seed: u64) -> BlueprintGraph {
+        let mut rng = Lcg(seed);
+        let columns = (node_count as f32).sqrt().ceil() as usize;
+        let nodes = (0..node_count)
+            .map(|i| {
+                let x = (i % columns) as f32 * 260.0 + rng.unit() * 60.0;
+                let y = (i / columns) as f32 * 140.0 + rng.unit() * 30.0;
+                if i % 17 == 0 {
+                    reroute(&format!("n{i}"), x, y)
+                } else {
+                    node(&format!("n{i}"), x, y)
+                }
+            })
+            .collect::<Vec<_>>();
+        let connections = (0..connection_count)
+            .map(|i| {
+                let from = rng.below(node_count);
+                // Mostly local wires, as real graphs have, plus some long ones.
+                let to = if i % 10 == 0 {
+                    rng.below(node_count)
+                } else {
+                    (from + 1 + rng.below(columns + 1)).min(node_count - 1)
+                };
+                let output = match rng.below(3) {
+                    0 => "out0",
+                    1 => "out1",
+                    _ => "__return__",
+                };
+                let input = if rng.below(2) == 0 { "in0" } else { "in1" };
+                connection(i, (&nodes[from].id, output), (&nodes[to].id, input))
+            })
+            .collect::<Vec<_>>();
+        let comments = (0..node_count / 50 + 1)
+            .map(|i| {
+                comment(
+                    &format!("m{i}"),
+                    rng.unit() * columns as f32 * 260.0,
+                    rng.unit() * columns as f32 * 140.0,
+                    300.0 + rng.unit() * 400.0,
+                    200.0 + rng.unit() * 300.0,
+                )
+            })
+            .collect::<Vec<_>>();
+        graph(nodes, connections, comments)
+    }
+
+    fn built(graph: &BlueprintGraph) -> GraphSpatialIndex {
+        let mut index = GraphSpatialIndex::default();
+        index.ensure_current(graph);
+        index
+    }
+
+    fn intersects(a: GraphRect, b: GraphRect) -> bool {
+        a.min_x <= b.max_x && b.min_x <= a.max_x && a.min_y <= b.max_y && b.min_y <= a.max_y
+    }
+
+    fn probes(graph: &BlueprintGraph, seed: u64) -> Vec<GraphRect> {
+        let (mut max_x, mut max_y) = (0.0f32, 0.0f32);
+        for node in graph.nodes.iter() {
+            max_x = max_x.max(node.position.x + node.size.width);
+            max_y = max_y.max(node.position.y + node.size.height);
+        }
+        let mut rng = Lcg(seed);
+        (0..300)
+            .map(|i| {
+                let center = Point::new(rng.unit() * max_x, rng.unit() * max_y);
+                // Points, pointer-sized radii and viewport-sized rectangles.
+                let radius = [0.0, 12.0, 30.0, 400.0][i % 4];
+                GraphRect::around(center, radius)
+            })
+            .collect()
+    }
+
+    /// `incremental` answers every query exactly as a fresh build would.
+    fn assert_matches_rebuild(incremental: &GraphSpatialIndex, graph: &BlueprintGraph) {
+        let fresh = built(graph);
+        for index in 0..graph.connections.len() {
+            let (a, b) = (incremental.wire(index), fresh.wire(index));
+            assert_eq!(
+                a.map(|w| (w.from, w.to)),
+                b.map(|w| (w.from, w.to)),
+                "wire {index} geometry"
+            );
+        }
+        for (i, probe) in probes(graph, 7).into_iter().enumerate() {
+            assert_eq!(
+                incremental.nodes_intersecting(probe, true),
+                fresh.nodes_intersecting(probe, true),
+                "nodes, probe {i}"
+            );
+            assert_eq!(
+                incremental.comments_intersecting(probe, false),
+                fresh.comments_intersecting(probe, false),
+                "comments, probe {i}"
+            );
+            assert_eq!(
+                incremental.wires_intersecting(probe),
+                fresh.wires_intersecting(probe),
+                "wires, probe {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn node_and_comment_queries_match_a_linear_scan() {
+        let graph = random_graph(400, 900, 1);
+        let index = built(&graph);
+        for (i, probe) in probes(&graph, 2).into_iter().enumerate() {
+            let expected_nodes = graph
+                .nodes
+                .iter()
+                .enumerate()
+                .filter(|(_, node)| intersects(node_bounds(node), probe))
+                .map(|(index, _)| index)
+                .rev()
+                .collect::<Vec<_>>();
+            assert_eq!(
+                index.nodes_intersecting(probe, true),
+                expected_nodes,
+                "probe {i}"
+            );
+            let expected_comments = graph
+                .comments
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| {
+                    let rect =
+                        rect_from_xywh(c.position.x, c.position.y, c.size.width, c.size.height);
+                    intersects(rect, probe)
+                })
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                index.comments_intersecting(probe, false),
+                expected_comments,
+                "probe {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_point_on_a_wire_finds_that_wire() {
+        // The hover test only checks the wires the index returns, so a point
+        // within the hover threshold of a curve must return that curve.
+        const THRESHOLD: f32 = 12.0;
+        let graph = random_graph(200, 500, 3);
+        let index = built(&graph);
+        for (wire_index, _) in graph.connections.iter().enumerate() {
+            let wire = index.wire(wire_index).expect("both endpoints exist");
+            let offset = ((wire.to.x - wire.from.x).abs() * 0.45).clamp(55.0, 220.0);
+            let c1 = (wire.from.x + offset, wire.from.y);
+            let c2 = (wire.to.x - offset, wire.to.y);
+            for step in 0..=32 {
+                let (x, y) = bezier(
+                    (wire.from.x, wire.from.y),
+                    c1,
+                    c2,
+                    (wire.to.x, wire.to.y),
+                    step as f32 / 32.0,
+                );
+                for (dx, dy) in [(0.0, 0.0), (THRESHOLD, 0.0), (0.0, -THRESHOLD)] {
+                    let candidates = index.wires_intersecting(GraphRect::around(
+                        Point::new(x + dx, y + dy),
+                        THRESHOLD,
+                    ));
+                    assert!(
+                        candidates.contains(&wire_index),
+                        "wire {wire_index} missing at t={step}/32 offset ({dx}, {dy})"
+                    );
+                }
+            }
+        }
+        // Far from every node, nothing is a candidate.
+        assert!(index
+            .wires_intersecting(GraphRect::around(Point::new(-5000.0, -5000.0), THRESHOLD))
+            .is_empty());
+    }
+
+    #[test]
+    fn overlapping_nodes_return_the_topmost_first() {
+        let graph = graph(
+            vec![
+                node("below", 0.0, 0.0),
+                node("far", 1000.0, 0.0),
+                node("above", 40.0, 20.0),
+            ],
+            Vec::new(),
+            Vec::new(),
+        );
+        let index = built(&graph);
+        let point = GraphRect::around(Point::new(60.0, 40.0), 0.0);
+        // Later nodes draw on top, so hit testing walks them first.
+        assert_eq!(index.nodes_intersecting(point, true), vec![2, 0]);
+        assert_eq!(index.nodes_intersecting(point, false), vec![0, 2]);
+        assert_eq!(index.node_index("above"), Some(2));
+        assert_eq!(index.node_index("missing"), None);
+        assert!(index
+            .nodes_intersecting(GraphRect::around(Point::new(500.0, 500.0), 10.0), true)
+            .is_empty());
+    }
+
+    #[test]
+    fn special_pins_and_reroutes_place_wire_endpoints() {
+        let mut conversion = node("conv", 400.0, 0.0);
+        conversion.node_type = NodeType::Conversion;
+        conversion.size = Size::new(60.0, 24.0);
+        let graph = graph(
+            vec![node("a", 0.0, 0.0), reroute("r", 300.0, 200.0), conversion],
+            vec![
+                connection(0, ("a", "__return__"), ("r", "input")),
+                connection(1, ("r", "output"), ("conv", "in0")),
+                connection(2, ("conv", "out0"), ("a", "missing_pin")),
+                connection(3, ("a", "out0"), ("deleted", "in0")),
+            ],
+            Vec::new(),
+        );
+        let index = built(&graph);
+
+        // `__return__` sits in the header, 24 units in from the right edge.
+        let wire = index.wire(0).unwrap();
+        assert_eq!(
+            wire.from,
+            Point::new(160.0 - 24.0, crate::rendering::graph::HEADER_H * 0.5)
+        );
+        // A reroute's pins are both its centre.
+        assert_eq!(wire.to, Point::new(315.0, 215.0));
+        assert_eq!(index.wire(1).unwrap().from, Point::new(315.0, 215.0));
+        // A conversion pill's pins are the middle of its left and right edges.
+        assert_eq!(index.wire(1).unwrap().to, Point::new(400.0, 12.0));
+        assert_eq!(index.wire(2).unwrap().from, Point::new(460.0, 12.0));
+        // An unknown pin falls back to the node's left edge middle.
+        assert_eq!(index.wire(2).unwrap().to, Point::new(0.0, 40.0));
+        // A wire to a deleted node has no geometry and is never a candidate.
+        assert!(index.wire(3).is_none());
+        let everything = GraphRect::from_corners(Point::new(-1e4, -1e4), Point::new(1e4, 1e4));
+        assert_eq!(index.wires_intersecting(everything), vec![0, 1, 2]);
+        // A reroute is found by a point at its centre.
+        assert_eq!(
+            index.nodes_intersecting(GraphRect::around(Point::new(315.0, 215.0), 0.0), true),
+            vec![1]
+        );
+    }
+
+    #[test]
+    fn pin_queries_widen_with_zoom_out() {
+        // Pin hit tests query nodes within a 12-pixel screen radius, which is
+        // 12 / zoom graph units (`nearby_node_indices`). A pointer just
+        // outside a node reaches it when zoomed out, not when zoomed in.
+        let graph = graph(vec![node("a", 0.0, 0.0)], Vec::new(), Vec::new());
+        let index = built(&graph);
+        let outside = Point::new(160.0 + 20.0, 40.0);
+        for (zoom, expected) in [
+            (2.0f32, vec![]),
+            (1.0, vec![]),
+            (0.5, vec![0]),
+            (0.1, vec![0]),
+        ] {
+            let radius = 12.0 / zoom.max(0.05);
+            assert_eq!(
+                index.nodes_intersecting(GraphRect::around(outside, radius), true),
+                expected,
+                "zoom {zoom}"
+            );
+        }
+    }
+
+    #[test]
+    fn incremental_node_moves_and_resizes_match_a_rebuild() {
+        let mut graph = random_graph(300, 700, 4);
+        let mut index = built(&graph);
+        let mut rng = Lcg(5);
+        for round in 0..25 {
+            // A single-node drag, a multi-node drag, then a resize (the
+            // renderer widens nodes whose labels do not fit).
+            let count = [1, 12, 3][round % 3];
+            let indices = (0..count)
+                .map(|_| rng.below(graph.nodes.len()))
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
+            let previous = graph.nodes.revision();
+            let (dx, dy) = (rng.unit() * 2000.0 - 1000.0, rng.unit() * 2000.0 - 1000.0);
+            let grow = rng.unit() * 120.0;
+            graph.nodes.with_mut(|nodes| {
+                for &i in &indices {
+                    if round % 3 == 2 {
+                        nodes[i].size.width += grow;
+                    } else {
+                        nodes[i].position.x += dx;
+                        nodes[i].position.y += dy;
+                    }
+                }
+            });
+            assert!(
+                index.sync_nodes_after_batch(&graph, previous, &indices),
+                "round {round} fell back to a rebuild"
+            );
+            assert_matches_rebuild(&index, &graph);
+        }
+    }
+
+    #[test]
+    fn incremental_drag_of_nodes_and_comments_matches_a_rebuild() {
+        let mut graph = random_graph(250, 600, 6);
+        let mut index = built(&graph);
+        let mut rng = Lcg(8);
+        for round in 0..20 {
+            let node_indices = if round % 4 == 3 {
+                Vec::new()
+            } else {
+                vec![rng.below(graph.nodes.len())]
+            };
+            // The editor only syncs when something moved.
+            let comment_indices = if round % 2 == 0 || node_indices.is_empty() {
+                vec![rng.below(graph.comments.len())]
+            } else {
+                Vec::new()
+            };
+            let previous_nodes = graph.nodes.revision();
+            let previous_comments = graph.comments.revision();
+            let (dx, dy) = (rng.unit() * 600.0 - 300.0, rng.unit() * 600.0 - 300.0);
+            // Same shape as the editor's drag: one `with_mut` per collection,
+            // only for collections that have something to move.
+            if !node_indices.is_empty() {
+                graph.nodes.with_mut(|nodes| {
+                    for &i in &node_indices {
+                        nodes[i].position.x += dx;
+                        nodes[i].position.y += dy;
+                    }
+                });
+            }
+            if !comment_indices.is_empty() {
+                graph.comments.with_mut(|comments| {
+                    for &i in &comment_indices {
+                        comments[i].position.x += dx;
+                        comments[i].size.height += dy.abs();
+                    }
+                });
+            }
+            assert!(
+                index.sync_geometry_after_batch(
+                    &graph,
+                    previous_nodes,
+                    &node_indices,
+                    previous_comments,
+                    &comment_indices,
+                ),
+                "round {round} fell back to a rebuild"
+            );
+            assert_matches_rebuild(&index, &graph);
+        }
+
+        let previous = graph.comments.revision();
+        graph
+            .comments
+            .with_mut(|comments| comments[0].size.width += 50.0);
+        assert!(index.sync_comments_after_batch(&graph, previous, &[0]));
+        assert_matches_rebuild(&index, &graph);
+    }
+
+    #[test]
+    fn stale_or_unrelated_edits_refuse_the_incremental_path() {
+        let mut graph = random_graph(60, 120, 9);
+        let mut index = built(&graph);
+
+        // A connection edit since the last sync: the wire set changed, so a
+        // node-only update must not be accepted.
+        let previous = graph.nodes.revision();
+        graph.connections.pop();
+        graph.nodes.with_mut(|nodes| nodes[3].position.x += 500.0);
+        assert!(!index.sync_nodes_after_batch(&graph, previous, &[3]));
+        index.ensure_current(&graph);
+        assert_matches_rebuild(&index, &graph);
+
+        // A node edit the index has not seen yet (through `DerefMut`, as
+        // undoing a move does) before the caller's batch.
+        graph.nodes[5].position.y += 300.0;
+        let previous = graph.nodes.revision();
+        graph.nodes.with_mut(|nodes| nodes[6].position.y += 300.0);
+        assert!(!index.sync_nodes_after_batch(&graph, previous, &[6]));
+        index.ensure_current(&graph);
+        assert_matches_rebuild(&index, &graph);
+
+        // A replaced collection (undo, tab switch) always rebuilds.
+        let previous = graph.nodes.revision();
+        graph.nodes = graph.nodes.iter().cloned().collect();
+        assert!(!index.sync_nodes_after_batch(&graph, previous, &[0]));
+        index.ensure_current(&graph);
+        assert_matches_rebuild(&index, &graph);
+
+        // Nothing changed: there is nothing to sync.
+        let previous = graph.nodes.revision();
+        assert!(!index.sync_nodes_after_batch(&graph, previous, &[0]));
+    }
+}

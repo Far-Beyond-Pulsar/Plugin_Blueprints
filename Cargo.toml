@@ -19,6 +19,13 @@ name = "standalone_stress"
 path = "examples/standalone_stress.rs"
 test = false
 
+# Headless spatial-index benchmark (#1072): candidate counts and per-query
+# times for large graphs. Manual only, no CI gate.
+[[example]]
+name = "spatial_index_stress"
+path = "examples/spatial_index_stress.rs"
+test = false
+
 [features]
 # Pulsar statically links this crate when it is used as a built-in editor.
 # Dynamic plugin builds keep the loader ABI exports by default.
