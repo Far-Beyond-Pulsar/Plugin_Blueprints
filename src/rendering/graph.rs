@@ -22,7 +22,7 @@ use ui::PixelsExt;
 
 use crate::core::graph::BlueprintGraph;
 use crate::core::spatial_index::GraphRect;
-use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType};
+use crate::core::types::{BlueprintComment, BlueprintNode, NodeType};
 use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::connections::operations::ConnectionDrag;
 use crate::rendering::gpu::{
@@ -149,14 +149,6 @@ impl NodeGraphRenderer {
         viewport_size: Size<f32>,
     ) -> bool {
         geometry::is_node_visible_simple(node, graph, viewport_size)
-    }
-
-    pub fn is_connection_visible_simple(
-        conn: &Connection,
-        graph: &BlueprintGraph,
-        viewport_size: Size<f32>,
-    ) -> bool {
-        geometry::is_connection_visible_simple(conn, graph, viewport_size)
     }
 
     pub fn parse_hex_color(hex: &str) -> Option<gpui::Hsla> {

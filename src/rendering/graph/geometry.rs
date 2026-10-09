@@ -107,22 +107,6 @@ pub(super) fn viewport_graph_bounds(
     )
 }
 
-pub(super) fn is_connection_visible_simple(
-    conn: &Connection,
-    graph: &crate::core::graph::BlueprintGraph,
-    viewport_size: gpui::Size<f32>,
-) -> bool {
-    let from = graph.nodes.iter().find(|node| node.id == conn.source_node);
-    let to = graph.nodes.iter().find(|node| node.id == conn.target_node);
-    match (from, to) {
-        (Some(from), Some(to)) => {
-            is_node_visible_simple(from, graph, viewport_size)
-                || is_node_visible_simple(to, graph, viewport_size)
-        }
-        _ => false,
-    }
-}
-
 pub(super) fn parse_hex_color(hex: &str) -> Option<gpui::Hsla> {
     let hex = hex.trim_start_matches('#');
     let parse = |s: &str| {
