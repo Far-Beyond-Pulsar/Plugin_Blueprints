@@ -38,6 +38,9 @@ pub use core::definitions::*;
 pub use core::events::*;
 pub use core::graph::*;
 pub use core::types::*;
+// Public for the `spatial_index_stress` benchmark example (#1072).
+#[doc(hidden)]
+pub use core::spatial_index::{GraphRect, GraphSpatialIndex};
 pub use editor::panel::BlueprintEditorPanel;
 pub use features::viewport::parse_hex_color;
 
