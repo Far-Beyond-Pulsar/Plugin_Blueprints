@@ -375,8 +375,8 @@ pub struct GraphCanvasPanel {
     pub panel: WeakEntity<BlueprintEditorPanel>,
 
     pub graph: BlueprintGraph,
-    /// This graph's undo history; the host's for the graph once the
-    /// editor knows its document (`BlueprintEditorPanel::graph_history`).
+    /// This graph's undo history, registered with the host once the editor
+    /// knows its document (`BlueprintEditorPanel::graph_history`).
     pub history: plugin_editor_api::SharedHistory<crate::features::undo::Command>,
     pub focus_handle: FocusHandle,
 
