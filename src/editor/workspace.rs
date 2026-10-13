@@ -83,9 +83,9 @@ impl BlueprintEditorPanel {
                     );
                     let ew = editor_weak.clone();
                     let panel = cx.new(|cx| {
-                        let mut canvas =
+                        let canvas =
                             GraphCanvasPanel::new(ew, tid.clone(), tname, tis_main, tgraph, window, cx);
-                        self.adopt_graph_history(&tid, &mut canvas.history);
+                        self.adopt_graph_history(&tid, &canvas.history);
                         canvas
                     });
                     (tab.id.clone(), panel)
