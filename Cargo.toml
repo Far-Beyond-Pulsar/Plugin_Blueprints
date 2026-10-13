@@ -32,31 +32,31 @@ test = false
 builtin = ["dep:plugin_manager"]
 
 [dependencies]
-engine_fs = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6868a0378f85b846a809490617d17404a7b4082c" }
+engine_fs = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 editor_task_queue = { path = "../../../crates/core/editor_task_queue" }
-ui_types_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+ui_types_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 blueprint_graph = { path = "graph" }
 # Resolve every public UI and engine type through one current Pulsar revision.
 # Mixing the standalone WGPUI repositories with Pulsar's re-exports creates
 # distinct Cargo package identities for otherwise identical GPUI types.
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
-ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
+ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 
-plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 # Only for the built-in provider (feature `builtin`): registers this editor at link time.
-plugin_manager = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b", optional = true }
-ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
-engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
-pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+plugin_manager = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61", optional = true }
+ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
+engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
+pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 
 # Compiler graph types paired with the current Blueprint integration.
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
 pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "8739ed4b9d4acc362887a3d6414d3ff96c880f4f" }
 # Graph -> engine script module compiler (this repository's `compiler/`).
 blueprint_compiler = { path = "compiler" }
-pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 # Exports a compiled class as Rust (the Rust compile target).
-pulsar_script_codegen = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+pulsar_script_codegen = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"
@@ -94,11 +94,11 @@ windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D12", "Win32_
 parking_lot = "0.12"
 
 [patch."https://github.com/Far-Beyond-Pulsar/WGPUI"]
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 
 [patch."https://github.com/Far-Beyond-Pulsar/WGPUI-Component"]
-ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
-ui-macros = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3746651e5df5157078e3d911a3d2cb35a363f52b" }
+ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
+ui-macros = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 
 [patch."https://github.com/Far-Beyond-Pulsar/Pulsar-Native"]
 pulsar_reflection = { path = "../../../crates/external/pulsar-reflection/crates/pulsar_reflection" }
