@@ -687,90 +687,16 @@ impl BatchCommand {
     }
 }
 
-/// Undo/Redo manager
-#[derive(Debug, Clone)]
-pub struct UndoManager {
-    pub(crate) undo_stack: Vec<Command>,
-    pub(crate) redo_stack: Vec<Command>,
-    max_undo_levels: usize,
-}
-
-impl UndoManager {
-    pub fn new() -> Self {
-        Self {
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
-            max_undo_levels: 100,
-        }
-    }
-
-    /// Push a new command to the undo stack (and clear redo stack)
-    pub fn push(&mut self, command: Command) {
-        println!("[UNDO] Pushing command: {}", command.description());
-        self.undo_stack.push(command);
-
-        // Limit stack size
-        if self.undo_stack.len() > self.max_undo_levels {
-            self.undo_stack.remove(0);
-        }
-
-        // Clear redo stack when new action is performed
-        self.redo_stack.clear();
-    }
-
-    /// Undo the last command
-    pub fn undo(
-        &mut self,
-        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
-        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
-    ) -> bool {
-        if let Some(mut command) = self.undo_stack.pop() {
-            println!("[UNDO] Undoing: {}", command.description());
-            command.undo(panel, cx);
-            self.redo_stack.push(command);
-            true
-        } else {
-            println!("[UNDO] Nothing to undo");
-            false
-        }
-    }
-
-    /// Redo the last undone command
-    pub fn redo(
-        &mut self,
-        panel: &mut crate::editor::workspace_panels::GraphCanvasPanel,
-        cx: &mut Context<crate::editor::workspace_panels::GraphCanvasPanel>,
-    ) -> bool {
-        if let Some(mut command) = self.redo_stack.pop() {
-            println!("[UNDO] Redoing: {}", command.description());
-            command.execute(panel, cx);
-            self.undo_stack.push(command);
-            true
-        } else {
-            println!("[UNDO] Nothing to redo");
-            false
-        }
-    }
-
-    /// Check if undo is available
-    pub fn can_undo(&self) -> bool {
-        !self.undo_stack.is_empty()
-    }
-
-    /// Check if redo is available
-    pub fn can_redo(&self) -> bool {
-        !self.redo_stack.is_empty()
-    }
-
-    /// Clear all undo/redo history
-    pub fn clear(&mut self) {
-        self.undo_stack.clear();
-        self.redo_stack.clear();
+/// A graph's undo history entry. The history itself is the host's
+/// (`plugin_editor_api::undo`, Pulsar-Native#931): one per graph of a
+/// blueprint, shared by every view of it.
+impl plugin_editor_api::UndoEntry for Command {
+    fn label(&self) -> String {
+        self.description()
     }
 }
 
-impl Default for UndoManager {
-    fn default() -> Self {
-        Self::new()
-    }
+/// A new graph history, kept until the editor learns its document.
+pub fn new_history() -> plugin_editor_api::SharedHistory<Command> {
+    std::sync::Arc::new(std::sync::Mutex::new(plugin_editor_api::History::with_capacity(100)))
 }
