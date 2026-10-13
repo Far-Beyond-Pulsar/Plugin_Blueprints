@@ -194,8 +194,8 @@ pub struct BlueprintEditorPanel {
     /// True while a toolbar save is running in the editor task queue.
     pub is_saving: bool,
 
-    // Undo/redo system
-    pub undo_manager: crate::features::undo::UndoManager,
+    /// The host's undo histories (Pulsar-Native#931), once given them.
+    pub undo_service: Option<plugin_editor_api::UndoService>,
 
     // ── GPU renderer ──────────────────────────────────────────────────────────
     pub bp_renderer: crate::rendering::gpu::BpRenderer,
@@ -702,7 +702,7 @@ impl BlueprintEditorPanel {
             dragging_tab: None,
             is_dirty: false,
             is_saving: false,
-            undo_manager: crate::features::undo::UndoManager::new(),
+            undo_service: None,
             bp_renderer: crate::rendering::gpu::BpRenderer::new(),
             bp_surface: None,
             node_context_menu: None,
@@ -1160,7 +1160,7 @@ impl BlueprintEditorPanel {
             let tab_graph = tab.graph.clone();
             let ew = editor_weak.clone();
             let panel = cx.new(|cx| {
-                GraphCanvasPanel::new(
+                let mut canvas = GraphCanvasPanel::new(
                     ew,
                     tab_id.clone(),
                     tab_name,
@@ -1168,7 +1168,9 @@ impl BlueprintEditorPanel {
                     tab_graph,
                     window,
                     cx,
-                )
+                );
+                self.adopt_graph_history(&tab_id, &mut canvas.history);
+                canvas
             });
 
             workspace_entity.update(cx, |workspace, cx| {

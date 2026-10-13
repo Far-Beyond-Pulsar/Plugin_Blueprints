@@ -901,7 +901,13 @@ impl NodeGraphRenderer {
                         crate::rendering::input::on_mouse_up_right(cx),
                     )
                     .on_scroll_wheel(crate::rendering::input::on_scroll_wheel(cx))
-                    .on_key_down(crate::rendering::input::on_key_down(cx)),
+                    .on_key_down(crate::rendering::input::on_key_down(cx))
+                    .on_action(cx.listener(|canvas, _: &plugin_editor_api::Undo, _, cx| {
+                        canvas.undo(cx)
+                    }))
+                    .on_action(cx.listener(|canvas, _: &plugin_editor_api::Redo, _, cx| {
+                        canvas.redo(cx)
+                    })),
             ), // close macro DropArea child
         ) // close component DropArea child
     }

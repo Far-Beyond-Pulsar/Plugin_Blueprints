@@ -85,6 +85,8 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
                 panel.project_root = Some(project_root);
             });
         }
+        let undo = editor_context.services.undo.clone();
+        panel.update(cx, |panel, cx| panel.set_undo_service(undo, cx));
 
         if panel.read(cx).load_error.is_none() {
             panel.update(cx, |panel, cx| {

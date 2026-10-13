@@ -607,15 +607,9 @@ pub fn on_key_down(
                 "v" if has_copy_paste_modifier => {
                     canvas.paste_entities(window, cx);
                 }
-                "z" if event.keystroke.modifiers.control && event.keystroke.modifiers.shift => {
-                    canvas.redo(cx);
-                }
-                "z" if event.keystroke.modifiers.control => {
-                    canvas.undo(cx);
-                }
-                "y" if event.keystroke.modifiers.control => {
-                    canvas.redo(cx);
-                }
+                // Undo/Redo come as the host's shared actions
+                // (`plugin_editor_api::{Undo, Redo}`, bound to Ctrl/Cmd+Z,
+                // Ctrl/Cmd+Shift+Z and Ctrl+Y), handled in `graph.rs`.
                 "f9" => {
                     if let Some(node_id) = canvas.graph.selected_nodes.first().cloned() {
                         canvas.toggle_breakpoint(node_id, cx);

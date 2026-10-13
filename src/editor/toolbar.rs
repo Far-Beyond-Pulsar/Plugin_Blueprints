@@ -98,6 +98,21 @@ impl ToolbarRenderer {
             CompilationState::Idle => cx.theme().muted_foreground,
         };
 
+        // ── Edit menu (Pulsar-Native#1012): the active graph's history ───────
+        let active = panel.active_canvas().map(|canvas| canvas.read(cx));
+        let history = active.map(|canvas| canvas.history.clone());
+        let mut menus = plugin_editor_api::EditorMenuStrip::new("blueprint-editor-menus").menu(
+            plugin_editor_api::EditorMenu::new("Edit").undo_redo(
+                "Undo",
+                "Redo",
+                history.map(|history| history as _),
+            ),
+        );
+        if let Some(canvas) = active {
+            // Undo/Redo reach the graph the menu is for.
+            menus = menus.action_context(canvas.focus_handle.clone());
+        }
+
         // ── Assemble toolbar ─────────────────────────────────────────────────
         h_flex()
             .w_full()
@@ -110,6 +125,8 @@ impl ToolbarRenderer {
             .border_b_1()
             .border_color(cx.theme().border.opacity(0.8))
             .shadow_sm()
+            .child(menus)
+            .child(toolbar_separator(cx))
             // ── Group 1 · File ───────────────────────────────────────────────
             .child(
                 h_flex().gap_1p5().items_center().child(
