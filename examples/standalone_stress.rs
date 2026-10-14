@@ -99,7 +99,8 @@ fn node_icon(nt: &NodeType) -> &'static str {
         NodeType::Reroute => "•",
         NodeType::MacroEntry => "→",
         NodeType::MacroExit => "←",
-        NodeType::MacroInstance => "⊡",
+        NodeType::Conversion => "⇄",
+        NodeType::SubGraphCall => "⊡",
         NodeType::CustomEvent => "◆",
         NodeType::CustomEventDispatch => "◇",
     }
