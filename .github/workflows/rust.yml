@@ -9,41 +9,54 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
 
     runs-on: ubuntu-latest
 
     steps:
+    # Pulsar-Native builds this plugin as a path dependency of `engine`,
+    # resolving its Pulsar-Native, WGPUI, SceneDB, reflection and wgpu
+    # dependencies to its own crates through the patches in its root
+    # manifest, and its `../../../crates/...` paths to its own checkout.
+    # Build it the same way: in a Pulsar-Native checkout, at the path
+    # Pulsar-Native vendors it under, as a member of its workspace.
     - uses: actions/checkout@v4
+      with:
+        repository: Far-Beyond-Pulsar/Pulsar-Native
+        submodules: recursive
+        path: pulsar
+    - uses: actions/checkout@v4
+      with:
+        path: pulsar/plugins/vendor/blueprint_editor
+    - name: Make the plugin a workspace member
+      working-directory: pulsar
+      run: |
+        sed -i '/^exclude = \[/,/^\]/{\#"plugins/vendor/blueprint_editor",#d}' Cargo.toml
+        sed -i 's#^members = \[#members = [\n    "plugins/vendor/blueprint_editor",#' Cargo.toml
+        grep -n 'plugins/vendor/blueprint_editor' Cargo.toml
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          pkg-config \
-          libssl-dev \
-          libfontconfig1-dev \
-          libfreetype6-dev \
-          libx11-dev \
-          libxext-dev \
-          libxrender-dev \
-          libxcb1-dev \
-          libxcb-render0-dev \
-          libxcb-shape0-dev \
-          libxcb-xfixes0-dev \
-          libwayland-dev \
-          libxkbcommon-dev \
-          libegl1-mesa-dev \
-          libgl1-mesa-dev \
-          libvulkan-dev \
-          libsqlite3-dev \
-          libgit2-dev \
-          libssh2-1-dev \
-          libzstd-dev
+          pkg-config libssl-dev libfontconfig1-dev libfreetype6-dev \
+          libx11-dev libx11-xcb-dev libwayland-dev libxkbcommon-x11-dev \
+          libasound2-dev libudev-dev \
+          mesa-vulkan-drivers
+    - name: Cache Rust build
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: pulsar
     - name: Build
-    - name: Build
-      run: cargo build --locked --verbose
+      working-directory: pulsar
+      run: cargo build -p blueprint_editor_plugin --verbose
     - name: Check examples
-      run: cargo check --examples --locked --verbose
+      working-directory: pulsar
+      run: cargo check -p blueprint_editor_plugin --examples --verbose
     - name: Run tests
-      run: cargo test --tests --locked --verbose
+      working-directory: pulsar
+      run: cargo test -p blueprint_editor_plugin --tests --verbose
