@@ -575,7 +575,10 @@ impl GraphDescription {
             let mut pin_ids = std::collections::HashSet::new();
             for pin in pins {
                 if pin.id.trim().is_empty() {
-                    return Err(format!("{direction} pin id on node `{}` must not be empty", node.id));
+                    return Err(format!(
+                        "{direction} pin id on node `{}` must not be empty",
+                        node.id
+                    ));
                 }
                 if !pin_ids.insert(pin.id.as_str()) {
                     return Err(format!(
@@ -617,12 +620,14 @@ impl GraphDescription {
             return Err(format!("connection id `{}` already exists", connection.id));
         }
 
-        let source = self.nodes.get(&connection.source_node).ok_or_else(|| {
-            format!("source node `{}` does not exist", connection.source_node)
-        })?;
-        let target = self.nodes.get(&connection.target_node).ok_or_else(|| {
-            format!("target node `{}` does not exist", connection.target_node)
-        })?;
+        let source = self
+            .nodes
+            .get(&connection.source_node)
+            .ok_or_else(|| format!("source node `{}` does not exist", connection.source_node))?;
+        let target = self
+            .nodes
+            .get(&connection.target_node)
+            .ok_or_else(|| format!("target node `{}` does not exist", connection.target_node))?;
         let source_pin = source
             .outputs
             .iter()
@@ -651,9 +656,7 @@ impl GraphDescription {
 
         let types_match = match (&source_pin.pin.data_type, &target_pin.pin.data_type) {
             (DataType::Execution, DataType::Execution) => true,
-            (DataType::Data(source), DataType::Data(target)) => {
-                source.is_compatible_with(target)
-            }
+            (DataType::Data(source), DataType::Data(target)) => source.is_compatible_with(target),
             _ => false,
         };
         if !types_match {
@@ -1091,11 +1094,18 @@ fn boundary_connection_is_valid(graph: &GraphDescription, edge: &Connection) -> 
     let Some(target_node) = graph.nodes.get(&edge.target_node) else {
         return false;
     };
-    let Some(source_pin) = source_node.outputs.iter().find(|pin| pin.id == edge.source_pin)
+    let Some(source_pin) = source_node
+        .outputs
+        .iter()
+        .find(|pin| pin.id == edge.source_pin)
     else {
         return false;
     };
-    let Some(target_pin) = target_node.inputs.iter().find(|pin| pin.id == edge.target_pin) else {
+    let Some(target_pin) = target_node
+        .inputs
+        .iter()
+        .find(|pin| pin.id == edge.target_pin)
+    else {
         return false;
     };
     if !matches!(&source_pin.pin.pin_type, PinType::Output)
@@ -1187,9 +1197,10 @@ impl SubGraph {
         normalize_boundary_node(&mut graph, ENTRY_ID, "subgraph_input", "macro_entry")?;
         normalize_boundary_node(&mut graph, EXIT_ID, "subgraph_output", "macro_exit")?;
 
-        let mut entry_node = graph.nodes.remove(ENTRY_ID).ok_or_else(|| {
-            "failed to stage macro entry node".to_owned()
-        })?;
+        let mut entry_node = graph
+            .nodes
+            .remove(ENTRY_ID)
+            .ok_or_else(|| "failed to stage macro entry node".to_owned())?;
         entry_node.id = ENTRY_ID.to_owned();
         entry_node.node_type = "macro_entry".to_owned();
         entry_node.inputs.clear();
@@ -1209,9 +1220,10 @@ impl SubGraph {
             .collect();
         graph.add_node(entry_node)?;
 
-        let mut exit_node = graph.nodes.remove(EXIT_ID).ok_or_else(|| {
-            "failed to stage macro exit node".to_owned()
-        })?;
+        let mut exit_node = graph
+            .nodes
+            .remove(EXIT_ID)
+            .ok_or_else(|| "failed to stage macro exit node".to_owned())?;
         exit_node.id = EXIT_ID.to_owned();
         exit_node.node_type = "macro_exit".to_owned();
         exit_node.outputs.clear();
@@ -1237,20 +1249,24 @@ impl SubGraph {
         let mut occupied_inputs: HashSet<(String, String)> = graph
             .connections
             .iter()
-            .filter(|edge| edge.source_node != ENTRY_ID
-                && edge.target_node != ENTRY_ID
-                && edge.source_node != EXIT_ID
-                && edge.target_node != EXIT_ID)
+            .filter(|edge| {
+                edge.source_node != ENTRY_ID
+                    && edge.target_node != ENTRY_ID
+                    && edge.source_node != EXIT_ID
+                    && edge.target_node != EXIT_ID
+            })
             .map(|edge| (edge.target_node.clone(), edge.target_pin.clone()))
             .collect();
         let mut occupied_single_outputs: HashSet<(String, String)> = graph
             .connections
             .iter()
-            .filter(|edge| edge.source_node != ENTRY_ID
-                && edge.target_node != ENTRY_ID
-                && edge.source_node != EXIT_ID
-                && edge.target_node != EXIT_ID
-                && connection_uses_single_output(&graph, edge))
+            .filter(|edge| {
+                edge.source_node != ENTRY_ID
+                    && edge.target_node != ENTRY_ID
+                    && edge.source_node != EXIT_ID
+                    && edge.target_node != EXIT_ID
+                    && connection_uses_single_output(&graph, edge)
+            })
             .map(|edge| (edge.source_node.clone(), edge.source_pin.clone()))
             .collect();
 
@@ -1301,7 +1317,11 @@ impl SubGraph {
         }
         for edge in &graph.connections {
             if let Some(node) = graph.nodes.get_mut(&edge.source_node) {
-                if let Some(pin) = node.outputs.iter_mut().find(|pin| pin.id == edge.source_pin) {
+                if let Some(pin) = node
+                    .outputs
+                    .iter_mut()
+                    .find(|pin| pin.id == edge.source_pin)
+                {
                     pin.pin.connected_to.push(edge.id.clone());
                 }
             }
