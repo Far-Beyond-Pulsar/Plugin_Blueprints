@@ -50,19 +50,31 @@ impl GraphCanvasPanel {
 
     /// End selection drag.
     /// Also clears sidebar selections for mutual exclusivity when a rubber-band
-    /// selection produces actual selected items.
+    /// selection produces actual selected items, and notifies the editor panel
+    /// when an empty-space click clears the graph selection.
     pub fn end_selection_drag(&mut self, cx: &mut Context<Self>) {
+        let had_graph_selection =
+            !self.graph.selected_nodes.is_empty() || !self.graph.selected_comments.is_empty();
+        let mut cleared_graph_selection = false;
+
         // If selection box was very small, treat as click and clear selection
         if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
             let distance = ((end.x - start.x).powi(2) + (end.y - start.y).powi(2)).sqrt();
             if distance < 5.0 {
                 self.graph.selected_nodes.clear();
+                self.graph.selected_comments.clear();
+                cleared_graph_selection = had_graph_selection;
                 tracing::info!("[SELECTION] Cleared selection (click on empty space)");
             }
         }
 
-        // Clear sidebar selections when graph items are selected via rubber-band
-        if !self.graph.selected_nodes.is_empty() || !self.graph.selected_comments.is_empty() {
+        // Clear sidebar selections when graph items are selected via
+        // rubber-band. Also notify on a real deselection: a canvas-only
+        // notification leaves the cached Properties panel showing stale data.
+        if !self.graph.selected_nodes.is_empty()
+            || !self.graph.selected_comments.is_empty()
+            || cleared_graph_selection
+        {
             if let Some(panel) = self.panel.upgrade() {
                 panel.update(cx, |panel, cx| {
                     panel.clear_sidebar_selections(false, false, false, false);
