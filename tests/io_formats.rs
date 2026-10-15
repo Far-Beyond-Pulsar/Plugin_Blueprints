@@ -1,5 +1,5 @@
 use blueprint_editor_plugin::io::formats::{
-    BlueprintAsset, BlueprintEditorState, strip_header_comments,
+    BlueprintAsset, BlueprintEditorState, current_format_version, strip_header_comments,
 };
 use blueprint_editor_plugin::io::legacy::{
     LegacyBlueprintComment, LegacyColor, LegacyConnection, LegacyPosition, LegacySize,
@@ -11,7 +11,7 @@ use blueprint_graph::{BlueprintComment, Connection, ConnectionType};
 fn blueprint_asset_creation_uses_current_defaults() {
     let asset = BlueprintAsset::new();
 
-    assert_eq!(asset.format_version, 1);
+    assert_eq!(asset.format_version, current_format_version());
     assert_eq!(asset.main_graph.metadata.name, "EventGraph");
     assert!(asset.main_graph.custom_event_defs.is_empty());
     assert!(asset.subgraphs.is_empty());

@@ -766,13 +766,28 @@ impl NodeGraphRenderer {
                 };
                 canvas.element_bounds = Some(b);
 
-                // Create surface on first call — triggers re-render via notify
+                // The GPU device was lost: the surface and everything the
+                // renderer made are on it. Start over on the window's new device.
+                if canvas
+                    .surface
+                    .as_ref()
+                    .is_some_and(gpui::WgpuSurfaceHandle::is_device_lost)
+                {
+                    canvas.surface = None;
+                    canvas.renderer = crate::rendering::gpu::BpRenderer::new();
+                }
+                // Create surface on first call — triggers re-render via notify.
+                // Until the window has a new device after a loss, a new surface
+                // is on the lost one too; the window renders again once it has.
                 if canvas.surface.is_none() {
-                    if let Some(s) = window.create_wgpu_surface(
-                        sw.max(64),
-                        sh.max(64),
-                        wgpu::TextureFormat::Bgra8UnormSrgb,
-                    ) {
+                    if let Some(s) = window
+                        .create_wgpu_surface(
+                            sw.max(64),
+                            sh.max(64),
+                            wgpu::TextureFormat::Bgra8UnormSrgb,
+                        )
+                        .filter(|s| !s.is_device_lost())
+                    {
                         canvas.surface = Some(s);
                         cx.notify(); // re-render to pick up wgpu_surface() element
                     }
