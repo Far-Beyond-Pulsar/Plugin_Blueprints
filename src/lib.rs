@@ -30,6 +30,7 @@ mod editor;
 mod features;
 pub mod io;
 mod rendering;
+pub mod std_nodes;
 mod ui_components;
 pub mod validation;
 

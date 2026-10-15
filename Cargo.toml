@@ -48,10 +48,11 @@ plugin_manager = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", r
 ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
+# The `#[blueprint]` node registry the palette and graph checks read.
+pulsar_std         = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
 
 # Compiler graph types paired with the current Blueprint integration.
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
-pbgc = { git = "https://github.com/Far-Beyond-Pulsar/PBGC", rev = "8739ed4b9d4acc362887a3d6414d3ff96c880f4f" }
 # Graph -> engine script module compiler (this repository's `compiler/`).
 blueprint_compiler = { path = "compiler" }
 pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "6c61db9aacb29efc4a49bc23a7b1622eb6510a61" }
