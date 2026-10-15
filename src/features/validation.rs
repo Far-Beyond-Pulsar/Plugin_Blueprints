@@ -1,7 +1,7 @@
 //! Graph validation stage (#656): bad graphs never reach codegen.
 //!
-//! Runs the same UI→PBGC conversion and macro expansion codegen uses, then
-//! exercises PBGC's data-flow resolver so broken connections, dangling pins
+//! Runs the same UI→Graphy conversion and macro expansion codegen uses, then
+//! exercises Graphy's data-flow resolver so broken connections, dangling pins
 //! and unresolvable node types surface as diagnostics *before* any artifact
 //! is produced.
 
@@ -222,11 +222,11 @@ fn check_ui_graph(graph: &blueprint_graph::GraphDescription, report: &mut Valida
     }
 }
 
-/// Validate an already-converted + expanded PBGC graph with the same
+/// Validate an already-converted + expanded Graphy graph with the same
 /// data-flow analysis codegen runs. Errors here are hard failures that
 /// would otherwise abort compilation mid-codegen.
-fn check_pbgc_graph(graph: &graphy::GraphDescription, report: &mut ValidationReport) {
-    let metadata_provider = pbgc::metadata::BlueprintMetadataProvider::new();
+fn check_graphy_graph(graph: &graphy::GraphDescription, report: &mut ValidationReport) {
+    let metadata_provider = crate::std_nodes::StdNodeProvider::new();
     match graphy::DataResolver::build(graph, &metadata_provider) {
         Ok(_) => {}
         Err(e) => report.push(format!("data flow analysis failed: {e}")),
@@ -266,7 +266,7 @@ pub(crate) struct AssetCompile {
 }
 
 /// Compile a saved class the way Play runs it: structural checks, the
-/// UI -> PBGC conversion, local macro expansion, data-flow analysis and the
+/// UI -> Graphy conversion, local macro expansion, data-flow analysis and the
 /// script module compile against `natives`. No GPUI state is involved.
 pub(crate) fn compile_asset(
     asset: &crate::io::formats::BlueprintAsset,
@@ -293,7 +293,7 @@ pub(crate) fn compile_asset(
             };
         }
     };
-    check_pbgc_graph(&graph, &mut report);
+    check_graphy_graph(&graph, &mut report);
     let mut problems: Vec<(Option<String>, String)> =
         report.diagnostics.into_iter().map(|m| (None, m)).collect();
 

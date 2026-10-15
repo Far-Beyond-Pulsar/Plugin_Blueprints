@@ -1,7 +1,7 @@
 //! Node definition system for loading and managing node metadata.
 //!
 //! This module provides the infrastructure for loading node definitions from
-//! the Pulsar Standard Library (pbgc), managing macro libraries, and converting
+//! the Pulsar Standard Library (`pulsar_std`), managing macro libraries, and converting
 //! metadata into UI-ready node definitions. It uses a global singleton pattern
 //! for efficient access to node metadata throughout the application.
 
@@ -71,10 +71,7 @@ static NODE_DEFINITIONS: OnceLock<NodeDefinitions> = OnceLock::new();
 
 pub(crate) fn extract_canonical_node_metadata(
 ) -> std::collections::HashMap<String, graphy::NodeMetadata> {
-    let mut metadata = pbgc::extract_node_metadata().unwrap_or_else(|e| {
-        eprintln!("Failed to load node metadata: {}", e);
-        std::collections::HashMap::new()
-    });
+    let mut metadata = crate::std_nodes::extract_node_metadata();
 
     for node_meta in metadata.values_mut() {
         for param in node_meta.params.iter_mut() {
@@ -99,7 +96,7 @@ impl NodeDefinitions {
     /// Get the global node definitions, loading them if necessary.
     pub fn load() -> &'static NodeDefinitions {
         NODE_DEFINITIONS.get_or_init(|| {
-            // Load dynamic node definitions from PBGC metadata, then canonicalize type names.
+            // Load dynamic node definitions from the `pulsar_std` catalogue, then canonicalize type names.
             let metadata = extract_canonical_node_metadata();
 
             // Load sub-graph libraries
@@ -488,7 +485,7 @@ impl NodeDefinitions {
     /// - A **Set Property** method node per property (`comp_set_prop::ClassName::PropName`)
     /// - A **Call Method** node per blueprint-callable method (`comp_call::ClassName::MethodName`)
     ///
-    /// These node IDs follow the convention expected by the PBGC Rust codegen so that
+    /// These node IDs follow the convention expected by the Rust codegen so that
     /// compiled blueprints produce correct `ComponentStore` access code.
     pub fn generate_component_nodes(prefab: &PrefabAsset) -> Vec<NodeCategory> {
         let mut categories = Vec::new();

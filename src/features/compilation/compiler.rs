@@ -63,7 +63,7 @@ impl BlueprintEditorPanel {
     /// Dump the active graph (editor view + the `graphy::GraphDescription` that gets
     /// sent to the compiler) to `blueprint_graph_debug.json` in the working
     /// directory, so event-node detection mismatches can be diagnosed by
-    /// comparing the editor's classification against PBGC's metadata lookup.
+    /// comparing the editor's classification against the `pulsar_std` catalogue.
     fn dump_graph_debug_info(&self, graph: &graphy::GraphDescription) {
         #[derive(serde::Serialize)]
         struct EditorNodeDebug {
@@ -130,11 +130,16 @@ impl BlueprintEditorPanel {
         match serde_json::to_string_pretty(&dump) {
             Ok(json) => match std::fs::write("blueprint_graph_debug.json", &json) {
                 Ok(()) => tracing::info!(
-                    "[PBGC debug] Wrote graph snapshot to ./blueprint_graph_debug.json"
+                    "[Blueprint debug] Wrote graph snapshot to ./blueprint_graph_debug.json"
                 ),
-                Err(e) => tracing::warn!("[PBGC debug] Failed to write graph debug dump: {}", e),
+                Err(e) => {
+                    tracing::warn!("[Blueprint debug] Failed to write graph debug dump: {}", e)
+                }
             },
-            Err(e) => tracing::warn!("[PBGC debug] Failed to serialize graph debug dump: {}", e),
+            Err(e) => tracing::warn!(
+                "[Blueprint debug] Failed to serialize graph debug dump: {}",
+                e
+            ),
         }
     }
 
@@ -146,7 +151,7 @@ impl BlueprintEditorPanel {
     ///
     /// This is the single source-of-truth conversion; both compile functions
     /// use it. Compiling only the directly-authored event-graph nodes (the
-    /// previous behaviour) silently dropped macro bodies — PBGC's metadata
+    /// previous behaviour) silently dropped macro bodies — the `pulsar_std` metadata
     /// provider doesn't recognise `"macro:<id>"` as a node type, so those
     /// instances would compile to nothing.
     ///
@@ -164,7 +169,7 @@ impl BlueprintEditorPanel {
 
     /// Run the #656 preflight validation stage against the live graph:
     /// structural checks on the UI-level graph (dangling connections, empty
-    /// node types), then PBGC's own data-flow analysis over the converted and
+    /// node types), then Graphy's data-flow analysis over the converted and
     /// macro-expanded graph — exactly what codegen is about to consume.
     pub(crate) fn run_validation_stage(
         &mut self,
@@ -195,7 +200,7 @@ impl BlueprintEditorPanel {
         // pipeline codegen uses.
         match self.build_graphy_description() {
             Ok(graph) => {
-                let metadata_provider = pbgc::metadata::BlueprintMetadataProvider::new();
+                let metadata_provider = crate::std_nodes::StdNodeProvider::new();
                 if let Err(e) = graphy::DataResolver::build(&graph, &metadata_provider) {
                     report.push(format!("data flow analysis failed: {e}"));
                 }
