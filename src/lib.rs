@@ -188,12 +188,6 @@ impl BlueprintEditorPlugin {
             }
         });
 
-        if panel.read(cx).load_error.is_none() {
-            panel.update(cx, |panel, cx| {
-                panel.attach_ai_graph_updates(file_path.clone(), cx);
-            });
-        }
-
         let panel_arc: Arc<dyn ui::dock::PanelView> = Arc::new(panel.clone());
 
         let id = {

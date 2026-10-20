@@ -755,19 +755,19 @@ dependencies = [
  "chrono",
  "editor_task_queue 0.1.0",
  "engine_backend",
- "engine_fs 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "engine_fs",
  "fontdue",
  "futures",
  "gpui-ce",
  "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=c43924070aa0955302f8015708625be279da77a7)",
  "log",
  "parking_lot",
- "pbgc",
  "plugin_editor_api",
  "plugin_manager",
  "pulsar_reflection",
  "pulsar_script_codegen",
  "pulsar_script_vm",
+ "pulsar_std",
  "rstar 0.12.2",
  "schemars",
  "serde",
@@ -2075,7 +2075,7 @@ dependencies = [
  "bytemuck",
  "crossbeam-channel",
  "dashmap",
- "engine_fs 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "engine_fs",
  "engine_state",
  "engine_subsystems",
  "flume",
@@ -2149,19 +2149,6 @@ dependencies = [
 [[package]]
 name = "engine_fs"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=38bbbd93a5986c43955af8879380ee544025abbb#38bbbd93a5986c43955af8879380ee544025abbb"
-dependencies = [
- "anyhow",
- "parking_lot",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "engine_fs"
-version = "0.1.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
 dependencies = [
  "anyhow",
@@ -2199,7 +2186,7 @@ dependencies = [
  "anyhow",
  "dashmap",
  "directories 6.0.0",
- "engine_fs 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "engine_fs",
  "event-listener 5.4.2",
  "futures",
  "gpui-ce",
@@ -2269,12 +2256,6 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
-
-[[package]]
-name = "env_home"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7f84e12ccf0a7ddc17a6c41c93326024c42920d7ee630d04950e6926645c0fe"
 
 [[package]]
 name = "equator"
@@ -4202,7 +4183,7 @@ source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb
 dependencies = [
  "bytemuck",
  "engine_class_derive",
- "engine_fs 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "engine_fs",
  "engine_state",
  "engine_subsystems",
  "glam 0.33.5",
@@ -5165,25 +5146,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lua-src"
-version = "547.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1edaf29e3517b49b8b746701e5648ccb5785cde1c119062cbabbc5d5cd115e42"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "luajit-src"
-version = "210.5.12+a4f56a4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3a8e7962a5368d5f264d045a5a255e90f9aa3fc1941ae15a8d2940d42cac671"
-dependencies = [
- "cc",
- "which 7.0.3",
-]
-
-[[package]]
 name = "lyon"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5499,48 +5461,6 @@ dependencies = [
  "log",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "mlua"
-version = "0.9.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d111deb18a9c9bd33e1541309f4742523bfab01d276bfa9a27519f6de9c11dc7"
-dependencies = [
- "bstr",
- "mlua-sys",
- "mlua_derive",
- "num-traits",
- "once_cell",
- "rustc-hash 2.1.3",
-]
-
-[[package]]
-name = "mlua-sys"
-version = "0.6.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "380c1f7e2099cafcf40e51d3a9f20a346977587aa4d012eae1f043149a728a93"
-dependencies = [
- "cc",
- "cfg-if",
- "lua-src",
- "luajit-src",
- "pkg-config",
-]
-
-[[package]]
-name = "mlua_derive"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09697a6cec88e7f58a02c7ab5c18c611c6907c8654613df9cc0192658a4fb859"
-dependencies = [
- "itertools 0.12.1",
- "once_cell",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "regex",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -6561,19 +6481,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pbgc"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/PBGC?rev=8739ed4b9d4acc362887a3d6414d3ff96c880f4f#8739ed4b9d4acc362887a3d6414d3ff96c880f4f"
-dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Graphy?rev=c43924070aa0955302f8015708625be279da77a7)",
- "pulsar_std",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
 name = "pem"
 version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7027,30 +6934,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-error"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
-dependencies = [
- "proc-macro-error-attr",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
- "version_check",
-]
-
-[[package]]
-name = "proc-macro-error-attr"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
-dependencies = [
- "proc-macro2",
- "quote",
- "version_check",
-]
-
-[[package]]
 name = "proc-macro-utils"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7235,7 +7118,7 @@ version = "0.1.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
 dependencies = [
  "engine_class_derive",
- "engine_fs 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "engine_fs",
  "glam 0.33.5",
  "inventory",
  "pulsar_reflection",
@@ -7292,7 +7175,7 @@ dependencies = [
 [[package]]
 name = "pulsar_macros"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=38bbbd93a5986c43955af8879380ee544025abbb#38bbbd93a5986c43955af8879380ee544025abbb"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
 dependencies = [
  "linkme",
  "proc-macro2",
@@ -7364,7 +7247,7 @@ name = "pulsar_scene"
 version = "0.1.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
 dependencies = [
- "engine_fs 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "engine_fs",
  "helio",
  "helio-asset-compat",
  "helio_component",
@@ -7408,7 +7291,7 @@ dependencies = [
 [[package]]
 name = "pulsar_scenedb"
 version = "0.1.0"
-source = "git+https://github.com//Far-Beyond-Pulsar/SceneDB?rev=685b1b0aa212b64912549efd583c93480bea027f#685b1b0aa212b64912549efd583c93480bea027f"
+source = "git+https://github.com//Far-Beyond-Pulsar/SceneDB?rev=8b5b1144c4ef80411592985fcd9767134ee03941#8b5b1144c4ef80411592985fcd9767134ee03941"
 dependencies = [
  "ahash 0.8.12",
  "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Profiling?rev=12424a5f75166332f9f1d2741281f6fc4847b44d)",
@@ -7424,7 +7307,7 @@ dependencies = [
 [[package]]
 name = "pulsar_scenedb_derive"
 version = "0.1.0"
-source = "git+https://github.com//Far-Beyond-Pulsar/SceneDB?rev=685b1b0aa212b64912549efd583c93480bea027f#685b1b0aa212b64912549efd583c93480bea027f"
+source = "git+https://github.com//Far-Beyond-Pulsar/SceneDB?rev=8b5b1144c4ef80411592985fcd9767134ee03941#8b5b1144c4ef80411592985fcd9767134ee03941"
 dependencies = [
  "proc-macro2",
  "pulsar_reflection_codegen",
@@ -7490,14 +7373,14 @@ dependencies = [
 [[package]]
 name = "pulsar_std"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=38bbbd93a5986c43955af8879380ee544025abbb#38bbbd93a5986c43955af8879380ee544025abbb"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
 dependencies = [
- "engine_fs 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=38bbbd93a5986c43955af8879380ee544025abbb)",
+ "engine_fs",
  "linkme",
  "pulsar_macros",
  "pulsar_reflection",
+ "pulsar_script_vm",
  "rand 0.10.2",
- "rlua",
  "tracing",
 ]
 
@@ -8107,15 +7990,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "rlua"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d43f01c44a4ea0d2c7faadac231a0fd906a438723aa4ee26599e71fa7b915abd"
-dependencies = [
- "mlua",
 ]
 
 [[package]]
@@ -10579,7 +10453,7 @@ version = "0.1.0"
 source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
 dependencies = [
  "anyhow",
- "engine_fs 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "engine_fs",
  "engine_state",
  "gpui-ce",
  "helio-snapshot",
@@ -11444,18 +11318,6 @@ dependencies = [
  "either",
  "home",
  "rustix 0.38.44",
- "winsafe",
-]
-
-[[package]]
-name = "which"
-version = "7.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24d643ce3fd3e5b54854602a080f34fb10ab75e0b813ee32d00ca2b44fa74762"
-dependencies = [
- "either",
- "env_home",
- "rustix 1.1.4",
  "winsafe",
 ]
 

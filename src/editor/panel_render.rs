@@ -640,6 +640,7 @@ impl Render for BlueprintEditorPanel {
 
         v_flex()
             .size_full()
+            .relative()
             .bg(cx.theme().background)
             .key_context("BlueprintEditor")
             .on_action(cx.listener(|panel, action: &DuplicateNode, _window, cx| {
@@ -693,6 +694,42 @@ impl Render for BlueprintEditorPanel {
                     el.child(div().child("Initializing workspace..."))
                 }
             }))
+            .when(self.file_loading, |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(cx.theme().background.opacity(0.88))
+                        .child(
+                            v_flex()
+                                .items_center()
+                                .gap_3()
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(cx.theme().foreground)
+                                        .child("Loading Blueprint…"),
+                                )
+                                .child(
+                                    div()
+                                        .w(px(220.))
+                                        .h(px(3.))
+                                        .rounded_full()
+                                        .bg(cx.theme().border)
+                                        .child(
+                                            div()
+                                                .w(px(70.))
+                                                .h_full()
+                                                .rounded_full()
+                                                .bg(cx.theme().primary),
+                                        ),
+                                ),
+                        ),
+                )
+            })
             .into_any_element()
     }
 }

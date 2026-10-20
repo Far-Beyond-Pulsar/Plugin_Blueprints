@@ -652,42 +652,37 @@ impl BlueprintEditorPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
+        let (source_path, asset) = Self::parse_asset_from_path(path)?;
+        self.apply_loaded_asset(source_path, asset, window, cx)
+    }
+
+    /// Read and deserialize a blueprint without touching UI state. Saved-tab
+    /// restoration runs this on the background executor before applying the
+    /// graph to its editor entity.
+    pub(crate) fn parse_asset_from_path(
+        path: &Path,
+    ) -> Result<(PathBuf, formats::BlueprintAsset), String> {
         let source_path = Self::resolve_blueprint_path(path);
         tracing::info!(
-            ">>> load_from_path: path={:?} resolved={:?}, current open_tabs={}",
+            ">>> parse_asset_from_path: path={:?} resolved={:?}",
             path,
             source_path,
-            self.open_tabs.len(),
         );
 
-        // Read file content
         let bytes = engine_fs::virtual_fs::read_file(&source_path)
             .map_err(|e| format!("Failed to read file: {}", e))?;
         let content = String::from_utf8(bytes)
             .map_err(|e| format!("Blueprint file is not valid UTF-8: {}", e))?;
         tracing::info!(
-            ">>> load_from_path: read {} bytes from {:?}",
+            ">>> parse_asset_from_path: read {} bytes from {:?}",
             content.len(),
             source_path
         );
 
-        // Try to deserialize as current format first
         let asset = match formats::deserialize_blueprint(&content) {
-            Ok(asset) => {
-                tracing::info!(
-                    ">>> load_from_path: deserialized as current format, main_graph has {} nodes, {} subgraphs, {} variables",
-                    asset.main_graph.nodes.len(),
-                    asset.subgraphs.len(),
-                    asset.variables.len(),
-                );
-                asset
-            }
+            Ok(asset) => asset,
             Err(_) => {
-                // Try legacy format
-                tracing::info!(">>> load_from_path: Trying to load as legacy format...");
                 let legacy_graph = legacy::try_parse_legacy_format(&content)?;
-
-                // Convert legacy graph to current format
                 formats::BlueprintAsset {
                     format_version: formats::current_format_version(),
                     main_graph: legacy_graph,
@@ -699,14 +694,24 @@ impl BlueprintEditorPanel {
                 }
             }
         };
+        Ok((source_path, asset))
+    }
 
-        // Load the asset into the editor
+    /// Apply an already-parsed blueprint to the live editor. Must run on the
+    /// UI thread because loading creates graph-canvas entities.
+    pub(crate) fn apply_loaded_asset(
+        &mut self,
+        source_path: PathBuf,
+        asset: formats::BlueprintAsset,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
         self.load_blueprint_asset(asset, window, cx)?;
         self.set_path(source_path);
         self.load_prefab_sidecar()?;
 
         tracing::info!(
-            ">>> load_from_path: done. open_tabs={}, graph_panels={}, self.graph.nodes={}",
+            ">>> apply_loaded_asset: done. open_tabs={}, graph_panels={}, self.graph.nodes={}",
             self.open_tabs.len(),
             self.graph_panels.len(),
             self.graph.nodes.len(),

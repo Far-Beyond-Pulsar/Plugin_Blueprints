@@ -57,6 +57,8 @@ pub struct BlueprintEditorPanel {
     // File I/O
     pub current_class_path: Option<std::path::PathBuf>,
     pub tab_title: Option<String>,
+    /// Initial graph data is being read on the background executor.
+    pub file_loading: bool,
     /// Set when a requested file could not be loaded. Failed opens render an
     /// explicit error state instead of presenting an empty, editable document.
     pub load_error: Option<String>,
@@ -362,36 +364,38 @@ impl BlueprintEditorPanel {
         );
 
         let mut panel = Self::new_internal(Some(file_path.clone()), window, cx);
-        tracing::info!(
-            ">>> new_with_path: after new_internal: open_tabs={}, self.graph.nodes={}, graph_panels={}, current_class_path={:?}",
-            panel.open_tabs.len(),
-            panel.graph.nodes.len(),
-            panel.graph_panels.len(),
-            panel.current_class_path,
-        );
-
-        // Blueprint classes are folders containing graph_save.json
+        panel.file_loading = true;
+        panel.set_path(file_path.clone());
         let graph_file = file_path.join("graph_save.json");
+        let window_handle = window.window_handle();
+        cx.spawn(async move |this, cx| {
+            let parsed = cx
+                .background_executor()
+                .spawn(async move { Self::parse_asset_from_path(&graph_file) })
+                .await;
+            let _ = cx.update_window(window_handle, |_, window, cx| {
+                let _ = this.update(cx, |panel, cx| {
+                    let result = parsed.and_then(|(path, asset)| {
+                        panel.apply_loaded_asset(path, asset, window, cx)
+                    });
+                    panel.file_loading = false;
+                    match result {
+                        Ok(()) => {
+                            panel.load_error = None;
+                            panel.attach_ai_graph_updates(file_path, cx);
+                            log::info!("Loaded blueprint asynchronously");
+                        }
+                        Err(error) => {
+                            tracing::error!("Failed to load blueprint: {error}");
+                            panel.load_error = Some(error);
+                        }
+                    }
+                    cx.notify();
+                });
+            });
+        })
+        .detach();
 
-        // Load the blueprint file
-        if let Err(e) = panel.load_blueprint(graph_file.to_str().unwrap(), window, cx) {
-            log::error!("Failed to load blueprint: {}", e);
-            return Err(e.into());
-        }
-
-        if let Err(e) = panel.load_prefab_sidecar() {
-            log::warn!("Failed to load prefab sidecar: {}", e);
-        }
-
-        tracing::info!(
-            ">>> new_with_path: loaded. open_tabs={}, self.graph.nodes={}, graph_panels={}, current_class_path={:?}",
-            panel.open_tabs.len(),
-            panel.graph.nodes.len(),
-            panel.graph_panels.len(),
-            panel.current_class_path,
-        );
-
-        log::info!("Loaded blueprint from {:?}", file_path);
         Ok(panel)
     }
 
@@ -600,6 +604,7 @@ impl BlueprintEditorPanel {
             find_panel: None,
             current_class_path: None,
             tab_title: None,
+            file_loading: false,
             load_error: None,
             dragging_node: None,
             drag_offset: Point::new(0.0, 0.0),

@@ -88,12 +88,6 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
         let undo = editor_context.services.undo.clone();
         panel.update(cx, |panel, cx| panel.set_undo_service(undo, cx));
 
-        if panel.read(cx).load_error.is_none() {
-            panel.update(cx, |panel, cx| {
-                panel.attach_ai_graph_updates(file_path.clone(), cx);
-            });
-        }
-
         Ok(Arc::new(panel))
     }
 }
