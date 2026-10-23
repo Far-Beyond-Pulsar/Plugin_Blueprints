@@ -463,6 +463,8 @@ pub struct GraphCanvasPanel {
     pub last_comment_click_pos: Option<Point<f32>>,
     pub last_comment_click_id: Option<String>,
     pub comment_text_input: Entity<InputState>,
+    /// Text inputs for a profile's node parameters, by `node id` + `key`.
+    pub(crate) param_inputs: HashMap<String, Entity<InputState>>,
     pub comment_color_bindings_dirty: bool,
     pub pin_property_state: PropertyStateManager,
 
@@ -595,6 +597,7 @@ impl GraphCanvasPanel {
             last_comment_click_pos: None,
             last_comment_click_id: None,
             comment_text_input,
+            param_inputs: HashMap::new(),
             comment_color_bindings_dirty: true,
             pin_property_state: PropertyStateManager::new(),
             dragging_variable: None,
@@ -1175,6 +1178,74 @@ impl GraphCanvasPanel {
                 });
             }
         }
+    }
+
+    /// Sets one property of a node and lets the profile follow up. Marks the
+    /// graph changed only when the value really differs.
+    pub fn set_node_property(
+        &mut self,
+        node_id: &str,
+        key: &str,
+        value: String,
+        cx: &mut Context<Self>,
+    ) {
+        {
+            let Some(node) = self.graph.nodes.iter_mut().find(|n| n.id == node_id) else {
+                return;
+            };
+            if node.properties.get(key) == Some(&value) {
+                return;
+            }
+            node.properties.insert(key.to_string(), value);
+        }
+        if let Some(profile) = crate::profile::profile() {
+            profile.parameter_changed(&mut self.graph, node_id);
+        }
+        self.is_dirty = true;
+        cx.notify();
+    }
+
+    /// The text input editing `key` of node `node_id`, created on first use and
+    /// kept in step with the node's value while it is not being typed in.
+    pub(crate) fn param_input(
+        &mut self,
+        node_id: &str,
+        key: &str,
+        current: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
+        let slot = format!("{node_id}\u{1f}{key}");
+        if let Some(existing) = self.param_inputs.get(&slot) {
+            let existing = existing.clone();
+            let focused = existing.read(cx).focus_handle(cx).is_focused(window);
+            if !focused && existing.read(cx).text().to_string() != current {
+                existing.update(cx, |input, cx| input.set_value(current.to_string(), window, cx));
+            }
+            return existing;
+        }
+        let input = cx.new(|cx| {
+            let mut input = InputState::new(window, cx);
+            input.set_value(current.to_string(), window, cx);
+            input
+        });
+        let (node_id, key) = (node_id.to_string(), key.to_string());
+        cx.subscribe_in(
+            &input,
+            window,
+            move |this, state: &Entity<InputState>, event: &InputEvent, _window, cx| {
+                if matches!(
+                    event,
+                    InputEvent::Change | InputEvent::Blur | InputEvent::PressEnter { .. }
+                ) {
+                    let text = state.read(cx).text().to_string();
+                    this.set_node_property(&node_id, &key, text, cx);
+                }
+            },
+        )
+        .detach();
+        self.param_inputs.insert(slot, input.clone());
+        input
     }
 
     pub fn create_comment_at_center(&mut self, window: &mut Window, cx: &mut Context<Self>) {

@@ -73,6 +73,17 @@ pub trait EditorProfile: Send + Sync + 'static {
     fn side_panels(&self) -> bool {
         false
     }
+
+    /// The editable parameters of the node type `definition_id`, in display
+    /// order. Nodes of other types show their properties read-only.
+    fn parameters(&self, _definition_id: &str) -> Vec<ParamField> {
+        Vec::new()
+    }
+
+    /// Called after a parameter of node `node_id` was edited, so the profile can bring
+    /// the graph in line: pins named after a resource change, and the wires on
+    /// them must follow.
+    fn parameter_changed(&self, _graph: &mut BlueprintGraph, _node_id: &str) {}
 }
 
 static PROFILE: OnceLock<Arc<dyn EditorProfile>> = OnceLock::new();
@@ -89,4 +100,22 @@ pub fn install_profile(profile: Arc<dyn EditorProfile>) -> Result<(), &'static s
 /// The installed profile, if this library was set up with one.
 pub fn profile() -> Option<&'static Arc<dyn EditorProfile>> {
     PROFILE.get()
+}
+
+/// How a parameter is edited.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParamKind {
+    /// Free text; numbers are edited as text too.
+    Text,
+    Bool,
+    /// One of a fixed set.
+    Choice(Vec<String>),
+}
+
+/// An editable node parameter, stored as text in the node's properties.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParamField {
+    pub key: String,
+    pub label: String,
+    pub kind: ParamKind,
 }

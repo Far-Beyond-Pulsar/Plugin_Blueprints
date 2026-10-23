@@ -656,6 +656,81 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
+    /// Editable controls for the node's parameters, if the installed profile
+    /// declares any for this node type: a text input, an on/off toggle or a
+    /// button that steps through the choices.
+    fn render_profile_parameters(
+        canvas: &mut GraphCanvasPanel,
+        node: &BlueprintNode,
+        window: &mut Window,
+        cx: &mut Context<GraphCanvasPanel>,
+    ) -> Option<AnyElement> {
+        use crate::profile::ParamKind;
+
+        let fields = crate::profile::profile()?.parameters(&node.definition_id);
+        if fields.is_empty() {
+            return None;
+        }
+        let mut rows = Vec::with_capacity(fields.len());
+        for field in fields {
+            let value = node.properties.get(&field.key).cloned().unwrap_or_default();
+            let control: AnyElement = match &field.kind {
+                ParamKind::Text => {
+                    let input = canvas.param_input(&node.id, &field.key, &value, window, cx);
+                    ui::input::TextInput::new(&input).xsmall().into_any_element()
+                }
+                ParamKind::Bool => {
+                    let on = value.eq_ignore_ascii_case("true");
+                    let (node_id, key) = (node.id.clone(), field.key.clone());
+                    Button::new(SharedString::from(format!("param-{}-{}", node.id, field.key)))
+                        .label(if on { "On" } else { "Off" })
+                        .xsmall()
+                        .when(on, |button| button.primary())
+                        .on_click(cx.listener(move |canvas, _, _, cx| {
+                            canvas.set_node_property(&node_id, &key, (!on).to_string(), cx);
+                        }))
+                        .into_any_element()
+                }
+                ParamKind::Choice(options) => {
+                    let options = options.clone();
+                    let (node_id, key) = (node.id.clone(), field.key.clone());
+                    let current = value.clone();
+                    Button::new(SharedString::from(format!("param-{}-{}", node.id, field.key)))
+                        .label(value.clone())
+                        .xsmall()
+                        .on_click(cx.listener(move |canvas, _, _, cx| {
+                            let next = options
+                                .iter()
+                                .position(|option| *option == current)
+                                .map_or(0, |index| (index + 1) % options.len());
+                            if let Some(option) = options.get(next) {
+                                canvas.set_node_property(&node_id, &key, option.clone(), cx);
+                            }
+                        }))
+                        .into_any_element()
+                }
+            };
+            rows.push(
+                h_flex()
+                    .w_full()
+                    .gap_2()
+                    .items_center()
+                    .child(
+                        div()
+                            .w(px(80.0))
+                            .flex_shrink_0()
+                            .text_xs()
+                            .font_medium()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(field.label.clone()),
+                    )
+                    .child(div().flex_1().child(control))
+                    .into_any_element(),
+            );
+        }
+        Some(v_flex().gap_3().children(rows).into_any_element())
+    }
+
     fn render_selected_node_properties(
         canvas: &mut GraphCanvasPanel,
         window: &mut Window,
@@ -676,6 +751,13 @@ impl PropertiesRenderer {
         };
 
         let canvas_entity = cx.entity().clone();
+        // A profile's nodes edit their parameters here; every other node lists
+        // its properties read-only.
+        let properties_body: Option<AnyElement> =
+            Self::render_profile_parameters(canvas, &selected_node, window, cx).or_else(|| {
+                (!selected_node.properties.is_empty())
+                    .then(|| Self::render_node_properties(&selected_node, cx).into_any_element())
+            });
 
         v_flex()
             .gap_3()
@@ -764,7 +846,7 @@ impl PropertiesRenderer {
                 ))
             })
             // Properties card
-            .when(!selected_node.properties.is_empty(), |el| {
+            .when_some(properties_body, |el, body| {
                 el.child(Self::render_card(
                     [
                         Self::render_section_header("Properties", IconName::Settings, cx)
@@ -775,7 +857,7 @@ impl PropertiesRenderer {
                             .w_full()
                             .p_3()
                             .gap_2()
-                            .child(Self::render_node_properties(&selected_node, cx))
+                            .child(body)
                             .into_any_element(),
                     ],
                     cx,
