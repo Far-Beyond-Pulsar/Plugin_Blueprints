@@ -91,6 +91,36 @@ pub trait EditorProfile: Send + Sync + 'static {
     /// them must follow.
     fn parameter_changed(&self, _graph: &mut BlueprintGraph, _node_id: &str) {}
 
+    /// The title a node shows, when it depends on its properties (a buffer node
+    /// is titled with its buffer). `None` keeps the definition's title.
+    fn node_title(
+        &self,
+        _definition_id: &str,
+        _properties: &std::collections::HashMap<String, String>,
+    ) -> Option<String> {
+        None
+    }
+
+    /// Arranges the graph's nodes (and the comments that group them). Returns
+    /// whether it did anything; the toolbar's Auto Layout button is shown when the
+    /// profile is installed.
+    fn auto_layout(&self, _graph: &mut BlueprintGraph) -> bool {
+        false
+    }
+
+    /// A panel shown on the left of the canvas, such as a list of buffers to drag
+    /// out. `editor` lets it add nodes to the graph
+    /// ([`BlueprintEditorPanel::add_profile_node`](crate::editor::panel::BlueprintEditorPanel::add_profile_node)).
+    fn left_panel(
+        &self,
+        _editor: gpui::WeakEntity<crate::editor::panel::BlueprintEditorPanel>,
+        _file: Option<&std::path::Path>,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> Option<Arc<dyn ui::dock::PanelView>> {
+        None
+    }
+
     /// A panel shown above the Properties panel, such as a live preview, for the
     /// editor of the document at `file`. Called once as the workspace is built.
     fn preview_panel(

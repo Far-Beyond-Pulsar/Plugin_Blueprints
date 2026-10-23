@@ -27,6 +27,7 @@ impl ToolbarRenderer {
         let is_compiling = panel.compilation_status.is_compiling;
         let is_dirty = panel.is_dirty;
         let is_saving = panel.is_saving;
+        let has_profile = panel.profile.is_some();
         let show_minimap = panel.show_minimap;
         let show_debug = panel.show_debug_overlay;
         let show_controls = panel.show_graph_controls;
@@ -176,6 +177,18 @@ impl ToolbarRenderer {
                         }
                     })),
             )
+            .when(has_profile, |toolbar| {
+                toolbar.child(
+                    Button::new("toolbar-auto-layout")
+                        .ghost()
+                        .small()
+                        .icon(IconName::GitBranch)
+                        .tooltip("Auto-layout the graph")
+                        .on_click(cx.listener(|panel, _, _window, cx| {
+                            panel.auto_layout(cx);
+                        })),
+                )
+            })
             .child(
                 Button::new("toolbar-find")
                     .ghost()

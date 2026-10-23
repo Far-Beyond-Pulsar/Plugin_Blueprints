@@ -418,7 +418,7 @@ impl BlueprintEditorPanel {
                 );
             }
             let is_conversion = node_type == NodeType::Conversion;
-            let bp_node = BlueprintNode {
+            let mut bp_node = BlueprintNode {
                 id: node_id.clone(),
                 definition_id,
                 title,
@@ -475,6 +475,13 @@ impl BlueprintEditorPanel {
                 description,
                 color,
             };
+            if let Some(title) = self
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.node_title(&bp_node.definition_id, &bp_node.properties))
+            {
+                bp_node.title = title;
+            }
             nodes.push(bp_node);
         }
 

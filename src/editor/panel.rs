@@ -1060,6 +1060,66 @@ impl BlueprintEditorPanel {
     }
 
     /// Return the active graph canvas entity, if one exists.
+    /// Adds a node of the profile's catalogue to the active graph, at the centre of
+    /// the view, with `properties` set, and lets the profile bring its pins and title
+    /// in line with them. How a profile's own panels put a node on the canvas.
+    pub fn add_profile_node(
+        &mut self,
+        definition_id: &str,
+        properties: Vec<(String, String)>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(profile) = self.profile.clone() else {
+            return;
+        };
+        let definitions = crate::profile::definitions_for(Some(&profile));
+        let Some(definition) = definitions.get_node_definition(definition_id) else {
+            return;
+        };
+        let Some(canvas) = self.active_canvas().cloned() else {
+            return;
+        };
+        canvas.update(cx, |canvas, cx| {
+            let centre = crate::features::viewport::coordinates::screen_to_graph_pos(
+                Point::new(gpui::px(960.0), gpui::px(540.0)),
+                &canvas.graph,
+            );
+            let mut node = crate::core::types::BlueprintNode::from_definition(definition, centre);
+            for (key, value) in properties {
+                node.properties.insert(key, value);
+            }
+            let id = node.id.clone();
+            canvas.add_node(node, cx);
+            profile.parameter_changed(&mut canvas.graph, &id);
+            cx.notify();
+        });
+        self.is_dirty = true;
+        cx.notify();
+    }
+
+    /// Arranges the active graph with the profile's layout (the toolbar's Auto
+    /// Layout button).
+    pub fn auto_layout(&mut self, cx: &mut Context<Self>) {
+        let Some(profile) = self.profile.clone() else {
+            return;
+        };
+        let Some(canvas) = self.active_canvas().cloned() else {
+            return;
+        };
+        let changed = canvas.update(cx, |canvas, cx| {
+            let changed = profile.auto_layout(&mut canvas.graph);
+            if changed {
+                canvas.is_dirty = true;
+                cx.notify();
+            }
+            changed
+        });
+        if changed {
+            self.is_dirty = true;
+            cx.notify();
+        }
+    }
+
     pub fn active_canvas(
         &self,
     ) -> Option<&Entity<crate::editor::workspace_panels::GraphCanvasPanel>> {
