@@ -504,7 +504,7 @@ impl NodeGraphRenderer {
                         let exe = pin.data_type == DataType::execution();
                         // A profile (another kind of graph) draws its own pin
                         // shapes: `kind` picks the outline, `style` bit 0 a ring.
-                        let (profile_kind, profile_style) = match crate::profile::profile() {
+                        let (profile_kind, profile_style) = match canvas.profile.as_ref() {
                             Some(profile) if !is_special => {
                                 let style = profile.pin_style(&pin.data_type.to_string());
                                 if let Some(color) = style.color {

@@ -123,6 +123,8 @@ pub struct BlueprintEditorPanel {
     pub resizing_comment: Option<(String, ResizeHandle)>,
     pub resizing_comment_start: Option<(Point<f32>, Size<f32>)>,
     pub editing_comment: Option<String>,
+    /// The profile whose document this editor edits, if it is not a Blueprint.
+    pub profile: Option<std::sync::Arc<dyn crate::profile::EditorProfile>>,
     pub comment_text_input: Entity<InputState>,
     pub comment_color_bindings_dirty: bool,
 
@@ -367,7 +369,7 @@ impl BlueprintEditorPanel {
         panel.file_loading = true;
         panel.set_path(file_path.clone());
         // A profile's documents are single files, not `.class` folders.
-        let graph_file = if crate::profile::profile().is_some() {
+        let graph_file = if panel.profile.is_some() {
             file_path.clone()
         } else {
             file_path.join("graph_save.json")
@@ -485,8 +487,9 @@ impl BlueprintEditorPanel {
             Self::create_sample_graph()
         };
 
+        let profile = project_path.as_deref().and_then(crate::profile::profile_for_path);
         let editor_weak = cx.entity().downgrade();
-        let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
+        let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, profile.clone(), window, cx));
         let mut engine_classes = pulsar_reflection::REGISTRY.get_class_names();
         // A placed class's own marker component is not a prefab component.
         engine_classes.retain(|name| !crate::features::prefabs::is_internal_component(name));
@@ -650,6 +653,7 @@ impl BlueprintEditorPanel {
             resizing_comment: None,
             resizing_comment_start: None,
             editing_comment: None,
+            profile,
             comment_text_input: cx
                 .new(|cx| InputState::new(window, cx).placeholder("Comment text...")),
             comment_color_bindings_dirty: true,
@@ -1176,6 +1180,7 @@ impl BlueprintEditorPanel {
                     tab_name,
                     tab_is_main,
                     tab_graph,
+                    self.profile.clone(),
                     window,
                     cx,
                 );

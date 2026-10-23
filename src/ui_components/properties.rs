@@ -667,7 +667,7 @@ impl PropertiesRenderer {
     ) -> Option<AnyElement> {
         use crate::profile::ParamKind;
 
-        let fields = crate::profile::profile()?.parameters(&node.definition_id);
+        let fields = canvas.profile.as_ref()?.parameters(&node.definition_id);
         if fields.is_empty() {
             return None;
         }

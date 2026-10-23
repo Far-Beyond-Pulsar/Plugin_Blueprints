@@ -93,19 +93,9 @@ pub(crate) fn extract_canonical_node_metadata(
 }
 
 impl NodeDefinitions {
-    /// Whether [`load`](Self::load) has already produced the global set.
-    pub fn is_loaded() -> bool {
-        NODE_DEFINITIONS.get().is_some()
-    }
-
     /// Get the global node definitions, loading them if necessary.
     pub fn load() -> &'static NodeDefinitions {
         NODE_DEFINITIONS.get_or_init(|| {
-            // A plugin that reuses the editor for another kind of graph
-            // supplies its own palette (see `crate::profile`).
-            if let Some(profile) = crate::profile::profile() {
-                return profile.catalog();
-            }
             // Load dynamic node definitions from the `pulsar_std` catalogue, then canonicalize type names.
             let metadata = extract_canonical_node_metadata();
 

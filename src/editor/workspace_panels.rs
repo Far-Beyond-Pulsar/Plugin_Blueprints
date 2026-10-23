@@ -325,7 +325,7 @@ impl PalettePanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let palette_view = cx.new(|cx| NodePaletteView::new(editor, window, cx));
+        let palette_view = cx.new(|cx| NodePaletteView::new(editor, None, window, cx));
         Self {
             focus_handle: cx.focus_handle(),
             palette_view,
@@ -465,6 +465,8 @@ pub struct GraphCanvasPanel {
     pub comment_text_input: Entity<InputState>,
     /// Text inputs for a profile's node parameters, by `node id` + `key`.
     pub(crate) param_inputs: HashMap<String, Entity<InputState>>,
+    /// The profile of the document this canvas edits; `None` for Blueprints.
+    pub profile: Option<std::sync::Arc<dyn crate::profile::EditorProfile>>,
     pub comment_color_bindings_dirty: bool,
     pub pin_property_state: PropertyStateManager,
 
@@ -490,12 +492,19 @@ impl GraphCanvasPanel {
         name: String,
         is_main: bool,
         graph: BlueprintGraph,
+        profile: Option<std::sync::Arc<dyn crate::profile::EditorProfile>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let canvas_weak = cx.entity().downgrade();
         let quick_palette_view =
-            cx.new(|cx| NodePaletteView::new_for_canvas(canvas_weak, panel.clone(), window, cx));
+            cx.new(|cx| NodePaletteView::new_for_canvas(
+                canvas_weak,
+                panel.clone(),
+                profile.clone(),
+                window,
+                cx,
+            ));
         let comment_text_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Comment text..."));
         cx.subscribe_in(
@@ -598,6 +607,7 @@ impl GraphCanvasPanel {
             last_comment_click_id: None,
             comment_text_input,
             param_inputs: HashMap::new(),
+            profile,
             comment_color_bindings_dirty: true,
             pin_property_state: PropertyStateManager::new(),
             dragging_variable: None,
@@ -1198,7 +1208,7 @@ impl GraphCanvasPanel {
             }
             node.properties.insert(key.to_string(), value);
         }
-        if let Some(profile) = crate::profile::profile() {
+        if let Some(profile) = self.profile.clone() {
             profile.parameter_changed(&mut self.graph, node_id);
         }
         self.is_dirty = true;

@@ -180,8 +180,11 @@ impl BlueprintSaveSnapshot {
     }
 }
 
-fn serialize_blueprint_asset(asset: &formats::BlueprintAsset) -> Result<String, String> {
-    if let Some(profile) = crate::profile::profile() {
+fn serialize_blueprint_asset(
+    asset: &formats::BlueprintAsset,
+    profile: Option<&std::sync::Arc<dyn crate::profile::EditorProfile>>,
+) -> Result<String, String> {
+    if let Some(profile) = profile {
         return profile.encode(asset);
     }
     formats::serialize_blueprint_with_header(asset)
@@ -200,8 +203,12 @@ fn persist_blueprint_content(path: &Path, content: &str) -> Result<(), String> {
     })
 }
 
-fn persist_blueprint_asset(path: &Path, asset: &formats::BlueprintAsset) -> Result<usize, String> {
-    let content = serialize_blueprint_asset(asset)?;
+fn persist_blueprint_asset(
+    path: &Path,
+    asset: &formats::BlueprintAsset,
+    profile: Option<&std::sync::Arc<dyn crate::profile::EditorProfile>>,
+) -> Result<usize, String> {
+    let content = serialize_blueprint_asset(asset, profile)?;
     persist_blueprint_content(path, &content)?;
     Ok(content.len())
 }
@@ -216,10 +223,6 @@ fn persist_prefab_sidecar(path: &Path, json: &str) -> Result<(), String> {
 }
 
 fn refresh_blueprint_trait_index_at(project_root: Option<&Path>) {
-    // Only Blueprints are indexed for the traits they implement.
-    if crate::profile::profile().is_some() {
-        return;
-    }
     if let Some(project_root) = project_root {
         if let Err(error) = engine_fs::BlueprintTraitIndex::rebuild(project_root) {
             tracing::warn!(
@@ -324,6 +327,7 @@ impl BlueprintEditorPanel {
                 .and_then(crate::features::class_dirs::project_root_of)
         });
         let class_dir = self.current_class_path.clone();
+        let save_profile = self.profile.clone();
         let mut publish_after_save = false;
         self.is_saving = true;
         cx.notify();
@@ -377,7 +381,7 @@ impl BlueprintEditorPanel {
                     });
 
                     let asset = snapshot.into_asset()?;
-                    let content = serialize_blueprint_asset(&asset)?;
+                    let content = serialize_blueprint_asset(&asset, save_profile.as_ref())?;
                     if task.is_cancelled() {
                         return Err("Blueprint save cancelled".to_string());
                     }
@@ -398,7 +402,9 @@ impl BlueprintEditorPanel {
                     }
 
                     task.report_progress(0.9, "Refreshing Blueprint index");
-                    refresh_blueprint_trait_index_at(project_root.as_deref());
+                    if save_profile.is_none() {
+                        refresh_blueprint_trait_index_at(project_root.as_deref());
+                    }
 
                     tracing::info!(">>> plugin_save: SUCCESS wrote to {:?}", task_path);
                     task.report_progress(1.0, "Blueprint saved");
@@ -633,7 +639,7 @@ impl BlueprintEditorPanel {
             asset.main_graph.nodes.len(),
         );
 
-        let bytes_written = persist_blueprint_asset(&target_path, &asset)?;
+        let bytes_written = persist_blueprint_asset(&target_path, &asset, self.profile.as_ref())?;
 
         // The project index is derived from authored Blueprint metadata. Keep
         // it current for toolbar saves, assignment-panel saves and autosaves.
@@ -642,7 +648,10 @@ impl BlueprintEditorPanel {
                 .as_deref()
                 .and_then(crate::features::class_dirs::project_root_of)
         });
-        refresh_blueprint_trait_index_at(project_root.as_deref());
+        // Only Blueprints are indexed for the traits they implement.
+        if self.profile.is_none() {
+            refresh_blueprint_trait_index_at(project_root.as_deref());
+        }
 
         tracing::info!(
             ">>> save_to_path: wrote {} bytes to {:?}",
@@ -686,7 +695,7 @@ impl BlueprintEditorPanel {
             source_path
         );
 
-        if let Some(profile) = crate::profile::profile() {
+        if let Some(profile) = crate::profile::profile_for_path(&source_path) {
             return profile.decode(&content).map(|asset| (source_path, asset));
         }
 

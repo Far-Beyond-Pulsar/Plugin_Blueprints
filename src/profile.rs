@@ -6,11 +6,11 @@
 //! pins are drawn, the file format, and what "compile" means. The side panels
 //! for variables, macros, events, traits and prefabs are left out.
 //!
-//! A profile is installed once per library, before the first editor opens.
-//! Plugins link their own copy of this crate, so a profile installed by one
-//! plugin is not seen by the Blueprint editor or by another plugin.
+//! Profiles are installed per library; an editor opened on a file takes the
+//! profile claiming its extension, so several profiles and the Blueprint editor
+//! can share one binary.
 
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::core::definitions::NodeDefinitions;
 use crate::core::graph::BlueprintGraph;
@@ -52,6 +52,12 @@ pub struct PinStyle {
 
 /// What a profile replaces. Every method with a default may be left alone.
 pub trait EditorProfile: Send + Sync + 'static {
+    /// Stable id of this profile.
+    fn id(&self) -> &str;
+
+    /// File extensions (without the dot) whose documents this profile edits.
+    fn extensions(&self) -> Vec<String>;
+
     /// The node palette. Called once, the first time definitions are needed.
     fn catalog(&self) -> NodeDefinitions;
 
@@ -86,20 +92,55 @@ pub trait EditorProfile: Send + Sync + 'static {
     fn parameter_changed(&self, _graph: &mut BlueprintGraph, _node_id: &str) {}
 }
 
-static PROFILE: OnceLock<Arc<dyn EditorProfile>> = OnceLock::new();
+/// Every profile installed in this library, in installation order.
+static PROFILES: RwLock<Vec<Arc<dyn EditorProfile>>> = RwLock::new(Vec::new());
 
-/// Installs the profile for this library. Fails if one is already installed or
-/// the node definitions were already loaded without it.
-pub fn install_profile(profile: Arc<dyn EditorProfile>) -> Result<(), &'static str> {
-    if NodeDefinitions::is_loaded() {
-        return Err("node definitions were already loaded; install the profile before opening an editor");
+/// Registers a profile. Several can coexist (and coexist with the Blueprint
+/// editor in one binary): an editor opened on a file takes the profile that
+/// claims the file's extension, see [`profile_for_path`]. Fails if a profile
+/// with the same id, or one claiming the same extension, is already installed.
+pub fn install_profile(profile: Arc<dyn EditorProfile>) -> Result<(), String> {
+    let mut profiles = PROFILES.write().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if profiles.iter().any(|existing| existing.id() == profile.id()) {
+        return Err(format!("an editor profile `{}` is already installed", profile.id()));
     }
-    PROFILE.set(profile).map_err(|_| "an editor profile is already installed")
+    for extension in profile.extensions() {
+        if profiles.iter().any(|p| p.extensions().iter().any(|e| e.eq_ignore_ascii_case(&extension))) {
+            return Err(format!("another editor profile already claims `.{extension}`"));
+        }
+    }
+    profiles.push(profile);
+    Ok(())
 }
 
-/// The installed profile, if this library was set up with one.
-pub fn profile() -> Option<&'static Arc<dyn EditorProfile>> {
-    PROFILE.get()
+/// The profile that claims the extension of `path`, if any. Files no profile
+/// claims are Blueprints.
+pub fn profile_for_path(path: &std::path::Path) -> Option<Arc<dyn EditorProfile>> {
+    let extension = path.extension()?.to_str()?;
+    PROFILES
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .iter()
+        .find(|profile| profile.extensions().iter().any(|e| e.eq_ignore_ascii_case(extension)))
+        .cloned()
+}
+
+/// The node definitions of `profile`, built once and kept for the process.
+pub fn catalog_of(profile: &Arc<dyn EditorProfile>) -> &'static NodeDefinitions {
+    static CATALOGS: Mutex<Vec<(String, &'static NodeDefinitions)>> = Mutex::new(Vec::new());
+    let mut catalogs = CATALOGS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((_, catalog)) = catalogs.iter().find(|(id, _)| id == profile.id()) {
+        return catalog;
+    }
+    let catalog: &'static NodeDefinitions = Box::leak(Box::new(profile.catalog()));
+    catalogs.push((profile.id().to_string(), catalog));
+    catalog
+}
+
+/// The definitions an editor with `profile` offers: the profile's, or the
+/// Blueprint node catalogue.
+pub(crate) fn definitions_for(profile: Option<&Arc<dyn EditorProfile>>) -> &'static NodeDefinitions {
+    profile.map_or_else(NodeDefinitions::load, catalog_of)
 }
 
 /// How a parameter is edited.

@@ -84,7 +84,16 @@ impl BlueprintEditorPanel {
                     let ew = editor_weak.clone();
                     let panel = cx.new(|cx| {
                         let canvas =
-                            GraphCanvasPanel::new(ew, tid.clone(), tname, tis_main, tgraph, window, cx);
+                            GraphCanvasPanel::new(
+                            ew,
+                            tid.clone(),
+                            tname,
+                            tis_main,
+                            tgraph,
+                            self.profile.clone(),
+                            window,
+                            cx,
+                        );
                         self.adopt_graph_history(&tid, &canvas.history);
                         canvas
                     });
@@ -117,7 +126,7 @@ impl BlueprintEditorPanel {
             // Left sidebar: Components/Find (multi-tab), Macros/Events (multi-tab), Variables
             // A profile without Blueprint concepts keeps only the canvas and the
             // property panel (a node's parameters are edited there).
-            let stripped = crate::profile::profile().is_some_and(|p| !p.side_panels());
+            let stripped = self.profile.as_ref().is_some_and(|p| !p.side_panels());
             let left = DockItem::split(
                 Axis::Vertical,
                 vec![

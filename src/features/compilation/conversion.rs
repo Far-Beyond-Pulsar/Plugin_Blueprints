@@ -202,7 +202,7 @@ impl BlueprintEditorPanel {
         let mut nodes = Vec::new();
         let mut connections = Vec::new();
 
-        let node_definitions = NodeDefinitions::load();
+        let node_definitions = crate::profile::definitions_for(self.profile.as_ref());
 
         // Convert nodes
         for (node_id, node_instance) in &graph_desc.nodes {

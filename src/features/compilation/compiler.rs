@@ -459,7 +459,7 @@ impl BlueprintEditorPanel {
     /// Start compilation (called from toolbar)
     pub fn start_compilation(&mut self, cx: &mut Context<Self>) {
         // Another kind of graph checks itself instead of generating code.
-        if let Some(profile) = crate::profile::profile() {
+        if let Some(profile) = self.profile.clone() {
             self.sync_all_canvases_to_tabs(cx);
             let problems = profile.validate(&self.graph);
             self.compilation_status = if problems.is_empty() {
