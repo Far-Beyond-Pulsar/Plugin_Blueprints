@@ -172,7 +172,25 @@ impl BlueprintEditorPanel {
                 right_panels.push(Arc::new(compiler_panel) as Arc<dyn ui::dock::PanelView>);
                 right_panels.push(Arc::new(asset_inspector_panel) as Arc<dyn ui::dock::PanelView>);
             }
-            let right = DockItem::tabs(right_panels, None, &dock_area_weak, window, cx);
+            let properties = DockItem::tabs(right_panels, None, &dock_area_weak, window, cx);
+            // A profile may put a preview above the Properties panel.
+            let preview = self.profile.clone().and_then(|profile| {
+                let file = self.get_graph_file_path();
+                profile.preview_panel(file.as_deref(), window, cx)
+            });
+            let right = match preview {
+                Some(preview) => DockItem::split(
+                    Axis::Vertical,
+                    vec![
+                        DockItem::tabs(vec![preview], None, &dock_area_weak, window, cx),
+                        properties,
+                    ],
+                    &dock_area_weak,
+                    window,
+                    cx,
+                ),
+                None => properties,
+            };
 
             workspace.initialize(
                 center,

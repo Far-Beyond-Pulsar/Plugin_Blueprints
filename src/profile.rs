@@ -90,6 +90,27 @@ pub trait EditorProfile: Send + Sync + 'static {
     /// the graph in line: pins named after a resource change, and the wires on
     /// them must follow.
     fn parameter_changed(&self, _graph: &mut BlueprintGraph, _node_id: &str) {}
+
+    /// A panel shown above the Properties panel, such as a live preview, for the
+    /// editor of the document at `file`. Called once as the workspace is built.
+    fn preview_panel(
+        &self,
+        _file: Option<&std::path::Path>,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> Option<Arc<dyn ui::dock::PanelView>> {
+        None
+    }
+
+    /// The graph of the document at `file` was compiled (the toolbar's Compile
+    /// button) or is being saved. A preview picks the graph up here.
+    fn graph_applied(
+        &self,
+        _file: Option<&std::path::Path>,
+        _graph: &BlueprintGraph,
+        _cx: &mut gpui::App,
+    ) {
+    }
 }
 
 /// Every profile installed in this library, in installation order.

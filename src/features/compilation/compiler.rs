@@ -462,6 +462,10 @@ impl BlueprintEditorPanel {
         if let Some(profile) = self.profile.clone() {
             self.sync_all_canvases_to_tabs(cx);
             let problems = profile.validate(&self.graph);
+            if problems.is_empty() {
+                let file = self.get_graph_file_path();
+                profile.graph_applied(file.as_deref(), &self.graph, cx);
+            }
             self.compilation_status = if problems.is_empty() {
                 CompilationStatus {
                     state: CompilationState::Success,
