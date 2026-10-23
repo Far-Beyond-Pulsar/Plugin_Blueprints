@@ -305,7 +305,9 @@ impl BlueprintEditorPanel {
         if let Some(profile) = self.profile.clone() {
             self.sync_all_canvases_to_tabs(cx);
             let file = self.get_graph_file_path();
-            profile.graph_applied(file.as_deref(), &self.graph, cx);
+            if let Ok(asset) = self.to_blueprint_asset() {
+                profile.graph_applied(file.as_deref(), &asset, cx);
+            }
         }
 
         let file_path = self.get_graph_file_path();

@@ -461,10 +461,13 @@ impl BlueprintEditorPanel {
         // Another kind of graph checks itself instead of generating code.
         if let Some(profile) = self.profile.clone() {
             self.sync_all_canvases_to_tabs(cx);
-            let problems = profile.validate(&self.graph);
-            if problems.is_empty() {
+            let (problems, asset) = match self.to_blueprint_asset() {
+                Ok(asset) => (profile.validate(&asset), Some(asset)),
+                Err(error) => (vec![error], None),
+            };
+            if let (true, Some(asset)) = (problems.is_empty(), asset) {
                 let file = self.get_graph_file_path();
-                profile.graph_applied(file.as_deref(), &self.graph, cx);
+                profile.graph_applied(file.as_deref(), &asset, cx);
             }
             self.compilation_status = if problems.is_empty() {
                 CompilationStatus {

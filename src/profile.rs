@@ -72,7 +72,7 @@ pub trait EditorProfile: Send + Sync + 'static {
 
     /// Checks the graph; each entry is one problem, errors first. This is what
     /// the toolbar's compile button runs. Empty means the graph is sound.
-    fn validate(&self, graph: &BlueprintGraph) -> Vec<String>;
+    fn validate(&self, asset: &BlueprintAsset) -> Vec<String>;
 
     /// Whether the variables, macros, events, traits and prefab panels are
     /// shown. A profile that has none of those leaves this `false`.
@@ -108,17 +108,18 @@ pub trait EditorProfile: Send + Sync + 'static {
         false
     }
 
-    /// A panel shown on the left of the canvas, such as a list of buffers to drag
-    /// out. `editor` lets it add nodes to the graph
-    /// ([`BlueprintEditorPanel::add_profile_node`](crate::editor::panel::BlueprintEditorPanel::add_profile_node)).
-    fn left_panel(
+    /// The panels shown, as tabs, on the left of the canvas, such as a list of buffers
+    /// to drag out. `editor` lets them add nodes to the graph
+    /// ([`BlueprintEditorPanel::add_profile_node`](crate::editor::panel::BlueprintEditorPanel::add_profile_node))
+    /// and open its collapsed graphs.
+    fn left_panels(
         &self,
         _editor: gpui::WeakEntity<crate::editor::panel::BlueprintEditorPanel>,
         _file: Option<&std::path::Path>,
         _window: &mut gpui::Window,
         _cx: &mut gpui::App,
-    ) -> Option<Arc<dyn ui::dock::PanelView>> {
-        None
+    ) -> Vec<Arc<dyn ui::dock::PanelView>> {
+        Vec::new()
     }
 
     /// A panel shown above the Properties panel, such as a live preview, for the
@@ -137,7 +138,7 @@ pub trait EditorProfile: Send + Sync + 'static {
     fn graph_applied(
         &self,
         _file: Option<&std::path::Path>,
-        _graph: &BlueprintGraph,
+        _asset: &BlueprintAsset,
         _cx: &mut gpui::App,
     ) {
     }

@@ -193,13 +193,13 @@ impl BlueprintEditorPanel {
             };
 
             // A profile may put its own panel on the left instead of the Blueprint ones.
-            let profile_left = self.profile.clone().and_then(|profile| {
+            let profile_left = self.profile.clone().map(|profile| {
                 let file = self.get_graph_file_path();
-                profile.left_panel(editor_weak.clone(), file.as_deref(), window, cx)
+                profile.left_panels(editor_weak.clone(), file.as_deref(), window, cx)
             });
             let left = match profile_left {
-                Some(panel) if stripped => {
-                    Some(DockItem::tabs(vec![panel], None, &dock_area_weak, window, cx))
+                Some(panels) if stripped && !panels.is_empty() => {
+                    Some(DockItem::tabs(panels, None, &dock_area_weak, window, cx))
                 }
                 _ => (!stripped).then_some(left),
             };
