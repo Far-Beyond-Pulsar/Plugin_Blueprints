@@ -750,7 +750,7 @@ impl BpRenderer {
             4 => Uint32,     // kind
             5 => Uint32,     // is_input
             6 => Uint32,     // compatible
-            7 => Uint32,     // _pad1
+            7 => Uint32,     // style
         ];
         let vbl = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<PinInstance>() as wgpu::BufferAddress,

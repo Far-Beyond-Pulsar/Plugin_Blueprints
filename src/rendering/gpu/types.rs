@@ -78,7 +78,7 @@ pub struct PinInstance {
     pub is_input: u32,
     /// 1 = highlighted compatible-drop target
     pub compatible: u32,
-    pub _pad1: u32,
+    pub style: u32,
 }
 
 // ── Comment instances ──────────────────────────────────────────────────────────

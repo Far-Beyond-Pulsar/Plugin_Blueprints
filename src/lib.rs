@@ -29,6 +29,7 @@ mod core;
 mod editor;
 mod features;
 pub mod io;
+pub mod profile;
 mod rendering;
 pub mod std_nodes;
 mod ui_components;

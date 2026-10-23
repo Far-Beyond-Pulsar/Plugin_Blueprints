@@ -181,6 +181,9 @@ impl BlueprintSaveSnapshot {
 }
 
 fn serialize_blueprint_asset(asset: &formats::BlueprintAsset) -> Result<String, String> {
+    if let Some(profile) = crate::profile::profile() {
+        return profile.encode(asset);
+    }
     formats::serialize_blueprint_with_header(asset)
 }
 
@@ -213,6 +216,10 @@ fn persist_prefab_sidecar(path: &Path, json: &str) -> Result<(), String> {
 }
 
 fn refresh_blueprint_trait_index_at(project_root: Option<&Path>) {
+    // Only Blueprints are indexed for the traits they implement.
+    if crate::profile::profile().is_some() {
+        return;
+    }
     if let Some(project_root) = project_root {
         if let Err(error) = engine_fs::BlueprintTraitIndex::rebuild(project_root) {
             tracing::warn!(
@@ -678,6 +685,10 @@ impl BlueprintEditorPanel {
             content.len(),
             source_path
         );
+
+        if let Some(profile) = crate::profile::profile() {
+            return profile.decode(&content).map(|asset| (source_path, asset));
+        }
 
         let asset = match formats::deserialize_blueprint(&content) {
             Ok(asset) => asset,

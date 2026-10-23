@@ -13,10 +13,10 @@ struct PinInst {
     @location(1) size:       f32,
     @location(2) _pad0:      f32,
     @location(3) color:      vec4<f32>,
-    @location(4) kind:       u32,   // 0=circle 1=exec
+    @location(4) kind:       u32,   // 0=circle 1=exec 2=box 3=diamond 4=square 5=hexagon
     @location(5) is_input:   u32,
     @location(6) compatible: u32,
-    @location(7) _pad1:      u32,
+    @location(7) style:      u32,   // bit 0: persistent (second outline)
 }
 
 struct VOut {
@@ -26,6 +26,7 @@ struct VOut {
     @location(2) @interpolate(flat) kind:       u32,
     @location(3) @interpolate(flat) is_input:   u32,
     @location(4) @interpolate(flat) compatible: u32,
+    @location(5) @interpolate(flat) style:      u32,
 }
 
 fn graph_to_screen(p: vec2<f32>) -> vec2<f32> {
@@ -68,6 +69,31 @@ fn sdf_exec(p: vec2<f32>, is_input: bool) -> f32 {
     return min(d_rect, d_tri);
 }
 
+// Diamond: a square turned 45 degrees, `r` the distance from centre to a corner.
+fn sdf_diamond(p: vec2<f32>, r: f32) -> f32 {
+    return (abs(p.x) + abs(p.y) - r) * 0.70710678;
+}
+
+// Regular hexagon with flat top and bottom, `r` the apothem.
+fn sdf_hexagon(p: vec2<f32>, r: f32) -> f32 {
+    let k = vec3(-0.866025404, 0.5, 0.577350269);
+    var q = abs(p);
+    q = q - 2.0 * min(dot(k.xy, q), 0.0) * k.xy;
+    q = q - vec2(clamp(q.x, -k.z * r, k.z * r), r);
+    return length(q) * sign(q.y);
+}
+
+fn pin_sdf(kind: u32, uv: vec2<f32>, is_input: bool) -> f32 {
+    switch kind {
+        case 0u: { return sdf_circle(uv, 0.78); }
+        case 1u: { return sdf_exec(uv, is_input); }
+        case 3u: { return sdf_diamond(uv, 0.98); }
+        case 4u: { return sdf_box(uv, vec2(0.62, 0.62)) - 0.08; }
+        case 5u: { return sdf_hexagon(uv, 0.72); }
+        default: { return sdf_box(uv, vec2(0.70, 0.70)); }
+    }
+}
+
 var<private> CX: array<f32, 6> = array<f32, 6>(-1.0, 1.0, -1.0, -1.0, 1.0, 1.0);
 var<private> CY: array<f32, 6> = array<f32, 6>(-1.0, -1.0, 1.0, 1.0, -1.0, 1.0);
 
@@ -86,6 +112,7 @@ fn vs_main(inst: PinInst, @builtin(vertex_index) vi: u32) -> VOut {
     o.kind       = inst.kind;
     o.is_input   = inst.is_input;
     o.compatible = inst.compatible;
+    o.style      = inst.style;
     return o;
 }
 
@@ -101,25 +128,32 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let fill_col = mix(vec3(0.12, 0.13, 0.15), active_accent, 0.74);
     let glow_col = mix(active_accent, vec3(1.0), 0.20);
 
-    var d: f32;
-    if in.kind == 0u {
-        d = sdf_circle(in.uv, 0.78);
-    } else if in.kind == 1u {
-        d = sdf_exec(in.uv, in.is_input != 0u);
-    } else {
-        d = sdf_box(in.uv, vec2(0.70, 0.70));
-    }
+    // A persistent pin is drawn smaller so its halo fits inside the quad.
+    let persistent = (in.style & 1u) != 0u;
+    let d = pin_sdf(in.kind, select(in.uv, in.uv * 1.3, persistent), in.is_input != 0u);
 
     let aa = max(fwidth(d), 0.02);
     let ring_w = 0.13;
     let inside = 1.0 - smoothstep(-aa, aa, d);
     let ring_outer = 1.0 - smoothstep(-aa, aa, d + ring_w);
-    let ring = clamp(ring_outer - inside, 0.0, 1.0);
-    if inside + ring <= 0.01 { discard; }
+    var ring = clamp(ring_outer - inside, 0.0, 1.0);
+
+    // Persistent data (style bit 0): a gap, then a second outline in the
+    // pin's own colour, so it reads as a pin inside a halo.
+    var halo = 0.0;
+    if persistent {
+        let gap = 0.07;
+        let halo_w = 0.10;
+        let halo_outer = 1.0 - smoothstep(-aa, aa, d + ring_w + gap + halo_w);
+        let halo_inner = 1.0 - smoothstep(-aa, aa, d + ring_w + gap);
+        halo = clamp(halo_outer - halo_inner, 0.0, 1.0);
+    }
+    if inside + ring + halo <= 0.01 { discard; }
 
     var base = mix(ring_col, fill_col, inside / (inside + ring + 0.0001));
+    base = mix(base, active_accent, halo);
 
-    if in.kind != 0u {
+    if in.kind == 1u || in.kind == 2u {
         var q = in.uv;
         if in.is_input != 0u { q.x = -q.x; }
         let stripe = smoothstep(0.22, 0.03, abs(q.y)) * smoothstep(0.02, 0.52, q.x);
@@ -129,7 +163,7 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
     let glow = smoothstep(0.36, 0.0, d) * smoothstep(-aa, aa, d);
     base = mix(base, glow_col, glow * 0.16);
 
-    let alpha = clamp(inside + ring, 0.0, 1.0);
+    let alpha = clamp(inside + ring + halo, 0.0, 1.0);
     if in.compatible != 0u {
         let pulse = 0.90 + 0.10 * sin(u.time * 3.0);
         base = mix(base, glow_col, 0.18) * pulse;

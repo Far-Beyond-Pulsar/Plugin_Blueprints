@@ -366,7 +366,12 @@ impl BlueprintEditorPanel {
         let mut panel = Self::new_internal(Some(file_path.clone()), window, cx);
         panel.file_loading = true;
         panel.set_path(file_path.clone());
-        let graph_file = file_path.join("graph_save.json");
+        // A profile's documents are single files, not `.class` folders.
+        let graph_file = if crate::profile::profile().is_some() {
+            file_path.clone()
+        } else {
+            file_path.join("graph_save.json")
+        };
         let window_handle = window.window_handle();
         cx.spawn(async move |this, cx| {
             let parsed = cx

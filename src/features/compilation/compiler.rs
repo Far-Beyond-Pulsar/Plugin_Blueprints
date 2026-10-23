@@ -458,6 +458,28 @@ impl BlueprintEditorPanel {
 
     /// Start compilation (called from toolbar)
     pub fn start_compilation(&mut self, cx: &mut Context<Self>) {
+        // Another kind of graph checks itself instead of generating code.
+        if let Some(profile) = crate::profile::profile() {
+            self.sync_all_canvases_to_tabs(cx);
+            let problems = profile.validate(&self.graph);
+            self.compilation_status = if problems.is_empty() {
+                CompilationStatus {
+                    state: CompilationState::Success,
+                    message: "✓ Graph is valid".to_string(),
+                    progress: 1.0,
+                    is_compiling: false,
+                }
+            } else {
+                CompilationStatus {
+                    state: CompilationState::Error,
+                    message: format!("✗ {}", problems.join("; ")),
+                    progress: 0.0,
+                    is_compiling: false,
+                }
+            };
+            cx.notify();
+            return;
+        }
         let panel_entity = cx.weak_entity();
         cx.spawn(async move |_entity, mut cx| {
             Self::compile_async(panel_entity, &mut cx).await;

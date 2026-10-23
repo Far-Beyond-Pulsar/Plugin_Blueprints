@@ -500,8 +500,20 @@ impl NodeGraphRenderer {
                         } else {
                             pin_gpos_row(node, is_input, i)
                         };
-                        let pc = pin_color(&pin.data_type);
+                        let mut pc = pin_color(&pin.data_type);
                         let exe = pin.data_type == DataType::execution();
+                        // A profile (another kind of graph) draws its own pin
+                        // shapes: `kind` picks the outline, `style` bit 0 a ring.
+                        let (profile_kind, profile_style) = match crate::profile::profile() {
+                            Some(profile) if !is_special => {
+                                let style = profile.pin_style(&pin.data_type.to_string());
+                                if let Some(color) = style.color {
+                                    pc = color;
+                                }
+                                (Some(style.shape.shader_kind()), style.ringed as u32)
+                            }
+                            _ => (None, 0),
+                        };
                         let compat = dragging_conn.as_ref().map_or(false, |d| {
                             is_input
                                 && node.id != d.source_node
@@ -512,10 +524,14 @@ impl NodeGraphRenderer {
                             size: PIN_SIZE,
                             _pad0: 0.0,
                             color: if is_special { [1.0, 0.2, 0.2, 1.0] } else { pc },
-                            kind: if is_special { 2 } else { exe as u32 },
+                            kind: if is_special {
+                                2
+                            } else {
+                                profile_kind.unwrap_or(exe as u32)
+                            },
                             is_input: is_input as u32,
                             compatible: compat as u32,
-                            _pad1: 0,
+                            style: profile_style,
                         });
                         if !pin.name.is_empty() && !is_reroute && !is_conversion {
                             let scr_x = (cgx + pan_x) * zoom;

@@ -115,6 +115,9 @@ impl BlueprintEditorPanel {
             }
 
             // Left sidebar: Components/Find (multi-tab), Macros/Events (multi-tab), Variables
+            // A profile without Blueprint concepts keeps only the canvas and the
+            // property panel (a node's parameters are edited there).
+            let stripped = crate::profile::profile().is_some_and(|p| !p.side_panels());
             let left = DockItem::split(
                 Axis::Vertical,
                 vec![
@@ -155,19 +158,21 @@ impl BlueprintEditorPanel {
             );
 
             // Right sidebar: live properties, compiler output, and serialized save data.
-            let right = DockItem::tabs(
-                vec![
-                    Arc::new(properties_panel) as Arc<dyn ui::dock::PanelView>,
-                    Arc::new(compiler_panel) as Arc<dyn ui::dock::PanelView>,
-                    Arc::new(asset_inspector_panel) as Arc<dyn ui::dock::PanelView>,
-                ],
+            let mut right_panels = vec![Arc::new(properties_panel) as Arc<dyn ui::dock::PanelView>];
+            if !stripped {
+                right_panels.push(Arc::new(compiler_panel) as Arc<dyn ui::dock::PanelView>);
+                right_panels.push(Arc::new(asset_inspector_panel) as Arc<dyn ui::dock::PanelView>);
+            }
+            let right = DockItem::tabs(right_panels, None, &dock_area_weak, window, cx);
+
+            workspace.initialize(
+                center,
+                (!stripped).then_some(left),
+                Some(right),
                 None,
-                &dock_area_weak,
                 window,
                 cx,
             );
-
-            workspace.initialize(center, Some(left), Some(right), None, window, cx);
         });
 
         self.workspace = Some(workspace);
