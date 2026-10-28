@@ -25,6 +25,7 @@ use ui::dock::PanelView;
 
 // Module declarations
 mod ai_tools;
+pub mod canvas_profile;
 mod core;
 mod editor;
 mod features;
