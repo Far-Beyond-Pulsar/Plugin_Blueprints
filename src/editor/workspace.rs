@@ -8,8 +8,10 @@ use ui::dock::DockItem;
 use ui::workspace::Workspace;
 
 use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
+use crate::editor::tabs::TabDoc;
 use crate::editor::workspace_panels::{
-    AssetInspectorPanel, CompilerPanel, EventsPanel, FindPanel, GraphCanvasPanel,
+    AssetInspectorPanel, CompilerPanel, EventsPanel, FindPanel,
     ImplementedTraitsPanel, MacrosPanel, PrefabHierarchyPanel, PropertiesPanel, VariablesPanel,
 };
 
@@ -20,22 +22,7 @@ impl BlueprintEditorPanel {
             return;
         }
 
-        tracing::info!(
-            ">>> initialize_workspace: open_tabs={}, self.graph.nodes={}, graph_panels before={}",
-            self.open_tabs.len(),
-            self.graph.nodes.len(),
-            self.graph_panels.len(),
-        );
-
-        for tab in &self.open_tabs {
-            tracing::info!(
-                ">>> initialize_workspace: tab id={} is_main={} nodes={} connections={}",
-                tab.id,
-                tab.is_main,
-                tab.graph.nodes.len(),
-                tab.graph.connections.len(),
-            );
-        }
+        self.sync_profile_data();
 
         let editor_weak = cx.entity().downgrade();
 
@@ -66,38 +53,39 @@ impl BlueprintEditorPanel {
             let find_panel = cx.new(|cx| FindPanel::new(editor_weak.clone(), cx));
             self.find_panel = Some(find_panel.clone());
             let properties_panel = cx.new(|cx| PropertiesPanel::new(editor_weak.clone(), cx));
-            let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = self
+            let pending: Vec<(String, String, bool, TabDoc)> = self
                 .open_tabs
-                .iter()
-                .map(|tab| {
-                    let tid = tab.id.clone();
-                    let tname = tab.name.clone();
-                    let tis_main = tab.is_main;
-                    let tgraph = tab.graph.clone();
-                    let tracing_id = tid.clone();
-                    let tracing_nodes = tgraph.nodes.len();
-                    tracing::info!(
-                        ">>> initialize_workspace: creating canvas for tab {} with {} nodes",
-                        tracing_id,
-                        tracing_nodes,
-                    );
+                .iter_mut()
+                .filter_map(|tab| {
+                    tab.pending
+                        .take()
+                        .map(|doc| (tab.id.clone(), tab.name.clone(), tab.is_main, doc))
+                })
+                .collect();
+            let profile_data = self.profile_data.clone();
+            let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = pending
+                .into_iter()
+                .map(|(tid, tname, tis_main, doc)| {
                     let ew = editor_weak.clone();
+                    let profile = self.profile.clone();
+                    let profile_data = profile_data.clone();
+                    let id = tid.clone();
                     let panel = cx.new(|cx| {
-                        let canvas =
-                            GraphCanvasPanel::new(
+                        let canvas = GraphCanvasPanel::new(
                             ew,
                             tid.clone(),
                             tname,
                             tis_main,
-                            tgraph,
-                            self.profile.clone(),
+                            doc,
+                            profile,
+                            profile_data,
                             window,
                             cx,
                         );
                         self.adopt_graph_history(&tid, &canvas.history);
                         canvas
                     });
-                    (tab.id.clone(), panel)
+                    (id, panel)
                 })
                 .collect();
 
@@ -251,11 +239,6 @@ impl BlueprintEditorPanel {
                     };
                     if new_index != this.active_tab_index {
                         this.active_tab_index = new_index;
-                        if let Some((_, canvas)) =
-                            this.graph_panels.iter().find(|(id, _)| id == &tab_id)
-                        {
-                            this.graph = canvas.read(cx).graph.clone();
-                        }
                         cx.notify();
                     }
                 },

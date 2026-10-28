@@ -1,59 +1,7 @@
-//! Undo/redo operations for the graph canvas
+//! Undo/redo wiring between the editor and the host's histories.
 
-use crate::editor::workspace_panels::GraphCanvasPanel;
 use crate::features::undo::Command;
 use gpui::*;
-use plugin_editor_api::undo::lock;
-
-impl GraphCanvasPanel {
-    /// Undo the last operation
-    pub fn undo(&mut self, cx: &mut Context<Self>) {
-        let history = self.history.clone();
-        let undone = lock(&history)
-            .undo(|command| {
-                command.undo(self, cx);
-                true
-            })
-            .is_some();
-        if undone {
-            self.is_dirty = true;
-            cx.notify();
-        }
-    }
-
-    /// Redo the last undone operation
-    pub fn redo(&mut self, cx: &mut Context<Self>) {
-        let history = self.history.clone();
-        let redone = lock(&history)
-            .redo(|command| {
-                command.execute(self, cx);
-                true
-            })
-            .is_some();
-        if redone {
-            self.is_dirty = true;
-            cx.notify();
-        }
-    }
-
-    /// Push a command to the undo stack
-    pub fn push_undo_command(&mut self, command: Command) {
-        let mut history = lock(&self.history);
-        history.push(command);
-        history.seal();
-        self.is_dirty = true;
-    }
-
-    /// Check if undo is available
-    pub fn can_undo(&self) -> bool {
-        lock(&self.history).can_undo()
-    }
-
-    /// Check if redo is available
-    pub fn can_redo(&self) -> bool {
-        lock(&self.history).can_redo()
-    }
-}
 
 impl crate::editor::panel::BlueprintEditorPanel {
     /// Use the host's undo histories (Pulsar-Native#931): each graph's

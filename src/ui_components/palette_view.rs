@@ -21,10 +21,9 @@ use ui::{
 
 use crate::core::definitions::PinDefinition;
 use crate::core::definitions::{NodeDefinition, NodeDefinitions};
-use crate::core::types::{BlueprintNode, PinType};
+use crate::core::types::PinType;
 use crate::editor::panel::BlueprintEditorPanel;
-use crate::editor::workspace_panels::GraphCanvasPanel;
-use crate::rendering::graph::NodeGraphRenderer;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::ui_components::node_library::{
     build_item_sizes, build_palette_items, filter_compatible_palette_items, matching_node_count,
     visible_items, PaletteItem, CATEGORY_HEADER_H, NODE_ENTRY_H,
@@ -780,20 +779,7 @@ fn palette_node_row(
                                 if let Some(panel) = panel.upgrade() {
                                     panel.update(cx, |panel, cx| {
                                         let uid = panel.create_event_def("NewEvent".to_string(), String::new());
-                                        // Sync to the active tab matching this canvas
-                                        if let Some(tab) = panel.open_tabs.iter_mut().find(|t| t.id == canvas_id) {
-                                            if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid) {
-                                                crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(def, &uid, &mut tab.graph);
-                                            }
-                                        }
-                                        // Also sync the live canvas
-                                        if let Some((_, canvas)) = panel.graph_panels.iter().find(|(id, _)| *id == canvas_id) {
-                                            canvas.update(cx, |canvas_panel, _cx| {
-                                                if let Some(def) = panel.local_event_defs.iter().find(|d| d.uid == uid) {
-                                                    crate::editor::panel::BlueprintEditorPanel::sync_event_on_node_for_def(def, &uid, &mut canvas_panel.graph);
-                                                }
-                                            });
-                                        }
+                                        panel.sync_event_to_tab(&uid, &canvas_id, cx);
                                         cx.notify();
                                     });
                                 }
@@ -815,45 +801,12 @@ fn palette_node_row(
                     canvas_entity.update(cx, |canvas, cx| {
                         let base = canvas
                             .popup_palette_graph_pos
-                            .or_else(|| {
-                                canvas.element_bounds.map(|b| {
-                                    let center = b.center();
-                                    let gp = NodeGraphRenderer::screen_to_graph_pos(center, &canvas.graph);
-                                    Point::new(gp.x, gp.y)
-                                })
-                            })
-                            .unwrap_or(Point::new(0.0, 0.0));
-                        let stagger = (canvas.graph.nodes.len() % 8) as f32 * 18.0;
-                        let place_pos = Point::new(base.x + stagger, base.y + stagger);
-
-                        let node_clone =
-                            if let Some(reference) = crate::core::subgraph_ref::SubGraphReference::decode(
-                                &def_now.id,
-                                &[],
-                            ) {
-                                canvas.create_macro_instance_node(reference.id, place_pos, cx);
-                                canvas.graph.nodes.last().cloned()
-                            } else if let Some(uid) = def_now.id.strip_prefix("custom_event_dispatch:") {
-                                canvas.create_custom_event_dispatch_node(uid.to_string(), place_pos, cx);
-                                canvas.graph.nodes.last().cloned()
-                            } else {
-                                let node =
-                                    crate::core::types::BlueprintNode::from_definition(&def_now, place_pos);
-                                let clone = node.clone();
-                                canvas.add_node(node, cx);
-                                Some(clone)
-                            };
-
-                        if let (Some(source), Some(ref new_node)) =
-                            (canvas.quick_palette_connection_source.take(), node_clone.as_ref())
-                        {
-                            canvas.complete_connection_to_new_node(source, new_node, cx);
-                        }
-
-                        canvas.popup_palette_graph_pos = None;
-                        canvas.quick_palette_connection_source = None;
-                        canvas.quick_palette_open = false;
-                        canvas.quick_palette_focus_pending = false;
+                            .unwrap_or_else(|| canvas.view_center(cx));
+                        let stagger = (canvas.graph(cx).nodes.len() % 8) as f32 * 18.0;
+                        let place_pos = graphy_render::Vec2::new(base.x + stagger, base.y + stagger);
+                        let source = canvas.quick_palette_connection_source.take();
+                        canvas.add_definition_node(&def_now.id, place_pos, source, cx);
+                        canvas.close_quick_palette();
                         cx.notify();
                     });
                 }

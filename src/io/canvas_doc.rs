@@ -198,3 +198,16 @@ pub fn to_authored(doc: &GraphDescription, sidecar: &AuthoredSidecar) -> authore
     out
 }
 
+
+/// A node property as the editor's text fields hold it, as the document stores it.
+pub fn property_value(raw: &str) -> graphy::JsonValue {
+    blueprint_compiler::authored::property_value_from_raw(raw)
+}
+
+/// A stored node property as editor text.
+pub fn property_string(value: &graphy::JsonValue) -> String {
+    match value {
+        graphy::JsonValue::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}

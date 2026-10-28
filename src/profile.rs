@@ -13,7 +13,7 @@
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::core::definitions::NodeDefinitions;
-use crate::core::graph::BlueprintGraph;
+use graphy::{GraphCommand, GraphDescription};
 use crate::io::formats::BlueprintAsset;
 
 /// Outline of a pin.
@@ -86,10 +86,13 @@ pub trait EditorProfile: Send + Sync + 'static {
         Vec::new()
     }
 
-    /// Called after a parameter of node `node_id` was edited, so the profile can bring
+    /// Called after a parameter of node `node_id` was edited (`graph` already has
+    /// the new value), so the profile can bring
     /// the graph in line: pins named after a resource change, and the wires on
-    /// them must follow.
-    fn parameter_changed(&self, _graph: &mut BlueprintGraph, _node_id: &str) {}
+    /// them must follow. Returns the extra commands, applied in the same edit.
+    fn parameter_changed(&self, _graph: &GraphDescription, _node_id: &str) -> Vec<GraphCommand> {
+        Vec::new()
+    }
 
     /// The title a node shows, when it depends on its properties (a buffer node
     /// is titled with its buffer). `None` keeps the definition's title.
@@ -101,11 +104,11 @@ pub trait EditorProfile: Send + Sync + 'static {
         None
     }
 
-    /// Arranges the graph's nodes (and the comments that group them). Returns
-    /// whether it did anything; the toolbar's Auto Layout button is shown when the
+    /// Arranges the graph's nodes (and the comments that group them) as edit
+    /// commands, empty if nothing moves; the toolbar's Auto Layout button is shown when the
     /// profile is installed.
-    fn auto_layout(&self, _graph: &mut BlueprintGraph) -> bool {
-        false
+    fn auto_layout(&self, _graph: &GraphDescription) -> Vec<GraphCommand> {
+        Vec::new()
     }
 
     /// The panels shown, as tabs, on the left of the canvas, such as a list of buffers

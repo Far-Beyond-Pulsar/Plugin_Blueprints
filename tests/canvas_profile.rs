@@ -8,7 +8,7 @@ use graphy_gpui::GraphProfile;
 use graphy_render::{FixedAdvance, LayoutMetrics, Scene};
 
 fn profile() -> BlueprintProfile {
-    BlueprintProfile::blueprint(Arc::default(), Arc::default())
+    BlueprintProfile::blueprint(Arc::default())
 }
 
 #[test]

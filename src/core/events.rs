@@ -5,51 +5,6 @@
 //! and cross-panel communication.
 
 use gpui::*;
-use schemars::JsonSchema;
-use serde::Deserialize;
-
-// ============================================================================
-// Context Menu Actions
-// ============================================================================
-
-/// Action to duplicate a node in the blueprint graph.
-#[derive(Action, Clone, Debug, PartialEq, Eq, Deserialize, JsonSchema)]
-#[action(namespace = blueprint_editor)]
-pub struct DuplicateNode {
-    pub node_id: String,
-}
-
-/// Action to delete a node from the blueprint graph.
-#[derive(Action, Clone, Debug, PartialEq, Eq, Deserialize, JsonSchema)]
-#[action(namespace = blueprint_editor)]
-pub struct DeleteNode {
-    pub node_id: String,
-}
-
-/// Action to copy a node to the clipboard.
-#[derive(Action, Clone, Debug, PartialEq, Eq, Deserialize, JsonSchema)]
-#[action(namespace = blueprint_editor)]
-pub struct CopyNode {
-    pub node_id: String,
-}
-
-/// Action to paste a node from the clipboard.
-#[derive(Action, Clone, Debug, PartialEq, Eq, Deserialize, JsonSchema)]
-#[action(namespace = blueprint_editor)]
-pub struct PasteNode;
-
-/// Action to disconnect a specific pin from all connections.
-#[derive(Action, Clone, Debug, PartialEq, Eq, Deserialize, JsonSchema)]
-#[action(namespace = blueprint_editor)]
-pub struct DisconnectPin {
-    pub node_id: String,
-    pub pin_id: String,
-}
-
-/// Action to open the "Add Node" menu at the current cursor position.
-#[derive(Action, Clone, Debug, PartialEq, Eq, Deserialize, JsonSchema)]
-#[action(namespace = blueprint_editor)]
-pub struct OpenAddNodeMenu;
 
 // ============================================================================
 // Cross-Panel Events

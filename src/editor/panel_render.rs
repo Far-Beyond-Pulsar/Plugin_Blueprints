@@ -12,17 +12,20 @@ use ui::{
 
 use super::panel::BlueprintEditorPanel;
 use super::toolbar::ToolbarRenderer;
-use crate::core::events::*;
-use crate::rendering::graph::NodeGraphRenderer;
+use crate::core::events::{OpenEngineLibraryRequest, ShowNodePickerRequest};
+
 
 /// A node entry in the find-panel listing, tagged with its owning subgraph tab
 /// so clicking it can switch tabs and pan to the correct canvas.
 struct FindNodeEntry {
-    node: crate::core::types::BlueprintNode,
+    id: String,
+    title: String,
+    node_type: String,
+    position: (f64, f64),
     tab_index: usize,
     tab_name: String,
     is_active_tab: bool,
-    canvas: Option<Entity<crate::editor::workspace_panels::GraphCanvasPanel>>,
+    canvas: Option<Entity<crate::editor::graph_canvas_panel::GraphCanvasPanel>>,
 }
 
 impl Panel for BlueprintEditorPanel {
@@ -273,15 +276,43 @@ impl BlueprintEditorPanel {
                 .iter()
                 .find(|(id, _)| id == &tab.id)
                 .map(|(_, c)| c.clone());
-            // Prefer live canvas data, fall back to tab snapshot.
-            let graph = canvas
-                .as_ref()
-                .map(|c| c.read(cx).graph.clone())
-                .unwrap_or_else(|| tab.graph.clone());
-            total_nodes += graph.nodes.len();
-            for node in &graph.nodes {
+            // Live canvas data, or the document of a tab not yet mounted.
+            let nodes: Vec<(String, String, String, (f64, f64))> = match &canvas {
+                Some(c) => {
+                    let panel = c.read(cx);
+                    let scene = panel.canvas.read(cx).scene();
+                    panel
+                        .graph(cx)
+                        .nodes
+                        .values()
+                        .map(|n| {
+                            let title = scene
+                                .node(&n.id)
+                                .map(|s| s.presentation.title.clone())
+                                .unwrap_or_else(|| n.node_type.clone());
+                            (n.id.clone(), title, n.node_type.clone(), (n.position.x, n.position.y))
+                        })
+                        .collect()
+                }
+                None => tab
+                    .pending
+                    .as_ref()
+                    .map(|doc| {
+                        doc.graph
+                            .nodes
+                            .values()
+                            .map(|n| (n.id.clone(), n.node_type.clone(), n.node_type.clone(), (n.position.x, n.position.y)))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            };
+            total_nodes += nodes.len();
+            for (id, title, node_type, position) in nodes {
                 entries.push(FindNodeEntry {
-                    node: node.clone(),
+                    id,
+                    title,
+                    node_type,
+                    position,
                     tab_index: ti,
                     tab_name: tab.name.clone(),
                     is_active_tab: ti == active_tab_index,
@@ -300,11 +331,8 @@ impl BlueprintEditorPanel {
             entries
                 .into_iter()
                 .filter(|e| {
-                    e.node.title.to_lowercase().contains(&query)
-                        || format!("{:?}", e.node.node_type)
-                            .to_lowercase()
-                            .contains(&query)
-                        || e.node.definition_id.to_lowercase().contains(&query)
+                    e.title.to_lowercase().contains(&query)
+                        || e.node_type.to_lowercase().contains(&query)
                 })
                 .collect()
         };
@@ -394,8 +422,8 @@ impl BlueprintEditorPanel {
                                                 return div().h(px(36.0)).into_any_element();
                                             };
 
-                                            let node_id = entry.node.id.clone();
-                                            let node_title = entry.node.title.clone();
+                                            let node_id = entry.id.clone();
+                                            let node_title = entry.title.clone();
                                             let node_tab_name = entry.tab_name.clone();
                                             let node_tab_index = entry.tab_index;
                                             let is_active_tab = entry.is_active_tab;
@@ -415,12 +443,6 @@ impl BlueprintEditorPanel {
                                                         panel.clear_sidebar_selections(
                                                             false, false, false, false,
                                                         );
-                                                        panel.graph.selected_nodes.clear();
-                                                        panel
-                                                            .graph
-                                                            .selected_nodes
-                                                            .push(node_id.clone());
-
                                                         // Switch to the owning tab if needed
                                                         if node_tab_index != panel.active_tab_index
                                                         {
@@ -433,14 +455,11 @@ impl BlueprintEditorPanel {
 
                                                         // Pan & select on the correct canvas
                                                         if let Some(ref canvas) = canvas_for_click {
-                                                            canvas.update(cx, |canvas, _cx| {
-                                                                canvas.graph.selected_nodes.clear();
-                                                                canvas
-                                                                    .graph
-                                                                    .selected_nodes
-                                                                    .push(node_id.clone());
-                                                                canvas
-                                                                    .animate_pan_to_node(&node_id);
+                                                            canvas.update(cx, |canvas, cx| {
+                                                                canvas.canvas.update(cx, |c, cx| {
+                                                                    c.select_nodes([node_id.clone()], cx)
+                                                                });
+                                                                canvas.animate_pan_to_node(&node_id, cx);
                                                             });
                                                         }
                                                         cx.notify();
@@ -484,8 +503,8 @@ impl BlueprintEditorPanel {
                                                         .text_color(cx.theme().muted_foreground)
                                                         .child(format!(
                                                             "({:.0}, {:.0})",
-                                                            entry.node.position.x,
-                                                            entry.node.position.y
+                                                            entry.position.0,
+                                                            entry.position.1
                                                         )),
                                                 )
                                                 .into_any_element()
@@ -631,61 +650,11 @@ impl Render for BlueprintEditorPanel {
             self.initialize_workspace(window, cx);
         }
 
-        // Comment color bindings are per-canvas; refresh via the active canvas
-        if let Some(c) = self.active_canvas().cloned() {
-            c.update(cx, |canvas, cx| {
-                canvas.refresh_comment_color_bindings(window, cx)
-            });
-        }
-
         v_flex()
             .size_full()
             .relative()
             .bg(cx.theme().background)
             .key_context("BlueprintEditor")
-            .on_action(cx.listener(|panel, action: &DuplicateNode, _window, cx| {
-                let nid = action.node_id.clone();
-                if let Some(c) = panel.active_canvas().cloned() {
-                    c.update(cx, |canvas, cx| canvas.duplicate_node(nid, cx));
-                }
-            }))
-            .on_action(cx.listener(|panel, action: &DeleteNode, _window, cx| {
-                let nid = action.node_id.clone();
-                if let Some(c) = panel.active_canvas().cloned() {
-                    c.update(cx, |canvas, cx| canvas.delete_node(nid, cx));
-                }
-            }))
-            .on_action(cx.listener(|panel, action: &CopyNode, _window, cx| {
-                let nid = action.node_id.clone();
-                if let Some(c) = panel.active_canvas().cloned() {
-                    c.update(cx, |canvas, cx| canvas.copy_node(nid, cx));
-                }
-            }))
-            .on_action(cx.listener(|panel, _action: &PasteNode, _window, cx| {
-                if let Some(c) = panel.active_canvas().cloned() {
-                    c.update(cx, |canvas, cx| canvas.paste_node(cx));
-                }
-            }))
-            .on_action(cx.listener(|panel, action: &DisconnectPin, _window, cx| {
-                let nid = action.node_id.clone();
-                let pid = action.pin_id.clone();
-                if let Some(c) = panel.active_canvas().cloned() {
-                    c.update(cx, |canvas, cx| canvas.disconnect_pin(nid, pid, cx));
-                }
-            }))
-            .on_action(cx.listener(|panel, _action: &OpenAddNodeMenu, window, cx| {
-                if let Some(c) = panel.active_canvas().cloned() {
-                    c.update(cx, |canvas, cx| {
-                        if let Some(bounds) = canvas.element_bounds {
-                            let sc = Point::new(bounds.center().x, bounds.center().y);
-                            let gp = NodeGraphRenderer::screen_to_graph_pos(sc, &canvas.graph);
-                            // drop canvas borrow before calling show_node_picker on panel
-                            let _ = gp;
-                        }
-                    });
-                }
-                // TODO: route show_node_picker through active canvas
-            }))
             .child(ToolbarRenderer::render(self, window, cx))
             .child(div().flex_1().min_h_0().map(|el| {
                 if let Some(workspace) = &self.workspace {

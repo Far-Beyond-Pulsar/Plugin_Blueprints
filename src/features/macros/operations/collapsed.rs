@@ -1,8 +1,11 @@
 //! Collapse and expand private collapsed graph regions.
 
 use super::*;
+use crate::core::types::NodeType;
+use graphy::Connection;
+use std::collections::{HashMap, HashSet};
 
-impl crate::editor::workspace_panels::GraphCanvasPanel {
+impl GraphCanvasPanel {
     /// Expand a private collapsed graph back into its containing graph.
     pub fn expand_collapsed_node(
         &mut self,
@@ -10,220 +13,163 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        use crate::core::types::Connection;
-
-        let Some(call_node) = self
-            .graph
-            .nodes
-            .iter()
-            .find(|node| node.id == node_id)
-            .cloned()
-        else {
+        let graph = self.graph(cx).clone();
+        let Some(call_node) = graph.nodes.get(&node_id).cloned() else {
             return;
         };
-        let Some(graph_id) = crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(
-            &call_node.definition_id,
-        )
-        .map(str::to_owned) else {
+        let Some(graph_id) = SubGraphReference::id_from_definition_id(&call_node.node_type)
+            .map(str::to_owned)
+        else {
             return;
         };
         let Some(panel) = self.panel.upgrade() else {
             return;
         };
+        let this_tab = self.id.clone();
 
-        let mut expanded = None;
-        panel.update(cx, |editor, panel_cx| {
-            let Some(definition) = editor
-                .subgraphs
-                .iter()
-                .find(|definition| {
-                    definition.id == graph_id
-                        && definition.kind == graphy_blueprint::SubGraphKind::Collapsed
-                })
-                .cloned()
-            else {
-                return;
-            };
-            let tab_graph = editor
-                .open_tabs
-                .iter()
-                .find(|tab| tab.id == graph_id)
-                .map(|tab| tab.graph.clone())
-                .filter(|graph| {
-                    let has_entry = graph
-                        .nodes
-                        .iter()
-                        .any(|node| node.node_type == NodeType::MacroEntry);
-                    let has_exit = graph
-                        .nodes
-                        .iter()
-                        .any(|node| node.node_type == NodeType::MacroExit);
-                    let has_body = graph.nodes.iter().any(|node| {
-                        node.node_type != NodeType::MacroEntry
-                            && node.node_type != NodeType::MacroExit
+        // The collapsed graph's body: its open tab if that still looks like a
+        // collapsed graph, otherwise the saved definition.
+        let editor = panel.read(cx);
+        let Some(definition) = editor
+            .subgraphs
+            .iter()
+            .find(|d| d.id == graph_id && d.kind == graphy_blueprint::SubGraphKind::Collapsed)
+            .cloned()
+        else {
+            return;
+        };
+        let authored_inner = editor
+            .tab_authored_graph(&graph_id, cx)
+            .filter(|g| {
+                let has = |ty: &str| g.nodes.values().any(|n| n.node_type == ty);
+                let has_body = g
+                    .nodes
+                    .values()
+                    .any(|n| n.node_type != "macro_entry" && n.node_type != "macro_exit");
+                let has_collapsed_sentinels = g
+                    .nodes
+                    .values()
+                    .any(|n| n.node_type == "macro_entry" && n.id.starts_with("collapsed_entry_"))
+                    && g.nodes.values().any(|n| {
+                        n.node_type == "macro_exit" && n.id.starts_with("collapsed_exit_")
                     });
-                    let has_collapsed_sentinels = graph.nodes.iter().any(|node| {
-                        node.node_type == NodeType::MacroEntry
-                            && node.id.starts_with("collapsed_entry_")
-                    }) && graph.nodes.iter().any(|node| {
-                        node.node_type == NodeType::MacroExit
-                            && node.id.starts_with("collapsed_exit_")
-                    });
-                    has_entry && has_exit && (has_body || has_collapsed_sentinels)
-                });
-            let Some(mut inner) = tab_graph.or_else(|| {
-                editor
-                    .convert_graph_description_to_blueprint(&definition.graph, window, panel_cx)
-                    .ok()
-            }) else {
-                return;
-            };
-            normalize_subgraph_boundary(&mut inner, NodeType::MacroEntry);
-            normalize_subgraph_boundary(&mut inner, NodeType::MacroExit);
-            let Some(entry_id) = inner
-                .nodes
-                .iter()
-                .find(|node| node.node_type == NodeType::MacroEntry)
-                .map(|node| node.id.clone())
-            else {
-                return;
-            };
-            let Some(exit_id) = inner
-                .nodes
-                .iter()
-                .find(|node| node.node_type == NodeType::MacroExit)
-                .map(|node| node.id.clone())
-            else {
-                return;
-            };
+                has("macro_entry") && has("macro_exit") && (has_body || has_collapsed_sentinels)
+            })
+            .unwrap_or_else(|| definition.graph.clone());
+        let mut inner = BlueprintEditorPanel::tab_doc_from_authored(&authored_inner).graph;
+        normalize_subgraph_boundary(&mut inner, "macro_entry");
+        normalize_subgraph_boundary(&mut inner, "macro_exit");
+        let find = |ty: &str| inner.nodes.values().find(|n| n.node_type == ty).map(|n| n.id.clone());
+        let (Some(entry_id), Some(exit_id)) = (find("macro_entry"), find("macro_exit")) else {
+            return;
+        };
 
-            let incoming: std::collections::HashMap<String, Vec<Connection>> = self
-                .graph
-                .connections
-                .iter()
-                .filter(|connection| connection.target_node == node_id)
-                .fold(std::collections::HashMap::new(), |mut map, connection| {
-                    map.entry(connection.target_pin.clone())
-                        .or_default()
-                        .push(connection.clone());
-                    map
-                });
-            let outgoing: std::collections::HashMap<String, Vec<Connection>> = self
-                .graph
-                .connections
-                .iter()
-                .filter(|connection| connection.source_node == node_id)
-                .fold(std::collections::HashMap::new(), |mut map, connection| {
-                    map.entry(connection.source_pin.clone())
-                        .or_default()
-                        .push(connection.clone());
-                    map
-                });
-
-            let mut restored_connections = self
-                .graph
-                .connections
-                .iter()
-                .filter(|connection| {
-                    connection.source_node != node_id && connection.target_node != node_id
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            for connection in &inner.connections {
-                if connection.source_node.as_str() == entry_id.as_str() {
-                    if let Some(outer) = incoming.get(&connection.source_pin) {
-                        for outer in outer {
-                            restored_connections.push(Connection {
-                                id: uuid::Uuid::new_v4().to_string(),
-                                source_node: outer.source_node.clone(),
-                                source_pin: outer.source_pin.clone(),
-                                target_node: connection.target_node.clone(),
-                                target_pin: connection.target_pin.clone(),
-                                connection_type: connection.connection_type.clone(),
-                            });
-                        }
-                    }
-                } else if connection.target_node.as_str() == exit_id.as_str() {
-                    if let Some(outer) = outgoing.get(&connection.target_pin) {
-                        for outer in outer {
-                            restored_connections.push(Connection {
-                                id: uuid::Uuid::new_v4().to_string(),
-                                source_node: connection.source_node.clone(),
-                                source_pin: connection.source_pin.clone(),
-                                target_node: outer.target_node.clone(),
-                                target_pin: outer.target_pin.clone(),
-                                connection_type: connection.connection_type.clone(),
-                            });
-                        }
-                    }
-                } else {
-                    restored_connections.push(connection.clone());
-                }
+        // Wires that crossed the call node's pins, by pin.
+        let mut incoming: HashMap<String, Vec<Connection>> = HashMap::new();
+        let mut outgoing: HashMap<String, Vec<Connection>> = HashMap::new();
+        for c in &graph.connections {
+            if c.target_node == node_id {
+                incoming.entry(c.target_pin.clone()).or_default().push(c.clone());
             }
+            if c.source_node == node_id {
+                outgoing.entry(c.source_pin.clone()).or_default().push(c.clone());
+            }
+        }
 
-            inner.nodes.retain(|node| {
-                node.node_type != NodeType::MacroEntry && node.node_type != NodeType::MacroExit
+        // A collapsed instance can be duplicated like any other macro call.
+        // Expanding a second instance must not insert the same node IDs as the
+        // first expansion.
+        let remap: HashMap<String, String> = inner
+            .nodes
+            .keys()
+            .filter(|id| **id != entry_id && **id != exit_id)
+            .map(|id| (id.clone(), uuid::Uuid::new_v4().to_string()))
+            .collect();
+
+        let mut commands = vec![GraphCommand::RemoveNode {
+            id: node_id.clone(),
+        }];
+        let mut body: Vec<&NodeInstance> = inner
+            .nodes
+            .values()
+            .filter(|n| n.id != entry_id && n.id != exit_id)
+            .collect();
+        body.sort_by(|a, b| a.id.cmp(&b.id));
+        for node in &body {
+            let mut node = (*node).clone();
+            node.id = remap[&node.id].clone();
+            node.position.x += call_node.position.x;
+            node.position.y += call_node.position.y;
+            commands.push(GraphCommand::AddNode(node));
+        }
+        let mapped = |id: &str| remap.get(id).cloned().unwrap_or_else(|| id.to_string());
+        let mut connect = |source: (&str, &str), target: (&str, &str), like: &Connection| {
+            let mut c = Connection::new(source.0, source.1, target.0, target.1, like.connection_type);
+            c.id = Some(uuid::Uuid::new_v4().to_string());
+            commands.push(GraphCommand::Connect(c));
+        };
+        for c in &inner.connections {
+            if c.source_node == entry_id {
+                for outer in incoming.get(&c.source_pin).into_iter().flatten() {
+                    connect(
+                        (&outer.source_node, &outer.source_pin),
+                        (&mapped(&c.target_node), &c.target_pin),
+                        c,
+                    );
+                }
+            } else if c.target_node == exit_id {
+                for outer in outgoing.get(&c.target_pin).into_iter().flatten() {
+                    connect(
+                        (&mapped(&c.source_node), &c.source_pin),
+                        (&outer.target_node, &outer.target_pin),
+                        c,
+                    );
+                }
+            } else {
+                connect(
+                    (&mapped(&c.source_node), &c.source_pin),
+                    (&mapped(&c.target_node), &c.target_pin),
+                    c,
+                );
+            }
+        }
+        let restored: Vec<String> = remap.values().cloned().collect();
+
+        // Collapsed definitions are private to their call sites. Keep the
+        // definition while another instance still references it, and remove
+        // its saved graph and tab after the last instance expands.
+        let references = |ty: &str| SubGraphReference::id_from_definition_id(ty) == Some(graph_id.as_str());
+        let editor = panel.read(cx);
+        let other_in_this_graph = graph.nodes.values().any(|n| n.id != node_id && references(&n.node_type));
+        let other_in_tabs = editor
+            .graph_panels
+            .iter()
+            .filter(|(id, _)| *id != this_tab && *id != graph_id)
+            .any(|(_, canvas)| {
+                canvas
+                    .read(cx)
+                    .graph(cx)
+                    .nodes
+                    .values()
+                    .any(|n| references(&n.node_type))
+            })
+            || editor.open_tabs.iter().filter(|t| t.id != this_tab).any(|t| {
+                t.pending
+                    .as_ref()
+                    .is_some_and(|doc| doc.graph.nodes.values().any(|n| references(&n.node_type)))
             });
+        let other_in_definitions = editor
+            .subgraphs
+            .iter()
+            .filter(|s| s.id != graph_id)
+            .any(|s| s.graph.nodes.values().any(|n| references(&n.node_type)));
+        let remove_definition = !(other_in_this_graph || other_in_tabs || other_in_definitions);
 
-            // A collapsed instance can be duplicated like any other macro
-            // call. Expanding a second instance must not insert the same node
-            // IDs as the first expansion, or the canvas will render both sets
-            // at once and connections will target the wrong copy.
-            let remapped_ids: std::collections::HashMap<String, String> = inner
-                .nodes
-                .iter()
-                .map(|node| (node.id.clone(), uuid::Uuid::new_v4().to_string()))
-                .collect();
-            for node in &mut inner.nodes {
-                if let Some(new_id) = remapped_ids.get(&node.id) {
-                    node.id = new_id.clone();
-                }
-            }
-            for connection in &mut restored_connections {
-                if let Some(new_id) = remapped_ids.get(&connection.source_node) {
-                    connection.source_node = new_id.clone();
-                }
-                if let Some(new_id) = remapped_ids.get(&connection.target_node) {
-                    connection.target_node = new_id.clone();
-                }
-            }
-            for node in &mut inner.nodes {
-                node.position.x += call_node.position.x;
-                node.position.y += call_node.position.y;
-                node.is_selected = true;
-            }
-            expanded = Some((inner.nodes, restored_connections));
+        let _ = self.apply("Expand collapsed graph", commands, cx);
+        self.canvas.update(cx, |canvas, cx| canvas.select_nodes(restored, cx));
 
-            // Collapsed definitions are private to their call sites. Keep the
-            // definition while another instance still references it, but
-            // remove its saved graph and tab after the last instance expands.
-            let references_graph = |nodes: &[BlueprintNode]| {
-                nodes.iter().any(|node| {
-                    node.id != node_id
-                        && crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(
-                            &node.definition_id,
-                        ) == Some(graph_id.as_str())
-                })
-            };
-            let has_other_instance = references_graph(&self.graph.nodes)
-                || editor
-                    .open_tabs
-                    .iter()
-                    .filter(|tab| tab.id != self.id)
-                    .any(|tab| references_graph(&tab.graph.nodes))
-                || editor
-                    .subgraphs
-                    .iter()
-                    .filter(|subgraph| subgraph.id != graph_id)
-                    .any(|subgraph| {
-                        subgraph.graph.nodes.values().any(|node| {
-                            crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(
-                                &node.node_type,
-                            ) == Some(graph_id.as_str())
-                        })
-                    });
-
-            if !has_other_instance {
+        if remove_definition {
+            panel.update(cx, |editor, panel_cx| {
                 let active_tab_id = editor
                     .open_tabs
                     .get(editor.active_tab_index)
@@ -239,22 +185,12 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
                     });
                 editor.graph_workspace_tabs_dirty = true;
                 editor.is_dirty = true;
+                editor.sync_profile_data();
                 editor.invalidate_palette(panel_cx);
                 editor.refresh_graph_workspace_tabs(window, panel_cx);
-            }
-            panel_cx.notify();
-        });
-
-        let Some((nodes, connections)) = expanded else {
-            return;
-        };
-        self.graph.nodes.retain(|node| node.id != node_id);
-        let restored_ids = nodes.iter().map(|node| node.id.clone()).collect::<Vec<_>>();
-        self.graph.nodes.extend(nodes);
-        self.graph.connections = connections.into();
-        self.graph.selected_nodes = restored_ids;
-        self.is_dirty = true;
-        cx.notify();
+                panel_cx.notify();
+            });
+        }
     }
 
     /// Replace the selected nodes with a single call node backed by a private
@@ -262,345 +198,231 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
     /// explicit graph interface pin, so the parent and nested graphs retain
     /// the same connections.
     pub fn collapse_selected_nodes(&mut self, cx: &mut Context<Self>) {
-        use crate::core::types::{BlueprintNode, Connection, NodeType, Pin, PinType};
-        use graphy_blueprint::{DataType as GraphDataType, SubGraphPin};
+        use graphy_blueprint::{DataType as AuthoredType, SubGraphPin};
 
-        let selected: std::collections::HashSet<String> = self
-            .graph
-            .selected_nodes
-            .iter()
-            .filter(|id| self.graph.nodes.iter().any(|n| n.id == **id))
-            .cloned()
+        let graph = self.graph(cx).clone();
+        let selected: HashSet<String> = self
+            .selected_nodes(cx)
+            .into_iter()
+            .filter(|id| graph.nodes.contains_key(id))
             .collect();
         if selected.is_empty() {
             return;
         }
-
-        let mut moved_nodes: Vec<BlueprintNode> = self
-            .graph
-            .nodes
+        let mut moved: Vec<NodeInstance> = selected
             .iter()
-            .filter(|node| selected.contains(&node.id))
-            .cloned()
+            .filter_map(|id| graph.nodes.get(id).cloned())
             .collect();
+        moved.sort_by(|a, b| a.id.cmp(&b.id));
         // Macro sentinels belong to their containing graph and cannot be
         // nested as ordinary nodes in a collapsed region.
-        if moved_nodes
+        if moved
             .iter()
-            .any(|node| matches!(node.node_type, NodeType::MacroEntry | NodeType::MacroExit))
+            .any(|n| matches!(NodeType::of(&n.node_type), NodeType::MacroEntry | NodeType::MacroExit))
         {
             return;
         }
-        let Some(min_x) = moved_nodes.iter().map(|n| n.position.x).reduce(f32::min) else {
-            return;
+        let rects: Vec<_> = {
+            let canvas = self.canvas.read(cx);
+            moved
+                .iter()
+                .filter_map(|n| canvas.scene().node(&n.id).map(|s| s.rect()))
+                .collect()
         };
-        let min_y = moved_nodes
-            .iter()
-            .map(|n| n.position.y)
-            .fold(f32::INFINITY, f32::min);
-        let max_x = moved_nodes
-            .iter()
-            .map(|n| n.position.x + n.size.width)
-            .fold(f32::NEG_INFINITY, f32::max);
-        let max_y = moved_nodes
-            .iter()
-            .map(|n| n.position.y + n.size.height)
-            .fold(f32::NEG_INFINITY, f32::max);
+        if rects.is_empty() {
+            return;
+        }
+        let min_x = rects.iter().map(|r| r.min.x).fold(f32::INFINITY, f32::min);
+        let min_y = rects.iter().map(|r| r.min.y).fold(f32::INFINITY, f32::min);
+        let max_x = rects.iter().map(|r| r.max.x).fold(f32::NEG_INFINITY, f32::max);
+        let max_y = rects.iter().map(|r| r.max.y).fold(f32::NEG_INFINITY, f32::max);
         let graph_id = uuid::Uuid::new_v4().to_string();
-        let graph_name = format!("Collapsed {}", self.graph.selected_nodes.len());
+        let graph_name = format!("Collapsed {}", selected.len());
 
-        for node in &mut moved_nodes {
-            node.position.x -= min_x;
-            node.position.y -= min_y;
-            node.is_selected = false;
+        for node in &mut moved {
+            node.position.x -= f64::from(min_x);
+            node.position.y -= f64::from(min_y);
         }
 
-        let crossing: Vec<Connection> = self
-            .graph
+        let crossing: Vec<Connection> = graph
             .connections
             .iter()
-            .filter(|connection| {
-                selected.contains(&connection.source_node)
-                    != selected.contains(&connection.target_node)
-            })
+            .filter(|c| selected.contains(&c.source_node) != selected.contains(&c.target_node))
             .cloned()
             .collect();
+        let mut internal_connections: Vec<Connection> = graph
+            .connections
+            .iter()
+            .filter(|c| selected.contains(&c.source_node) && selected.contains(&c.target_node))
+            .cloned()
+            .collect();
+        let mut parent_connections: Vec<Connection> = Vec::new();
+
+        let entry_id = format!("collapsed_entry_{graph_id}");
+        let exit_id = format!("collapsed_exit_{graph_id}");
+        let instance_id = format!("collapsed_{graph_id}");
         let mut interface = graphy_blueprint::SubGraphInterface {
             inputs: Vec::new(),
             outputs: Vec::new(),
         };
-        let mut internal_connections = self
-            .graph
-            .connections
-            .iter()
-            .filter(|connection| {
-                selected.contains(&connection.source_node)
-                    && selected.contains(&connection.target_node)
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut parent_connections = self
-            .graph
-            .connections
-            .iter()
-            .filter(|connection| {
-                !selected.contains(&connection.source_node)
-                    && !selected.contains(&connection.target_node)
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-
-        let entry_id = format!("collapsed_entry_{graph_id}");
-        let exit_id = format!("collapsed_exit_{graph_id}");
         let mut entry_outputs = Vec::new();
         let mut exit_inputs = Vec::new();
         let mut instance_inputs = Vec::new();
         let mut instance_outputs = Vec::new();
 
-        for (index, connection) in crossing.iter().enumerate() {
+        let new_connection = |s: (&str, &str), t: (&str, &str), like: &Connection| {
+            let mut c = Connection::new(s.0, s.1, t.0, t.1, like.connection_type);
+            c.id = Some(uuid::Uuid::new_v4().to_string());
+            c
+        };
+        let pin_of = |node: &str, pin: &str, outputs: bool| -> Option<PinInstance> {
+            let n = graph.nodes.get(node)?;
+            let pins = if outputs { &n.outputs } else { &n.inputs };
+            pins.iter().find(|p| p.id == pin).cloned()
+        };
+        let interface_pin = |id: &str, name: &str, data_type: &DataType| SubGraphPin {
+            id: id.to_string(),
+            name: name.to_string(),
+            data_type: AuthoredType::from_type_str(&type_string(data_type)),
+            description: None,
+            default_value: None,
+            is_instance_editable: false,
+            category: None,
+        };
+
+        for (index, c) in crossing.iter().enumerate() {
             let pin_id = format!("port_{index}");
-            if selected.contains(&connection.target_node) {
-                let target = moved_nodes
-                    .iter()
-                    .find(|node| node.id == connection.target_node)
-                    .and_then(|node| {
-                        node.inputs
-                            .iter()
-                            .find(|pin| pin.id == connection.target_pin)
-                    });
-                let source = self
-                    .graph
-                    .nodes
-                    .iter()
-                    .find(|node| node.id == connection.source_node)
-                    .and_then(|node| {
-                        node.outputs
-                            .iter()
-                            .find(|pin| pin.id == connection.source_pin)
-                    });
-                let Some(target) = target else { return };
-                let Some(source) = source else { return };
-                let name = format!("{}.{}", source.name, target.name);
-                let data_type = target.data_type.type_name.clone();
-                interface.inputs.push(SubGraphPin {
-                    id: pin_id.clone(),
-                    name: name.clone(),
-                    data_type: GraphDataType::from_type_str(&data_type),
-                    description: None,
-                    default_value: None,
-                    is_instance_editable: false,
-                    category: None,
-                });
-                instance_inputs.push(Pin {
-                    id: pin_id.clone(),
-                    name,
-                    pin_type: PinType::Input,
-                    data_type: target.data_type.clone(),
-                });
-                entry_outputs.push(Pin {
-                    id: pin_id.clone(),
-                    name: target.name.clone(),
-                    pin_type: PinType::Output,
-                    data_type: target.data_type.clone(),
-                });
-                internal_connections.push(Connection {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    source_node: entry_id.clone(),
-                    source_pin: pin_id,
-                    target_node: connection.target_node.clone(),
-                    target_pin: connection.target_pin.clone(),
-                    connection_type: connection.connection_type.clone(),
-                });
-                parent_connections.push(Connection {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    source_node: connection.source_node.clone(),
-                    source_pin: connection.source_pin.clone(),
-                    target_node: format!("collapsed_{graph_id}"),
-                    target_pin: format!("port_{index}"),
-                    connection_type: connection.connection_type.clone(),
-                });
+            if selected.contains(&c.target_node) {
+                let (Some(target), Some(source)) = (
+                    pin_of(&c.target_node, &c.target_pin, false),
+                    pin_of(&c.source_node, &c.source_pin, true),
+                ) else {
+                    return;
+                };
+                let name = format!("{}.{}", source.pin.name, target.pin.name);
+                interface
+                    .inputs
+                    .push(interface_pin(&pin_id, &name, &target.pin.data_type));
+                instance_inputs.push(pin_instance(&pin_id, &name, target.pin.data_type.clone(), PinType::Input));
+                entry_outputs.push(pin_instance(
+                    &pin_id,
+                    &target.pin.name,
+                    target.pin.data_type.clone(),
+                    PinType::Output,
+                ));
+                internal_connections.push(new_connection(
+                    (&entry_id, &pin_id),
+                    (&c.target_node, &c.target_pin),
+                    c,
+                ));
+                parent_connections.push(new_connection(
+                    (&c.source_node, &c.source_pin),
+                    (&instance_id, &pin_id),
+                    c,
+                ));
             } else {
-                let source = moved_nodes
-                    .iter()
-                    .find(|node| node.id == connection.source_node)
-                    .and_then(|node| {
-                        node.outputs
-                            .iter()
-                            .find(|pin| pin.id == connection.source_pin)
-                    });
-                let target = self
-                    .graph
-                    .nodes
-                    .iter()
-                    .find(|node| node.id == connection.target_node)
-                    .and_then(|node| {
-                        node.inputs
-                            .iter()
-                            .find(|pin| pin.id == connection.target_pin)
-                    });
-                let Some(source) = source else { return };
-                let Some(target) = target else { return };
-                let name = format!("{}.{}", source.name, target.name);
-                let data_type = source.data_type.type_name.clone();
-                interface.outputs.push(SubGraphPin {
-                    id: pin_id.clone(),
-                    name: name.clone(),
-                    data_type: GraphDataType::from_type_str(&data_type),
-                    description: None,
-                    default_value: None,
-                    is_instance_editable: false,
-                    category: None,
-                });
-                instance_outputs.push(Pin {
-                    id: pin_id.clone(),
-                    name,
-                    pin_type: PinType::Output,
-                    data_type: source.data_type.clone(),
-                });
-                exit_inputs.push(Pin {
-                    id: pin_id.clone(),
-                    name: source.name.clone(),
-                    pin_type: PinType::Input,
-                    data_type: source.data_type.clone(),
-                });
-                internal_connections.push(Connection {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    source_node: connection.source_node.clone(),
-                    source_pin: connection.source_pin.clone(),
-                    target_node: exit_id.clone(),
-                    target_pin: pin_id,
-                    connection_type: connection.connection_type.clone(),
-                });
-                parent_connections.push(Connection {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    source_node: format!("collapsed_{graph_id}"),
-                    source_pin: format!("port_{index}"),
-                    target_node: connection.target_node.clone(),
-                    target_pin: connection.target_pin.clone(),
-                    connection_type: connection.connection_type.clone(),
-                });
+                let (Some(source), Some(target)) = (
+                    pin_of(&c.source_node, &c.source_pin, true),
+                    pin_of(&c.target_node, &c.target_pin, false),
+                ) else {
+                    return;
+                };
+                let name = format!("{}.{}", source.pin.name, target.pin.name);
+                interface
+                    .outputs
+                    .push(interface_pin(&pin_id, &name, &source.pin.data_type));
+                instance_outputs.push(pin_instance(&pin_id, &name, source.pin.data_type.clone(), PinType::Output));
+                exit_inputs.push(pin_instance(
+                    &pin_id,
+                    &source.pin.name,
+                    source.pin.data_type.clone(),
+                    PinType::Input,
+                ));
+                internal_connections.push(new_connection(
+                    (&c.source_node, &c.source_pin),
+                    (&exit_id, &pin_id),
+                    c,
+                ));
+                parent_connections.push(new_connection(
+                    (&instance_id, &pin_id),
+                    (&c.target_node, &c.target_pin),
+                    c,
+                ));
             }
         }
 
-        let rows = entry_outputs.len().max(exit_inputs.len()).max(1);
-        let internal_graph = BlueprintGraph {
-            nodes: {
-                let mut nodes = moved_nodes;
-                nodes.push(BlueprintNode {
-                    id: entry_id.clone(),
-                    definition_id: "macro_entry".to_string(),
-                    title: graph_name.clone(),
-                    icon: "▶".to_string(),
-                    node_type: NodeType::MacroEntry,
-                    position: Point::new(-220.0, (max_y - min_y) / 2.0),
-                    size: Size::new(
-                        180.0,
-                        crate::rendering::layout::node_height_for_pin_rows(
-                            entry_outputs.len().max(1),
-                        ),
-                    ),
-                    inputs: Vec::new(),
-                    outputs: entry_outputs,
-                    properties: std::collections::HashMap::new(),
-                    is_selected: false,
-                    description: format!("Entry — {graph_name}"),
-                    color: Some("#7C3AED".to_string()),
-                });
-                nodes.push(BlueprintNode {
-                    id: exit_id.clone(),
-                    definition_id: "macro_exit".to_string(),
-                    title: format!("{graph_name} (Return)"),
-                    icon: "◀".to_string(),
-                    node_type: NodeType::MacroExit,
-                    position: Point::new(max_x - min_x + 40.0, (max_y - min_y) / 2.0),
-                    size: Size::new(
-                        180.0,
-                        crate::rendering::layout::node_height_for_pin_rows(
-                            exit_inputs.len().max(1),
-                        ),
-                    ),
-                    inputs: exit_inputs,
-                    outputs: Vec::new(),
-                    properties: std::collections::HashMap::new(),
-                    is_selected: false,
-                    description: format!("Exit — {graph_name}"),
-                    color: Some("#7C3AED".to_string()),
-                });
-                nodes.into()
+        // The nested graph.
+        let mut inner = GraphDescription::new(&graph_name);
+        for node in moved {
+            inner.add_node(node);
+        }
+        let mut entry = NodeInstance::new(
+            &entry_id,
+            "macro_entry",
+            Position::new(-220.0, f64::from((max_y - min_y) / 2.0)),
+        );
+        entry.outputs = entry_outputs;
+        inner.add_node(entry);
+        let mut exit = NodeInstance::new(
+            &exit_id,
+            "macro_exit",
+            Position::new(f64::from(max_x - min_x + 40.0), f64::from((max_y - min_y) / 2.0)),
+        );
+        exit.inputs = exit_inputs;
+        inner.add_node(exit);
+        inner.connections = internal_connections;
+        let authored_inner =
+            crate::io::canvas_doc::to_authored(&inner, &crate::io::canvas_doc::AuthoredSidecar::default());
+
+        let definition = graphy_blueprint::SubGraph {
+            id: graph_id.clone(),
+            kind: graphy_blueprint::SubGraphKind::Collapsed,
+            name: graph_name.clone(),
+            description: "Collapsed graph region".to_string(),
+            graph: authored_inner,
+            interface,
+            metadata: graphy_blueprint::SubGraphMetadata {
+                created_at: chrono::Utc::now().to_rfc3339(),
+                modified_at: chrono::Utc::now().to_rfc3339(),
+                author: None,
+                tags: vec!["collapsed".to_string()],
             },
-            connections: internal_connections.into(),
-            comments: Vec::new().into(),
-            selected_nodes: Vec::new(),
-            selected_comments: Vec::new(),
-            zoom_level: 1.0,
-            pan_offset: Point::new(0.0, 0.0),
-            virtualization_stats: crate::VirtualizationStats::default(),
-        };
-        let instance_id = format!("collapsed_{graph_id}");
-        let replacement = BlueprintNode {
-            id: instance_id.clone(),
-            definition_id: crate::core::subgraph_ref::SubGraphReference::new(
-                graph_id.clone(),
-                graphy_blueprint::SubGraphKind::Collapsed,
-            )
-            .encode(),
-            title: graph_name.clone(),
-            icon: "▣".to_string(),
-            node_type: NodeType::SubGraphCall,
-            position: Point::new(min_x, min_y),
-            size: Size::new(
-                200.0,
-                crate::rendering::layout::node_height_for_pin_rows(rows),
-            ),
-            inputs: instance_inputs,
-            outputs: instance_outputs,
-            properties: std::collections::HashMap::new(),
-            is_selected: true,
-            description: format!("Collapsed graph '{graph_name}'"),
-            color: Some("#7C3AED".to_string()),
+            macro_config: graphy_blueprint::MacroConfiguration {
+                hide_in_palette: true,
+                category: "Collapsed".to_string(),
+                ..Default::default()
+            },
         };
 
         let Some(panel) = self.panel.upgrade() else {
             return;
         };
-        let mut definition = None;
         panel.update(cx, |editor, panel_cx| {
-            let Ok(graph) = editor.convert_graph_to_description(&internal_graph) else {
-                return;
-            };
-            definition = Some(graphy_blueprint::SubGraph {
-                id: graph_id.clone(),
-                kind: graphy_blueprint::SubGraphKind::Collapsed,
-                name: graph_name.clone(),
-                description: "Collapsed graph region".to_string(),
-                graph,
-                interface,
-                metadata: graphy_blueprint::SubGraphMetadata {
-                    created_at: chrono::Utc::now().to_rfc3339(),
-                    modified_at: chrono::Utc::now().to_rfc3339(),
-                    author: None,
-                    tags: vec!["collapsed".to_string()],
-                },
-                macro_config: graphy_blueprint::MacroConfiguration {
-                    hide_in_palette: true,
-                    category: "Collapsed".to_string(),
-                    ..Default::default()
-                },
-            });
-            editor.subgraphs.push(definition.clone().unwrap());
+            editor.subgraphs.push(definition);
             editor.is_dirty = true;
+            editor.sync_profile_data();
             editor.invalidate_palette(panel_cx);
             panel_cx.notify();
         });
-        if definition.is_none() {
-            return;
-        }
 
-        self.graph.nodes.retain(|node| !selected.contains(&node.id));
-        self.graph.nodes.push(replacement);
-        self.graph.connections = parent_connections.into();
-        self.graph.selected_nodes = vec![instance_id];
-        self.is_dirty = true;
-        cx.notify();
+        // Replace the selection with the call node, in one edit.
+        let mut replacement = NodeInstance::new(
+            &instance_id,
+            SubGraphReference::new(graph_id, graphy_blueprint::SubGraphKind::Collapsed).encode(),
+            Position::new(f64::from(min_x), f64::from(min_y)),
+        );
+        replacement.inputs = instance_inputs;
+        replacement.outputs = instance_outputs;
+        let mut ids: Vec<&String> = selected.iter().collect();
+        ids.sort();
+        let mut commands: Vec<GraphCommand> = ids
+            .into_iter()
+            .map(|id| GraphCommand::RemoveNode { id: id.clone() })
+            .collect();
+        commands.push(GraphCommand::AddNode(replacement));
+        commands.extend(parent_connections.into_iter().map(GraphCommand::Connect));
+        let _ = self.apply("Collapse to node", commands, cx);
+        self.canvas
+            .update(cx, |canvas, cx| canvas.select_nodes([instance_id], cx));
     }
 }

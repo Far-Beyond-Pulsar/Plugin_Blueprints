@@ -6,19 +6,22 @@
 //! canvas owns the document, layout, drawing, hit-testing and input; this
 //! profile only answers questions about *Blueprint* meaning.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use graphy::{
     Compatibility, DataType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
     TypeResolver,
 };
-use graphy_blueprint::SubGraph;
+use graphy_blueprint::{LibraryManager, SubGraph};
 use graphy_gpui::{
     Action, CatalogEntry, GraphProfile, MacroTarget, MenuItem, MenuTarget, PinUpdate,
 };
 use graphy_render::{NodeShape, PinSide};
-use graphy_render::presenter::{category_accent, prettify, NodePresentation, PinShape, PinStyle, Presenter};
+use graphy_render::presenter::{
+    category_accent, CommentPresentation, NodePresentation, PinShape, PinStyle, Presenter, WireStyle,
+};
+use graphy_render::WireRouting;
 use graphy_render::geom::rgba;
 
 use crate::core::definitions::{NodeDefinition, NodeDefinitions};
@@ -37,6 +40,22 @@ fn parse_hex(hex: &str) -> Option<[f32; 4]> {
         _ => None,
     }
 }
+
+/// What the profile reads from the editor that owns the asset: subgraph
+/// definitions (for call-node titles), the library, custom event names and the
+/// nodes currently executing. The editor writes it; the profile reads it.
+#[derive(Default)]
+pub struct ProfileData {
+    pub subgraphs: Vec<SubGraph>,
+    pub library: LibraryManager,
+    /// Custom event uid -> display name.
+    pub event_names: HashMap<String, String>,
+    pub running: HashSet<String>,
+    /// Draw wires as right-angle (circuit-style) routes.
+    pub angular_wires: bool,
+}
+
+pub type SharedProfileData = Arc<RwLock<ProfileData>>;
 
 /// Blueprint's pin type judgement, on the canvas document's pin types.
 #[derive(Clone, Copy, Debug, Default)]
@@ -72,8 +91,23 @@ impl TypeResolver for BlueprintResolver {
 /// Presentation of Blueprint nodes and pins.
 pub struct BlueprintPresenter {
     definitions: &'static NodeDefinitions,
-    subgraphs: Arc<RwLock<Vec<SubGraph>>>,
-    running: Arc<RwLock<HashSet<String>>>,
+    data: SharedProfileData,
+    /// A foreign graph kind's profile, which may title nodes from their properties.
+    editor_profile: Option<Arc<dyn crate::profile::EditorProfile>>,
+}
+
+fn title_case(s: &str) -> String {
+    s.replace('-', " ")
+        .split_whitespace()
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().to_string() + c.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 impl BlueprintPresenter {
@@ -81,28 +115,86 @@ impl BlueprintPresenter {
         self.definitions.get_node_definition(node_type)
     }
 
-    fn subgraph_of(&self, node_type: &str) -> Option<SubGraph> {
-        let subgraphs = self.subgraphs.read().unwrap_or_else(|e| e.into_inner());
-        let reference = SubGraphReference::decode(node_type, &subgraphs)?;
-        subgraphs.iter().find(|s| s.id == reference.id).cloned()
+    /// Title of a macro/collapsed call node.
+    fn subgraph_title(&self, node_type: &str) -> Option<String> {
+        let data = self.data.read().unwrap_or_else(|e| e.into_inner());
+        let reference = SubGraphReference::decode(node_type, &data.subgraphs)?;
+        let name = data
+            .subgraphs
+            .iter()
+            .find(|m| m.id == reference.id && m.kind == reference.kind)
+            .or_else(|| {
+                data.library
+                    .get_subgraph(&reference.id)
+                    .filter(|s| s.kind == reference.kind)
+            })
+            .map(|m| m.name.clone())
+            .unwrap_or_else(|| title_case(&reference.id));
+        Some(name)
+    }
+
+    fn event_title(&self, uid: &str) -> String {
+        let data = self.data.read().unwrap_or_else(|e| e.into_inner());
+        data.event_names
+            .get(uid)
+            .cloned()
+            .unwrap_or_else(|| title_case(uid))
     }
 }
 
 impl Presenter for BlueprintPresenter {
     fn node(&self, node: &NodeInstance) -> NodePresentation {
+        let ty = node.node_type.as_str();
         let mut p = if node.is_reroute() {
             let mut p = NodePresentation::card("", rgba(0x8b, 0x8b, 0x8b, 1.0));
             p.shape = NodeShape::Reroute;
             p
-        } else if let Some(conversion) = node
-            .node_type
+        } else if let Some(conversion) = ty
             .strip_prefix("conversion:")
             .and_then(|id| pulsar_reflection::CONVERSION_REGISTRY.get(id))
         {
             let mut p = NodePresentation::card(conversion.label, rgba(0x60, 0xa5, 0xfa, 1.0));
             p.shape = NodeShape::Pill;
             p
-        } else if let Some(def) = self.definition(&node.node_type) {
+        } else if ty.starts_with("conversion:") {
+            let mut p = NodePresentation::card("Conversion", rgba(0x60, 0xa5, 0xfa, 1.0));
+            p.shape = NodeShape::Pill;
+            p
+        } else if ty == "macro_entry" || ty == "macro_exit" {
+            let title = if ty == "macro_entry" { "Subgraph Entry" } else { "Subgraph Exit" };
+            let mut p = NodePresentation::card(title, rgba(0x7c, 0x3a, 0xed, 1.0));
+            p.icon = Some(if ty == "macro_entry" { '▶' } else { '◀' });
+            p
+        } else if let Some(uid) = ty.strip_prefix("custom_event_dispatch:") {
+            let mut p = NodePresentation::card(
+                format!("Dispatch {}", self.event_title(uid)),
+                rgba(0x00, 0xa8, 0xe8, 1.0),
+            );
+            p.icon = Some('📡');
+            p
+        } else if let Some(uid) = ty.strip_prefix("custom_event:") {
+            let mut p = NodePresentation::card(
+                format!("On {}", self.event_title(uid)),
+                rgba(0xc0, 0x39, 0x2b, 1.0),
+            );
+            p.icon = Some('📡');
+            p
+        } else if let Some(title) = self.subgraph_title(ty) {
+            let mut p = NodePresentation::card(title, rgba(0x9b, 0x59, 0xb6, 1.0));
+            p.icon = Some('📦');
+            p
+        } else if let Some((title, is_event)) =
+            crate::features::events::engine_events::describe_node_type(ty)
+        {
+            let accent = if is_event {
+                rgba(0xc0, 0x39, 0x2b, 1.0)
+            } else {
+                rgba(0x00, 0xa8, 0xe8, 1.0)
+            };
+            let mut p = NodePresentation::card(title, accent);
+            p.icon = Some(if is_event { '📡' } else { '📨' });
+            p
+        } else if let Some(def) = self.definition(ty) {
             let accent = def
                 .color
                 .as_deref()
@@ -116,24 +208,42 @@ impl Presenter for BlueprintPresenter {
             let mut p = NodePresentation::card(def.name.clone(), accent);
             p.icon = def.icon.chars().next();
             p
-        } else if let Some(sub) = self.subgraph_of(&node.node_type) {
-            NodePresentation::card(sub.name, rgba(0xc0, 0x84, 0xfc, 1.0))
         } else {
-            match node.node_type.as_str() {
-                "macro_entry" => NodePresentation::card("Subgraph Entry", rgba(0x4a, 0xde, 0x80, 1.0)),
-                "macro_exit" => NodePresentation::card("Subgraph Exit", rgba(0xf4, 0x72, 0xb6, 1.0)),
-                other => NodePresentation::card(
-                    prettify(other),
-                    category_accent(other),
-                ),
-            }
+            NodePresentation::card(ty.replace('_', " "), category_accent(ty))
         };
+        if let Some(title) = self.editor_profile.as_ref().and_then(|profile| {
+            profile.node_title(ty, &crate::canvas_profile::properties_as_text(node))
+        }) {
+            p.title = title;
+        }
+        // A `__return__` output is drawn in the header instead of a body row.
+        p.header_output = node.outputs.iter().position(|o| o.id == "__return__");
         p.active = self
-            .running
+            .data
             .read()
             .unwrap_or_else(|e| e.into_inner())
+            .running
             .contains(&node.id);
         p
+    }
+
+    fn wire(&self, conn: &graphy::Connection, from: &PinStyle) -> WireStyle {
+        let angular = self
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .angular_wires;
+        WireStyle {
+            color: from.color,
+            routing: if angular { WireRouting::Angular } else { WireRouting::Bezier },
+            exec: conn.connection_type == graphy::ConnectionType::Execution,
+        }
+    }
+
+    fn comment(&self, _index: usize, comment: &graphy::core::GraphComment) -> CommentPresentation {
+        CommentPresentation {
+            accent: comment.color,
+        }
     }
 
     fn pin(&self, _node: &NodeInstance, pin: &PinInstance, _side: PinSide) -> PinStyle {
@@ -174,26 +284,23 @@ pub struct BlueprintProfile {
 impl BlueprintProfile {
     pub fn new(
         definitions: &'static NodeDefinitions,
-        subgraphs: Arc<RwLock<Vec<SubGraph>>>,
-        running: Arc<RwLock<HashSet<String>>>,
+        data: SharedProfileData,
+        editor_profile: Option<Arc<dyn crate::profile::EditorProfile>>,
     ) -> Self {
         Self {
             id: "blueprint".to_string(),
             presenter: BlueprintPresenter {
                 definitions,
-                subgraphs,
-                running,
+                data,
+                editor_profile,
             },
             resolver: BlueprintResolver,
         }
     }
 
     /// The profile for a Blueprint asset, over the Blueprint node catalogue.
-    pub fn blueprint(
-        subgraphs: Arc<RwLock<Vec<SubGraph>>>,
-        running: Arc<RwLock<HashSet<String>>>,
-    ) -> Self {
-        Self::new(NodeDefinitions::load(), subgraphs, running)
+    pub fn blueprint(data: SharedProfileData) -> Self {
+        Self::new(NodeDefinitions::load(), data, None)
     }
 
     fn instantiate(&self, def: &NodeDefinition, id: &str, pos: Position) -> NodeInstance {
@@ -346,13 +453,13 @@ impl GraphProfile for BlueprintProfile {
         })
     }
 
+    fn is_deletable(&self, node: &NodeInstance) -> bool {
+        !matches!(node.node_type.as_str(), "macro_entry" | "macro_exit")
+    }
+
     fn macro_target(&self, node: &NodeInstance) -> Option<MacroTarget> {
-        let subgraphs = self
-            .presenter
-            .subgraphs
-            .read()
-            .unwrap_or_else(|e| e.into_inner());
-        SubGraphReference::decode(&node.node_type, &subgraphs).map(|r| MacroTarget { graph_id: r.id })
+        let data = self.presenter.data.read().unwrap_or_else(|e| e.into_inner());
+        SubGraphReference::decode(&node.node_type, &data.subgraphs).map(|r| MacroTarget { graph_id: r.id })
     }
 
     fn menu_items(&self, graph: &GraphDescription, target: &MenuTarget) -> Vec<MenuItem> {
@@ -386,3 +493,52 @@ impl GraphProfile for BlueprintProfile {
 }
 
 impl graphy_gpui::canvas::GpuiProfile for BlueprintProfile {}
+
+/// Fonts for the canvas text: a readable system font, with a compiled-in
+/// fallback so the editor works on unusual setups.
+pub fn canvas_fonts() -> graphy_render_wgpu::FontSet {
+    let candidates: &[&str] = if cfg!(target_os = "macos") {
+        &[
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/Library/Fonts/Arial.ttf",
+            "/System/Library/Fonts/SFNSText.ttf",
+        ]
+    } else if cfg!(target_os = "windows") {
+        &[
+            r"C:\Windows\Fonts\segoeui.ttf",
+            r"C:\Windows\Fonts\arial.ttf",
+            r"C:\Windows\Fonts\calibri.ttf",
+        ]
+    } else {
+        &[
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+        ]
+    };
+    let regular = candidates
+        .iter()
+        .find_map(|p| std::fs::read(p).ok())
+        .unwrap_or_else(|| include_bytes!("../assets/fallback_font.ttf").to_vec());
+    graphy_render_wgpu::FontSet {
+        regular,
+        bold: None,
+    }
+}
+
+/// A pin type from a document type string (`execution` or a Rust type).
+pub fn datatype_from_str(s: &str) -> DataType {
+    match graphy_blueprint::DataType::from_type_str(s) {
+        graphy_blueprint::DataType::Execution => DataType::Exec,
+        graphy_blueprint::DataType::Data(info) => DataType::typed(info.to_string()),
+    }
+}
+
+/// A node's properties as the text editor profiles read them.
+pub fn properties_as_text(node: &NodeInstance) -> HashMap<String, String> {
+    node.properties
+        .iter()
+        .map(|(k, v)| (k.clone(), crate::io::canvas_doc::property_string(v)))
+        .collect()
+}

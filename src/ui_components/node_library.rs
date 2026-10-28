@@ -244,10 +244,7 @@ pub fn build_compatible_palette_items(
             .iter()
             .filter(|def| {
                 def.inputs.iter().any(|pin| {
-                    crate::features::connections::compatibility::are_types_compatible(
-                        source_type,
-                        &pin.data_type,
-                    )
+                    source_type.is_compatible_with(&pin.data_type)
                 })
             })
             .cloned()
@@ -349,10 +346,7 @@ enum InputMatch {
 fn input_match(def: &NodeDefinition, source_type: &PinDataType) -> Option<InputMatch> {
     let mut best = None;
     for pin in &def.inputs {
-        if !crate::features::connections::compatibility::are_types_compatible(
-            source_type,
-            &pin.data_type,
-        ) {
+        if !source_type.is_compatible_with(&pin.data_type) {
             continue;
         }
         if source_type.is_wildcard() || !pin.data_type.is_wildcard() {

@@ -2,27 +2,27 @@
 
 mod collapsed;
 
-use crate::core::graph::BlueprintGraph;
-use crate::core::types::PinDataType as DataType;
-use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
+use crate::core::subgraph_ref::SubGraphReference;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::tabs::TabDoc;
 use crate::editor::GraphTab;
-use crate::rendering::layout;
 use gpui::*;
-use std::collections::HashMap;
-use ui::PixelsExt;
+use graphy::{
+    DataType, GraphCommand, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
+};
 
-/// Keep one boundary node of the requested role and redirect any connected
-/// duplicate sentinels to it. Older collapsed graphs could acquire a second,
-/// empty macro entry/exit when opened because their sentinel IDs differ from
-/// those generated for macros.
+/// Keep one boundary node of the requested role (`macro_entry` / `macro_exit`)
+/// and redirect any connected duplicates to it. Older collapsed graphs could
+/// acquire a second, empty macro entry/exit when opened because their sentinel
+/// IDs differ from those generated for macros.
 pub(crate) fn normalize_subgraph_boundary(
-    graph: &mut BlueprintGraph,
-    node_type: NodeType,
+    graph: &mut GraphDescription,
+    node_type: &str,
 ) -> Option<String> {
     let sentinel_ids: Vec<String> = graph
         .nodes
-        .iter()
+        .values()
         .filter(|node| node.node_type == node_type)
         .map(|node| node.id.clone())
         .collect();
@@ -32,31 +32,172 @@ pub(crate) fn normalize_subgraph_boundary(
             graph
                 .connections
                 .iter()
-                .filter(|connection| {
-                    connection.source_node.as_str() == id.as_str()
-                        || connection.target_node.as_str() == id.as_str()
+                .filter(|c| {
+                    c.source_node.as_str() == id.as_str() || c.target_node.as_str() == id.as_str()
                 })
                 .count()
         })?
         .clone();
-
-    for duplicate_id in sentinel_ids
+    for duplicate in sentinel_ids
         .iter()
         .filter(|id| id.as_str() != keep_id.as_str())
     {
         for connection in &mut graph.connections {
-            if connection.source_node.as_str() == duplicate_id.as_str() {
+            if connection.source_node == *duplicate {
                 connection.source_node = keep_id.clone();
             }
-            if connection.target_node.as_str() == duplicate_id.as_str() {
+            if connection.target_node == *duplicate {
                 connection.target_node = keep_id.clone();
             }
         }
+        graph.nodes.remove(duplicate);
     }
-    graph
-        .nodes
-        .retain(|node| node.node_type != node_type || node.id == keep_id);
     Some(keep_id)
+}
+
+/// The document type string of a pin type, as the interface stores it.
+pub(crate) fn type_string(data_type: &DataType) -> String {
+    match data_type {
+        DataType::Exec => "execution".to_string(),
+        DataType::Data(info) => info.type_string.clone(),
+    }
+}
+
+pub(crate) fn pin_instance(id: &str, name: &str, data_type: DataType, kind: PinType) -> PinInstance {
+    PinInstance {
+        id: id.to_string(),
+        pin: Pin {
+            id: id.to_string(),
+            name: name.to_string(),
+            data_type,
+            pin_type: kind,
+        },
+    }
+}
+
+fn interface_pins(pins: &[graphy_blueprint::SubGraphPin], kind: PinType) -> Vec<PinInstance> {
+    pins.iter()
+        .map(|p| {
+            pin_instance(
+                &p.id,
+                &p.name,
+                crate::canvas_profile::datatype_from_str(&p.data_type.to_string()),
+                kind,
+            )
+        })
+        .collect()
+}
+
+/// The inputs and outputs a call node of `definition` shows.
+pub(crate) fn call_node_pins(
+    definition: &graphy_blueprint::SubGraph,
+) -> (Vec<PinInstance>, Vec<PinInstance>) {
+    (
+        interface_pins(&definition.interface.inputs, PinType::Input),
+        interface_pins(&definition.interface.outputs, PinType::Output),
+    )
+}
+
+fn pins_match(a: &[PinInstance], b: &[PinInstance]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(x, y)| {
+            x.id == y.id && x.pin.name == y.pin.name && x.pin.data_type == y.pin.data_type
+        })
+}
+
+/// Commands that bring the macro's Entry and Exit nodes in line with its
+/// interface, creating them when absent. User nodes are untouched.
+pub(crate) fn boundary_sync_commands(
+    graph: &GraphDescription,
+    macro_def: &graphy_blueprint::SubGraph,
+) -> Vec<GraphCommand> {
+    let entry_outputs = interface_pins(&macro_def.interface.inputs, PinType::Output);
+    let exit_inputs = interface_pins(&macro_def.interface.outputs, PinType::Input);
+    let mut commands = Vec::new();
+
+    let find = |kind: &str| {
+        let mut ids: Vec<&String> = graph
+            .nodes
+            .values()
+            .filter(|n| n.node_type == kind)
+            .map(|n| &n.id)
+            .collect();
+        ids.sort();
+        ids.first().and_then(|id| graph.nodes.get(*id))
+    };
+
+    match find("macro_entry") {
+        Some(node) if !pins_match(&node.outputs, &entry_outputs) => {
+            commands.push(GraphCommand::SetPins {
+                node: node.id.clone(),
+                inputs: node.inputs.clone(),
+                outputs: entry_outputs,
+            })
+        }
+        Some(_) => {}
+        None => {
+            let mut node = NodeInstance::new(
+                format!("macro_entry_{}", macro_def.id),
+                "macro_entry",
+                Position::new(60.0, 180.0),
+            );
+            node.outputs = entry_outputs;
+            commands.push(GraphCommand::AddNode(node));
+        }
+    }
+    match find("macro_exit") {
+        Some(node) if !pins_match(&node.inputs, &exit_inputs) => {
+            commands.push(GraphCommand::SetPins {
+                node: node.id.clone(),
+                inputs: exit_inputs,
+                outputs: node.outputs.clone(),
+            })
+        }
+        Some(_) => {}
+        None => {
+            let mut node = NodeInstance::new(
+                format!("macro_exit_{}", macro_def.id),
+                "macro_exit",
+                Position::new(820.0, 180.0),
+            );
+            node.inputs = exit_inputs;
+            commands.push(GraphCommand::AddNode(node));
+        }
+    }
+    commands
+}
+
+/// Commands that re-pin every call node of `macro_def` in `graph`.
+pub(crate) fn instance_sync_commands(
+    graph: &GraphDescription,
+    macro_def: &graphy_blueprint::SubGraph,
+    subgraphs: &[graphy_blueprint::SubGraph],
+) -> Vec<GraphCommand> {
+    let macro_ref = SubGraphReference::new(&macro_def.id, graphy_blueprint::SubGraphKind::Macro);
+    let (inputs, outputs) = call_node_pins(macro_def);
+    let mut ids: Vec<&String> = graph.nodes.keys().collect();
+    ids.sort();
+    ids.into_iter()
+        .filter_map(|id| graph.nodes.get(id))
+        .filter(|node| {
+            crate::core::subgraph_ref::definition_id_matches(&node.node_type, &macro_ref, subgraphs)
+                && crate::core::types::NodeType::of(&node.node_type)
+                    == crate::core::types::NodeType::SubGraphCall
+        })
+        .filter(|node| !pins_match(&node.inputs, &inputs) || !pins_match(&node.outputs, &outputs))
+        .map(|node| GraphCommand::SetPins {
+            node: node.id.clone(),
+            inputs: inputs.clone(),
+            outputs: outputs.clone(),
+        })
+        .collect()
+}
+
+/// Applies commands to a tab document that has no canvas yet.
+pub(crate) fn apply_to_doc(doc: &mut TabDoc, commands: &[GraphCommand]) {
+    for command in commands {
+        let _ = command.apply(&mut doc.graph);
+    }
 }
 
 impl BlueprintEditorPanel {
@@ -93,70 +234,36 @@ impl BlueprintEditorPanel {
             return;
         }
 
-        // Flush the current active canvas into its tab before leaving.
-        let active_tab_id = self
-            .open_tabs
-            .get(self.active_tab_index)
-            .map(|t| t.id.clone());
-        if let Some(tab_id) = active_tab_id {
-            if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
-                let live = canvas.read(cx).graph.clone();
-                self.graph = live.clone();
-                if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-                    tab.graph = live;
-                }
-            }
-        }
-
         // Materialize the saved graph before opening the tab. Collapsed graphs
         // are stored with their body in the same subgraph format as macros;
         // starting from an empty graph made the call node look like it had no
         // contents when opened.
-        let saved_graph = self
+        let Some(definition) = self
             .subgraphs
             .iter()
             .find(|definition| definition.id == macro_id)
-            .map(|definition| definition.graph.clone());
-        let Some(saved_graph) = saved_graph else {
+            .cloned()
+        else {
             tracing::warn!(
                 "Could not open subgraph '{}': definition was not found",
                 macro_name
             );
             return;
         };
-        let mut graph = match self.convert_graph_description_to_blueprint(&saved_graph, window, cx)
-        {
-            Ok(graph) => graph,
-            Err(error) => {
-                tracing::warn!("Could not load graph '{}': {}", macro_name, error);
-                return;
-            }
-        };
-        normalize_subgraph_boundary(&mut graph, NodeType::MacroEntry);
-        normalize_subgraph_boundary(&mut graph, NodeType::MacroExit);
-        // Keep the editor shell's legacy graph snapshot aligned with the tab
-        // being opened. Collapsed subgraphs skip macro interface sync below,
-        // so that sync cannot be relied on to update this shadow state.
-        self.graph = graph.clone();
+        let mut doc = Self::tab_doc_from_authored(&definition.graph);
+        normalize_subgraph_boundary(&mut doc.graph, "macro_entry");
+        normalize_subgraph_boundary(&mut doc.graph, "macro_exit");
+        // Seed entry/exit nodes from the interface (macros only; collapsed
+        // graphs keep the sentinels they were created with).
+        if definition.kind == graphy_blueprint::SubGraphKind::Macro {
+            let commands = boundary_sync_commands(&doc.graph, &definition);
+            apply_to_doc(&mut doc, &commands);
+        }
 
-        // Push the populated tab for the macro or collapsed graph.
-        let new_tab = GraphTab {
-            id: macro_id.clone(),
-            name: macro_name.clone(),
-            graph,
-            is_main: false,
-            is_dirty: false,
-            is_library_macro: false,
-            library_id: None,
-        };
-
-        self.open_tabs.push(new_tab);
+        self.open_tabs
+            .push(GraphTab::new_local_macro(macro_id, macro_name, doc));
         self.active_tab_index = self.open_tabs.len() - 1;
-
-        // Seed entry/exit nodes directly into the tab graph.
-        // No canvas exists yet — it will be created from this tab graph.
-        self.sync_entry_exit_in_active_graph(&macro_id, cx);
-
+        self.sync_profile_data();
         self.graph_workspace_tabs_dirty = true;
         self.refresh_graph_workspace_tabs(window, cx);
         cx.notify();
@@ -405,22 +512,15 @@ impl BlueprintEditorPanel {
     // ─── Entry / Exit synchronisation ────────────────────────────────────────
 
     /// Ensure the Macro Entry and Macro Exit nodes in the macro's graph reflect
-    /// the current interface of `macro_id`.
-    ///
-    /// If the macro canvas is already open, the live canvas graph is updated
-    /// directly (no full replacement — user nodes are preserved).
-    /// The matching tab snapshot is always updated so serialisation is correct.
+    /// the current interface of `macro_id`. Only runs when the active tab
+    /// belongs to this macro; user nodes are preserved.
     pub fn sync_entry_exit_in_active_graph(&mut self, macro_id: &str, cx: &mut Context<Self>) {
-        // Only run when the active tab belongs to this macro.
-        let is_active = self
-            .open_tabs
-            .get(self.active_tab_index)
-            .map(|t| t.id == macro_id && !t.is_main)
-            .unwrap_or(false);
-        if !is_active {
+        let Some(tab) = self.open_tabs.get(self.active_tab_index) else {
+            return;
+        };
+        if tab.id != macro_id || tab.is_main {
             return;
         }
-
         let Some(macro_def) = self
             .subgraphs
             .iter()
@@ -429,211 +529,35 @@ impl BlueprintEditorPanel {
         else {
             return;
         };
-
-        let entry_id = format!("macro_entry_{}", macro_id);
-        let exit_id = format!("macro_exit_{}", macro_id);
-
-        // Build the desired pin lists.
-        let entry_outputs: Vec<Pin> = macro_def
-            .interface
-            .inputs
-            .iter()
-            .map(|p| Pin {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                pin_type: PinType::Output,
-                data_type: DataType::from_type_str(p.data_type.to_string()),
-            })
-            .collect();
-
-        let exit_inputs: Vec<Pin> = macro_def
-            .interface
-            .outputs
-            .iter()
-            .map(|p| Pin {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                pin_type: PinType::Input,
-                data_type: DataType::from_type_str(p.data_type.to_string()),
-            })
-            .collect();
-
-        // Helper: apply entry/exit changes to a graph in-place.
-        // Does NOT replace the whole graph — only touches the sentinel nodes.
-        let apply = |graph: &mut BlueprintGraph| {
-            // Entry node
-            let existing_entry_id = normalize_subgraph_boundary(graph, NodeType::MacroEntry);
-            if let Some(node) = graph
-                .nodes
-                .iter_mut()
-                .find(|n| Some(n.id.as_str()) == existing_entry_id.as_deref())
-            {
-                node.title = macro_def.name.clone();
-                node.outputs = entry_outputs.clone();
-                let rows = node.outputs.len().max(1);
-                node.size.height = layout::node_height_for_pin_rows(rows);
-            } else {
-                let rows = entry_outputs.len().max(1);
-                graph.nodes.insert(
-                    0,
-                    BlueprintNode {
-                        id: entry_id.clone(),
-                        definition_id: "macro_entry".to_string(),
-                        title: macro_def.name.clone(),
-                        icon: "▶".to_string(),
-                        node_type: NodeType::MacroEntry,
-                        position: Point::new(60.0, 180.0),
-                        size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
-                        inputs: vec![],
-                        outputs: entry_outputs.clone(),
-                        properties: HashMap::new(),
-                        is_selected: false,
-                        description: format!("Entry — provides inputs into '{}'", macro_def.name),
-                        color: Some("#7C3AED".to_string()),
-                    },
-                );
-            }
-
-            // Exit node
-            let existing_exit_id = normalize_subgraph_boundary(graph, NodeType::MacroExit);
-            if let Some(node) = graph
-                .nodes
-                .iter_mut()
-                .find(|n| Some(n.id.as_str()) == existing_exit_id.as_deref())
-            {
-                node.title = format!("{} (Return)", macro_def.name);
-                node.inputs = exit_inputs.clone();
-                let rows = node.inputs.len().max(1);
-                node.size.height = layout::node_height_for_pin_rows(rows);
-            } else {
-                let rows = exit_inputs.len().max(1);
-                graph.nodes.push(BlueprintNode {
-                    id: exit_id.clone(),
-                    definition_id: "macro_exit".to_string(),
-                    title: format!("{} (Return)", macro_def.name),
-                    icon: "◀".to_string(),
-                    node_type: NodeType::MacroExit,
-                    position: Point::new(820.0, 180.0),
-                    size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
-                    inputs: exit_inputs.clone(),
-                    outputs: vec![],
-                    properties: HashMap::new(),
-                    is_selected: false,
-                    description: format!("Exit — collects outputs from '{}'", macro_def.name),
-                    color: Some("#7C3AED".to_string()),
-                });
-            }
-        };
-
-        // Apply to the active tab snapshot synchronously — safe because we are
-        // only modifying data, not crossing entity update boundaries.
-        if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-            apply(&mut tab.graph);
-            self.graph = tab.graph.clone();
-        }
-
-        // If the canvas entity is already open we must also update it, BUT we
-        // cannot call canvas.update(cx, …) here if we were called from inside a
-        // canvas update (e.g. from the "Add pin" button in graph.rs).  Defer to
-        // the next event-loop tick so the current update chain has unwound first.
+        self.sync_profile_data();
         if let Some(canvas) = self.active_canvas().cloned() {
-            // Clone the data the deferred closure needs — all 'static types.
-            let entry_id_d = entry_id.clone();
-            let exit_id_d = exit_id.clone();
-            let macro_name_d = macro_def.name.clone();
-            let entry_outputs_d = entry_outputs.clone();
-            let exit_inputs_d = exit_inputs.clone();
+            // Called from inside canvas updates (the "Add pin" button), so
+            // defer the canvas edit until the current update has unwound.
             cx.defer(move |cx| {
-                canvas.update(cx, |canvas_panel, cx| {
-                    // Entry sentinel
-                    let existing_entry_id =
-                        normalize_subgraph_boundary(&mut canvas_panel.graph, NodeType::MacroEntry);
-                    if let Some(node) = canvas_panel
-                        .graph
-                        .nodes
-                        .iter_mut()
-                        .find(|n| Some(n.id.as_str()) == existing_entry_id.as_deref())
-                    {
-                        node.title = macro_name_d.clone();
-                        node.outputs = entry_outputs_d.clone();
-                        let rows = node.outputs.len().max(1);
-                        node.size.height = layout::node_height_for_pin_rows(rows);
-                    } else {
-                        let rows = entry_outputs_d.len().max(1);
-                        canvas_panel.graph.nodes.insert(
-                            0,
-                            BlueprintNode {
-                                id: entry_id_d.clone(),
-                                definition_id: "macro_entry".to_string(),
-                                title: macro_name_d.clone(),
-                                icon: "▶".to_string(),
-                                node_type: NodeType::MacroEntry,
-                                position: Point::new(60.0, 180.0),
-                                size: gpui::Size::new(
-                                    180.0,
-                                    layout::node_height_for_pin_rows(rows),
-                                ),
-                                inputs: vec![],
-                                outputs: entry_outputs_d.clone(),
-                                properties: HashMap::new(),
-                                is_selected: false,
-                                description: format!(
-                                    "Entry — provides inputs into '{}'",
-                                    macro_name_d
-                                ),
-                                color: Some("#7C3AED".to_string()),
-                            },
-                        );
-                    }
-                    // Exit sentinel
-                    let existing_exit_id =
-                        normalize_subgraph_boundary(&mut canvas_panel.graph, NodeType::MacroExit);
-                    if let Some(node) = canvas_panel
-                        .graph
-                        .nodes
-                        .iter_mut()
-                        .find(|n| Some(n.id.as_str()) == existing_exit_id.as_deref())
-                    {
-                        node.title = format!("{} (Return)", macro_name_d);
-                        node.inputs = exit_inputs_d.clone();
-                        let rows = node.inputs.len().max(1);
-                        node.size.height = layout::node_height_for_pin_rows(rows);
-                    } else {
-                        let rows = exit_inputs_d.len().max(1);
-                        canvas_panel.graph.nodes.push(BlueprintNode {
-                            id: exit_id_d.clone(),
-                            definition_id: "macro_exit".to_string(),
-                            title: format!("{} (Return)", macro_name_d),
-                            icon: "◀".to_string(),
-                            node_type: NodeType::MacroExit,
-                            position: Point::new(820.0, 180.0),
-                            size: gpui::Size::new(180.0, layout::node_height_for_pin_rows(rows)),
-                            inputs: exit_inputs_d.clone(),
-                            outputs: vec![],
-                            properties: HashMap::new(),
-                            is_selected: false,
-                            description: format!("Exit — collects outputs from '{}'", macro_name_d),
-                            color: Some("#7C3AED".to_string()),
-                        });
-                    }
-                    cx.notify();
+                canvas.update(cx, |canvas, cx| {
+                    let commands = boundary_sync_commands(canvas.graph(cx), &macro_def);
+                    canvas.apply_system("Sync macro interface", commands, cx);
                 });
             });
+        } else if let Some(doc) = self
+            .open_tabs
+            .get_mut(self.active_tab_index)
+            .and_then(|tab| tab.pending.as_mut())
+        {
+            let commands = boundary_sync_commands(&doc.graph, &macro_def);
+            apply_to_doc(doc, &commands);
         }
-
         cx.notify();
     }
 
     // ─── Subgraph call placement ───────────────────────────────────────────────
 
     /// Create a subgraph call node at `position` for the local macro identified
-    /// by `macro_id`.  Rejects the operation silently if the active tab IS that
-    /// macro (prevents a macro from containing itself).
-    /// Delegate macro instance creation to the active canvas.
+    /// by `macro_id` on the active canvas.
     pub fn create_macro_instance_node(
         &mut self,
         macro_id: String,
-        position: Point<f32>,
+        position: graphy_render::Vec2,
         cx: &mut Context<Self>,
     ) {
         if let Some(canvas) = self.active_canvas().cloned() {
@@ -646,12 +570,8 @@ impl BlueprintEditorPanel {
     }
 
     /// Update the pins of every macro call node that references `macro_id`
-    /// across all tab snapshots AND all live canvas graphs.
+    /// across all tabs (live canvases and tabs whose canvas does not exist yet).
     pub fn sync_all_macro_instances(&mut self, macro_id: &str, cx: &mut Context<Self>) {
-        let macro_ref = crate::core::subgraph_ref::SubGraphReference::new(
-            macro_id,
-            graphy_blueprint::SubGraphKind::Macro,
-        );
         let Some(macro_def) = self
             .subgraphs
             .iter()
@@ -660,100 +580,26 @@ impl BlueprintEditorPanel {
         else {
             return;
         };
+        self.sync_profile_data();
+        let subgraphs = self.subgraphs.clone();
 
-        let rebuild_node = |node: &mut BlueprintNode| {
-            if crate::core::subgraph_ref::definition_id_matches(
-                &node.definition_id,
-                &macro_ref,
-                &self.subgraphs,
-            ) && node.node_type == NodeType::SubGraphCall
-            {
-                node.inputs = macro_def
-                    .interface
-                    .inputs
-                    .iter()
-                    .map(|p| Pin {
-                        id: p.id.clone(),
-                        name: p.name.clone(),
-                        pin_type: PinType::Input,
-                        data_type: DataType::from_type_str(p.data_type.to_string()),
-                    })
-                    .collect();
-                node.outputs = macro_def
-                    .interface
-                    .outputs
-                    .iter()
-                    .map(|p| Pin {
-                        id: p.id.clone(),
-                        name: p.name.clone(),
-                        pin_type: PinType::Output,
-                        data_type: DataType::from_type_str(p.data_type.to_string()),
-                    })
-                    .collect();
-                let rows = node.inputs.len().max(node.outputs.len()).max(1);
-                node.size.height = layout::node_height_for_pin_rows(rows);
-            }
-        };
-
-        // Update all tab snapshots (covers closed tabs and the authoritative store).
         for tab in self.open_tabs.iter_mut() {
-            for node in tab.graph.nodes.iter_mut() {
-                rebuild_node(node);
+            if let Some(doc) = tab.pending.as_mut() {
+                let commands = instance_sync_commands(&doc.graph, &macro_def, &subgraphs);
+                apply_to_doc(doc, &commands);
             }
         }
 
-        // Also update live canvas graphs so the display is immediately correct.
-        // Defer each canvas.update to avoid reentrancy — this function can be
-        // called from within a canvas update (e.g. add/remove macro pin button).
-        let canvases: Vec<Entity<crate::editor::workspace_panels::GraphCanvasPanel>> =
-            self.graph_panels.iter().map(|(_, c)| c.clone()).collect();
-        for canvas in canvases {
-            let macro_ref_d = macro_ref.clone();
-            let subgraphs = self.subgraphs.clone();
-            let macro_def_d = macro_def.clone();
+        // Live canvases: deferred to avoid re-entrancy, as this can be called
+        // from within a canvas update (add/remove macro pin buttons).
+        for (_, canvas) in self.graph_panels.clone() {
+            let (macro_def, subgraphs) = (macro_def.clone(), subgraphs.clone());
             cx.defer(move |cx| {
-                canvas.update(cx, |canvas_panel, cx| {
-                    for node in canvas_panel.graph.nodes.iter_mut() {
-                        if crate::core::subgraph_ref::definition_id_matches(
-                            &node.definition_id,
-                            &macro_ref_d,
-                            &subgraphs,
-                        ) && node.node_type == NodeType::SubGraphCall
-                        {
-                            node.inputs = macro_def_d
-                                .interface
-                                .inputs
-                                .iter()
-                                .map(|p| Pin {
-                                    id: p.id.clone(),
-                                    name: p.name.clone(),
-                                    pin_type: PinType::Input,
-                                    data_type: DataType::from_type_str(p.data_type.to_string()),
-                                })
-                                .collect();
-                            node.outputs = macro_def_d
-                                .interface
-                                .outputs
-                                .iter()
-                                .map(|p| Pin {
-                                    id: p.id.clone(),
-                                    name: p.name.clone(),
-                                    pin_type: PinType::Output,
-                                    data_type: DataType::from_type_str(p.data_type.to_string()),
-                                })
-                                .collect();
-                            let rows = node.inputs.len().max(node.outputs.len()).max(1);
-                            node.size.height = layout::node_height_for_pin_rows(rows);
-                        }
-                    }
-                    cx.notify();
+                canvas.update(cx, |canvas, cx| {
+                    let commands = instance_sync_commands(canvas.graph(cx), &macro_def, &subgraphs);
+                    canvas.apply_system("Sync macro instances", commands, cx);
                 });
             });
-        }
-
-        // Keep the self.graph shadow in sync with the active tab.
-        if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
-            self.graph = tab.graph.clone();
         }
     }
 
@@ -774,17 +620,17 @@ impl BlueprintEditorPanel {
     }
 }
 
+
 // ─── Canvas-side macro operations ────────────────────────────────────────────
 
-impl crate::editor::workspace_panels::GraphCanvasPanel {
+impl GraphCanvasPanel {
     /// Place a subgraph call node built from an already-resolved macro definition.
     pub fn create_macro_instance_node(
         &mut self,
         macro_id: String,
-        position: Point<f32>,
+        position: graphy_render::Vec2,
         cx: &mut Context<Self>,
     ) {
-        // Get the macro definition from the shared panel
         let macro_def = self.panel.upgrade().and_then(|p| {
             p.read(cx)
                 .subgraphs
@@ -793,49 +639,14 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
                 .cloned()
         });
         let Some(macro_def) = macro_def else { return };
-
-        let inputs: Vec<crate::core::types::Pin> = macro_def
-            .interface
-            .inputs
-            .iter()
-            .map(|p| crate::core::types::Pin {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                pin_type: crate::core::types::PinType::Input,
-                data_type: DataType::from_type_str(p.data_type.to_string()),
-            })
-            .collect();
-        let outputs: Vec<crate::core::types::Pin> = macro_def
-            .interface
-            .outputs
-            .iter()
-            .map(|p| crate::core::types::Pin {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                pin_type: crate::core::types::PinType::Output,
-                data_type: DataType::from_type_str(p.data_type.to_string()),
-            })
-            .collect();
-        let max_rows = inputs.len().max(outputs.len()).max(1);
-        let node = crate::core::types::BlueprintNode {
-            id: uuid::Uuid::new_v4().to_string(),
-            definition_id: crate::core::subgraph_ref::SubGraphReference::new(
-                macro_id.clone(),
-                graphy_blueprint::SubGraphKind::Macro,
-            )
-            .encode(),
-            title: macro_def.name.clone(),
-            icon: "📦".to_string(),
-            node_type: crate::core::types::NodeType::SubGraphCall,
-            position,
-            size: gpui::Size::new(200.0, layout::node_height_for_pin_rows(max_rows)),
-            inputs,
-            outputs,
-            properties: std::collections::HashMap::new(),
-            is_selected: false,
-            description: format!("Instance of macro '{}'", macro_def.name),
-            color: Some("#9B59B6".to_string()),
-        };
+        let (inputs, outputs) = call_node_pins(&macro_def);
+        let mut node = NodeInstance::new(
+            uuid::Uuid::new_v4().to_string(),
+            SubGraphReference::new(macro_id, graphy_blueprint::SubGraphKind::Macro).encode(),
+            Position::new(f64::from(position.x), f64::from(position.y)),
+        );
+        node.inputs = inputs;
+        node.outputs = outputs;
         self.add_node(node, cx);
     }
 
@@ -844,16 +655,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         let Some(drag) = self.dragging_macro.take() else {
             return;
         };
-        let origin = *self.canvas_origin.borrow();
-        let cp = Point::new(
-            window_pos.x.as_f32() - origin.x,
-            window_pos.y.as_f32() - origin.y,
-        );
-        let z = self.graph.zoom_level;
-        let graph_pos = Point::new(
-            cp.x / z - self.graph.pan_offset.x,
-            cp.y / z - self.graph.pan_offset.y,
-        );
+        let graph_pos = self.canvas.read(cx).window_to_graph(window_pos);
         self.create_macro_instance_node(drag.macro_id, graph_pos, cx);
     }
 

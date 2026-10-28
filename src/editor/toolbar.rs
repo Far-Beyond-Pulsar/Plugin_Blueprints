@@ -33,7 +33,7 @@ impl ToolbarRenderer {
         let show_controls = panel.show_graph_controls;
         let electronic_connections = panel
             .active_canvas()
-            .map(|canvas| canvas.read(cx).electronic_connections)
+            .map(|canvas| canvas.read(cx).angular_wires())
             .unwrap_or(false);
         let blueprint_name = panel
             .tab_title
@@ -172,7 +172,7 @@ impl ToolbarRenderer {
                     .on_click(cx.listener(|panel, _, window, cx| {
                         if let Some(canvas) = panel.active_canvas().cloned() {
                             canvas.update(cx, |canvas, cx| {
-                                canvas.create_comment_at_center(window, cx)
+                                canvas.create_comment_at_center(cx)
                             });
                         }
                     })),
@@ -332,9 +332,7 @@ impl ToolbarRenderer {
                                     let _ = panel.update(cx, |panel, cx| {
                                         if let Some(canvas) = panel.active_canvas().cloned() {
                                             canvas.update(cx, |canvas, cx| {
-                                                canvas.electronic_connections =
-                                                    !canvas.electronic_connections;
-                                                cx.notify();
+                                                canvas.toggle_angular_wires(cx);
                                             });
                                         }
                                         cx.notify();
