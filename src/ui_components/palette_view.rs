@@ -178,12 +178,17 @@ impl NodePaletteView {
                 .as_deref()
                 .and_then(crate::features::class_dirs::class_name_of)
                 .unwrap_or_else(|| "unnamed_blueprint".to_owned());
+            let animation_assets =
+                crate::features::events::engine_events::animation_asset_ids_from_prefab(
+                    &editor_ref.prefab_asset,
+                );
             let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> =
                 Default::default();
             for (category, def) in crate::features::events::engine_events::event_node_definitions(
                 class_path.as_deref(),
                 &class_name,
                 &editor_ref.local_event_defs,
+                &animation_assets,
             ) {
                 by_category.entry(category).or_default().push(def);
             }

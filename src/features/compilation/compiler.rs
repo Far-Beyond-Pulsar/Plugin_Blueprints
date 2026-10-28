@@ -267,11 +267,15 @@ impl BlueprintEditorPanel {
         // Engine events (#924): this class's custom events are declared;
         // event nodes are checked against the built-in and other classes'.
         let events = crate::features::events::engine_events::event_sources(&self.local_event_defs);
-        let known_events =
-            crate::features::events::engine_events::known_event_signatures_with_components(
-                Some(class_path.as_path()),
-                &self.component_event_metadata,
+        let animation_assets =
+            crate::features::events::engine_events::animation_asset_ids_from_prefab(
+                &self.prefab_asset,
             );
+        let known_events = crate::features::events::engine_events::known_event_signatures_with_components_and_animation_assets(
+            Some(class_path.as_path()),
+            &self.component_event_metadata,
+            &animation_assets,
+        );
         let source = blueprint_compiler::ClassSource {
             name: &class_name,
             graph: &graph,

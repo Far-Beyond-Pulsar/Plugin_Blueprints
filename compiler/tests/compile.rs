@@ -1983,6 +1983,58 @@ mod engine_events {
     }
 
     #[test]
+    fn animation_notify_entry_point_requires_component_scope() {
+        let signature = EventSignature {
+            id: 91,
+            name: "animseq::6f3f5b1e-9e4c-4f7f-b97d-7e37f21f8d44.footstep".into(),
+            fields: vec![
+                EventField::new("entity", Type::Entity),
+                EventField::new("source", Type::Entity),
+                EventField::new("clip_time", Type::Float),
+                EventField::new("surface", Type::Str),
+            ],
+        };
+        let mut graph = Graph::default();
+        graph
+            .node(
+                "on_footstep",
+                "event::on_component::SkeletalMeshComponent.animseq::6f3f5b1e-9e4c-4f7f-b97d-7e37f21f8d44.footstep",
+                &[
+                    P::In("component_ref", "SkeletalMeshComponent"),
+                    P::ExecOut("Body"),
+                    P::Out("entity", "Entity"),
+                    P::Out("source", "Entity"),
+                    P::Out("clip_time", "f64"),
+                    P::Out("surface", "String"),
+                ],
+            )
+            .prop("on_footstep", "component_type", json!("SkeletalMeshComponent"));
+        let graph = graph.build();
+        let module = compile(
+            &ClassSource {
+                name: "NotifyReceiver",
+                graph: &graph,
+                variables: &[],
+                events: &[],
+                known_events: &[signature],
+                version: 0,
+            },
+            &natives(),
+        )
+        .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}"));
+
+        assert_eq!(module.subscriptions.len(), 1);
+        assert!(matches!(
+            module.subscriptions[0].scope,
+            SubscriptionScope::Component(_)
+        ));
+        assert_eq!(
+            module.subscriptions[0].event,
+            EventRef::Name("animseq::6f3f5b1e-9e4c-4f7f-b97d-7e37f21f8d44.footstep".into())
+        );
+    }
+
+    #[test]
     fn palette_lists_event_nodes_by_category() {
         let events = [
             PaletteEvent {
