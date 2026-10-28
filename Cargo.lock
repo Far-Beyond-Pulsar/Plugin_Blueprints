@@ -753,7 +753,7 @@ dependencies = [
  "blueprint_graph",
  "bytemuck",
  "chrono",
- "editor_task_queue 0.1.0",
+ "editor_task_queue",
  "engine_backend",
  "engine_fs",
  "fontdue",
@@ -779,7 +779,7 @@ dependencies = [
  "tracing",
  "ui",
  "ui_common",
- "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "ui_types_common",
  "uuid",
  "wgpu",
  "windows 0.62.2",
@@ -2005,14 +2005,7 @@ dependencies = [
 [[package]]
 name = "editor_task_queue"
 version = "0.1.0"
-dependencies = [
- "parking_lot",
-]
-
-[[package]]
-name = "editor_task_queue"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "parking_lot",
 ]
@@ -2065,7 +2058,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 [[package]]
 name = "engine_backend"
 version = "0.1.34"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "PebbleVault",
  "anyhow",
@@ -2085,35 +2078,44 @@ dependencies = [
  "gpui-ce",
  "helio",
  "helio-asset-compat",
- "helio-default-graphs",
+ "helio-core",
+ "helio-default-passes",
+ "helio-graph-asset",
  "helio-mats",
  "helio-pass-billboard",
  "helio-pass-decal",
  "helio-pass-forward-lit",
  "helio-pass-gbuffer",
+ "helio-pass-portal-cull",
  "helio-pass-postprocess",
  "helio-pass-sky",
  "helio-pass-tsr",
+ "helio-pass-volumetric-fog",
  "helio-pass-voxel-planet",
  "helio-pass-water-sim",
+ "helio-vg-format",
+ "helio-vg-stream",
  "helio-voxel-data",
  "helio_component",
  "image",
+ "inventory",
  "libloading 0.9.0",
  "lsp-types",
  "parking_lot",
- "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "pollster 0.4.0",
+ "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef)",
  "psgc",
  "pulsar_class",
- "pulsar_events 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "pulsar_events",
  "pulsar_lsp",
  "pulsar_physics",
  "pulsar_pie_abi",
  "pulsar_reflection",
  "pulsar_scene",
- "pulsar_scene_model 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "pulsar_scene_model",
  "pulsar_scenedb",
  "pulsar_script_object_model",
+ "pulsar_settings",
  "pulsar_world_registry",
  "rapier3d",
  "reqwest",
@@ -2139,7 +2141,7 @@ dependencies = [
 [[package]]
 name = "engine_class_derive"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2149,21 +2151,22 @@ dependencies = [
 [[package]]
 name = "engine_fs"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
  "dashmap",
- "editor_task_queue 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "editor_task_queue",
  "futures",
  "image",
  "notify 8.2.0",
  "parking_lot",
  "plugin_editor_api",
  "plugin_manager",
- "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef)",
  "pulsar-multiplayer-core",
  "pulsar_reflection",
+ "rusqlite",
  "serde",
  "serde_json",
  "smol",
@@ -2171,7 +2174,7 @@ dependencies = [
  "tool_registry",
  "tool_registry_macros",
  "tracing",
- "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "ui_types_common",
  "ureq",
  "urlencoding",
  "uuid",
@@ -2181,7 +2184,7 @@ dependencies = [
 [[package]]
 name = "engine_state"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -2200,7 +2203,7 @@ dependencies = [
  "smol",
  "toml 1.1.4+spec-1.1.0",
  "tracing",
- "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "ui_types_common",
  "uuid",
  "wgpu",
  "window_manager",
@@ -2209,9 +2212,9 @@ dependencies = [
 [[package]]
 name = "engine_subsystems"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
- "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef)",
  "thiserror 2.0.20",
  "tracing",
 ]
@@ -3069,7 +3072,7 @@ dependencies = [
 [[package]]
 name = "gpui-ce"
 version = "1.0.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "anyhow",
  "arboard",
@@ -3297,7 +3300,7 @@ dependencies = [
 [[package]]
 name = "graphy"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "quote",
  "rayon",
@@ -3470,8 +3473,8 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "helio"
-version = "0.19.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+version = "0.20.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "arrayvec",
  "bytemuck",
@@ -3489,11 +3492,13 @@ dependencies = [
  "helio-pass-portal-cull",
  "helio-pass-portal-instances",
  "helio-pass-postprocess",
- "helio-pass-radiance-cascades",
  "helio-pass-shadow-matrix",
  "helio-pass-sky",
  "helio-pass-tsr",
  "helio-pass-volumetric-fog",
+ "helio-settings",
+ "helio-vg-format",
+ "helio-vg-stream",
  "helio-xr",
  "image",
  "log",
@@ -3512,7 +3517,7 @@ dependencies = [
 [[package]]
 name = "helio-asset-compat"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
@@ -3536,12 +3541,12 @@ dependencies = [
 [[package]]
 name = "helio-bake-types"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 
 [[package]]
 name = "helio-core"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
@@ -3550,35 +3555,39 @@ dependencies = [
  "notify 8.2.0",
  "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=45cda191beb316fee0859ae40d59f0dff986a66a)",
  "pulsar_scenedb",
+ "smallvec",
  "thiserror 2.0.20",
  "wgpu",
 ]
 
 [[package]]
-name = "helio-default-graphs"
+name = "helio-default-passes"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
  "helio",
  "helio-core",
+ "helio-graph-asset",
  "helio-mats",
  "helio-pass-billboard",
+ "helio-pass-buffer-view",
  "helio-pass-corona",
  "helio-pass-debug-overlay",
  "helio-pass-decal",
  "helio-pass-deferred-light",
- "helio-pass-dof",
  "helio-pass-flare",
  "helio-pass-foliage-gbuffer",
  "helio-pass-foliage-place",
  "helio-pass-forward-lit",
  "helio-pass-fxaa",
  "helio-pass-gbuffer",
+ "helio-pass-gi",
  "helio-pass-hiz",
  "helio-pass-hlfs",
  "helio-pass-indirect-dispatch",
+ "helio-pass-lens",
  "helio-pass-light-cull",
  "helio-pass-object-batch",
  "helio-pass-occlusion-cull",
@@ -3598,20 +3607,51 @@ dependencies = [
  "helio-pass-ssr",
  "helio-pass-transparent",
  "helio-pass-tsr",
- "helio-pass-virtual-geometry",
+ "helio-pass-vg-bvh",
+ "helio-pass-vg-cull",
+ "helio-pass-vg-dense",
+ "helio-pass-vg-raster",
+ "helio-pass-vg-shade",
  "helio-pass-volumetric-fog",
+ "helio-pass-voxel-planet",
  "helio-pass-water-sim",
+ "helio-vg-format",
+ "helio-vg-stream",
  "image",
  "log",
  "pulsar_scenedb",
+ "serde_json",
  "twox-hash",
  "wgpu",
 ]
 
 [[package]]
+name = "helio-graph-asset"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "helio",
+ "helio-core",
+ "log",
+ "serde",
+ "serde_json",
+ "wgpu",
+]
+
+[[package]]
+name = "helio-lens-optics"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "helio-mats"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3622,7 +3662,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-billboard"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3633,9 +3673,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "helio-pass-buffer-view"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "helio-core",
+ "wgpu",
+]
+
+[[package]]
 name = "helio-pass-corona"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
@@ -3650,7 +3699,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-debug-overlay"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3660,7 +3709,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-decal"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3675,12 +3724,12 @@ dependencies = [
 [[package]]
 name = "helio-pass-deferred-light"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
  "helio-mats",
- "helio-pass-radiance-cascades",
+ "helio-pass-gi",
  "helio-pass-shadow-matrix",
  "helio-pass-sky",
  "pulsar_reflection",
@@ -3690,22 +3739,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "helio-pass-dof"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
-dependencies = [
- "bytemuck",
- "helio-core",
- "wgpu",
-]
-
-[[package]]
 name = "helio-pass-flare"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
+ "helio-pass-lens",
  "helio-pass-shadow-matrix",
  "wgpu",
 ]
@@ -3713,7 +3753,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-foliage-gbuffer"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3726,7 +3766,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-foliage-place"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
@@ -3742,7 +3782,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-forward-lit"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3760,7 +3800,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-fxaa"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3770,14 +3810,14 @@ dependencies = [
 [[package]]
 name = "helio-pass-gbuffer"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
  "helio-core",
  "helio-mats",
- "helio-pass-radiance-cascades",
  "helio-pass-shadow-matrix",
+ "image",
  "log",
  "pulsar_reflection",
  "pulsar_scenedb",
@@ -3787,9 +3827,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "helio-pass-gi"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+ "glam 0.33.5",
+ "helio-core",
+ "helio-mats",
+ "helio-pass-shadow-matrix",
+ "helio-pass-sky",
+ "wgpu",
+]
+
+[[package]]
 name = "helio-pass-hiz"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3800,12 +3854,13 @@ dependencies = [
 [[package]]
 name = "helio-pass-hlfs"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
  "helio-core",
  "helio-pass-gbuffer",
+ "helio-pass-gi",
  "helio-pass-shadow-matrix",
  "wgpu",
 ]
@@ -3813,7 +3868,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-indirect-dispatch"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3822,9 +3877,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "helio-pass-lens"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+ "helio-core",
+ "helio-lens-optics",
+ "pulsar_reflection",
+ "pulsar_scenedb",
+ "pulsar_scenedb_derive",
+ "wgpu",
+]
+
+[[package]]
 name = "helio-pass-light-cull"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3835,7 +3904,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-object-batch"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3848,7 +3917,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-occlusion-cull"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-bake-types",
@@ -3861,7 +3930,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-perf-overlay"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3871,7 +3940,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-planar-reflection"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3882,7 +3951,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-portal-cull"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
@@ -3898,7 +3967,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-portal-instances"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3913,7 +3982,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-postprocess"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3924,20 +3993,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "helio-pass-radiance-cascades"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
-dependencies = [
- "bytemuck",
- "helio-core",
- "helio-pass-sky",
- "wgpu",
-]
-
-[[package]]
 name = "helio-pass-shadow"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3950,7 +4008,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-shadow-cull"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3962,7 +4020,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-shadow-dirty"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3974,7 +4032,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-shadow-matrix"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3984,7 +4042,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-simple-cube"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -3995,7 +4053,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-sky"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -4009,7 +4067,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-sprite-batch"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
@@ -4026,7 +4084,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-sprite-cull"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -4038,7 +4096,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-ssr"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -4049,7 +4107,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-transparent"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -4065,38 +4123,102 @@ dependencies = [
 [[package]]
 name = "helio-pass-tsr"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
+ "glam 0.33.5",
  "helio-core",
  "wgpu",
 ]
 
 [[package]]
-name = "helio-pass-virtual-geometry"
+name = "helio-pass-vg-bvh"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
- "helio-mats",
  "helio-pass-gbuffer",
- "helio-pass-object-batch",
- "helio-pass-radiance-cascades",
+ "helio-vg-format",
  "log",
  "pulsar_scenedb",
  "wgpu",
 ]
 
 [[package]]
+name = "helio-pass-vg-cull"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+ "helio-core",
+ "helio-mats",
+ "helio-pass-vg-bvh",
+ "helio-vg-format",
+ "helio-vg-stream",
+ "log",
+ "wgpu",
+]
+
+[[package]]
+name = "helio-pass-vg-dense"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+ "helio-core",
+ "helio-mats",
+ "helio-pass-vg-cull",
+ "helio-pass-vg-raster",
+ "helio-vg-format",
+ "helio-vg-stream",
+ "log",
+ "wgpu",
+]
+
+[[package]]
+name = "helio-pass-vg-raster"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+ "helio-core",
+ "helio-mats",
+ "helio-pass-vg-cull",
+ "helio-vg-format",
+ "log",
+ "wgpu",
+]
+
+[[package]]
+name = "helio-pass-vg-shade"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+ "glam 0.33.5",
+ "helio-core",
+ "helio-mats",
+ "helio-pass-shadow-matrix",
+ "helio-pass-vg-cull",
+ "helio-pass-vg-dense",
+ "helio-pass-vg-raster",
+ "helio-vg-format",
+ "helio-vg-stream",
+ "log",
+ "wgpu",
+]
+
+[[package]]
 name = "helio-pass-volumetric-fog"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
  "helio-pass-postprocess",
  "helio-pass-shadow-matrix",
+ "helio-pass-sky",
  "pulsar_reflection",
  "pulsar_scenedb",
  "pulsar_scenedb_derive",
@@ -4106,11 +4228,19 @@ dependencies = [
 [[package]]
 name = "helio-pass-voxel-planet"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "glam 0.33.5",
  "helio-core",
+ "helio-mats",
+ "helio-pass-foliage-place",
+ "helio-pass-gi",
+ "helio-pass-shadow-matrix",
+ "helio-settings",
+ "image",
+ "miniz_oxide",
+ "rayon",
  "rustc-hash 2.1.3",
  "serde",
  "serde_json",
@@ -4120,7 +4250,7 @@ dependencies = [
 [[package]]
 name = "helio-pass-water-sim"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "helio-core",
@@ -4132,16 +4262,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "helio-settings"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+
+[[package]]
 name = "helio-snapshot"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "futures-channel",
  "glam 0.33.5",
  "helio",
  "helio-asset-compat",
- "helio-default-graphs",
+ "helio-default-passes",
  "helio-pass-forward-lit",
  "helio-pass-gbuffer",
  "image",
@@ -4153,9 +4288,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "helio-vg-build"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+ "helio-vg-format",
+ "meshopt",
+ "rayon",
+]
+
+[[package]]
+name = "helio-vg-format"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
+name = "helio-vg-stream"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "bytemuck",
+ "helio-vg-format",
+ "log",
+ "pulsar_scenedb",
+ "wgpu",
+]
+
+[[package]]
 name = "helio-voxel-data"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "serde",
  "serde_json",
@@ -4164,7 +4330,7 @@ dependencies = [
 [[package]]
 name = "helio-xr"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "ash",
  "glam 0.33.5",
@@ -4179,7 +4345,7 @@ dependencies = [
 [[package]]
 name = "helio_component"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "engine_class_derive",
@@ -4190,28 +4356,35 @@ dependencies = [
  "gpui-ce",
  "helio",
  "helio-asset-compat",
+ "helio-core",
  "helio-mats",
  "helio-pass-corona",
  "helio-pass-decal",
  "helio-pass-foliage-place",
+ "helio-pass-lens",
  "helio-pass-postprocess",
  "helio-pass-sky",
  "helio-pass-sprite-batch",
  "helio-pass-volumetric-fog",
  "helio-pass-voxel-planet",
  "helio-pass-water-sim",
+ "helio-vg-build",
+ "helio-vg-format",
+ "helio-vg-stream",
  "helio-voxel-data",
  "image",
+ "intel_tex_2",
  "plugin_editor_api",
  "psgc",
- "pulsar_events 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "pulsar_events",
  "pulsar_reflection",
- "pulsar_scene_model 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "pulsar_scene_model",
  "pulsar_scenedb",
  "pulsar_scenedb_derive",
  "pulsar_world_registry",
  "serde",
  "serde_json",
+ "skeletal_assets",
  "thiserror 2.0.20",
  "tracing",
  "twox-hash",
@@ -4667,6 +4840,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "intel_tex_2"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7980d359170e7da4bc2421aa74c49d338a3153313e006d732a3430f1af375a60"
+dependencies = [
+ "ispc_rt",
+]
+
+[[package]]
 name = "intrusive-collections"
 version = "0.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4728,6 +4910,16 @@ checksum = "173609498df190136aa7dea1a91db051746d339e18476eed5ca40521f02d7aa5"
 dependencies = [
  "is-docker",
  "once_cell",
+]
+
+[[package]]
+name = "ispc_rt"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a396f76fd253fab9945bb4c6080f515d0c4036bc30219462d199b58886fd37b4"
+dependencies = [
+ "libc",
+ "num_cpus",
 ]
 
 [[package]]
@@ -5544,8 +5736,7 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a616d2fb8c89516ac2723a581f69d6c18576046bed761bd6b305e5618e6ae130"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -5570,8 +5761,7 @@ dependencies = [
 [[package]]
 name = "naga-types"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "590afbf58a6f4f62873cd5cff4468061844bafa1cdf399cc954537c22d768d49"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
@@ -6703,14 +6893,14 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "plugin_editor_api"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "engine_subsystems",
  "gamma",
  "gpui-ce",
  "inventory",
- "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
- "pulsar_events 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef)",
+ "pulsar_events",
  "pulsar_lsp",
  "pulsar_reflection",
  "pulsar_script_vm",
@@ -6720,15 +6910,16 @@ dependencies = [
  "serde_json",
  "tracing",
  "ui",
- "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "ui_types_common",
  "window_manager",
 ]
 
 [[package]]
 name = "plugin_manager"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
+ "arc-swap",
  "engine_subsystems",
  "gpui-ce",
  "inventory",
@@ -6736,8 +6927,8 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "plugin_editor_api",
- "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
- "pulsar_events 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef)",
+ "pulsar_events",
  "pulsar_world_registry",
  "serde_json",
  "sha2 0.11.0",
@@ -6956,12 +7147,10 @@ dependencies = [
 [[package]]
 name = "profiling"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Profiling?rev=12424a5f75166332f9f1d2741281f6fc4847b44d#12424a5f75166332f9f1d2741281f6fc4847b44d"
 dependencies = [
  "chrono",
  "crossbeam-channel",
- "crossbeam-queue",
- "libc",
- "memmap2",
  "once_cell",
  "parking_lot",
  "rusqlite",
@@ -6971,10 +7160,13 @@ dependencies = [
 [[package]]
 name = "profiling"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Profiling?rev=12424a5f75166332f9f1d2741281f6fc4847b44d#12424a5f75166332f9f1d2741281f6fc4847b44d"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "chrono",
  "crossbeam-channel",
+ "crossbeam-queue",
+ "libc",
+ "memmap2",
  "once_cell",
  "parking_lot",
  "rusqlite",
@@ -6989,22 +7181,6 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "crossbeam-queue",
- "once_cell",
- "parking_lot",
- "rusqlite",
- "serde",
-]
-
-[[package]]
-name = "profiling"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
-dependencies = [
- "chrono",
- "crossbeam-channel",
- "crossbeam-queue",
- "libc",
- "memmap2",
  "once_cell",
  "parking_lot",
  "rusqlite",
@@ -7033,9 +7209,9 @@ dependencies = [
 [[package]]
 name = "psgc"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef)",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -7076,7 +7252,7 @@ dependencies = [
 [[package]]
 name = "pulsar-config"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "dashmap",
  "dirs 5.0.1",
@@ -7087,7 +7263,7 @@ dependencies = [
 [[package]]
 name = "pulsar-multiplayer-core"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7101,7 +7277,7 @@ dependencies = [
 [[package]]
 name = "pulsar_auth"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "anyhow",
  "directories 6.0.0",
@@ -7115,14 +7291,14 @@ dependencies = [
 [[package]]
 name = "pulsar_class"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "engine_class_derive",
  "engine_fs",
  "glam 0.33.5",
  "inventory",
  "pulsar_reflection",
- "pulsar_scene_model 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "pulsar_scene_model",
  "pulsar_scenedb",
  "pulsar_world_registry",
  "serde",
@@ -7134,32 +7310,20 @@ dependencies = [
 [[package]]
 name = "pulsar_events"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "gamma",
- "profiling 0.1.0",
+ "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef)",
  "serde",
  "serde_json",
  "tracing",
- "ui_types_common 0.1.0",
-]
-
-[[package]]
-name = "pulsar_events"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
-dependencies = [
- "gamma",
- "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
- "serde",
- "serde_json",
- "tracing",
- "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "ui_types_common",
 ]
 
 [[package]]
 name = "pulsar_lsp"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "anyhow",
  "flume",
@@ -7175,7 +7339,7 @@ dependencies = [
 [[package]]
 name = "pulsar_macros"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "linkme",
  "proc-macro2",
@@ -7186,7 +7350,7 @@ dependencies = [
 [[package]]
 name = "pulsar_physics"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bytemuck",
  "engine_class_derive",
@@ -7196,6 +7360,7 @@ dependencies = [
  "pulsar_world_registry",
  "serde",
  "serde_json",
+ "skeletal_assets",
  "tracing",
  "wgpu",
 ]
@@ -7203,11 +7368,12 @@ dependencies = [
 [[package]]
 name = "pulsar_pie_abi"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 
 [[package]]
 name = "pulsar_reflection"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "dashmap",
  "glam 0.33.5",
@@ -7225,6 +7391,7 @@ dependencies = [
 [[package]]
 name = "pulsar_reflection_codegen"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7234,6 +7401,7 @@ dependencies = [
 [[package]]
 name = "pulsar_reflection_derive"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "owo-colors",
  "proc-macro2",
@@ -7245,7 +7413,7 @@ dependencies = [
 [[package]]
 name = "pulsar_scene"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "engine_fs",
  "helio",
@@ -7260,22 +7428,7 @@ dependencies = [
 [[package]]
 name = "pulsar_scene_model"
 version = "0.1.0"
-dependencies = [
- "glam 0.33.5",
- "inventory",
- "pulsar_reflection",
- "pulsar_scenedb",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
- "wgpu",
-]
-
-[[package]]
-name = "pulsar_scene_model"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "glam 0.33.5",
  "inventory",
@@ -7291,7 +7444,7 @@ dependencies = [
 [[package]]
 name = "pulsar_scenedb"
 version = "0.1.0"
-source = "git+https://github.com//Far-Beyond-Pulsar/SceneDB?rev=8b5b1144c4ef80411592985fcd9767134ee03941#8b5b1144c4ef80411592985fcd9767134ee03941"
+source = "git+https://github.com//Far-Beyond-Pulsar/SceneDB?rev=017252c3c84331a29e53eaa627185597954a3241#017252c3c84331a29e53eaa627185597954a3241"
 dependencies = [
  "ahash 0.8.12",
  "profiling 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Profiling?rev=12424a5f75166332f9f1d2741281f6fc4847b44d)",
@@ -7307,7 +7460,7 @@ dependencies = [
 [[package]]
 name = "pulsar_scenedb_derive"
 version = "0.1.0"
-source = "git+https://github.com//Far-Beyond-Pulsar/SceneDB?rev=8b5b1144c4ef80411592985fcd9767134ee03941#8b5b1144c4ef80411592985fcd9767134ee03941"
+source = "git+https://github.com//Far-Beyond-Pulsar/SceneDB?rev=017252c3c84331a29e53eaa627185597954a3241#017252c3c84331a29e53eaa627185597954a3241"
 dependencies = [
  "proc-macro2",
  "pulsar_reflection_codegen",
@@ -7318,6 +7471,7 @@ dependencies = [
 [[package]]
 name = "pulsar_script_codegen"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "pulsar_script_vm",
 ]
@@ -7325,6 +7479,7 @@ dependencies = [
 [[package]]
 name = "pulsar_script_math"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "glam 0.33.5",
  "pulsar_script_vm",
@@ -7334,11 +7489,11 @@ dependencies = [
 [[package]]
 name = "pulsar_script_object_model"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "inventory",
  "pulsar_reflection",
- "pulsar_scene_model 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "pulsar_scene_model",
  "pulsar_scenedb",
  "pulsar_world_registry",
  "serde",
@@ -7350,6 +7505,7 @@ dependencies = [
 [[package]]
 name = "pulsar_script_vm"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "bincode",
  "inventory",
@@ -7365,15 +7521,16 @@ dependencies = [
 [[package]]
 name = "pulsar_settings"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
+ "helio-settings",
  "pulsar-config",
 ]
 
 [[package]]
 name = "pulsar_std"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "engine_fs",
  "linkme",
@@ -7387,11 +7544,12 @@ dependencies = [
 [[package]]
 name = "pulsar_world_registry"
 version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "inventory",
- "pulsar_events 0.1.0",
+ "pulsar_events",
  "pulsar_reflection",
- "pulsar_scene_model 0.1.0",
+ "pulsar_scene_model",
  "pulsar_scenedb",
  "pulsar_script_math",
  "pulsar_script_vm",
@@ -8395,7 +8553,7 @@ checksum = "ece8e78b2f38ec51c51f5d475df0a7187ba5111b2a28bdc761ee05b075d40a71"
 [[package]]
 name = "scenedb-inspector-agent"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "log",
  "pulsar_reflection",
@@ -8812,6 +8970,19 @@ name = "siphasher"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
+
+[[package]]
+name = "skeletal_assets"
+version = "0.1.0"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
+dependencies = [
+ "anyhow",
+ "engine_fs",
+ "pulsar_reflection",
+ "serde",
+ "serde_json",
+ "uuid",
+]
 
 [[package]]
 name = "skrifa"
@@ -10344,7 +10515,7 @@ dependencies = [
 [[package]]
 name = "ui"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -10431,7 +10602,7 @@ dependencies = [
 [[package]]
 name = "ui-macros"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10441,7 +10612,7 @@ dependencies = [
 [[package]]
 name = "ui_auth"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "gpui-ce",
  "ui",
@@ -10450,7 +10621,7 @@ dependencies = [
 [[package]]
 name = "ui_common"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "anyhow",
  "engine_fs",
@@ -10480,7 +10651,7 @@ dependencies = [
 [[package]]
 name = "ui_gen_macros"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10490,20 +10661,7 @@ dependencies = [
 [[package]]
 name = "ui_types_common"
 version = "0.1.0"
-dependencies = [
- "chrono",
- "lazy_static",
- "regex",
- "schemars",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "ui_types_common"
-version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "chrono",
  "lazy_static",
@@ -11078,8 +11236,7 @@ checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 [[package]]
 name = "wgpu"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "527ccdf43dd5b2e8676eed9984ce00e2bbb0a1b85b70c1969dcb6cd2eb55ab9e"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "arrayvec",
  "bitflags 2.13.1",
@@ -11108,8 +11265,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14c018fce9b6270aa203c2fdd56f3cce996713534bd757e4ea58c8560b121f14"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -11142,8 +11298,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-apple"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "061f3d319a40d39d00b1ecc2c33b89fe21d4e6fe01859df3500a3a8ecccd6b68"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "wgpu-hal",
 ]
@@ -11151,8 +11306,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-emscripten"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d98b86cf4abf524a902dd35f18ca6a3f08fc2ae9847c8f10b48e30491b1f0b86"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "wgpu-hal",
 ]
@@ -11160,8 +11314,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7586165fd5f6d881cb9ce4bb71f40d6caab2c0f1837e3fc1d9788a197fb6004f"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "wgpu-hal",
 ]
@@ -11169,8 +11322,7 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b7fb58561a792bc237628ba0792e332de418fefe145f13b5ed8201e6d52f58"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -11226,8 +11378,7 @@ dependencies = [
 [[package]]
 name = "wgpu-naga-bridge"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2f62e73117bb7a62bfd9c5a5841438a823f6566c6442a808ee269d2d055c081"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "naga",
  "wgpu-types",
@@ -11236,8 +11387,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99dad6f1fbdbbdb4c278a6508b059d44688f5cebddf78d005a46a31340269286"
+source = "git+https://github.com/Far-Beyond-Pulsar/wgpu?branch=helio%2Fv30.0.1-reusable-command-buffers#57068206074cd8a6af5551032d8d60a8db3b2637"
 dependencies = [
  "bitflags 2.13.1",
  "bytemuck",
@@ -11252,7 +11402,7 @@ dependencies = [
 [[package]]
 name = "wgpui-base"
 version = "0.6.1"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -11289,9 +11439,9 @@ dependencies = [
 [[package]]
 name = "wgsl_std"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
- "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "graphy 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef)",
  "linkme",
  "serde",
  "tracing",
@@ -11387,7 +11537,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 [[package]]
 name = "window_manager"
 version = "0.1.0"
-source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61#6c61db9aacb29efc4a49bc23a7b1622eb6510a61"
+source = "git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=3ffbecda91982c3997ebff801c5b872df0a455ef#3ffbecda91982c3997ebff801c5b872df0a455ef"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -11398,7 +11548,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tracing",
  "ui_gen_macros",
- "ui_types_common 0.1.0 (git+https://github.com/Far-Beyond-Pulsar/Pulsar-Native?rev=6c61db9aacb29efc4a49bc23a7b1622eb6510a61)",
+ "ui_types_common",
 ]
 
 [[package]]

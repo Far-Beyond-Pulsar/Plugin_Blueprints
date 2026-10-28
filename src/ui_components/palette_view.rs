@@ -56,6 +56,7 @@ pub struct NodePaletteView {
     scrollbar_state: ScrollbarState,
     /// Tracks whether component nodes have been loaded
     component_nodes_loaded: bool,
+    _asset_updates: Task<()>,
     /// Categories the user opened by hand. They show every node, even while a
     /// search is narrowing the others to their matches.
     expanded: std::collections::HashSet<String>,
@@ -94,7 +95,33 @@ impl NodePaletteView {
         let all_items = build_palette_items(crate::profile::definitions_for(profile.as_ref()));
 
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
+        let (send, receive) = smol::channel::bounded(1);
+        let subscription =
+            plugin_editor_api::pulsar_events::subscribe_asset_updates(None, move |event| {
+                if event
+                    .path
+                    .as_ref()
+                    .is_none_or(|path| path.extension().is_some_and(|e| e == "animseq"))
+                {
+                    let _ = send.try_send(());
+                }
+            });
+        let asset_updates = cx.spawn(async move |this, cx| {
+            let _subscription = subscription;
+            while receive.recv().await.is_ok() {
+                if this
+                    .update(cx, |palette, cx| {
+                        palette.rebuild_items(cx);
+                        cx.notify();
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
         Self {
+            _asset_updates: asset_updates,
             editor,
             canvas,
             profile,
@@ -151,12 +178,17 @@ impl NodePaletteView {
                 .as_deref()
                 .and_then(crate::features::class_dirs::class_name_of)
                 .unwrap_or_else(|| "unnamed_blueprint".to_owned());
+            let animation_assets =
+                crate::features::events::engine_events::animation_asset_ids_from_prefab(
+                    &editor_ref.prefab_asset,
+                );
             let mut by_category: std::collections::BTreeMap<String, Vec<NodeDefinition>> =
                 Default::default();
             for (category, def) in crate::features::events::engine_events::event_node_definitions(
                 class_path.as_deref(),
                 &class_name,
                 &editor_ref.local_event_defs,
+                &animation_assets,
             ) {
                 by_category.entry(category).or_default().push(def);
             }
@@ -355,6 +387,7 @@ fn build_custom_event_dispatch_palette_items_from_panel(
 impl NodePaletteView {
     /// Clear the query when the quick palette opens; the dock palette keeps its query.
     pub fn clear_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.rebuild_items(cx);
         if !self.search_input.read(cx).value().is_empty() {
             self.search_input
                 .update(cx, |input, cx| input.set_value("", window, cx));

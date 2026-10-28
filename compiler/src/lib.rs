@@ -2422,6 +2422,15 @@ impl<'a> Compiler<'a> {
 /// the event name; current graphs use `event::on_component::Component.event`.
 fn component_event_name(node_type: &str) -> Option<String> {
     if let Some(event) = node_type.strip_prefix("event::on_component::") {
+        // Animation notifies keep their asset-qualified event identity
+        // (`animseq::<sequence-id>.<notify-id>`) while using the established
+        // component-reference subscription path. The component prefix names
+        // the SceneDB source reference; it is not part of the event name.
+        if let Some((component, event_name)) = event.split_once('.') {
+            if component == "SkeletalMeshComponent" && event_name.starts_with("animseq::") {
+                return Some(event_name.to_owned());
+            }
+        }
         return Some(event.to_owned());
     }
     // Saved graphs exist with several historical spellings, including
