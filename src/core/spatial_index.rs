@@ -613,7 +613,7 @@ mod tests {
     use super::*;
     use crate::core::types::{BlueprintComment, NodeType, Pin, PinDataType, PinType};
     use crate::rendering::graph::bezier;
-    use blueprint_graph::ConnectionType;
+    use graphy_blueprint::ConnectionType;
     use gpui::{Hsla, Size};
     use std::collections::BTreeSet;
 

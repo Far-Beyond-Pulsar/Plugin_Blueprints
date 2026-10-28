@@ -24,7 +24,7 @@ impl NodeGraphRenderer {
                         &panel.read(cx).subgraphs,
                     )
                     .is_some_and(|reference| {
-                        reference.kind == blueprint_graph::SubGraphKind::Collapsed
+                        reference.kind == graphy_blueprint::SubGraphKind::Collapsed
                     })
                 })
             })

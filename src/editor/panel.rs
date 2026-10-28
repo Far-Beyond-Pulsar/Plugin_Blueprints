@@ -22,7 +22,7 @@ use crate::features::connections::operations::ConnectionDrag;
 use crate::features::prefabs::PrefabAsset;
 use crate::features::variables::ClassVariable;
 use crate::ui_components::palette_view::NodePaletteView;
-use blueprint_graph::{LibraryManager, SubGraph};
+use graphy_blueprint::{LibraryManager, SubGraph};
 use ui::dock::{DockItem, DockPlacement};
 use ui::dropdown::{SearchableList, SearchableListEvent};
 
@@ -38,7 +38,7 @@ pub struct BlueprintEditorPanel {
     pub(super) focus_handle: FocusHandle,
     pub graph: BlueprintGraph,
     /// Asset metadata is kept intact across UI edits and serialization.
-    pub blueprint_metadata: blueprint_graph::BlueprintMetadata,
+    pub blueprint_metadata: graphy_blueprint::BlueprintMetadata,
     /// Project root used for VFS-backed trait discovery and index refresh.
     pub project_root: Option<std::path::PathBuf>,
     pub implemented_trait_catalog: Vec<crate::features::traits::TraitAssetSummary>,
@@ -599,7 +599,7 @@ impl BlueprintEditorPanel {
         Self {
             focus_handle: cx.focus_handle(),
             graph: main_graph.clone(),
-            blueprint_metadata: blueprint_graph::BlueprintMetadata::default(),
+            blueprint_metadata: graphy_blueprint::BlueprintMetadata::default(),
             project_root: None,
             implemented_trait_catalog: Vec::new(),
             implemented_trait_catalog_error: None,
@@ -968,7 +968,7 @@ impl BlueprintEditorPanel {
                 source_pin: "Body".to_string(),
                 target_node: "branch_node".to_string(),
                 target_pin: "exec".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Execution,
+                connection_type: graphy_blueprint::ConnectionType::Execution,
             },
             // Data: add -> greater_than
             Connection {
@@ -977,7 +977,7 @@ impl BlueprintEditorPanel {
                 source_pin: "result".to_string(),
                 target_node: "greater_node".to_string(),
                 target_pin: "a".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Data,
+                connection_type: graphy_blueprint::ConnectionType::Data,
             },
             // Data: greater_than -> branch
             Connection {
@@ -986,7 +986,7 @@ impl BlueprintEditorPanel {
                 source_pin: "result".to_string(),
                 target_node: "branch_node".to_string(),
                 target_pin: "condition".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Data,
+                connection_type: graphy_blueprint::ConnectionType::Data,
             },
             // Execution: branch(True) -> print_true
             Connection {
@@ -995,7 +995,7 @@ impl BlueprintEditorPanel {
                 source_pin: "True".to_string(),
                 target_node: "print_true".to_string(),
                 target_pin: "exec".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Execution,
+                connection_type: graphy_blueprint::ConnectionType::Execution,
             },
             // Execution: branch(False) -> print_false
             Connection {
@@ -1004,7 +1004,7 @@ impl BlueprintEditorPanel {
                 source_pin: "False".to_string(),
                 target_node: "print_false".to_string(),
                 target_pin: "exec".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Execution,
+                connection_type: graphy_blueprint::ConnectionType::Execution,
             },
         ];
 
@@ -1545,7 +1545,7 @@ impl BlueprintEditorPanel {
         );
 
         // Reload library manager so any library macros are available.
-        self.library_manager = blueprint_graph::LibraryManager::default();
+        self.library_manager = graphy_blueprint::LibraryManager::default();
         if let Err(e) = self
             .library_manager
             .load_all_libraries(crate::io::libraries::load_directory)
@@ -1561,27 +1561,27 @@ impl BlueprintEditorPanel {
         let macros_file = class_path.join("macros.json");
         if !macros_file.exists() {
             self.subgraphs
-                .retain(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Collapsed);
+                .retain(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed);
             return Ok(());
         }
 
         let content = std::fs::read_to_string(&macros_file)
             .map_err(|e| format!("Failed to read macros.json: {}", e))?;
-        let macros: Vec<blueprint_graph::SubGraph> = serde_json::from_str(&content)
+        let macros: Vec<graphy_blueprint::SubGraph> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse macros.json: {}", e))?;
 
         self.subgraphs
-            .retain(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Collapsed);
+            .retain(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed);
         self.subgraphs.extend(
             macros
                 .into_iter()
-                .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro),
+                .filter(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Macro),
         );
         println!(
             "📂 Loaded {} local macros from macros.json",
             self.subgraphs
                 .iter()
-                .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro)
+                .filter(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Macro)
                 .count()
         );
         Ok(())
@@ -1628,13 +1628,13 @@ impl BlueprintEditorPanel {
                     .map(|m| m.graph.clone());
 
                 if let Some(graph) = macro_graph {
-                    if let Ok(blueprint_graph) =
+                    if let Ok(graphy_blueprint) =
                         self.convert_graph_description_to_blueprint(&graph, window, cx)
                     {
                         self.open_tabs.push(GraphTab {
                             id: ser_tab.id.clone(),
                             name: ser_tab.name.clone(),
-                            graph: blueprint_graph,
+                            graph: graphy_blueprint,
                             is_main: false,
                             is_dirty: false,
                             is_library_macro: true,
@@ -1650,13 +1650,13 @@ impl BlueprintEditorPanel {
                     .map(|m| m.graph.clone());
 
                 if let Some(graph) = macro_graph {
-                    if let Ok(blueprint_graph) =
+                    if let Ok(graphy_blueprint) =
                         self.convert_graph_description_to_blueprint(&graph, window, cx)
                     {
                         self.open_tabs.push(GraphTab {
                             id: ser_tab.id.clone(),
                             name: ser_tab.name.clone(),
-                            graph: blueprint_graph,
+                            graph: graphy_blueprint,
                             is_main: false,
                             is_dirty: false,
                             is_library_macro: false,

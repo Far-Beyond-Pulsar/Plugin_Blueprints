@@ -175,7 +175,7 @@ impl ValidationReport {
 }
 
 /// Structural diagnostics for a UI-level graph description.
-pub(crate) fn check_ui_graph_diagnostics(graph: &blueprint_graph::GraphDescription) -> Vec<String> {
+pub(crate) fn check_ui_graph_diagnostics(graph: &graphy_blueprint::GraphDescription) -> Vec<String> {
     let mut report = ValidationReport::default();
     check_ui_graph(graph, &mut report);
     report.diagnostics
@@ -183,7 +183,7 @@ pub(crate) fn check_ui_graph_diagnostics(graph: &blueprint_graph::GraphDescripti
 
 /// Structural checks on the raw UI graph — the checks conversion silently
 /// skips (dangling endpoints) are reported loudly here instead.
-fn check_ui_graph(graph: &blueprint_graph::GraphDescription, report: &mut ValidationReport) {
+fn check_ui_graph(graph: &graphy_blueprint::GraphDescription, report: &mut ValidationReport) {
     for (id, node) in &graph.nodes {
         if node.node_type.trim().is_empty() {
             report.push(format!(

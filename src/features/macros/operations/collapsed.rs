@@ -38,7 +38,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
                 .iter()
                 .find(|definition| {
                     definition.id == graph_id
-                        && definition.kind == blueprint_graph::SubGraphKind::Collapsed
+                        && definition.kind == graphy_blueprint::SubGraphKind::Collapsed
                 })
                 .cloned()
             else {
@@ -263,7 +263,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
     /// the same connections.
     pub fn collapse_selected_nodes(&mut self, cx: &mut Context<Self>) {
         use crate::core::types::{BlueprintNode, Connection, NodeType, Pin, PinType};
-        use blueprint_graph::{DataType as GraphDataType, SubGraphPin};
+        use graphy_blueprint::{DataType as GraphDataType, SubGraphPin};
 
         let selected: std::collections::HashSet<String> = self
             .graph
@@ -325,7 +325,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
             })
             .cloned()
             .collect();
-        let mut interface = blueprint_graph::SubGraphInterface {
+        let mut interface = graphy_blueprint::SubGraphInterface {
             inputs: Vec::new(),
             outputs: Vec::new(),
         };
@@ -541,7 +541,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
             id: instance_id.clone(),
             definition_id: crate::core::subgraph_ref::SubGraphReference::new(
                 graph_id.clone(),
-                blueprint_graph::SubGraphKind::Collapsed,
+                graphy_blueprint::SubGraphKind::Collapsed,
             )
             .encode(),
             title: graph_name.clone(),
@@ -568,20 +568,20 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
             let Ok(graph) = editor.convert_graph_to_description(&internal_graph) else {
                 return;
             };
-            definition = Some(blueprint_graph::SubGraph {
+            definition = Some(graphy_blueprint::SubGraph {
                 id: graph_id.clone(),
-                kind: blueprint_graph::SubGraphKind::Collapsed,
+                kind: graphy_blueprint::SubGraphKind::Collapsed,
                 name: graph_name.clone(),
                 description: "Collapsed graph region".to_string(),
                 graph,
                 interface,
-                metadata: blueprint_graph::SubGraphMetadata {
+                metadata: graphy_blueprint::SubGraphMetadata {
                     created_at: chrono::Utc::now().to_rfc3339(),
                     modified_at: chrono::Utc::now().to_rfc3339(),
                     author: None,
                     tags: vec!["collapsed".to_string()],
                 },
-                macro_config: blueprint_graph::MacroConfiguration {
+                macro_config: graphy_blueprint::MacroConfiguration {
                     hide_in_palette: true,
                     category: "Collapsed".to_string(),
                     ..Default::default()

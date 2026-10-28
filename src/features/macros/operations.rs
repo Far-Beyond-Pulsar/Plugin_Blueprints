@@ -259,28 +259,28 @@ impl BlueprintEditorPanel {
         let macro_count = self
             .subgraphs
             .iter()
-            .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro)
+            .filter(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Macro)
             .count();
         let macro_name = format!("Macro {}", macro_count + 1);
         let macro_id = uuid::Uuid::new_v4().to_string();
 
-        let macro_def = blueprint_graph::SubGraph {
+        let macro_def = graphy_blueprint::SubGraph {
             id: macro_id.clone(),
-            kind: blueprint_graph::SubGraphKind::Macro,
+            kind: graphy_blueprint::SubGraphKind::Macro,
             name: macro_name.clone(),
             description: "New macro".to_string(),
-            graph: blueprint_graph::GraphDescription::new(&macro_name),
-            interface: blueprint_graph::SubGraphInterface {
+            graph: graphy_blueprint::GraphDescription::new(&macro_name),
+            interface: graphy_blueprint::SubGraphInterface {
                 inputs: Vec::new(),
                 outputs: Vec::new(),
             },
-            metadata: blueprint_graph::SubGraphMetadata {
+            metadata: graphy_blueprint::SubGraphMetadata {
                 created_at: chrono::Utc::now().to_rfc3339(),
                 modified_at: chrono::Utc::now().to_rfc3339(),
                 author: Some(String::new()),
                 tags: Vec::new(),
             },
-            macro_config: blueprint_graph::MacroConfiguration::default(),
+            macro_config: graphy_blueprint::MacroConfiguration::default(),
         };
 
         self.subgraphs.push(macro_def);
@@ -293,7 +293,7 @@ impl BlueprintEditorPanel {
         if let Some(m) = self
             .subgraphs
             .iter_mut()
-            .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+            .find(|m| m.id == macro_id && m.kind == graphy_blueprint::SubGraphKind::Macro)
         {
             m.name = new_name.clone();
         } else {
@@ -312,7 +312,7 @@ impl BlueprintEditorPanel {
         if !self
             .subgraphs
             .iter()
-            .any(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+            .any(|m| m.id == macro_id && m.kind == graphy_blueprint::SubGraphKind::Macro)
         {
             return;
         }
@@ -345,14 +345,14 @@ impl BlueprintEditorPanel {
         if !self
             .subgraphs
             .iter()
-            .any(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+            .any(|m| m.id == macro_id && m.kind == graphy_blueprint::SubGraphKind::Macro)
         {
             return;
         }
-        let pin = blueprint_graph::SubGraphPin {
+        let pin = graphy_blueprint::SubGraphPin {
             id: uuid::Uuid::new_v4().to_string(),
             name: pin_name,
-            data_type: blueprint_graph::DataType::from_type_str(&type_str),
+            data_type: graphy_blueprint::DataType::from_type_str(&type_str),
             description: None,
             default_value: None,
             is_instance_editable: false,
@@ -384,7 +384,7 @@ impl BlueprintEditorPanel {
         if !self
             .subgraphs
             .iter()
-            .any(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+            .any(|m| m.id == macro_id && m.kind == graphy_blueprint::SubGraphKind::Macro)
         {
             return;
         }
@@ -424,7 +424,7 @@ impl BlueprintEditorPanel {
         let Some(macro_def) = self
             .subgraphs
             .iter()
-            .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+            .find(|m| m.id == macro_id && m.kind == graphy_blueprint::SubGraphKind::Macro)
             .cloned()
         else {
             return;
@@ -650,12 +650,12 @@ impl BlueprintEditorPanel {
     pub fn sync_all_macro_instances(&mut self, macro_id: &str, cx: &mut Context<Self>) {
         let macro_ref = crate::core::subgraph_ref::SubGraphReference::new(
             macro_id,
-            blueprint_graph::SubGraphKind::Macro,
+            graphy_blueprint::SubGraphKind::Macro,
         );
         let Some(macro_def) = self
             .subgraphs
             .iter()
-            .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+            .find(|m| m.id == macro_id && m.kind == graphy_blueprint::SubGraphKind::Macro)
             .cloned()
         else {
             return;
@@ -789,7 +789,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
             p.read(cx)
                 .subgraphs
                 .iter()
-                .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+                .find(|m| m.id == macro_id && m.kind == graphy_blueprint::SubGraphKind::Macro)
                 .cloned()
         });
         let Some(macro_def) = macro_def else { return };
@@ -821,7 +821,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
             id: uuid::Uuid::new_v4().to_string(),
             definition_id: crate::core::subgraph_ref::SubGraphReference::new(
                 macro_id.clone(),
-                blueprint_graph::SubGraphKind::Macro,
+                graphy_blueprint::SubGraphKind::Macro,
             )
             .encode(),
             title: macro_def.name.clone(),

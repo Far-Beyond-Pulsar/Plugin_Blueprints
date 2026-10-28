@@ -276,7 +276,7 @@ pub struct Connection {
     pub source_pin: String,
     pub target_node: String,
     pub target_pin: String,
-    pub connection_type: blueprint_graph::ConnectionType,
+    pub connection_type: graphy_blueprint::ConnectionType,
 }
 
 // ============================================================================

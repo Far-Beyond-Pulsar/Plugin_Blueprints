@@ -4,7 +4,7 @@
 //! used `macro:<id>` for both macros and collapsed regions, so parsing accepts
 //! that form and resolves its kind from the saved subgraph catalog.
 
-use blueprint_graph::{SubGraph, SubGraphKind};
+use graphy_blueprint::{SubGraph, SubGraphKind};
 
 const TYPED_PREFIX: &str = "subgraph:";
 const LEGACY_PREFIX: &str = "macro:";

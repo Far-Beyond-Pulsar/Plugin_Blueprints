@@ -18,7 +18,7 @@ pub struct MacroDrag {
 /// Wrapper for SubGraph that implements HierarchyItem
 #[derive(Clone)]
 pub struct MacroHierarchyItem {
-    pub subgraph: blueprint_graph::SubGraph,
+    pub subgraph: graphy_blueprint::SubGraph,
     pub index: usize,
     pub is_selected: bool,
     /// Weak back-ref so context-menu actions can reach the panel.

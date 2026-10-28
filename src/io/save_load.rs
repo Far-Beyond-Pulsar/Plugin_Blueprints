@@ -14,11 +14,11 @@ const GRAPH_SAVE_FILE_NAME: &str = "graph_save.json";
 
 struct BlueprintSaveSnapshot {
     tabs: Vec<BlueprintSaveTabSnapshot>,
-    subgraphs: Vec<blueprint_graph::SubGraph>,
+    subgraphs: Vec<graphy_blueprint::SubGraph>,
     local_event_defs: Vec<crate::core::graph::EventDefinition>,
     class_variables: Vec<crate::features::variables::ClassVariable>,
     active_tab_index: usize,
-    blueprint_metadata: blueprint_graph::BlueprintMetadata,
+    blueprint_metadata: graphy_blueprint::BlueprintMetadata,
 }
 
 struct BlueprintSaveTabSnapshot {
@@ -38,7 +38,7 @@ impl PrefabSaveSnapshot {
     fn into_json(
         mut self,
         graph: &crate::core::graph::BlueprintGraph,
-        subgraphs: &[blueprint_graph::SubGraph],
+        subgraphs: &[graphy_blueprint::SubGraph],
     ) -> Result<(PathBuf, String), String> {
         self.asset.script_graph = Some(
             BlueprintEditorPanel::convert_graph_to_description_for_subgraphs(graph, subgraphs)?,
@@ -122,10 +122,10 @@ impl BlueprintSaveSnapshot {
         let variables = self
             .class_variables
             .iter()
-            .map(|variable| blueprint_graph::ClassVariable {
+            .map(|variable| graphy_blueprint::ClassVariable {
                 id: variable.id.clone(),
                 name: variable.name.clone(),
-                data_type: blueprint_graph::DataType::from_type_str(&variable.var_type),
+                data_type: graphy_blueprint::DataType::from_type_str(&variable.var_type),
                 default_value: variable.default_value.clone(),
                 description: variable.description.clone(),
             })
@@ -155,7 +155,7 @@ impl BlueprintSaveSnapshot {
             .map(|tab| {
                 (
                     tab.id.clone(),
-                    blueprint_graph::GraphViewState {
+                    graphy_blueprint::GraphViewState {
                         pan_offset_x: tab.graph.pan_offset.x,
                         pan_offset_y: tab.graph.pan_offset.y,
                         zoom: tab.graph.zoom_level,

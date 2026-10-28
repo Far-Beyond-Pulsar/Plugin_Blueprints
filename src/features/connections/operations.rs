@@ -160,9 +160,9 @@ impl GraphCanvasPanel {
 
                         // Create new connection
                         let connection_type = if pin_data_type == GraphDataType::execution() {
-                            blueprint_graph::ConnectionType::Execution
+                            graphy_blueprint::ConnectionType::Execution
                         } else {
-                            blueprint_graph::ConnectionType::Data
+                            graphy_blueprint::ConnectionType::Data
                         };
 
                         let connection = Connection {

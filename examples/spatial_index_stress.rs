@@ -16,7 +16,7 @@ use blueprint_editor_plugin::{
     BlueprintGraph, BlueprintNode, Connection, GraphRect, GraphSpatialIndex, NodeType, Pin,
     PinDataType, PinType,
 };
-use blueprint_graph::ConnectionType;
+use graphy_blueprint::ConnectionType;
 use gpui::{Point, Size};
 use std::collections::HashMap;
 use std::hint::black_box;

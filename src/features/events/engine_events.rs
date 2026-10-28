@@ -300,7 +300,7 @@ fn pin(id: &str, ty: &str, pin_type: PinType) -> PinDefinition {
         id: id.to_string(),
         name: id.to_string(),
         data_type: PinDataType::from_type_str(
-            blueprint_graph::DataType::from_type_str(ty).to_string(),
+            graphy_blueprint::DataType::from_type_str(ty).to_string(),
         ),
         pin_type,
     }

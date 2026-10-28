@@ -13,7 +13,7 @@ use blueprint_editor_plugin::{
     BlueprintEditorPanel, BlueprintGraph, BlueprintNode, Connection, NodeType, Pin, PinDataType,
     PinType, VirtualizationStats,
 };
-use blueprint_graph::ConnectionType;
+use graphy_blueprint::ConnectionType;
 use gpui::*;
 use std::collections::HashMap;
 use ui::{Assets, Root, Theme, ThemeMode};

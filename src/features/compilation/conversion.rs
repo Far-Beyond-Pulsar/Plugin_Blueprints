@@ -6,7 +6,7 @@ use crate::{
     BlueprintComment, BlueprintGraph, BlueprintNode, Connection, NodeDefinitions, NodeType, Pin,
     PinType,
 };
-use blueprint_graph::{self as graph_types, GraphDescription, NodeInstance, PinInstance, Position};
+use graphy_blueprint::{self as graph_types, GraphDescription, NodeInstance, PinInstance, Position};
 use gpui::*;
 
 /// Authored comment colors use normalized RGBA channels. GPUI stores the same
@@ -71,7 +71,7 @@ impl BlueprintEditorPanel {
     /// This path is pure so save tasks can prepare the serialized graph off the UI thread.
     pub(crate) fn convert_graph_to_description_for_subgraphs(
         graph: &BlueprintGraph,
-        subgraphs: &[blueprint_graph::SubGraph],
+        subgraphs: &[graphy_blueprint::SubGraph],
     ) -> Result<GraphDescription, String> {
         let mut graph_desc = GraphDescription::new("Blueprint Graph");
 
@@ -168,7 +168,7 @@ impl BlueprintEditorPanel {
     /// Get node type from blueprint node
     fn get_node_type_from_blueprint(
         bp_node: &BlueprintNode,
-        subgraphs: &[blueprint_graph::SubGraph],
+        subgraphs: &[graphy_blueprint::SubGraph],
     ) -> Result<String, String> {
         if bp_node.node_type == NodeType::Conversion {
             let conversion_id = bp_node
@@ -327,10 +327,10 @@ impl BlueprintEditorPanel {
                     macro_name,
                     "📦".to_string(),
                     match reference.kind {
-                        blueprint_graph::SubGraphKind::Macro => {
+                        graphy_blueprint::SubGraphKind::Macro => {
                             format!("Instance of macro '{}'", macro_id)
                         }
-                        blueprint_graph::SubGraphKind::Collapsed => {
+                        graphy_blueprint::SubGraphKind::Collapsed => {
                             format!("Collapsed graph '{}'", macro_id)
                         }
                     },

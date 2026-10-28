@@ -73,7 +73,7 @@ impl AssetInspectorRenderer {
             .subgraphs
             .iter()
             .filter(|subgraph| {
-                subgraph.kind == blueprint_graph::SubGraphKind::Collapsed
+                subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed
                     && !subgraph_is_referenced(editor, &subgraph.id)
             })
             .map(|subgraph| (subgraph.id.clone(), subgraph.name.clone()))
@@ -145,7 +145,7 @@ impl AssetInspectorRenderer {
                                 editor.sync_all_canvases_to_tabs(cx);
                                 if editor.subgraphs.iter().any(|subgraph| {
                                     subgraph.id == id
-                                        && subgraph.kind == blueprint_graph::SubGraphKind::Collapsed
+                                        && subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed
                                         && !subgraph_is_referenced(editor, &id)
                                 }) {
                                     let active_tab_id = editor

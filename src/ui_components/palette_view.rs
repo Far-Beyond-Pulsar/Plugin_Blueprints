@@ -244,7 +244,7 @@ impl NodePaletteView {
 /// Build palette items for all local macros, excluding `editing_macro_id` to
 /// prevent a macro from being placed inside itself.
 fn build_local_macro_palette_items(
-    macros: &[blueprint_graph::SubGraph],
+    macros: &[graphy_blueprint::SubGraph],
     editing_macro_id: Option<&str>,
 ) -> Vec<PaletteItem> {
     use crate::core::definitions::{NodeDefinition, PinDefinition};
@@ -253,7 +253,7 @@ fn build_local_macro_palette_items(
     let visible: Vec<_> = macros
         .iter()
         .filter(|m| {
-            m.kind == blueprint_graph::SubGraphKind::Macro
+            m.kind == graphy_blueprint::SubGraphKind::Macro
                 && Some(m.id.as_str()) != editing_macro_id
         })
         .collect();
@@ -274,7 +274,7 @@ fn build_local_macro_palette_items(
             .inputs
             .iter()
             .map(|p| {
-                let canonical = blueprint_graph::DataType::from_type_str(&p.data_type.to_string());
+                let canonical = graphy_blueprint::DataType::from_type_str(&p.data_type.to_string());
                 PinDefinition {
                     id: p.id.clone(),
                     name: p.name.clone(),
@@ -290,7 +290,7 @@ fn build_local_macro_palette_items(
             .outputs
             .iter()
             .map(|p| {
-                let canonical = blueprint_graph::DataType::from_type_str(&p.data_type.to_string());
+                let canonical = graphy_blueprint::DataType::from_type_str(&p.data_type.to_string());
                 PinDefinition {
                     id: p.id.clone(),
                     name: p.name.clone(),
@@ -306,7 +306,7 @@ fn build_local_macro_palette_items(
             def: NodeDefinition {
                 id: crate::core::subgraph_ref::SubGraphReference::new(
                     m.id.clone(),
-                    blueprint_graph::SubGraphKind::Macro,
+                    graphy_blueprint::SubGraphKind::Macro,
                 )
                 .encode(),
                 name: m.name.clone(),

@@ -61,7 +61,7 @@ impl BlueprintEditorPanel {
     }
 
     /// Dump the active graph (editor view + the `graphy::GraphDescription` that gets
-    /// sent to the compiler) to `blueprint_graph_debug.json` in the working
+    /// sent to the compiler) to `graphy_blueprint_debug.json` in the working
     /// directory, so event-node detection mismatches can be diagnosed by
     /// comparing the editor's classification against the `pulsar_std` catalogue.
     fn dump_graph_debug_info(&self, graph: &graphy::GraphDescription) {
@@ -128,9 +128,9 @@ impl BlueprintEditorPanel {
         };
 
         match serde_json::to_string_pretty(&dump) {
-            Ok(json) => match std::fs::write("blueprint_graph_debug.json", &json) {
+            Ok(json) => match std::fs::write("graphy_blueprint_debug.json", &json) {
                 Ok(()) => tracing::info!(
-                    "[Blueprint debug] Wrote graph snapshot to ./blueprint_graph_debug.json"
+                    "[Blueprint debug] Wrote graph snapshot to ./graphy_blueprint_debug.json"
                 ),
                 Err(e) => {
                     tracing::warn!("[Blueprint debug] Failed to write graph debug dump: {}", e)
@@ -218,7 +218,7 @@ impl BlueprintEditorPanel {
     /// `to_blueprint_asset`'s save snapshot) — plus shared library macros.
     fn collect_macro_library(
         &self,
-    ) -> Result<HashMap<String, blueprint_graph::GraphDescription>, String> {
+    ) -> Result<HashMap<String, graphy_blueprint::GraphDescription>, String> {
         let mut macros = self.subgraphs.clone();
         for tab in self
             .open_tabs

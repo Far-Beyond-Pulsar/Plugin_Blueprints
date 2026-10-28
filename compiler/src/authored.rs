@@ -1,6 +1,6 @@
 //! Lower the versioned authored schema into Graphy compiler IR.
 //! This is the only saved-graph boundary used by editor and headless callers.
-use blueprint_graph as authored;
+use graphy_blueprint as authored;
 
 fn normalize_property_literal(raw: &str) -> String {
     let mut out = raw.trim().to_string();
@@ -44,8 +44,8 @@ pub fn property_value_from_raw(raw: &str) -> graphy::JsonValue {
     graphy::JsonValue::String(s)
 }
 
-fn to_graphy_datatype(dt: &blueprint_graph::DataType) -> graphy::DataType {
-    use blueprint_graph::DataType as PG;
+fn to_graphy_datatype(dt: &graphy_blueprint::DataType) -> graphy::DataType {
+    use graphy_blueprint::DataType as PG;
     use graphy::DataType as GD;
     match dt {
         PG::Execution => GD::Exec,
@@ -154,8 +154,8 @@ pub fn lower_graph(
             return Err(format!("connection {} has a missing node or pin", conn.id));
         }
         let conn_type = match conn.connection_type {
-            blueprint_graph::ConnectionType::Execution => ConnectionType::Execution,
-            blueprint_graph::ConnectionType::Data => ConnectionType::Data,
+            graphy_blueprint::ConnectionType::Execution => ConnectionType::Execution,
+            graphy_blueprint::ConnectionType::Data => ConnectionType::Data,
         };
         graph.connections.push(GConnection {
             source_node: conn.source_node.clone(),

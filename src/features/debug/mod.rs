@@ -347,7 +347,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         for conn in &self.graph.connections {
             if matches!(
                 conn.connection_type,
-                blueprint_graph::ConnectionType::Execution
+                graphy_blueprint::ConnectionType::Execution
             ) {
                 if let (Some(&src), Some(&dst)) = (
                     node_index.get(&conn.source_node),

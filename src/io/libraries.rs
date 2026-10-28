@@ -1,5 +1,5 @@
 //! Project I/O stays in the host; the shared library model accepts bytes.
-use blueprint_graph::SubGraphLibrary;
+use graphy_blueprint::SubGraphLibrary;
 use engine_fs::virtual_fs;
 use std::path::Path;
 

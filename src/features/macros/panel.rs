@@ -43,7 +43,7 @@ impl MacrosRenderer {
             .subgraphs
             .iter()
             .enumerate()
-            .filter(|(_, subgraph)| subgraph.kind == blueprint_graph::SubGraphKind::Macro)
+            .filter(|(_, subgraph)| subgraph.kind == graphy_blueprint::SubGraphKind::Macro)
             .map(|(index, subgraph)| {
                 let is_renaming = panel.renaming_target.as_ref().map_or(
                     false,

@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use blueprint_graph::ConnectionType;
+use graphy_blueprint::ConnectionType;
 use gpui::{Point, Size};
 use plugin_editor_api::{AiToolDefinition, PluginError};
 use serde_json::{json, Value};

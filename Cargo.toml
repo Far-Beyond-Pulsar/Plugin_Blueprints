@@ -35,7 +35,7 @@ builtin = ["dep:plugin_manager"]
 engine_fs = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ffbecda91982c3997ebff801c5b872df0a455ef" }
 editor_task_queue = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ffbecda91982c3997ebff801c5b872df0a455ef" }
 ui_types_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ffbecda91982c3997ebff801c5b872df0a455ef" }
-blueprint_graph = { path = "graph" }
+graphy-blueprint = { path = "../../../crates/third-party/graphy/crates/graphy-blueprint" }
 # Resolve every public UI and engine type through one current Pulsar revision.
 # Mixing the standalone WGPUI repositories with Pulsar's re-exports creates
 # distinct Cargo package identities for otherwise identical GPUI types.
