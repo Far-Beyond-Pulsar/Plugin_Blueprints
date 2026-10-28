@@ -83,6 +83,7 @@ impl Graph {
 
     fn exec(&mut self, from: &str, pin: &str, to: &str) -> &mut Self {
         self.connections.push(Connection {
+            id: Some(format!("c{}", self.connections.len())),
             source_node: from.into(),
             source_pin: pin.into(),
             target_node: to.into(),
@@ -94,6 +95,7 @@ impl Graph {
 
     fn data(&mut self, from: &str, from_pin: &str, to: &str, to_pin: &str) -> &mut Self {
         self.connections.push(Connection {
+            id: Some(format!("c{}", self.connections.len())),
             source_node: from.into(),
             source_pin: from_pin.into(),
             target_node: to.into(),
