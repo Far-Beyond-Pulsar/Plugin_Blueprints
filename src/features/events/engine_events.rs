@@ -43,7 +43,10 @@ pub fn signature_of(descriptor: &EventDescriptor) -> Option<EventSignature> {
         .collect::<Option<Vec<_>>>()?;
     Some(EventSignature {
         id: descriptor.id,
-        name: descriptor.name.clone(),
+        name: descriptor.namespace.as_ref().map_or_else(
+            || descriptor.name.clone(),
+            |ns| format!("{ns}::{}", descriptor.name),
+        ),
         fields,
     })
 }
@@ -95,6 +98,34 @@ pub fn project_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
     events
 }
 
+fn animation_catalog(class_path: Option<&Path>) -> Vec<(String, EventDescriptor)> {
+    let Some(root) = class_path.and_then(crate::features::class_dirs::project_root_of) else {
+        return Vec::new();
+    };
+    let catalog = engine_backend::project_animation_notify_events(&root);
+    for diagnostic in catalog.diagnostics {
+        tracing::warn!(path = %diagnostic.path.display(), error = %diagnostic.error,
+            "could not discover animation notify events");
+    }
+    catalog.events
+}
+
+fn animation_palette_event(descriptor: &EventDescriptor) -> Option<PaletteEvent> {
+    Some(PaletteEvent {
+        signature: signature_of(descriptor)?,
+        category: "Animation".into(),
+        declared_here: false,
+    })
+}
+
+/// saved animation assets use the same descriptors as the live player.
+pub fn animation_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
+    animation_catalog(class_path)
+        .iter()
+        .filter_map(|(_, descriptor)| animation_palette_event(descriptor))
+        .collect()
+}
+
 /// This class's own custom events, as the compiler will declare them.
 pub fn local_events(
     class_name: &str,
@@ -132,6 +163,7 @@ pub fn known_event_signatures(class_path: Option<&Path>) -> Vec<EventSignature> 
     builtin_events()
         .into_iter()
         .chain(project_events(class_path))
+        .chain(animation_events(class_path))
         .map(|e| e.signature)
         .collect()
 }
@@ -220,10 +252,38 @@ pub fn event_node_definitions(
 ) -> Vec<(String, NodeDefinition)> {
     let mut events = builtin_events();
     events.extend(project_events(class_path));
+    let animation = animation_catalog(class_path);
+    events.extend(
+        animation
+            .iter()
+            .filter_map(|(_, descriptor)| animation_palette_event(descriptor)),
+    );
     events.extend(local_events(class_name, defs));
+    let labels = animation
+        .into_iter()
+        .map(|(label, descriptor)| {
+            (
+                format!("animseq::{}", descriptor.name),
+                (label, descriptor.name),
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
     event_nodes(&events)
         .iter()
-        .map(|n| (n.category.clone(), node_definition(n)))
+        .map(|node| {
+            let mut definition = node_definition(node);
+            if let Some(key) = node
+                .node_type
+                .strip_prefix("event::")
+                .and_then(|rest| rest.split_once("::").map(|(_, key)| key))
+            {
+                if let Some((label, identity)) = labels.get(key) {
+                    definition.name = definition.name.replace(key, label);
+                    definition.description = format!("{} ({identity})", definition.name);
+                }
+            }
+            (node.category.clone(), definition)
+        })
         .collect()
 }
 
