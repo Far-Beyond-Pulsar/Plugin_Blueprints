@@ -158,6 +158,7 @@ pub fn lower_graph(
             graphy_blueprint::ConnectionType::Data => ConnectionType::Data,
         };
         graph.connections.push(GConnection {
+            id: Some(conn.id.clone()),
             source_node: conn.source_node.clone(),
             source_pin: conn.source_pin.clone(),
             target_node: conn.target_node.clone(),
@@ -224,6 +225,7 @@ fn collapse_interfaces(graph: &mut graphy::GraphDescription) -> Result<(), Strin
             }
             for input in sources {
                 graph.connections.push(graphy::Connection {
+                    id: None,
                     source_node: input.source_node.clone(),
                     source_pin: input.source_pin.clone(),
                     target_node: output.target_node.clone(),
