@@ -67,7 +67,6 @@ impl BlueprintEditorPanel {
                 .into_iter()
                 .map(|(tid, tname, tis_main, doc)| {
                     let ew = editor_weak.clone();
-                    let profile = self.profile.clone();
                     let profile_data = profile_data.clone();
                     let id = tid.clone();
                     let panel = cx.new(|cx| {
@@ -77,7 +76,6 @@ impl BlueprintEditorPanel {
                             tname,
                             tis_main,
                             doc,
-                            profile,
                             profile_data,
                             window,
                             cx,
@@ -112,9 +110,6 @@ impl BlueprintEditorPanel {
             }
 
             // Left sidebar: Components/Find (multi-tab), Macros/Events (multi-tab), Variables
-            // A profile without Blueprint concepts keeps only the canvas and the
-            // property panel (a node's parameters are edited there).
-            let stripped = self.profile.as_ref().is_some_and(|p| !p.side_panels());
             let left = DockItem::split(
                 Axis::Vertical,
                 vec![
@@ -155,46 +150,20 @@ impl BlueprintEditorPanel {
             );
 
             // Right sidebar: live properties, compiler output, and serialized save data.
-            let mut right_panels = vec![Arc::new(properties_panel) as Arc<dyn ui::dock::PanelView>];
-            if !stripped {
-                right_panels.push(Arc::new(compiler_panel) as Arc<dyn ui::dock::PanelView>);
-                right_panels.push(Arc::new(asset_inspector_panel) as Arc<dyn ui::dock::PanelView>);
-            }
-            let properties = DockItem::tabs(right_panels, None, &dock_area_weak, window, cx);
-            // A profile may put a preview above the Properties panel.
-            let preview = self.profile.clone().and_then(|profile| {
-                let file = self.get_graph_file_path();
-                profile.preview_panel(file.as_deref(), window, cx)
-            });
-            let right = match preview {
-                Some(preview) => DockItem::split(
-                    Axis::Vertical,
-                    vec![
-                        DockItem::tabs(vec![preview], None, &dock_area_weak, window, cx),
-                        properties,
-                    ],
-                    &dock_area_weak,
-                    window,
-                    cx,
-                ),
-                None => properties,
-            };
-
-            // A profile may put its own panel on the left instead of the Blueprint ones.
-            let profile_left = self.profile.clone().map(|profile| {
-                let file = self.get_graph_file_path();
-                profile.left_panels(editor_weak.clone(), file.as_deref(), window, cx)
-            });
-            let left = match profile_left {
-                Some(panels) if stripped && !panels.is_empty() => {
-                    Some(DockItem::tabs(panels, None, &dock_area_weak, window, cx))
-                }
-                _ => (!stripped).then_some(left),
-            };
-
+            let right = DockItem::tabs(
+                vec![
+                    Arc::new(properties_panel) as Arc<dyn ui::dock::PanelView>,
+                    Arc::new(compiler_panel) as Arc<dyn ui::dock::PanelView>,
+                    Arc::new(asset_inspector_panel) as Arc<dyn ui::dock::PanelView>,
+                ],
+                None,
+                &dock_area_weak,
+                window,
+                cx,
+            );
             workspace.initialize(
                 center,
-                left,
+                Some(left),
                 Some(right),
                 None,
                 window,

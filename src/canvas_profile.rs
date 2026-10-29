@@ -92,8 +92,6 @@ impl TypeResolver for BlueprintResolver {
 pub struct BlueprintPresenter {
     definitions: &'static NodeDefinitions,
     data: SharedProfileData,
-    /// A foreign graph kind's profile, which may title nodes from their properties.
-    editor_profile: Option<Arc<dyn crate::profile::EditorProfile>>,
 }
 
 fn title_case(s: &str) -> String {
@@ -211,11 +209,6 @@ impl Presenter for BlueprintPresenter {
         } else {
             NodePresentation::card(ty.replace('_', " "), category_accent(ty))
         };
-        if let Some(title) = self.editor_profile.as_ref().and_then(|profile| {
-            profile.node_title(ty, &crate::canvas_profile::properties_as_text(node))
-        }) {
-            p.title = title;
-        }
         // A `__return__` output is drawn in the header instead of a body row.
         p.header_output = node.outputs.iter().position(|o| o.id == "__return__");
         p.active = self
@@ -285,14 +278,12 @@ impl BlueprintProfile {
     pub fn new(
         definitions: &'static NodeDefinitions,
         data: SharedProfileData,
-        editor_profile: Option<Arc<dyn crate::profile::EditorProfile>>,
     ) -> Self {
         Self {
             id: "blueprint".to_string(),
             presenter: BlueprintPresenter {
                 definitions,
                 data,
-                editor_profile,
             },
             resolver: BlueprintResolver,
         }
@@ -300,7 +291,7 @@ impl BlueprintProfile {
 
     /// The profile for a Blueprint asset, over the Blueprint node catalogue.
     pub fn blueprint(data: SharedProfileData) -> Self {
-        Self::new(NodeDefinitions::load(), data, None)
+        Self::new(NodeDefinitions::load(), data)
     }
 
     fn instantiate(&self, def: &NodeDefinition, id: &str, pos: Position) -> NodeInstance {
@@ -494,39 +485,6 @@ impl GraphProfile for BlueprintProfile {
 
 impl graphy_gpui::canvas::GpuiProfile for BlueprintProfile {}
 
-/// Fonts for the canvas text: a readable system font, with a compiled-in
-/// fallback so the editor works on unusual setups.
-pub fn canvas_fonts() -> graphy_render_wgpu::FontSet {
-    let candidates: &[&str] = if cfg!(target_os = "macos") {
-        &[
-            "/System/Library/Fonts/Helvetica.ttc",
-            "/Library/Fonts/Arial.ttf",
-            "/System/Library/Fonts/SFNSText.ttf",
-        ]
-    } else if cfg!(target_os = "windows") {
-        &[
-            r"C:\Windows\Fonts\segoeui.ttf",
-            r"C:\Windows\Fonts\arial.ttf",
-            r"C:\Windows\Fonts\calibri.ttf",
-        ]
-    } else {
-        &[
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "/usr/share/fonts/TTF/DejaVuSans.ttf",
-            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-        ]
-    };
-    let regular = candidates
-        .iter()
-        .find_map(|p| std::fs::read(p).ok())
-        .unwrap_or_else(|| include_bytes!("../assets/fallback_font.ttf").to_vec());
-    graphy_render_wgpu::FontSet {
-        regular,
-        bold: None,
-    }
-}
-
 /// A pin type from a document type string (`execution` or a Rust type).
 pub fn datatype_from_str(s: &str) -> DataType {
     match graphy_blueprint::DataType::from_type_str(s) {
@@ -535,10 +493,3 @@ pub fn datatype_from_str(s: &str) -> DataType {
     }
 }
 
-/// A node's properties as the text editor profiles read them.
-pub fn properties_as_text(node: &NodeInstance) -> HashMap<String, String> {
-    node.properties
-        .iter()
-        .map(|(k, v)| (k.clone(), crate::io::canvas_doc::property_string(v)))
-        .collect()
-}

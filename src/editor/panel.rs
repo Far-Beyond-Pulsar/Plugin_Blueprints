@@ -87,8 +87,6 @@ pub struct BlueprintEditorPanel {
     pub prefab_expanded_categories: HashSet<(usize, String)>,
     pub selected_prefab_component: Option<usize>,
 
-    /// The profile whose document this editor edits, if it is not a Blueprint.
-    pub profile: Option<std::sync::Arc<dyn crate::profile::EditorProfile>>,
 
     // Subscriptions
     pub subscriptions: Vec<Subscription>,
@@ -308,12 +306,7 @@ impl BlueprintEditorPanel {
         let mut panel = Self::new_internal(Some(file_path.clone()), window, cx);
         panel.file_loading = true;
         panel.set_path(file_path.clone());
-        // A profile's documents are single files, not `.class` folders.
-        let graph_file = if panel.profile.is_some() {
-            file_path.clone()
-        } else {
-            file_path.join("graph_save.json")
-        };
+        let graph_file = file_path.join("graph_save.json");
         let window_handle = window.window_handle();
         cx.spawn(async move |this, cx| {
             let parsed = cx
@@ -416,9 +409,8 @@ impl BlueprintEditorPanel {
             Self::create_sample_graph()
         };
 
-        let profile = project_path.as_deref().and_then(crate::profile::profile_for_path);
         let editor_weak = cx.entity().downgrade();
-        let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, profile.clone(), window, cx));
+        let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
         let mut engine_classes = pulsar_reflection::REGISTRY.get_class_names();
         // A placed class's own marker component is not a prefab component.
         engine_classes.retain(|name| !crate::features::prefabs::is_internal_component(name));
@@ -559,7 +551,6 @@ impl BlueprintEditorPanel {
             prefab_collapsed_categories: HashSet::new(),
             prefab_expanded_categories: HashSet::new(),
             selected_prefab_component: None,
-            profile,
             subscriptions: Vec::new(),
             compilation_status: CompilationStatus::default(),
             compilation_history: Vec::new(),
@@ -693,38 +684,6 @@ impl BlueprintEditorPanel {
         &self.focus_handle
     }
 
-    /// Adds a node of the profile's catalogue to the active graph, at the centre of
-    /// the view, with `properties` set, and lets the profile bring its pins and title
-    /// in line with them. How a profile's own panels put a node on the canvas.
-    pub fn add_profile_node(
-        &mut self,
-        definition_id: &str,
-        properties: Vec<(String, String)>,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(canvas) = self.active_canvas().cloned() else {
-            return;
-        };
-        canvas.update(cx, |canvas, cx| {
-            canvas.add_profile_node(definition_id, properties, cx)
-        });
-    }
-
-    /// Arranges the active graph with the profile's layout (the toolbar's Auto
-    /// Layout button).
-    pub fn auto_layout(&mut self, cx: &mut Context<Self>) {
-        let Some(profile) = self.profile.clone() else {
-            return;
-        };
-        let Some(canvas) = self.active_canvas().cloned() else {
-            return;
-        };
-        canvas.update(cx, |canvas, cx| {
-            let commands = profile.auto_layout(canvas.graph(cx));
-            let _ = canvas.apply("Auto layout", commands, cx);
-        });
-    }
-
     pub fn active_canvas(
         &self,
     ) -> Option<&Entity<crate::editor::graph_canvas_panel::GraphCanvasPanel>> {
@@ -847,7 +806,6 @@ impl BlueprintEditorPanel {
             .collect();
         for (tab_id, tab_name, tab_is_main, is_library_macro, library_id, doc) in pending {
             let ew = editor_weak.clone();
-            let profile = self.profile.clone();
             let profile_data = self.profile_data.clone();
             let id = tab_id.clone();
             let panel = cx.new(|cx| {
@@ -857,7 +815,6 @@ impl BlueprintEditorPanel {
                     tab_name,
                     tab_is_main,
                     doc,
-                    profile,
                     profile_data,
                     window,
                     cx,

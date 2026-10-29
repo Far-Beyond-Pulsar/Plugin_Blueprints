@@ -162,11 +162,7 @@ impl BlueprintSaveSnapshot {
 
 fn serialize_blueprint_asset(
     asset: &formats::BlueprintAsset,
-    profile: Option<&std::sync::Arc<dyn crate::profile::EditorProfile>>,
 ) -> Result<String, String> {
-    if let Some(profile) = profile {
-        return profile.encode(asset);
-    }
     formats::serialize_blueprint_with_header(asset)
 }
 
@@ -186,9 +182,8 @@ fn persist_blueprint_content(path: &Path, content: &str) -> Result<(), String> {
 fn persist_blueprint_asset(
     path: &Path,
     asset: &formats::BlueprintAsset,
-    profile: Option<&std::sync::Arc<dyn crate::profile::EditorProfile>>,
 ) -> Result<usize, String> {
-    let content = serialize_blueprint_asset(asset, profile)?;
+    let content = serialize_blueprint_asset(asset)?;
     persist_blueprint_content(path, &content)?;
     Ok(content.len())
 }
@@ -281,14 +276,6 @@ impl BlueprintEditorPanel {
             return;
         }
 
-        // A preview follows what is saved.
-        if let Some(profile) = self.profile.clone() {
-            let file = self.get_graph_file_path();
-            if let Ok(asset) = self.to_blueprint_asset(cx) {
-                profile.graph_applied(file.as_deref(), &asset, cx);
-            }
-        }
-
         let file_path = self.get_graph_file_path();
 
         let Some(path) = file_path else {
@@ -306,7 +293,6 @@ impl BlueprintEditorPanel {
                 .and_then(crate::features::class_dirs::project_root_of)
         });
         let class_dir = self.current_class_path.clone();
-        let save_profile = self.profile.clone();
         let mut publish_after_save = false;
         self.is_saving = true;
         cx.notify();
@@ -360,7 +346,7 @@ impl BlueprintEditorPanel {
                     });
 
                     let asset = snapshot.into_asset()?;
-                    let content = serialize_blueprint_asset(&asset, save_profile.as_ref())?;
+                    let content = serialize_blueprint_asset(&asset)?;
                     if task.is_cancelled() {
                         return Err("Blueprint save cancelled".to_string());
                     }
@@ -381,9 +367,7 @@ impl BlueprintEditorPanel {
                     }
 
                     task.report_progress(0.9, "Refreshing Blueprint index");
-                    if save_profile.is_none() {
-                        refresh_blueprint_trait_index_at(project_root.as_deref());
-                    }
+                    refresh_blueprint_trait_index_at(project_root.as_deref());
 
                     tracing::info!(">>> plugin_save: SUCCESS wrote to {:?}", task_path);
                     task.report_progress(1.0, "Blueprint saved");
@@ -570,7 +554,7 @@ impl BlueprintEditorPanel {
         // Toolbar and synchronous saves share this snapshot path.
         let asset = self.snapshot_blueprint_for_save(cx)?.into_asset()?;
 
-        let bytes_written = persist_blueprint_asset(&target_path, &asset, self.profile.as_ref())?;
+        let bytes_written = persist_blueprint_asset(&target_path, &asset)?;
 
         // The project index is derived from authored Blueprint metadata. Keep
         // it current for toolbar saves, assignment-panel saves and autosaves.
@@ -579,10 +563,7 @@ impl BlueprintEditorPanel {
                 .as_deref()
                 .and_then(crate::features::class_dirs::project_root_of)
         });
-        // Only Blueprints are indexed for the traits they implement.
-        if self.profile.is_none() {
-            refresh_blueprint_trait_index_at(project_root.as_deref());
-        }
+        refresh_blueprint_trait_index_at(project_root.as_deref());
 
         tracing::info!(
             ">>> save_to_path: wrote {} bytes to {:?}",
@@ -625,10 +606,6 @@ impl BlueprintEditorPanel {
             content.len(),
             source_path
         );
-
-        if let Some(profile) = crate::profile::profile_for_path(&source_path) {
-            return profile.decode(&content).map(|asset| (source_path, asset));
-        }
 
         let asset = match formats::deserialize_blueprint(&content) {
             Ok(asset) => asset,

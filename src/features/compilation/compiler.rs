@@ -383,35 +383,6 @@ impl BlueprintEditorPanel {
 
     /// Start compilation (called from toolbar)
     pub fn start_compilation(&mut self, cx: &mut Context<Self>) {
-        // Another kind of graph checks itself instead of generating code.
-        if let Some(profile) = self.profile.clone() {
-            
-            let (problems, asset) = match self.to_blueprint_asset(cx) {
-                Ok(asset) => (profile.validate(&asset), Some(asset)),
-                Err(error) => (vec![error], None),
-            };
-            if let (true, Some(asset)) = (problems.is_empty(), asset) {
-                let file = self.get_graph_file_path();
-                profile.graph_applied(file.as_deref(), &asset, cx);
-            }
-            self.compilation_status = if problems.is_empty() {
-                CompilationStatus {
-                    state: CompilationState::Success,
-                    message: "✓ Graph is valid".to_string(),
-                    progress: 1.0,
-                    is_compiling: false,
-                }
-            } else {
-                CompilationStatus {
-                    state: CompilationState::Error,
-                    message: format!("✗ {}", problems.join("; ")),
-                    progress: 0.0,
-                    is_compiling: false,
-                }
-            };
-            cx.notify();
-            return;
-        }
         let panel_entity = cx.weak_entity();
         cx.spawn(async move |_entity, mut cx| {
             Self::compile_async(panel_entity, &mut cx).await;

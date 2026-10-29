@@ -318,7 +318,7 @@ impl PalettePanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let palette_view = cx.new(|cx| NodePaletteView::new(editor, None, window, cx));
+        let palette_view = cx.new(|cx| NodePaletteView::new(editor, window, cx));
         Self {
             focus_handle: cx.focus_handle(),
             palette_view,

@@ -42,8 +42,6 @@ pub struct NodePaletteView {
     /// palette), placement targets that canvas directly. When `None` (the dock
     /// palette panel) placement targets the editor's active canvas.
     pub canvas: Option<WeakEntity<GraphCanvasPanel>>,
-    /// The profile whose catalogue this palette lists; `None` for Blueprints.
-    profile: Option<std::sync::Arc<dyn crate::profile::EditorProfile>>,
     focus_handle: FocusHandle,
     /// Full unfiltered flat list — built once, never mutated.
     all_items: Vec<PaletteItem>,
@@ -64,11 +62,10 @@ pub struct NodePaletteView {
 impl NodePaletteView {
     pub fn new(
         editor: WeakEntity<BlueprintEditorPanel>,
-        profile: Option<std::sync::Arc<dyn crate::profile::EditorProfile>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        Self::new_inner(editor, None, profile, window, cx)
+        Self::new_inner(editor, None, window, cx)
     }
 
     /// Construct a palette bound to a specific canvas (the quick right-click palette).
@@ -76,22 +73,20 @@ impl NodePaletteView {
     pub fn new_for_canvas(
         canvas: WeakEntity<GraphCanvasPanel>,
         panel: WeakEntity<crate::editor::panel::BlueprintEditorPanel>,
-        profile: Option<std::sync::Arc<dyn crate::profile::EditorProfile>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        Self::new_inner(panel, Some(canvas), profile, window, cx)
+        Self::new_inner(panel, Some(canvas), window, cx)
     }
 
     fn new_inner(
         editor: WeakEntity<BlueprintEditorPanel>,
         canvas: Option<WeakEntity<GraphCanvasPanel>>,
-        profile: Option<std::sync::Arc<dyn crate::profile::EditorProfile>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         // Build base node items only - component nodes will be loaded lazily
-        let all_items = build_palette_items(crate::profile::definitions_for(profile.as_ref()));
+        let all_items = build_palette_items(NodeDefinitions::load());
 
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search nodes…"));
         let (send, receive) = smol::channel::bounded(1);
@@ -123,7 +118,6 @@ impl NodePaletteView {
             _asset_updates: asset_updates,
             editor,
             canvas,
-            profile,
             focus_handle: cx.focus_handle(),
             all_items,
             search_input,
@@ -148,7 +142,7 @@ impl NodePaletteView {
     /// Rebuild the palette items (called when prefab or macros change).
     pub fn rebuild_items(&mut self, cx: &mut Context<Self>) {
         let mut all_items =
-            build_palette_items(crate::profile::definitions_for(self.profile.as_ref()));
+            build_palette_items(NodeDefinitions::load());
 
         if let Some(editor_entity) = self.editor.upgrade() {
             let editor_ref = editor_entity.read(cx);

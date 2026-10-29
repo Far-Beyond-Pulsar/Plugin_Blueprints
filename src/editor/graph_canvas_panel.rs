@@ -18,7 +18,7 @@ use ui::dock::{Panel, PanelEvent};
 use ui::input::{InputEvent, InputState};
 use ui_common::reflected_properties_panel::PropertyStateManager;
 
-use crate::canvas_profile::{canvas_fonts, BlueprintProfile, SharedProfileData};
+use crate::canvas_profile::{BlueprintProfile, SharedProfileData};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::tabs::TabDoc;
 use crate::features::undo::Command;
@@ -99,10 +99,6 @@ pub struct GraphCanvasPanel {
     pub comment_text_input: Entity<InputState>,
     /// Colour pickers shown in the inspector, by comment id.
     pub comment_pickers: HashMap<String, Entity<ui::color_picker::ColorPickerState>>,
-    /// Text inputs for a profile's node parameters, by `node id` + `key`.
-    pub(crate) param_inputs: HashMap<String, Entity<InputState>>,
-    /// The profile of the document this canvas edits; `None` for Blueprints.
-    pub profile: Option<Arc<dyn crate::profile::EditorProfile>>,
     pub pin_property_state: PropertyStateManager,
 
     // ── Sidebar drags ──────────────────────────────────────────────────────
@@ -126,7 +122,6 @@ impl GraphCanvasPanel {
         name: String,
         is_main: bool,
         doc: TabDoc,
-        profile: Option<Arc<dyn crate::profile::EditorProfile>>,
         profile_data: SharedProfileData,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -136,12 +131,11 @@ impl GraphCanvasPanel {
             sidecar,
             view,
         } = doc;
-        let definitions = crate::profile::definitions_for(profile.as_ref());
-        let bp_profile = Arc::new(BlueprintProfile::new(definitions, profile_data.clone(), profile.clone()));
+        let bp_profile = Arc::new(BlueprintProfile::blueprint(profile_data.clone()));
         let canvas = {
             let bp_profile = bp_profile.clone();
             cx.new(|cx| {
-                let mut canvas = GraphCanvas::new(graph, bp_profile, canvas_fonts(), cx)
+                let mut canvas = GraphCanvas::new(graph, bp_profile, graphy_gpui::canvas::system_fonts(), cx)
                     .expect("the bundled canvas font parses");
                 if let Some(((pan_x, pan_y), zoom)) = view {
                     canvas.set_view(Vec2::new(pan_x, pan_y), zoom, cx);
@@ -154,7 +148,7 @@ impl GraphCanvasPanel {
 
         let canvas_weak = cx.entity().downgrade();
         let quick_palette_view = cx.new(|cx| {
-            NodePaletteView::new_for_canvas(canvas_weak, panel.clone(), profile.clone(), window, cx)
+            NodePaletteView::new_for_canvas(canvas_weak, panel.clone(), window, cx)
         });
         let comment_text_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Comment text..."));
@@ -198,8 +192,6 @@ impl GraphCanvasPanel {
             editing_comment: None,
             comment_text_input,
             comment_pickers: HashMap::new(),
-            param_inputs: HashMap::new(),
-            profile,
             pin_property_state: PropertyStateManager::new(),
             dragging_variable: None,
             variable_drop_menu_position: None,
@@ -675,36 +667,6 @@ impl GraphCanvasPanel {
         Some(id)
     }
 
-    /// Adds a node of the profile's catalogue at the centre of the view with
-    /// `properties` set, and lets the profile follow up, as one edit.
-    pub fn add_profile_node(
-        &mut self,
-        definition_id: &str,
-        properties: Vec<(String, String)>,
-        cx: &mut Context<Self>,
-    ) {
-        let canvas = self.canvas.read(cx);
-        let (pan, zoom) = canvas.view();
-        let vp = canvas.viewport();
-        let centre = Vec2::new(vp.x * 0.5 / zoom - pan.x, vp.y * 0.5 / zoom - pan.y);
-        let id = uuid::Uuid::new_v4().to_string();
-        let pos = Position::new(snap(f64::from(centre.x)), snap(f64::from(centre.y)));
-        let Some(mut node) = self.bp_profile.create_node(definition_id, &id, pos) else {
-            return;
-        };
-        for (key, value) in properties {
-            node.properties.insert(key, canvas_doc::property_value(&value));
-        }
-        let mut commands = vec![GraphCommand::AddNode(node)];
-        if let Some(profile) = self.profile.clone() {
-            let mut after = self.graph(cx).clone();
-            if commands[0].apply(&mut after).is_ok() {
-                commands.extend(profile.parameter_changed(&after, &id));
-            }
-        }
-        let _ = self.apply("Add node", commands, cx);
-    }
-
     /// Commands wiring `source` (an output pin) to the first compatible input
     /// of the freshly added `node`, replacing whatever occupied either end.
     fn connect_new_node_commands(
@@ -787,84 +749,6 @@ impl GraphCanvasPanel {
             }],
             cx,
         );
-    }
-
-    /// Sets one property of a node from editor text, brings dynamic pins in
-    /// line, and lets the profile follow up. No-op when the value is unchanged.
-    pub fn set_node_property(
-        &mut self,
-        node_id: &str,
-        key: &str,
-        value: String,
-        cx: &mut Context<Self>,
-    ) {
-        let new = canvas_doc::property_value(&value);
-        let unchanged = self
-            .graph(cx)
-            .nodes
-            .get(node_id)
-            .is_some_and(|n| n.properties.get(key) == Some(&new));
-        if unchanged {
-            return;
-        }
-        let mut commands = vec![GraphCommand::SetProperty {
-            node: node_id.to_string(),
-            key: key.to_string(),
-            value: Some(new),
-        }];
-        if let Some(profile) = self.profile.clone() {
-            // The profile sees the graph as it will be after the edit.
-            let mut after = self.graph(cx).clone();
-            if commands[0].apply(&mut after).is_ok() {
-                commands.extend(profile.parameter_changed(&after, node_id));
-            }
-        }
-        let _ = self.apply("Edit property", commands, cx);
-    }
-
-    /// The text input editing `key` of node `node_id`, created on first use and
-    /// kept in step with the node's value while it is not being typed in.
-    pub(crate) fn param_input(
-        &mut self,
-        node_id: &str,
-        key: &str,
-        current: &str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Entity<InputState> {
-        let slot = format!("{node_id}\u{1f}{key}");
-        if let Some(existing) = self.param_inputs.get(&slot) {
-            let existing = existing.clone();
-            let focused = existing.read(cx).focus_handle(cx).is_focused(window);
-            if !focused && existing.read(cx).text().to_string() != current {
-                existing.update(cx, |input, cx| {
-                    input.set_value(current.to_string(), window, cx)
-                });
-            }
-            return existing;
-        }
-        let input = cx.new(|cx| {
-            let mut input = InputState::new(window, cx);
-            input.set_value(current.to_string(), window, cx);
-            input
-        });
-        let (node_id, key) = (node_id.to_string(), key.to_string());
-        cx.subscribe_in(
-            &input,
-            window,
-            move |this, state: &Entity<InputState>, event: &InputEvent, _window, cx| {
-                if matches!(
-                    event,
-                    InputEvent::Change | InputEvent::Blur | InputEvent::PressEnter { .. }
-                ) {
-                    let text = state.read(cx).text().to_string();
-                    this.set_node_property(&node_id, &key, text, cx);
-                }
-            },
-        )
-        .detach();
-        self.param_inputs.insert(slot, input.clone());
-        input
     }
 
     // ── View ───────────────────────────────────────────────────────────────

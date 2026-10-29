@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 
+use crate::core::definitions::NodeDefinitions;
 use crate::core::types::{NodeType, PinDataType};
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use gpui::{App, Point, Size};
@@ -75,7 +76,7 @@ impl GraphCanvasPanel {
         let node = self.graph(cx).nodes.get(id)?;
         let canvas = self.canvas.read(cx);
         let scene_node = canvas.scene().node(id);
-        let definitions = crate::profile::definitions_for(self.profile.as_ref());
+        let definitions = NodeDefinitions::load();
         let definition = definitions.get_node_definition(&node.node_type);
         let category = definitions
             .get_category_for_node(&node.node_type)
