@@ -67,6 +67,7 @@ pub struct GraphCanvasPanel {
     /// Index of the comment whose title is being edited.
     pub editing_comment: Option<usize>,
     pub comment_text_input: Entity<InputState>,
+    pub zip_tie_length_input: Entity<InputState>,
     /// Colour pickers shown in the inspector, by comment id.
     pub comment_pickers: HashMap<String, Entity<ui::color_picker::ColorPickerState>>,
     pub pin_property_state: PropertyStateManager,
@@ -140,6 +141,23 @@ impl GraphCanvasPanel {
         )
         .detach();
 
+        let zip_tie_length_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Straight length (graph units)"));
+        cx.subscribe_in(
+            &zip_tie_length_input,
+            window,
+            |this, state: &Entity<InputState>, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change | InputEvent::Blur | InputEvent::PressEnter { .. }) {
+                    let length = state.read(cx).text().to_string().parse::<f64>().ok();
+                    let selected = this.canvas.read(cx).controller().selection.ties.iter().next().copied();
+                    if let (Some(index), Some(length)) = (selected, length.filter(|n| n.is_finite())) {
+                        this.set_zip_tie_straight_length(index, length, cx);
+                    }
+                }
+            },
+        )
+        .detach();
+
         Self {
             id,
             name,
@@ -159,6 +177,7 @@ impl GraphCanvasPanel {
             debug_pin_values: HashMap::new(),
             editing_comment: None,
             comment_text_input,
+            zip_tie_length_input,
             comment_pickers: HashMap::new(),
             pin_property_state: PropertyStateManager::new(),
             dragging_variable: None,
@@ -201,6 +220,50 @@ impl GraphCanvasPanel {
             .iter()
             .copied()
             .collect()
+    }
+
+    pub fn selected_ties(&self, cx: &App) -> Vec<usize> {
+        self.canvas
+            .read(cx)
+            .controller()
+            .selection
+            .ties
+            .iter()
+            .copied()
+            .collect()
+    }
+
+    pub fn set_zip_tie_straight_length(
+        &mut self,
+        index: usize,
+        length: f64,
+        cx: &mut Context<Self>,
+    ) {
+        let _ = self.canvas.update(cx, |canvas, cx| {
+            canvas.apply(
+                "Edit zip tie straight section",
+                &[GraphCommand::SetZipTieStraightLength { index, length }],
+                cx,
+            )
+        });
+    }
+
+    pub fn sync_zip_tie_length_input(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
+        let input = self.zip_tie_length_input.clone();
+        let length = self.graph(cx).zip_ties.get(index).map(|tie| tie.straight_length);
+        if let Some(length) = length {
+            let focused = input.read(cx).focus_handle(cx).is_focused(window);
+            let value = format!("{length:.1}");
+            if !focused && input.read(cx).text().to_string() != value {
+                input.update(cx, |input, cx| input.set_value(value, window, cx));
+            }
+        }
+        input
     }
 
     /// Applies commands to the document as one undoable edit. The history, dirty

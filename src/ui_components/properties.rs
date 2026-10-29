@@ -47,6 +47,7 @@ enum SelectionKind {
     Variable,
     GraphNode(usize),
     Comment(usize),
+    ZipTie(usize),
     Multi,
     None,
 }
@@ -102,7 +103,8 @@ impl PropertiesRenderer {
             let canvas = canvas.read(cx);
             let n = canvas.selected_nodes(cx).len();
             let c = canvas.selected_comments(cx).len();
-            if n > 1 || (n > 0 && c > 0) || c > 1 {
+            let t = canvas.selected_ties(cx).len();
+            if n > 1 || (n > 0 && (c > 0 || t > 0)) || c > 1 || (c > 0 && t > 0) || t > 1 {
                 return SelectionKind::Multi;
             }
             if n == 1 {
@@ -110,6 +112,9 @@ impl PropertiesRenderer {
             }
             if c == 1 {
                 return SelectionKind::Comment(1);
+            }
+            if t == 1 {
+                return SelectionKind::ZipTie(1);
             }
         }
         SelectionKind::None
@@ -126,6 +131,7 @@ impl PropertiesRenderer {
             SelectionKind::Variable => ("Properties", IconName::Component, "Variable"),
             SelectionKind::GraphNode(_) => ("Properties", IconName::Component, "Node"),
             SelectionKind::Comment(_) => ("Properties", IconName::Info, "Comment"),
+            SelectionKind::ZipTie(_) => ("Properties", IconName::Cable, "Zip Tie"),
             SelectionKind::Multi => ("Properties", IconName::Copy, "Multiple"),
             SelectionKind::None => ("Properties", IconName::Settings, "None"),
         };
@@ -168,8 +174,18 @@ impl PropertiesRenderer {
 
         let sel_nodes = canvas.selected_nodes(cx);
         let sel_comments = canvas.selected_comments(cx);
+        let sel_ties = canvas.selected_ties(cx);
         let sel_count = sel_nodes.len();
         let com_count = sel_comments.len();
+
+        if sel_ties.len() == 1 && sel_count == 0 && com_count == 0 {
+            if let Some(active_canvas) = active_canvas_opt {
+                let index = sel_ties[0];
+                return active_canvas.update(cx, |canvas, cx| {
+                    Self::render_zip_tie_properties(canvas, index, window, cx)
+                });
+            }
+        }
 
         // ── Single comment selected ──────────────────────────────────────
         if com_count == 1 && sel_count == 0 {
