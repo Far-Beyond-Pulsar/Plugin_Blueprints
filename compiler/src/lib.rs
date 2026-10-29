@@ -2422,12 +2422,14 @@ impl<'a> Compiler<'a> {
 /// the event name; current graphs use `event::on_component::Component.event`.
 fn component_event_name(node_type: &str) -> Option<String> {
     if let Some(event) = node_type.strip_prefix("event::on_component::") {
-        // Animation notifies keep their asset-qualified event identity
-        // (`animseq::<sequence-id>.<notify-id>`) while using the established
-        // component-reference subscription path. The component prefix names
-        // the SceneDB source reference; it is not part of the event name.
+        // Animation events keep their asset-qualified event identity
+        // (`animseq::<sequence-id>.<notify-id>` for Sequence-owned notifies and
+        // states, `montage::<montage-id>.<notify-id | lifecycle_kind>` for what a
+        // Montage owns) while using the established component-reference
+        // subscription path. The component prefix names the SceneDB source
+        // reference; it is not part of the event name.
         if let Some((component, event_name)) = event.split_once('.') {
-            if component == "SkeletalMeshComponent" && event_name.starts_with("animseq::") {
+            if component == "SkeletalMeshComponent" && (event_name.starts_with("animseq::") || event_name.starts_with("montage::")) {
                 return Some(event_name.to_owned());
             }
         }
