@@ -30,8 +30,7 @@ pub struct AssetInspectorRenderer;
 impl AssetInspectorRenderer {
     /// Called by the panel's debounced task, never from render.
     pub fn build_snapshot(editor: &mut BlueprintEditorPanel, cx: &App) -> AssetInspectorSnapshot {
-        editor.sync_all_canvases_to_tabs(cx);
-        let asset = match editor.to_blueprint_asset() {
+        let asset = match editor.to_blueprint_asset(cx) {
             Ok(asset) => asset,
             Err(error) => {
                 return AssetInspectorSnapshot {
@@ -73,8 +72,8 @@ impl AssetInspectorRenderer {
             .subgraphs
             .iter()
             .filter(|subgraph| {
-                subgraph.kind == blueprint_graph::SubGraphKind::Collapsed
-                    && !subgraph_is_referenced(editor, &subgraph.id)
+                subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed
+                    && !subgraph_is_referenced(editor, &subgraph.id, cx)
             })
             .map(|subgraph| (subgraph.id.clone(), subgraph.name.clone()))
             .collect();
@@ -142,11 +141,10 @@ impl AssetInspectorRenderer {
                             .danger()
                             .small()
                             .on_click(cx.listener(move |editor, _, window, cx| {
-                                editor.sync_all_canvases_to_tabs(cx);
                                 if editor.subgraphs.iter().any(|subgraph| {
                                     subgraph.id == id
-                                        && subgraph.kind == blueprint_graph::SubGraphKind::Collapsed
-                                        && !subgraph_is_referenced(editor, &id)
+                                        && subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed
+                                        && !subgraph_is_referenced(editor, &id, cx)
                                 }) {
                                     let active_tab_id = editor
                                         .open_tabs
@@ -231,14 +229,18 @@ fn section_summary(name: &str, value: &serde_json::Value) -> String {
     }
 }
 
-fn subgraph_is_referenced(editor: &BlueprintEditorPanel, graph_id: &str) -> bool {
+fn subgraph_is_referenced(editor: &BlueprintEditorPanel, graph_id: &str, cx: &App) -> bool {
+    let references = |node_type: &str| {
+        crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(node_type) == Some(graph_id)
+    };
     editor
-        .open_tabs
+        .graph_panels
         .iter()
-        .flat_map(|tab| tab.graph.nodes.iter())
-        .any(|node| {
-            crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(&node.definition_id)
-                == Some(graph_id)
+        .any(|(_, canvas)| canvas.read(cx).graph(cx).nodes.values().any(|n| references(&n.node_type)))
+        || editor.open_tabs.iter().any(|tab| {
+            tab.pending
+                .as_ref()
+                .is_some_and(|doc| doc.graph.nodes.values().any(|n| references(&n.node_type)))
         })
         || editor.subgraphs.iter().any(|subgraph| {
             subgraph.id != graph_id

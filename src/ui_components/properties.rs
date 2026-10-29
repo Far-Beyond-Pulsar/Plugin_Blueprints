@@ -20,9 +20,9 @@ use ui::{
     StyledExt,
 };
 
-use crate::core::types::{BlueprintComment, BlueprintNode};
+use self::view::{CommentView, NodeView};
 use crate::editor::panel::BlueprintEditorPanel;
-use crate::editor::workspace_panels::GraphCanvasPanel;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::features::prefabs::panel::group_rows_by_category;
 use std::any::Any;
 use std::sync::Arc;
@@ -35,6 +35,7 @@ use ui_common::properties_inspector;
 mod event_details;
 mod macro_details;
 mod shared_controls;
+pub(crate) mod view;
 
 pub struct PropertiesRenderer;
 
@@ -98,9 +99,9 @@ impl PropertiesRenderer {
             return SelectionKind::Variable;
         }
         if let Some(canvas) = active_canvas {
-            let graph = &canvas.read(cx).graph;
-            let n = graph.selected_nodes.len();
-            let c = graph.selected_comments.len();
+            let canvas = canvas.read(cx);
+            let n = canvas.selected_nodes(cx).len();
+            let c = canvas.selected_comments(cx).len();
             if n > 1 || (n > 0 && c > 0) || c > 1 {
                 return SelectionKind::Multi;
             }
@@ -165,20 +166,14 @@ impl PropertiesRenderer {
             return Self::render_empty_state(cx);
         };
 
-        let sel_nodes = canvas.graph.selected_nodes.clone();
-        let sel_comments = canvas.graph.selected_comments.clone();
+        let sel_nodes = canvas.selected_nodes(cx);
+        let sel_comments = canvas.selected_comments(cx);
         let sel_count = sel_nodes.len();
         let com_count = sel_comments.len();
 
         // ── Single comment selected ──────────────────────────────────────
         if com_count == 1 && sel_count == 0 {
-            let comment_id = &sel_comments[0];
-            let selected_comment = canvas
-                .graph
-                .comments
-                .iter()
-                .find(|c| &c.id == comment_id)
-                .cloned();
+            let selected_comment = canvas.comment_view(sel_comments[0], cx);
             if let Some(comment) = selected_comment {
                 return Self::render_comment_properties(panel, &comment, window, cx);
             }
@@ -188,7 +183,7 @@ impl PropertiesRenderer {
         // ── Single node selected ──────────────────────────────────────────
         if sel_count == 1 && com_count == 0 {
             let selected_node_id = &sel_nodes[0];
-            let node_found = canvas.graph.nodes.iter().any(|n| &n.id == selected_node_id);
+            let node_found = canvas.graph(cx).nodes.contains_key(selected_node_id);
             if !node_found {
                 return Self::render_empty_state(cx);
             }
@@ -536,7 +531,7 @@ impl PropertiesRenderer {
     }
 
     fn render_selected_node_readonly<T>(
-        selected_node: &BlueprintNode,
+        selected_node: &NodeView,
         cx: &mut Context<T>,
     ) -> AnyElement {
         v_flex()
@@ -567,17 +562,17 @@ impl PropertiesRenderer {
                                 .px_2()
                                 .py_1()
                                 .rounded(px(4.0))
-                                .bg(Self::get_node_type_color(&selected_node.node_type, cx)
+                                .bg(Self::get_node_type_color(&selected_node, cx)
                                     .opacity(0.15))
                                 .border_1()
                                 .border_color(
-                                    Self::get_node_type_color(&selected_node.node_type, cx)
+                                    Self::get_node_type_color(&selected_node, cx)
                                         .opacity(0.3),
                                 )
                                 .text_xs()
                                 .font_semibold()
-                                .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
-                                .child(format!("{:?} Node", selected_node.node_type)),
+                                .text_color(Self::get_node_type_color(&selected_node, cx))
+                                .child(selected_node.kind_label()),
                         )
                         .into_any_element(),
                 ],
@@ -656,108 +651,22 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
-    /// Editable controls for the node's parameters, if the installed profile
-    /// declares any for this node type: a text input, an on/off toggle or a
-    /// button that steps through the choices.
-    fn render_profile_parameters(
-        canvas: &mut GraphCanvasPanel,
-        node: &BlueprintNode,
-        window: &mut Window,
-        cx: &mut Context<GraphCanvasPanel>,
-    ) -> Option<AnyElement> {
-        use crate::profile::ParamKind;
-
-        let fields = canvas.profile.as_ref()?.parameters(&node.definition_id);
-        if fields.is_empty() {
-            return None;
-        }
-        let mut rows = Vec::with_capacity(fields.len());
-        for field in fields {
-            let value = node.properties.get(&field.key).cloned().unwrap_or_default();
-            let control: AnyElement = match &field.kind {
-                ParamKind::Text => {
-                    let input = canvas.param_input(&node.id, &field.key, &value, window, cx);
-                    ui::input::TextInput::new(&input).xsmall().into_any_element()
-                }
-                ParamKind::Bool => {
-                    let on = value.eq_ignore_ascii_case("true");
-                    let (node_id, key) = (node.id.clone(), field.key.clone());
-                    Button::new(SharedString::from(format!("param-{}-{}", node.id, field.key)))
-                        .label(if on { "On" } else { "Off" })
-                        .xsmall()
-                        .when(on, |button| button.primary())
-                        .on_click(cx.listener(move |canvas, _, _, cx| {
-                            canvas.set_node_property(&node_id, &key, (!on).to_string(), cx);
-                        }))
-                        .into_any_element()
-                }
-                ParamKind::Choice(options) => {
-                    let options = options.clone();
-                    let (node_id, key) = (node.id.clone(), field.key.clone());
-                    let current = value.clone();
-                    Button::new(SharedString::from(format!("param-{}-{}", node.id, field.key)))
-                        .label(value.clone())
-                        .xsmall()
-                        .on_click(cx.listener(move |canvas, _, _, cx| {
-                            let next = options
-                                .iter()
-                                .position(|option| *option == current)
-                                .map_or(0, |index| (index + 1) % options.len());
-                            if let Some(option) = options.get(next) {
-                                canvas.set_node_property(&node_id, &key, option.clone(), cx);
-                            }
-                        }))
-                        .into_any_element()
-                }
-            };
-            rows.push(
-                h_flex()
-                    .w_full()
-                    .gap_2()
-                    .items_center()
-                    .child(
-                        div()
-                            .w(px(80.0))
-                            .flex_shrink_0()
-                            .text_xs()
-                            .font_medium()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(field.label.clone()),
-                    )
-                    .child(div().flex_1().child(control))
-                    .into_any_element(),
-            );
-        }
-        Some(v_flex().gap_3().children(rows).into_any_element())
-    }
-
     fn render_selected_node_properties(
         canvas: &mut GraphCanvasPanel,
         window: &mut Window,
         cx: &mut Context<GraphCanvasPanel>,
     ) -> AnyElement {
-        let selected_node_id = canvas.graph.selected_nodes.first().cloned();
+        let selected_node_id = canvas.selected_nodes(cx).first().cloned();
         let Some(selected_node_id) = selected_node_id else {
             return Self::render_empty_state(cx);
         };
-        let Some(selected_node) = canvas
-            .graph
-            .nodes
-            .iter()
-            .find(|n| n.id == selected_node_id)
-            .cloned()
-        else {
+        let Some(selected_node) = canvas.node_view(&selected_node_id, cx) else {
             return Self::render_empty_state(cx);
         };
 
         let canvas_entity = cx.entity().clone();
-        // A profile's nodes edit their parameters here; every other node lists
-        // its properties read-only.
-        let properties_body: Option<AnyElement> =
-            Self::render_profile_parameters(canvas, &selected_node, window, cx).or_else(|| {
-                (!selected_node.properties.is_empty())
-                    .then(|| Self::render_node_properties(&selected_node, cx).into_any_element())
-            });
+        let properties_body: Option<AnyElement> = (!selected_node.properties.is_empty())
+            .then(|| Self::render_node_properties(&selected_node, cx).into_any_element());
 
         v_flex()
             .gap_3()
@@ -787,17 +696,17 @@ impl PropertiesRenderer {
                                 .px_2()
                                 .py_1()
                                 .rounded(px(4.0))
-                                .bg(Self::get_node_type_color(&selected_node.node_type, cx)
+                                .bg(Self::get_node_type_color(&selected_node, cx)
                                     .opacity(0.15))
                                 .border_1()
                                 .border_color(
-                                    Self::get_node_type_color(&selected_node.node_type, cx)
+                                    Self::get_node_type_color(&selected_node, cx)
                                         .opacity(0.3),
                                 )
                                 .text_xs()
                                 .font_semibold()
-                                .text_color(Self::get_node_type_color(&selected_node.node_type, cx))
-                                .child(format!("{:?} Node", selected_node.node_type)),
+                                .text_color(Self::get_node_type_color(&selected_node, cx))
+                                .child(selected_node.kind_label()),
                         )
                         .into_any_element(),
                 ],
@@ -884,7 +793,7 @@ impl PropertiesRenderer {
 
     fn render_comment_properties(
         panel: &BlueprintEditorPanel,
-        comment: &BlueprintComment,
+        comment: &CommentView,
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
@@ -894,17 +803,9 @@ impl PropertiesRenderer {
         let mut comment_text_input = None;
 
         if let Some(canvas) = active_canvas {
-            let canvas_state = canvas.read(cx);
-            comment_text_input = Some(canvas_state.comment_text_input.clone());
-            if let Some(selected) = canvas_state
-                .graph
-                .comments
-                .iter()
-                .find(|c| c.id == comment.id)
-            {
-                comment_color = selected.color;
-                color_picker = selected.color_picker_state.clone();
-            }
+            comment_text_input = Some(canvas.read(cx).comment_text_input.clone());
+            let (index, id) = (comment.index, comment.id.clone());
+            color_picker = Some(canvas.update(cx, |canvas, cx| canvas.comment_picker(index, &id, window, cx)));
         }
 
         // Keep the picker controls initialized from the selected comment.

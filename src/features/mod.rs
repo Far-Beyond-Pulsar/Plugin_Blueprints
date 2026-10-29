@@ -7,14 +7,10 @@
 //! - panel.rs: Dockable panel (if applicable)
 
 pub mod class_dirs;
-pub mod clipboard;
-pub mod comments;
 pub mod compilation;
-pub mod connections;
 pub mod debug;
 pub mod events;
 pub mod macros;
-pub mod nodes;
 pub mod prefabs;
 pub mod script_problems;
 pub mod traits;

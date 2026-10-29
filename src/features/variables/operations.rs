@@ -8,10 +8,8 @@
 //! - Type enumeration
 
 use super::types::{ClassVariable, TypeItem, VariableDrag};
-use crate::core::types::PinDataType as DataType;
-use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
-use crate::editor::workspace_panels::GraphCanvasPanel;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use gpui::*;
 
 impl BlueprintEditorPanel {
@@ -269,32 +267,21 @@ impl GraphCanvasPanel {
         &mut self,
         var_name: String,
         var_type: String,
-        position: Point<f32>,
+        position: graphy_render::Vec2,
         cx: &mut Context<Self>,
     ) {
-        let node_id = format!("get_{}_node_{}", var_name, uuid::Uuid::new_v4());
-
-        let node = BlueprintNode {
-            id: node_id,
-            definition_id: format!("get_{}", var_name),
-            title: format!("Get {}", var_name),
-            icon: "📖".to_string(),
-            node_type: NodeType::Logic,
-            position,
-            size: gpui::Size::new(180.0, 80.0),
-            inputs: vec![],
-            outputs: vec![Pin {
-                id: "value".to_string(),
-                name: var_name.clone(),
-                pin_type: PinType::Output,
-                data_type: DataType::from_type_str(&var_type),
-            }],
-            properties: std::collections::HashMap::new(),
-            is_selected: false,
-            description: format!("Gets the value of {}", var_name),
-            color: None,
-        };
-
+        use crate::features::macros::operations::pin_instance;
+        let mut node = graphy::NodeInstance::new(
+            format!("get_{}_node_{}", var_name, uuid::Uuid::new_v4()),
+            format!("get_{}", var_name),
+            graphy::Position::new(f64::from(position.x), f64::from(position.y)),
+        );
+        node.outputs.push(pin_instance(
+            "value",
+            &var_name,
+            crate::canvas_profile::datatype_from_str(&var_type),
+            graphy::PinType::Output,
+        ));
         self.add_node(node, cx);
         self.cancel_dragging_variable(cx);
     }
@@ -304,45 +291,33 @@ impl GraphCanvasPanel {
         &mut self,
         var_name: String,
         var_type: String,
-        position: Point<f32>,
+        position: graphy_render::Vec2,
         cx: &mut Context<Self>,
     ) {
-        let node_id = format!("set_{}_node_{}", var_name, uuid::Uuid::new_v4());
-
-        let node = BlueprintNode {
-            id: node_id,
-            definition_id: format!("set_{}", var_name),
-            title: format!("Set {}", var_name),
-            icon: "📝".to_string(),
-            node_type: NodeType::Logic,
-            position,
-            size: gpui::Size::new(180.0, 100.0),
-            inputs: vec![
-                Pin {
-                    id: "exec".to_string(),
-                    name: "".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: DataType::from_type_str("execution"),
-                },
-                Pin {
-                    id: "value".to_string(),
-                    name: var_name.clone(),
-                    pin_type: PinType::Input,
-                    data_type: DataType::from_type_str(&var_type),
-                },
-            ],
-            outputs: vec![Pin {
-                id: "exec_out".to_string(),
-                name: "".to_string(),
-                pin_type: PinType::Output,
-                data_type: DataType::from_type_str("execution"),
-            }],
-            properties: std::collections::HashMap::new(),
-            is_selected: false,
-            description: format!("Sets the value of {}", var_name),
-            color: None,
-        };
-
+        use crate::features::macros::operations::pin_instance;
+        let mut node = graphy::NodeInstance::new(
+            format!("set_{}_node_{}", var_name, uuid::Uuid::new_v4()),
+            format!("set_{}", var_name),
+            graphy::Position::new(f64::from(position.x), f64::from(position.y)),
+        );
+        node.inputs.push(pin_instance(
+            "exec",
+            "",
+            graphy::DataType::Exec,
+            graphy::PinType::Input,
+        ));
+        node.inputs.push(pin_instance(
+            "value",
+            &var_name,
+            crate::canvas_profile::datatype_from_str(&var_type),
+            graphy::PinType::Input,
+        ));
+        node.outputs.push(pin_instance(
+            "exec_out",
+            "",
+            graphy::DataType::Exec,
+            graphy::PinType::Output,
+        ));
         self.add_node(node, cx);
         self.cancel_dragging_variable(cx);
     }

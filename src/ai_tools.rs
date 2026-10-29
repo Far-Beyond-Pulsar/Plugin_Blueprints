@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
-use blueprint_graph::ConnectionType;
-use gpui::{Point, Size};
+use graphy::core::GraphComment;
+use graphy::{Connection, ConnectionType, DataType, GraphDescription, NodeInstance};
+use graphy_gpui::GraphProfile as _;
+use graphy_render::{FixedAdvance, LayoutMetrics, Scene};
 use plugin_editor_api::{AiToolDefinition, PluginError};
 use serde_json::{json, Value};
 use std::cell::RefCell;
@@ -13,24 +15,26 @@ use tool_registry_macros::tool;
 use tracing::debug;
 
 use crate::core::definitions::NodeDefinitions;
-use crate::core::graph::BlueprintGraph;
-use crate::core::types::{BlueprintComment, BlueprintNode, Connection, NodeType, PinDataType};
+use crate::canvas_profile::BlueprintProfile;
+use crate::core::types::NodeType;
+use crate::features::macros::operations::type_string;
+use crate::io::canvas_doc::{connection_id as edge_id, property_string, property_value};
 
 #[derive(Clone)]
 struct BlueprintAiSession {
     file_key: PathBuf,
-    graph: BlueprintGraph,
+    graph: GraphDescription,
     dirty: bool,
 }
 
 pub(crate) struct AiGraphUpdate {
-    pub before: BlueprintGraph,
-    pub after: BlueprintGraph,
+    pub before: GraphDescription,
+    pub after: GraphDescription,
     response: smol::channel::Sender<Result<AiGraphUpdateAck, String>>,
 }
 
 pub(crate) struct AiGraphUpdateAck {
-    pub graph: BlueprintGraph,
+    pub graph: GraphDescription,
     pub applied: bool,
 }
 
@@ -94,7 +98,7 @@ pub(crate) fn same_file_key(left: &Path, right: &Path) -> bool {
     normalize_file_key(left) == normalize_file_key(right)
 }
 
-pub fn upsert_session(file_path: PathBuf, graph: BlueprintGraph) {
+pub fn upsert_session(file_path: PathBuf, graph: GraphDescription) {
     let key = normalize_file_key(&file_path);
     if let Ok(mut guard) = state().lock() {
         guard.active_file = Some(key.clone());
@@ -112,7 +116,7 @@ pub fn upsert_session(file_path: PathBuf, graph: BlueprintGraph) {
 /// Register the UI-thread bridge used to apply AI edits to the live canvas.
 pub(crate) fn register_live_editor(
     file_path: PathBuf,
-    graph: BlueprintGraph,
+    graph: GraphDescription,
 ) -> smol::channel::Receiver<AiGraphUpdate> {
     let key = normalize_file_key(&file_path);
     let (sender, receiver) = smol::channel::unbounded();
@@ -241,26 +245,35 @@ fn requested_file(guard: &RuntimeState) -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("No active blueprint file in AI session"))
 }
 
-fn graph_content_fingerprint(graph: &BlueprintGraph) -> String {
-    let nodes = graph
-        .nodes
-        .iter()
-        .map(|node| {
+/// Everything the AI snapshot compares: nodes, wires and comments in a stable
+/// order, independent of hash-map iteration order.
+fn graph_content_fingerprint(graph: &GraphDescription) -> String {
+    let mut ids: Vec<&String> = graph.nodes.keys().collect();
+    ids.sort();
+    let nodes = ids
+        .into_iter()
+        .map(|id| {
+            let node = &graph.nodes[id];
+            let pins = |pins: &[graphy::PinInstance]| {
+                pins.iter()
+                    .map(|p| format!("{}:{}:{}", p.id, p.pin.name, type_string(p.data_type())))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
+            let mut props: Vec<String> = node
+                .properties
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect();
+            props.sort();
             format!(
-                "{}|{}|{}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}|{:?}",
+                "{}|{}|{:?}|{}|{}|{}",
                 node.id,
-                node.definition_id,
-                node.title,
-                node.icon,
-                node.description,
-                node.position,
-                node.size,
-                node.inputs,
-                node.outputs,
-                node.properties,
-                node.is_selected,
-                node.color,
-                node.node_type
+                node.node_type,
+                (node.position.x, node.position.y),
+                pins(&node.inputs),
+                pins(&node.outputs),
+                props.join(";")
             )
         })
         .collect::<Vec<_>>()
@@ -268,15 +281,15 @@ fn graph_content_fingerprint(graph: &BlueprintGraph) -> String {
     let connections = graph
         .connections
         .iter()
-        .map(|connection| {
+        .map(|c| {
             format!(
                 "{}|{}|{}|{}|{}|{:?}",
-                connection.id,
-                connection.source_node,
-                connection.source_pin,
-                connection.target_node,
-                connection.target_pin,
-                connection.connection_type
+                edge_id(c),
+                c.source_node,
+                c.source_pin,
+                c.target_node,
+                c.target_pin,
+                c.connection_type
             )
         })
         .collect::<Vec<_>>()
@@ -284,16 +297,15 @@ fn graph_content_fingerprint(graph: &BlueprintGraph) -> String {
     let comments = graph
         .comments
         .iter()
-        .map(|comment| {
+        .map(|c| {
             format!(
-                "{}|{}|{:?}|{:?}|{:?}|{:?}|{}",
-                comment.id,
-                comment.text,
-                comment.position,
-                comment.size,
-                comment.color,
-                comment.contained_node_ids,
-                comment.is_selected
+                "{}|{}|{:?}|{:?}|{:?}|{:?}",
+                c.id,
+                c.text,
+                (c.position.x, c.position.y),
+                c.size,
+                c.color,
+                c.contained_node_ids
             )
         })
         .collect::<Vec<_>>()
@@ -301,10 +313,8 @@ fn graph_content_fingerprint(graph: &BlueprintGraph) -> String {
     format!("{nodes}\n--connections--\n{connections}\n--comments--\n{comments}")
 }
 
-pub(crate) fn graphs_match(left: &BlueprintGraph, right: &BlueprintGraph) -> bool {
+pub(crate) fn graphs_match(left: &GraphDescription, right: &GraphDescription) -> bool {
     graph_content_fingerprint(left) == graph_content_fingerprint(right)
-        && left.selected_nodes == right.selected_nodes
-        && left.selected_comments == right.selected_comments
 }
 
 fn is_blueprint_file(file_path: &Path) -> bool {
@@ -322,44 +332,80 @@ fn is_blueprint_file(file_path: &Path) -> bool {
             .is_some_and(|n| n == "graph_save.json")
 }
 
-fn node_to_json(node: &BlueprintNode) -> Value {
+fn blueprint_profile() -> BlueprintProfile {
+    BlueprintProfile::blueprint(Default::default())
+}
+
+/// The title a node shows: its catalogue name, or its type.
+fn node_title(node: &NodeInstance) -> String {
+    NodeDefinitions::load()
+        .get_node_definition(&node.node_type)
+        .map(|d| d.name.clone())
+        .unwrap_or_else(|| node.node_type.replace('_', " "))
+}
+
+fn properties_as_text(node: &NodeInstance) -> HashMap<String, String> {
+    node.properties
+        .iter()
+        .map(|(k, v)| (k.clone(), property_string(v)))
+        .collect()
+}
+
+/// Laid-out rectangles of the graph's nodes and comments, with text measured
+/// by a fixed advance (tools have no GPU fonts).
+fn laid_out(graph: &GraphDescription) -> Scene {
+    let profile = blueprint_profile();
+    let mut scene = Scene::new(LayoutMetrics::default());
+    scene.rebuild(graph, profile.presenter(), &FixedAdvance::default());
+    scene
+}
+
+fn node_size(scene: &Scene, id: &str) -> (f32, f32) {
+    scene
+        .node(id)
+        .map_or((0.0, 0.0), |n| (n.layout.size.x, n.layout.size.y))
+}
+
+fn node_to_json(node: &NodeInstance, scene: &Scene) -> Value {
+    let (width, height) = node_size(scene, &node.id);
+    let pin = |pin: &graphy::PinInstance, kind: &str| {
+        json!({
+            "id": pin.id,
+            "name": pin.pin.name,
+            "pin_type": kind,
+            "data_type": type_string(pin.data_type()),
+        })
+    };
     json!({
         "id": node.id,
-        "definition_id": node.definition_id,
-        "title": node.title,
-        "node_type": format!("{:?}", node.node_type),
+        "definition_id": node.node_type,
+        "title": node_title(node),
+        "node_type": format!("{:?}", NodeType::of(&node.node_type)),
         "position": { "x": node.position.x, "y": node.position.y },
-        "size": { "width": node.size.width, "height": node.size.height },
-        "inputs": node.inputs.iter().map(|pin| json!({
-            "id": pin.id,
-            "name": pin.name,
-            "pin_type": format!("{:?}", pin.pin_type),
-            "data_type": pin.data_type.to_string(),
-        })).collect::<Vec<_>>(),
-        "outputs": node.outputs.iter().map(|pin| json!({
-            "id": pin.id,
-            "name": pin.name,
-            "pin_type": format!("{:?}", pin.pin_type),
-            "data_type": pin.data_type.to_string(),
-        })).collect::<Vec<_>>(),
-        "properties": node.properties,
-        "description": node.description,
+        "size": { "width": width, "height": height },
+        "inputs": node.inputs.iter().map(|p| pin(p, "Input")).collect::<Vec<_>>(),
+        "outputs": node.outputs.iter().map(|p| pin(p, "Output")).collect::<Vec<_>>(),
+        "properties": properties_as_text(node),
+        "description": NodeDefinitions::load()
+            .get_node_definition(&node.node_type)
+            .map(|d| d.description.clone())
+            .unwrap_or_default(),
     })
 }
 
-fn comment_to_json(comment: &BlueprintComment) -> Value {
+fn comment_to_json(comment: &GraphComment) -> Value {
     json!({
         "id": comment.id,
         "text": comment.text,
         "position": { "x": comment.position.x, "y": comment.position.y },
-        "size": { "width": comment.size.width, "height": comment.size.height },
+        "size": { "width": comment.size.0, "height": comment.size.1 },
         "contained_node_ids": comment.contained_node_ids,
     })
 }
 
 fn connection_to_json(connection: &Connection) -> Value {
     json!({
-        "id": connection.id,
+        "id": edge_id(connection),
         "source_node": connection.source_node,
         "source_pin": connection.source_pin,
         "target_node": connection.target_node,
@@ -368,18 +414,39 @@ fn connection_to_json(connection: &Connection) -> Value {
     })
 }
 
-fn update_comment_containment(graph: &mut BlueprintGraph) {
-    let nodes = graph.nodes.clone();
-    for comment in &mut graph.comments {
-        comment.update_contained_nodes(&nodes);
+/// Recomputes which nodes each comment box fully contains.
+fn update_comment_containment(graph: &mut GraphDescription) {
+    if graph.comments.is_empty() {
+        return;
+    }
+    let scene = laid_out(graph);
+    let mut contained: Vec<Vec<String>> = Vec::with_capacity(graph.comments.len());
+    for placed in &scene.comments {
+        let mut ids: Vec<String> = scene
+            .nodes
+            .iter()
+            .filter(|n| {
+                let r = n.rect();
+                r.min.x >= placed.rect.min.x
+                    && r.min.y >= placed.rect.min.y
+                    && r.max.x <= placed.rect.max.x
+                    && r.max.y <= placed.rect.max.y
+            })
+            .map(|n| n.id.clone())
+            .collect();
+        ids.sort();
+        contained.push(ids);
+    }
+    for (comment, ids) in graph.comments.iter_mut().zip(contained) {
+        comment.contained_node_ids = ids;
     }
 }
 
-fn propagate_reroute_types(
-    graph: &mut BlueprintGraph,
-    start_node_id: &str,
-    data_type: PinDataType,
-) {
+fn is_reroute(graph: &GraphDescription, id: &str) -> bool {
+    graph.nodes.get(id).is_some_and(NodeInstance::is_reroute)
+}
+
+fn propagate_reroute_types(graph: &mut GraphDescription, start_node_id: &str, data_type: DataType) {
     let mut visited = HashSet::new();
     let mut queue = VecDeque::from([start_node_id.to_owned()]);
 
@@ -387,21 +454,14 @@ fn propagate_reroute_types(
         if !visited.insert(node_id.clone()) {
             continue;
         }
-        let Some(node_index) = graph.nodes.iter().position(|node| node.id == node_id) else {
-            continue;
-        };
-        if graph.nodes[node_index].node_type != NodeType::Reroute {
+        if !is_reroute(graph, &node_id) {
             continue;
         }
-
-        let node = &mut graph.nodes[node_index];
-        for pin in &mut node.inputs {
-            pin.data_type = data_type.clone();
+        if let Some(node) = graph.nodes.get_mut(&node_id) {
+            for pin in node.inputs.iter_mut().chain(node.outputs.iter_mut()) {
+                pin.pin.data_type = data_type.clone();
+            }
         }
-        for pin in &mut node.outputs {
-            pin.data_type = data_type.clone();
-        }
-
         for connection in &graph.connections {
             let neighbor = if connection.source_node == node_id {
                 Some(&connection.target_node)
@@ -411,11 +471,7 @@ fn propagate_reroute_types(
                 None
             };
             if let Some(neighbor) = neighbor {
-                if graph
-                    .nodes
-                    .iter()
-                    .any(|node| node.id == *neighbor && node.node_type == NodeType::Reroute)
-                {
+                if is_reroute(graph, neighbor) {
                     queue.push_back(neighbor.clone());
                 }
             }
@@ -444,8 +500,8 @@ fn parse_properties(value: Option<Value>) -> Result<HashMap<String, String>> {
 
 fn parse_connection_type(
     kind: Option<String>,
-    source_type: &PinDataType,
-    target_type: &PinDataType,
+    source_type: &DataType,
+    target_type: &DataType,
 ) -> Result<ConnectionType> {
     if source_type.is_execution() != target_type.is_execution() {
         return Err(anyhow!("Execution pins can only connect to execution pins"));
@@ -465,7 +521,7 @@ fn parse_connection_type(
         "data" => ConnectionType::Data,
         _ => return Err(anyhow!("connection_type must be `execution` or `data`")),
     };
-    if std::mem::discriminant(&requested) != std::mem::discriminant(&expected) {
+    if requested != expected {
         return Err(anyhow!(
             "connection_type does not match the connected pin types (expected {:?})",
             expected
@@ -483,7 +539,13 @@ fn tool_registry() -> &'static ToolRegistry {
     })
 }
 
-/// Summarize graph-wide structure, counts, and selection state.
+fn sorted_nodes(graph: &GraphDescription) -> Vec<&NodeInstance> {
+    let mut nodes: Vec<&NodeInstance> = graph.nodes.values().collect();
+    nodes.sort_by(|a, b| a.id.cmp(&b.id));
+    nodes
+}
+
+/// Summarize graph-wide structure and counts.
 #[tool(category = "blueprint")]
 pub fn blueprint_query_graph() -> Result<Value> {
     with_session(|session| {
@@ -497,13 +559,7 @@ pub fn blueprint_query_graph() -> Result<Value> {
                 "nodes": graph.nodes.len(),
                 "connections": graph.connections.len(),
                 "comments": graph.comments.len(),
-                "selected_nodes": graph.selected_nodes.len(),
-                "selected_comments": graph.selected_comments.len(),
             },
-            "viewport": {
-                "zoom_level": graph.zoom_level,
-                "pan_offset": { "x": graph.pan_offset.x, "y": graph.pan_offset.y },
-            }
         }))
     })
 }
@@ -520,14 +576,13 @@ pub fn blueprint_list_nodes(
         let offset = offset.unwrap_or(0).max(0) as usize;
         let limit = limit.unwrap_or(200).clamp(1, 1000) as usize;
         let query_norm = query.as_ref().map(|q| q.to_ascii_lowercase());
+        let scene = laid_out(&session.graph);
 
-        let matched = session
-            .graph
-            .nodes
-            .iter()
+        let matched = sorted_nodes(&session.graph)
+            .into_iter()
             .filter(|node| {
                 if let Some(def) = definition_id.as_ref() {
-                    if &node.definition_id != def {
+                    if &node.node_type != def {
                         return false;
                     }
                 }
@@ -536,9 +591,9 @@ pub fn blueprint_list_nodes(
                     let haystack = format!(
                         "{} {} {} {}",
                         node.id,
-                        node.title,
-                        node.definition_id,
-                        node.properties
+                        node_title(node),
+                        node.node_type,
+                        properties_as_text(node)
                             .iter()
                             .map(|(k, v)| format!("{}:{}", k, v))
                             .collect::<Vec<_>>()
@@ -556,7 +611,7 @@ pub fn blueprint_list_nodes(
             .iter()
             .skip(offset)
             .take(limit)
-            .map(|node| node_to_json(node))
+            .map(|node| node_to_json(node, &scene))
             .collect::<Vec<_>>();
 
         Ok(json!({
@@ -573,11 +628,12 @@ pub fn blueprint_list_nodes(
 #[tool(category = "blueprint")]
 pub fn blueprint_get_node(id: String) -> Result<Value> {
     with_session(|session| {
-        let node = session.graph.nodes.iter().find(|n| n.id == id);
+        let node = session.graph.nodes.get(&id);
+        let scene = laid_out(&session.graph);
         Ok(json!({
             "ok": true,
             "found": node.is_some(),
-            "node": node.map(node_to_json),
+            "node": node.map(|n| node_to_json(n, &scene)),
         }))
     })
 }
@@ -591,36 +647,32 @@ pub fn blueprint_add_node(
     title: Option<String>,
     properties: Option<Value>,
 ) -> Result<Value> {
+    // Titles are derived from the node's type and are not stored.
+    let _ = title;
     with_session_mut(|session| {
-        let definitions = NodeDefinitions::load();
-        let definition = definitions
-            .get_node_definition(&definition_id)
+        let mut node = blueprint_profile()
+            .create_node(
+                &definition_id,
+                &uuid::Uuid::new_v4().to_string(),
+                graphy::Position::new(x, y),
+            )
             .ok_or_else(|| anyhow!("Unknown node definition_id: {}", definition_id))?;
 
-        let mut node = BlueprintNode::from_definition(definition, Point::new(x as f32, y as f32));
-
-        if let Some(title) = title {
-            if !title.trim().is_empty() {
-                node.title = title;
-            }
-        }
-
-        let properties_map = parse_properties(properties)?;
-        for (key, value) in properties_map {
-            node.properties.insert(key, value);
+        for (key, value) in parse_properties(properties)? {
+            node.properties.insert(key, property_value(&value));
         }
 
         let node_id = node.id.clone();
-        session.graph.nodes.push(node.clone());
-        session.graph.selected_nodes.clear();
-        session.graph.selected_nodes.push(node_id.clone());
+        session.graph.add_node(node);
         update_comment_containment(&mut session.graph);
         session.dirty = true;
 
+        let scene = laid_out(&session.graph);
+        let node = &session.graph.nodes[&node_id];
         Ok(json!({
             "ok": true,
             "node_id": node_id,
-            "node": node_to_json(&node),
+            "node": node_to_json(node, &scene),
             "counts": {
                 "nodes": session.graph.nodes.len(),
                 "connections": session.graph.connections.len(),
@@ -630,7 +682,7 @@ pub fn blueprint_add_node(
     })
 }
 
-/// Update node title/position/properties.
+/// Update node position/properties.
 #[tool(category = "blueprint")]
 pub fn blueprint_update_node(
     id: String,
@@ -640,45 +692,41 @@ pub fn blueprint_update_node(
     properties_merge: Option<Value>,
     replace_properties: Option<bool>,
 ) -> Result<Value> {
+    // Titles are derived from the node's type and are not stored.
+    let _ = title;
     with_session_mut(|session| {
-        let node_json = {
+        {
             let node = session
                 .graph
                 .nodes
-                .iter_mut()
-                .find(|n| n.id == id)
+                .get_mut(&id)
                 .ok_or_else(|| anyhow!("Node not found: {}", id))?;
 
-            if let Some(title) = title {
-                node.title = title;
-            }
             if let Some(x) = x {
-                node.position.x = x as f32;
+                node.position.x = x;
             }
             if let Some(y) = y {
-                node.position.y = y as f32;
+                node.position.y = y;
             }
 
             if let Some(props) = properties_merge {
                 let parsed = parse_properties(Some(props))?;
                 if replace_properties.unwrap_or(false) {
-                    node.properties = parsed;
-                } else {
-                    for (k, v) in parsed {
-                        node.properties.insert(k, v);
-                    }
+                    node.properties.clear();
+                }
+                for (k, v) in parsed {
+                    node.properties.insert(k, property_value(&v));
                 }
             }
-
-            node_to_json(node)
-        };
+        }
 
         update_comment_containment(&mut session.graph);
         session.dirty = true;
 
+        let scene = laid_out(&session.graph);
         Ok(json!({
             "ok": true,
-            "node": node_json,
+            "node": node_to_json(&session.graph.nodes[&id], &scene),
         }))
     })
 }
@@ -688,8 +736,11 @@ pub fn blueprint_update_node(
 pub fn blueprint_remove_node(id: String) -> Result<Value> {
     with_session_mut(|session| {
         // Macro entry/exit nodes are structural — never allow deletion.
-        if let Some(node) = session.graph.nodes.iter().find(|n| n.id == id) {
-            if matches!(node.node_type, NodeType::MacroEntry | NodeType::MacroExit) {
+        if let Some(node) = session.graph.nodes.get(&id) {
+            if matches!(
+                NodeType::of(&node.node_type),
+                NodeType::MacroEntry | NodeType::MacroExit
+            ) {
                 return Ok(json!({
                     "ok": false,
                     "error": "Cannot delete macro entry or return nodes",
@@ -698,18 +749,9 @@ pub fn blueprint_remove_node(id: String) -> Result<Value> {
             }
         }
 
-        let before_nodes = session.graph.nodes.len();
         let before_connections = session.graph.connections.len();
-
-        session.graph.nodes.retain(|n| n.id != id);
-        session
-            .graph
-            .connections
-            .retain(|c| c.source_node != id && c.target_node != id);
-        session.graph.selected_nodes.retain(|sid| sid != &id);
+        let removed = session.graph.remove_node(&id);
         update_comment_containment(&mut session.graph);
-
-        let removed = before_nodes != session.graph.nodes.len();
         if removed {
             session.dirty = true;
         }
@@ -762,12 +804,11 @@ pub fn blueprint_nodes_in_comment(comment_id: String) -> Result<Value> {
             .find(|c| c.id == comment_id)
             .ok_or_else(|| anyhow!("Comment not found: {}", comment_id))?;
 
-        let items = session
-            .graph
-            .nodes
-            .iter()
-            .filter(|node| comment.contains_node(node))
-            .map(node_to_json)
+        let scene = laid_out(&session.graph);
+        let items = sorted_nodes(&session.graph)
+            .into_iter()
+            .filter(|node| comment.contained_node_ids.contains(&node.id))
+            .map(|node| node_to_json(node, &scene))
             .collect::<Vec<_>>();
 
         Ok(json!({
@@ -789,28 +830,21 @@ pub fn blueprint_add_comment(
     height: Option<f64>,
 ) -> Result<Value> {
     with_session_mut(|session| {
-        let comment = BlueprintComment {
-            id: uuid::Uuid::new_v4().to_string(),
+        let mut comment = GraphComment::new(
             text,
-            position: Point::new(x as f32, y as f32),
-            size: Size::new(
-                width.unwrap_or(300.0) as f32,
-                height.unwrap_or(200.0) as f32,
-            ),
-            color: gpui::hsla(0.5, 0.3, 0.2, 0.3),
-            contained_node_ids: Vec::new(),
-            is_selected: false,
-            color_picker_state: None,
-        };
+            graphy::Position::new(x, y),
+            (width.unwrap_or(300.0), height.unwrap_or(200.0)),
+        );
+        comment.id = uuid::Uuid::new_v4().to_string();
+        comment.color = [0.5, 0.3, 0.2, 0.3];
 
         let id = comment.id.clone();
-        session.graph.comments.push(comment.clone());
+        session.graph.comments.push(comment);
         update_comment_containment(&mut session.graph);
-        session.graph.selected_comments.clear();
-        session.graph.selected_comments.push(id.clone());
         session.dirty = true;
 
-        Ok(json!({ "ok": true, "comment_id": id, "comment": comment_to_json(&comment) }))
+        let comment = session.graph.comments.last().expect("just pushed");
+        Ok(json!({ "ok": true, "comment_id": id, "comment": comment_to_json(comment) }))
     })
 }
 
@@ -820,10 +854,6 @@ pub fn blueprint_remove_comment(comment_id: String) -> Result<Value> {
     with_session_mut(|session| {
         let before = session.graph.comments.len();
         session.graph.comments.retain(|c| c.id != comment_id);
-        session
-            .graph
-            .selected_comments
-            .retain(|id| id != &comment_id);
         let removed = before != session.graph.comments.len();
         if removed {
             session.dirty = true;
@@ -869,57 +899,56 @@ pub fn blueprint_add_connection(
     connection_type: Option<String>,
 ) -> Result<Value> {
     with_session_mut(|session| {
-        let (source_type, source_node_type) = session
+        let source_type = session
             .graph
             .nodes
-            .iter()
-            .find(|n| n.id == source_node)
+            .get(&source_node)
             .ok_or_else(|| anyhow!("Source node not found: {}", source_node))
             .and_then(|node| {
-                let pin = node
-                    .outputs
+                node.outputs
                     .iter()
                     .find(|pin| pin.id == source_pin)
+                    .map(|pin| pin.data_type().clone())
                     .ok_or_else(|| {
                         anyhow!(
                             "Source pin '{}' not found on node '{}'",
                             source_pin,
                             source_node
                         )
-                    })?;
-                Ok((pin.data_type.clone(), node.node_type.clone()))
+                    })
             })?;
-        let (target_type, target_node_type) = session
+        let target_type = session
             .graph
             .nodes
-            .iter()
-            .find(|n| n.id == target_node)
+            .get(&target_node)
             .ok_or_else(|| anyhow!("Target node not found: {}", target_node))
             .and_then(|node| {
-                let pin = node
-                    .inputs
+                node.inputs
                     .iter()
                     .find(|pin| pin.id == target_pin)
+                    .map(|pin| pin.data_type().clone())
                     .ok_or_else(|| {
                         anyhow!(
                             "Target pin '{}' not found on node '{}'",
                             target_pin,
                             target_node
                         )
-                    })?;
-                Ok((pin.data_type.clone(), node.node_type.clone()))
+                    })
             })?;
 
-        let mut conn = Connection {
-            id: String::new(),
-            source_node: source_node.clone(),
-            source_pin: source_pin.clone(),
-            target_node: target_node.clone(),
-            target_pin: target_pin.clone(),
-            connection_type: parse_connection_type(connection_type, &source_type, &target_type)?,
-        };
-
-        crate::features::connections::compatibility::validate_connection(&conn, &session.graph)
+        let kind = parse_connection_type(connection_type, &source_type, &target_type)?;
+        blueprint_profile()
+            .can_connect(
+                &session.graph,
+                &graphy::PinRef {
+                    node: source_node.clone(),
+                    pin: source_pin.clone(),
+                },
+                &graphy::PinRef {
+                    node: target_node.clone(),
+                    pin: target_pin.clone(),
+                },
+            )
             .map_err(|error| anyhow!("Invalid connection: {error}"))?;
 
         if session.graph.connections.iter().any(|existing| {
@@ -931,23 +960,24 @@ pub fn blueprint_add_connection(
             return Err(anyhow!("This connection already exists"));
         }
 
-        conn.id = loop {
+        let mut conn = Connection::new(&source_node, &source_pin, &target_node, &target_pin, kind);
+        conn.id = Some(loop {
             let candidate = uuid::Uuid::new_v4().to_string();
             if !session
                 .graph
                 .connections
                 .iter()
-                .any(|existing| existing.id == candidate)
+                .any(|existing| edge_id(existing) == candidate)
             {
                 break candidate;
             }
-        };
+        });
 
         // Match interactive pin cardinality: execution and reroute outputs
         // have one outgoing edge; data/execution inputs and reroute inputs
         // have one incoming edge.
-        let source_is_reroute = source_node_type == NodeType::Reroute;
-        let target_is_reroute = target_node_type == NodeType::Reroute;
+        let source_is_reroute = is_reroute(&session.graph, &source_node);
+        let target_is_reroute = is_reroute(&session.graph, &target_node);
         if source_type.is_execution() || source_is_reroute {
             session.graph.connections.retain(|existing| {
                 !(existing.source_node == source_node && existing.source_pin == source_pin)
@@ -959,7 +989,6 @@ pub fn blueprint_add_connection(
             });
         }
 
-        let conn_id = conn.id.clone();
         session.graph.connections.push(conn.clone());
         if target_is_reroute {
             propagate_reroute_types(&mut session.graph, &target_node, source_type);
@@ -968,7 +997,7 @@ pub fn blueprint_add_connection(
         }
         session.dirty = true;
 
-        Ok(json!({ "ok": true, "connection_id": conn_id, "connection": connection_to_json(&conn) }))
+        Ok(json!({ "ok": true, "connection_id": edge_id(&conn), "connection": connection_to_json(&conn) }))
     })
 }
 
@@ -977,7 +1006,10 @@ pub fn blueprint_add_connection(
 pub fn blueprint_remove_connection(connection_id: String) -> Result<Value> {
     with_session_mut(|session| {
         let before = session.graph.connections.len();
-        session.graph.connections.retain(|c| c.id != connection_id);
+        session
+            .graph
+            .connections
+            .retain(|c| edge_id(c) != connection_id);
         let removed = before != session.graph.connections.len();
         if removed {
             session.dirty = true;
@@ -998,16 +1030,13 @@ pub fn blueprint_get_subgraph(
     include_comments: Option<bool>,
 ) -> Result<Value> {
     with_session(|session| {
-        let node_set = node_ids
-            .into_iter()
-            .collect::<std::collections::HashSet<_>>();
+        let node_set = node_ids.into_iter().collect::<HashSet<_>>();
+        let scene = laid_out(&session.graph);
 
-        let nodes = session
-            .graph
-            .nodes
-            .iter()
+        let nodes = sorted_nodes(&session.graph)
+            .into_iter()
             .filter(|n| node_set.contains(&n.id))
-            .map(node_to_json)
+            .map(|n| node_to_json(n, &scene))
             .collect::<Vec<_>>();
 
         let connections = session
@@ -1024,11 +1053,10 @@ pub fn blueprint_get_subgraph(
                 .comments
                 .iter()
                 .filter(|comment| {
-                    session
-                        .graph
-                        .nodes
+                    comment
+                        .contained_node_ids
                         .iter()
-                        .any(|node| node_set.contains(&node.id) && comment.contains_node(node))
+                        .any(|id| node_set.contains(id))
                 })
                 .map(comment_to_json)
                 .collect::<Vec<_>>()

@@ -27,13 +27,12 @@ impl ToolbarRenderer {
         let is_compiling = panel.compilation_status.is_compiling;
         let is_dirty = panel.is_dirty;
         let is_saving = panel.is_saving;
-        let has_profile = panel.profile.is_some();
         let show_minimap = panel.show_minimap;
         let show_debug = panel.show_debug_overlay;
         let show_controls = panel.show_graph_controls;
         let electronic_connections = panel
             .active_canvas()
-            .map(|canvas| canvas.read(cx).electronic_connections)
+            .map(|canvas| canvas.read(cx).angular_wires())
             .unwrap_or(false);
         let blueprint_name = panel
             .tab_title
@@ -172,23 +171,11 @@ impl ToolbarRenderer {
                     .on_click(cx.listener(|panel, _, window, cx| {
                         if let Some(canvas) = panel.active_canvas().cloned() {
                             canvas.update(cx, |canvas, cx| {
-                                canvas.create_comment_at_center(window, cx)
+                                canvas.create_comment_at_center(cx)
                             });
                         }
                     })),
             )
-            .when(has_profile, |toolbar| {
-                toolbar.child(
-                    Button::new("toolbar-auto-layout")
-                        .ghost()
-                        .small()
-                        .icon(IconName::GitBranch)
-                        .tooltip("Auto-layout the graph")
-                        .on_click(cx.listener(|panel, _, _window, cx| {
-                            panel.auto_layout(cx);
-                        })),
-                )
-            })
             .child(
                 Button::new("toolbar-find")
                     .ghost()
@@ -332,9 +319,7 @@ impl ToolbarRenderer {
                                     let _ = panel.update(cx, |panel, cx| {
                                         if let Some(canvas) = panel.active_canvas().cloned() {
                                             canvas.update(cx, |canvas, cx| {
-                                                canvas.electronic_connections =
-                                                    !canvas.electronic_connections;
-                                                cx.notify();
+                                                canvas.toggle_angular_wires(cx);
                                             });
                                         }
                                         cx.notify();

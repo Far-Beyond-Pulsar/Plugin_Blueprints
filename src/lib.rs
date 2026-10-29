@@ -25,12 +25,13 @@ use ui::dock::PanelView;
 
 // Module declarations
 mod ai_tools;
+mod palette_catalog;
+mod theme;
+pub mod canvas_profile;
 mod core;
 mod editor;
 mod features;
 pub mod io;
-pub mod profile;
-mod rendering;
 pub mod std_nodes;
 mod ui_components;
 pub mod validation;
@@ -38,11 +39,8 @@ pub mod validation;
 // Re-export main types for plugin API compatibility
 pub use core::definitions::*;
 pub use core::events::*;
-pub use core::graph::*;
+pub use core::graph::{CustomEventField, EventDefinition};
 pub use core::types::*;
-// Public for the `spatial_index_stress` benchmark example (#1072).
-#[doc(hidden)]
-pub use core::spatial_index::{GraphRect, GraphSpatialIndex};
 pub use editor::panel::BlueprintEditorPanel;
 pub use features::viewport::parse_hex_color;
 
@@ -51,7 +49,7 @@ mod builtin_provider;
 #[cfg(feature = "builtin")]
 pub use builtin_provider::BlueprintEditorBuiltinProvider;
 
-pub fn upsert_ai_session(file_path: PathBuf, graph: BlueprintGraph) {
+pub fn upsert_ai_session(file_path: PathBuf, graph: graphy::GraphDescription) {
     ai_tools::upsert_session(file_path, graph);
 }
 
@@ -171,8 +169,7 @@ impl BlueprintEditorPlugin {
             match BlueprintEditorPanel::new_with_path(file_path_clone.clone(), window, cx) {
                 Ok(p) => {
                     tracing::info!(
-                        "create_blueprint_editor: new_with_path succeeded, graph has {} nodes, current_class_path={:?}",
-                        p.graph.nodes.len(),
+                        "create_blueprint_editor: new_with_path succeeded, current_class_path={:?}",
                         p.current_class_path,
                     );
                     p

@@ -10,7 +10,7 @@ impl PropertiesRenderer {
         let Some(macro_def) = panel
             .subgraphs
             .get(index)
-            .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro)
+            .filter(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Macro)
             .cloned()
         else {
             return Self::render_empty_state(cx);
@@ -94,7 +94,7 @@ impl PropertiesRenderer {
         let Some(macro_def) = panel
             .subgraphs
             .iter()
-            .find(|m| m.id == macro_id && m.kind == blueprint_graph::SubGraphKind::Macro)
+            .find(|m| m.id == macro_id && m.kind == graphy_blueprint::SubGraphKind::Macro)
             .cloned()
         else {
             return div().into_any_element();
@@ -165,7 +165,7 @@ impl PropertiesRenderer {
         panel: &mut BlueprintEditorPanel,
         macro_id: &str,
         pin_index: usize,
-        pin: &blueprint_graph::SubGraphPin,
+        pin: &graphy_blueprint::SubGraphPin,
         is_input: bool,
         window: &mut Window,
         cx: &mut Context<BlueprintEditorPanel>,
@@ -190,7 +190,7 @@ impl PropertiesRenderer {
                         let new_name = state.read(cx).text().to_string().trim().to_string();
                         if !new_name.is_empty() {
                             if let Some(m) = this.subgraphs.iter_mut().find(|m| {
-                                m.id == sub_mid && m.kind == blueprint_graph::SubGraphKind::Macro
+                                m.id == sub_mid && m.kind == graphy_blueprint::SubGraphKind::Macro
                             }) {
                                 let pins = if sub_input {
                                     &mut m.interface.inputs
@@ -229,7 +229,7 @@ impl PropertiesRenderer {
                         let new_type = state.read(cx).text().to_string().trim().to_string();
                         if !new_type.is_empty() {
                             if let Some(m) = this.subgraphs.iter_mut().find(|m| {
-                                m.id == sub_mid && m.kind == blueprint_graph::SubGraphKind::Macro
+                                m.id == sub_mid && m.kind == graphy_blueprint::SubGraphKind::Macro
                             }) {
                                 let pins = if sub_input {
                                     &mut m.interface.inputs
@@ -238,7 +238,7 @@ impl PropertiesRenderer {
                                 };
                                 if let Some(p) = pins.iter_mut().find(|p| p.id == sub_pid) {
                                     p.data_type =
-                                        blueprint_graph::DataType::from_type_str(&new_type);
+                                        graphy_blueprint::DataType::from_type_str(&new_type);
                                 }
                             }
                             this.sync_entry_exit_in_active_graph(&sub_mid, cx);

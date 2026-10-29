@@ -6,6 +6,7 @@
 //! - Format conversion utilities
 //! - Autosave functionality
 
+pub mod canvas_doc;
 pub mod formats;
 pub mod legacy;
 pub mod libraries;

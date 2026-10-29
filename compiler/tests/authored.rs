@@ -1,9 +1,9 @@
 use blueprint_compiler::{authored::expand_graph, compile, ClassSource, VariableSource};
-use blueprint_graph::codec::deserialize_blueprint;
+use graphy_blueprint::codec::deserialize_blueprint;
 use pulsar_script_vm::{Budget, Host, NativeRegistry, Program, Value, Vm};
 use std::sync::Arc;
 
-const FIXTURE: &str = include_str!("../../graph/tests/fixtures/graph_save.json");
+const FIXTURE: &str = include_str!("../../../../../crates/third-party/graphy/crates/graphy-blueprint/tests/fixtures/graph_save.json");
 
 #[test]
 fn saved_graph_runs_headlessly_and_macro_state_is_stable_and_independent() {

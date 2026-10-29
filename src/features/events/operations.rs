@@ -4,11 +4,12 @@
 //! (`local_event_defs`) and graph nodes (On / Dispatch) are synced from them.
 
 use crate::core::graph::{CustomEventField, EventDefinition};
-use crate::core::types::{BlueprintNode, NodeType, Pin, PinDataType as DataType, PinType};
+use crate::core::types::NodeType;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::editor::panel::BlueprintEditorPanel;
-use crate::editor::workspace_panels::GraphCanvasPanel;
+use crate::features::macros::operations::{apply_to_doc, pin_instance};
 use gpui::*;
-use std::collections::HashMap;
+use graphy::{DataType, GraphCommand, GraphDescription, NodeInstance, PinInstance, PinType, Position};
 use uuid::Uuid;
 
 impl BlueprintEditorPanel {
@@ -79,214 +80,231 @@ impl BlueprintEditorPanel {
         self.local_event_defs.iter().find(|d| d.uid == uid)
     }
 
-    /// Build pin lists from an event definition for On and Dispatch nodes.
-    pub fn event_output_pins(def: &EventDefinition) -> Vec<Pin> {
-        let mut pins = vec![Pin {
-            id: "Body".to_string(),
-            name: "Body".to_string(),
-            pin_type: PinType::Output,
-            data_type: DataType::execution(),
-        }];
+    /// The output pins of an event's On node.
+    pub fn event_output_pins(def: &EventDefinition) -> Vec<PinInstance> {
+        let mut pins = vec![pin_instance("Body", "Body", DataType::Exec, PinType::Output)];
         for field in &def.fields {
-            pins.push(Pin {
-                id: field.name.clone(),
-                name: field.name.clone(),
-                pin_type: PinType::Output,
-                data_type: DataType::from_type_str(&field.type_name),
-            });
+            pins.push(pin_instance(
+                &field.name,
+                &field.name,
+                crate::canvas_profile::datatype_from_str(&field.type_name),
+                PinType::Output,
+            ));
         }
         pins
     }
 
-    pub fn event_dispatch_input_pins(def: &EventDefinition) -> Vec<Pin> {
-        let mut pins = vec![Pin {
-            id: "exec".to_string(),
-            name: String::new(),
-            pin_type: PinType::Input,
-            data_type: DataType::execution(),
-        }];
+    /// The input pins of an event's Dispatch node.
+    pub fn event_dispatch_input_pins(def: &EventDefinition) -> Vec<PinInstance> {
+        let mut pins = vec![pin_instance("exec", "", DataType::Exec, PinType::Input)];
         for field in &def.fields {
-            pins.push(Pin {
-                id: field.name.clone(),
-                name: field.name.clone(),
-                pin_type: PinType::Input,
-                data_type: DataType::from_type_str(&field.type_name),
-            });
+            pins.push(pin_instance(
+                &field.name,
+                &field.name,
+                crate::canvas_profile::datatype_from_str(&field.type_name),
+                PinType::Input,
+            ));
         }
         pins
     }
 
-    // ─── Sync (associated functions, not &self methods) ────────────────────────
+    // ─── Sync (command builders over a graph) ──────────────────────────────────
 
-    /// Ensure the On node for `uid` exists in `graph` with the correct pins.
-    /// Pass the event definition explicitly to avoid borrow conflicts.
-    pub fn sync_event_on_node_for_def(
+    fn same_pins(a: &[PinInstance], b: &[PinInstance]) -> bool {
+        a.len() == b.len()
+            && a.iter().zip(b).all(|(x, y)| {
+                x.id == y.id && x.pin.name == y.pin.name && x.pin.data_type == y.pin.data_type
+            })
+    }
+
+    /// Commands ensuring the On node for `def` exists in `graph` with the
+    /// correct pins.
+    pub fn event_on_node_commands(
         def: &EventDefinition,
-        uid: &str,
-        graph: &mut crate::core::graph::BlueprintGraph,
-    ) -> Option<String> {
-        let on_def_id = format!("custom_event:{}", uid);
-
-        let existing_id = graph
-            .nodes
-            .iter()
-            .find(|n| n.definition_id == on_def_id)
-            .map(|n| n.id.clone());
-
-        let on_inputs = vec![Pin {
-            id: "__return__".to_string(),
-            name: String::new(),
-            pin_type: PinType::Input,
-            data_type: DataType::from_type_str("?"),
-        }];
+        graph: &GraphDescription,
+    ) -> Vec<GraphCommand> {
+        let on_type = format!("custom_event:{}", def.uid);
+        let on_inputs = vec![pin_instance(
+            "__return__",
+            "",
+            crate::canvas_profile::datatype_from_str("?"),
+            PinType::Input,
+        )];
         let outputs = Self::event_output_pins(def);
-
-        if let Some(ref nid) = existing_id {
-            if let Some(node) = graph.nodes.iter_mut().find(|n| n.id == *nid) {
-                node.title = format!("On {}", def.name);
-                node.icon = "📡".to_string();
-                node.definition_id = on_def_id;
-                node.node_type = NodeType::CustomEvent;
+        let existing = graph
+            .nodes
+            .values()
+            .filter(|n| n.node_type == on_type)
+            .min_by(|a, b| a.id.cmp(&b.id));
+        match existing {
+            Some(node) => {
+                let mut commands = Vec::new();
+                if !Self::same_pins(&node.inputs, &on_inputs)
+                    || !Self::same_pins(&node.outputs, &outputs)
+                {
+                    commands.push(GraphCommand::SetPins {
+                        node: node.id.clone(),
+                        inputs: on_inputs,
+                        outputs,
+                    });
+                }
+                if node.properties.get("event_uid").and_then(|v| v.as_str())
+                    != Some(def.uid.as_str())
+                {
+                    commands.push(GraphCommand::SetProperty {
+                        node: node.id.clone(),
+                        key: "event_uid".to_string(),
+                        value: Some(graphy::JsonValue::String(def.uid.clone())),
+                    });
+                }
+                commands
+            }
+            None => {
+                let mut node = NodeInstance::new(
+                    Uuid::new_v4().to_string(),
+                    on_type,
+                    Position::new(200.0, 200.0),
+                );
                 node.inputs = on_inputs;
                 node.outputs = outputs;
-                node.description = format!("Custom event listener for '{}'", uid);
-                node.properties
-                    .insert("event_uid".to_string(), uid.to_string());
+                node.set_property("event_uid", def.uid.clone());
+                vec![GraphCommand::AddNode(node)]
             }
-            existing_id
-        } else {
-            let id = uuid::Uuid::new_v4().to_string();
-            graph.nodes.push(BlueprintNode {
-                id: id.clone(),
-                definition_id: on_def_id,
-                title: format!("On {}", def.name),
-                icon: "📡".to_string(),
-                node_type: NodeType::CustomEvent,
-                position: Point::new(200.0, 200.0),
-                size: gpui::Size::new(240.0, 60.0),
-                inputs: on_inputs,
-                outputs,
-                properties: {
-                    let mut m = HashMap::new();
-                    m.insert("event_uid".to_string(), uid.to_string());
-                    m
-                },
-                is_selected: false,
-                description: format!("Custom event listener for '{}'", uid),
-                color: None,
-            });
-            Some(id)
         }
     }
 
-    /// Sync all Dispatch nodes referencing `uid` in `graph` with the event
-    /// definition's pins.  Does NOT take `&self`.
-    pub fn sync_dispatch_nodes_for_def(
+    /// Commands bringing every Dispatch node of `def` in line with its pins.
+    pub fn event_dispatch_commands(
         def: &EventDefinition,
-        uid: &str,
-        graph: &mut crate::core::graph::BlueprintGraph,
-    ) {
-        let dispatch_def_id = format!("custom_event_dispatch:{}", uid);
+        graph: &GraphDescription,
+    ) -> Vec<GraphCommand> {
+        let dispatch_type = format!("custom_event_dispatch:{}", def.uid);
         let inputs = Self::event_dispatch_input_pins(def);
+        let mut ids: Vec<&String> = graph
+            .nodes
+            .values()
+            .filter(|n| n.node_type == dispatch_type && !Self::same_pins(&n.inputs, &inputs))
+            .map(|n| &n.id)
+            .collect();
+        ids.sort();
+        ids.into_iter()
+            .map(|id| GraphCommand::SetPins {
+                node: id.clone(),
+                inputs: inputs.clone(),
+                outputs: graph.nodes[id].outputs.clone(),
+            })
+            .collect()
+    }
 
-        for node in graph.nodes.iter_mut() {
-            if node.definition_id == dispatch_def_id
-                && node.node_type == NodeType::CustomEventDispatch
-            {
-                node.inputs = inputs.clone();
-                node.title = format!("Dispatch {}", def.name);
-                node.properties
-                    .insert("event_uid".to_string(), uid.to_string());
+    /// Commands removing On nodes of events that no longer exist.
+    fn event_cleanup_commands(
+        graph: &GraphDescription,
+        active_uids: &[String],
+    ) -> Vec<GraphCommand> {
+        let mut ids: Vec<&String> = graph
+            .nodes
+            .values()
+            .filter(|n| {
+                NodeType::of(&n.node_type) == NodeType::CustomEvent
+                    && n.node_type
+                        .strip_prefix("custom_event:")
+                        .is_some_and(|uid| !active_uids.iter().any(|a| a == uid))
+            })
+            .map(|n| &n.id)
+            .collect();
+        ids.sort();
+        ids.into_iter()
+            .map(|id| GraphCommand::RemoveNode { id: id.clone() })
+            .collect()
+    }
+
+    /// All commands that make `graph` agree with the event definitions.
+    fn event_sync_commands(
+        defs: &[EventDefinition],
+        graph: &GraphDescription,
+    ) -> Vec<GraphCommand> {
+        let active: Vec<String> = defs.iter().map(|d| d.uid.clone()).collect();
+        let mut working = graph.clone();
+        let mut all = Vec::new();
+        for def in defs {
+            for commands in [
+                Self::event_on_node_commands(def, &working),
+                Self::event_dispatch_commands(def, &working),
+            ] {
+                for command in commands {
+                    if command.apply(&mut working).is_ok() {
+                        all.push(command);
+                    }
+                }
             }
         }
+        all.extend(Self::event_cleanup_commands(&working, &active));
+        all
+    }
+
+    /// Ensure the On node for `uid` exists in the active graph (new events).
+    pub fn sync_event_to_active_graph(&mut self, uid: &str, cx: &mut Context<Self>) {
+        if let Some(tab_id) = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone()) {
+            self.sync_event_to_tab(uid, &tab_id, cx);
+        }
+    }
+
+    /// Ensure the On node for `uid` exists in the graph of tab `tab_id`.
+    pub fn sync_event_to_tab(&mut self, uid: &str, tab_id: &str, cx: &mut Context<Self>) {
+        let Some(def) = self.find_event_def(uid).cloned() else {
+            return;
+        };
+        self.sync_profile_data();
+        let canvas = self
+            .graph_panels
+            .iter()
+            .find(|(id, _)| id == tab_id)
+            .map(|(_, canvas)| canvas.clone());
+        if let Some(canvas) = canvas {
+            cx.defer(move |cx| {
+                canvas.update(cx, |canvas, cx| {
+                    let commands =
+                        BlueprintEditorPanel::event_on_node_commands(&def, canvas.graph(cx));
+                    canvas.apply_system("Sync event", commands, cx);
+                });
+            });
+        } else if let Some(doc) = self
+            .open_tabs
+            .iter_mut()
+            .find(|tab| tab.id == tab_id)
+            .and_then(|tab| tab.pending.as_mut())
+        {
+            let commands = Self::event_on_node_commands(&def, &doc.graph);
+            apply_to_doc(doc, &commands);
+        }
+        cx.notify();
     }
 
     /// Full sync: ensure all event On/Dispatch nodes match their definitions
     /// across all open tabs and live canvases.
-    pub fn sync_all_events(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn sync_all_events(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let defs: Vec<EventDefinition> = self.local_event_defs.clone();
-        let active_uids: Vec<String> = defs.iter().map(|d| d.uid.clone()).collect();
+        self.sync_profile_data();
 
-        // Sync tab snapshots (graph is separate from self)
         for tab in self.open_tabs.iter_mut() {
-            for def in &defs {
-                Self::sync_event_on_node_for_def(def, &def.uid, &mut tab.graph);
-                Self::sync_dispatch_nodes_for_def(def, &def.uid, &mut tab.graph);
+            if let Some(doc) = tab.pending.as_mut() {
+                let commands = Self::event_sync_commands(&defs, &doc.graph);
+                apply_to_doc(doc, &commands);
             }
-            tab.graph.nodes.retain(|n| {
-                if n.node_type == NodeType::CustomEvent {
-                    if let Some(uid) = n.definition_id.strip_prefix("custom_event:") {
-                        return active_uids.contains(&uid.to_string());
-                    }
-                }
-                true
+        }
+
+        for (_, canvas) in self.graph_panels.clone() {
+            let defs = defs.clone();
+            cx.defer(move |cx| {
+                canvas.update(cx, |canvas, cx| {
+                    let commands =
+                        BlueprintEditorPanel::event_sync_commands(&defs, canvas.graph(cx));
+                    canvas.apply_system("Sync events", commands, cx);
+                    canvas.refresh_presentation(cx);
+                });
             });
         }
-
-        // Sync live canvas graphs (deferred)
-        let canvases: Vec<Entity<GraphCanvasPanel>> =
-            self.graph_panels.iter().map(|(_, c)| c.clone()).collect();
-        let defs2 = defs.clone();
-        let active_uids2 = active_uids.clone();
-        cx.defer(move |cx| {
-            for canvas in &canvases {
-                canvas.update(cx, |canvas_panel, _cx| {
-                    for def in &defs2 {
-                        BlueprintEditorPanel::sync_event_on_node_for_def(
-                            def,
-                            &def.uid,
-                            &mut canvas_panel.graph,
-                        );
-                        BlueprintEditorPanel::sync_dispatch_nodes_for_def(
-                            def,
-                            &def.uid,
-                            &mut canvas_panel.graph,
-                        );
-                    }
-                    canvas_panel.graph.nodes.retain(|n| {
-                        if n.node_type == NodeType::CustomEvent {
-                            if let Some(uid) = n.definition_id.strip_prefix("custom_event:") {
-                                return active_uids2.contains(&uid.to_string());
-                            }
-                        }
-                        true
-                    });
-                });
-            }
-        });
-
-        if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
-            self.graph = tab.graph.clone();
-        }
-
         cx.notify();
-    }
-
-    // ─── Convenience methods on &mut self ─────────────────────────────────────
-
-    pub fn sync_event_on_node(
-        &self,
-        uid: &str,
-        graph: &mut crate::core::graph::BlueprintGraph,
-    ) -> Option<String> {
-        let def = self.find_event_def(uid)?;
-        Self::sync_event_on_node_for_def(def, uid, graph)
-    }
-
-    pub fn sync_event_dispatch_nodes(
-        &self,
-        uid: &str,
-        graph: &mut crate::core::graph::BlueprintGraph,
-    ) {
-        let Some(def) = self.find_event_def(uid) else {
-            return;
-        };
-        Self::sync_dispatch_nodes_for_def(def, uid, graph);
-    }
-
-    pub fn remove_event_on_node(&self, uid: &str, graph: &mut crate::core::graph::BlueprintGraph) {
-        let on_def_id = format!("custom_event:{}", uid);
-        graph.nodes.retain(|n| n.definition_id != on_def_id);
     }
 }
 
@@ -295,52 +313,23 @@ impl GraphCanvasPanel {
     pub fn create_custom_event_dispatch_node(
         &mut self,
         uid: String,
-        position: Point<f32>,
+        position: graphy_render::Vec2,
         cx: &mut Context<Self>,
     ) {
-        let inputs = if let Some(panel) = self.panel.upgrade() {
-            panel.read(cx).find_event_def(&uid).map_or_else(
-                || {
-                    vec![Pin {
-                        id: "exec".to_string(),
-                        name: String::new(),
-                        pin_type: PinType::Input,
-                        data_type: DataType::execution(),
-                    }]
-                },
-                |def| BlueprintEditorPanel::event_dispatch_input_pins(def),
-            )
-        } else {
+        let Some(panel) = self.panel.upgrade() else {
             return;
         };
-
-        let dispatch_def_id = format!("custom_event_dispatch:{}", uid);
-        let event_name = self
-            .panel
-            .upgrade()
-            .and_then(|p| p.read(cx).find_event_def(&uid))
-            .map(|d| d.name.clone())
-            .unwrap_or_else(|| uid.clone());
-
-        let node = BlueprintNode {
-            id: uuid::Uuid::new_v4().to_string(),
-            definition_id: dispatch_def_id,
-            title: format!("Dispatch {}", event_name),
-            icon: "📡".to_string(),
-            node_type: NodeType::CustomEventDispatch,
-            position,
-            size: gpui::Size::new(240.0, 60.0),
-            inputs,
-            outputs: Vec::new(),
-            properties: {
-                let mut m = HashMap::new();
-                m.insert("event_uid".to_string(), uid);
-                m
-            },
-            is_selected: false,
-            description: String::new(),
-            color: None,
-        };
+        let inputs = panel.read(cx).find_event_def(&uid).map_or_else(
+            || vec![pin_instance("exec", "", DataType::Exec, PinType::Input)],
+            BlueprintEditorPanel::event_dispatch_input_pins,
+        );
+        let mut node = NodeInstance::new(
+            Uuid::new_v4().to_string(),
+            format!("custom_event_dispatch:{uid}"),
+            Position::new(f64::from(position.x), f64::from(position.y)),
+        );
+        node.inputs = inputs;
+        node.set_property("event_uid", uid);
         self.add_node(node, cx);
     }
 }

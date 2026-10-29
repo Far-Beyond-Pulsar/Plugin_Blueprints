@@ -8,8 +8,10 @@ use ui::dock::DockItem;
 use ui::workspace::Workspace;
 
 use crate::editor::panel::BlueprintEditorPanel;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
+use crate::editor::tabs::TabDoc;
 use crate::editor::workspace_panels::{
-    AssetInspectorPanel, CompilerPanel, EventsPanel, FindPanel, GraphCanvasPanel,
+    AssetInspectorPanel, CompilerPanel, EventsPanel, FindPanel,
     ImplementedTraitsPanel, MacrosPanel, PrefabHierarchyPanel, PropertiesPanel, VariablesPanel,
 };
 
@@ -20,22 +22,8 @@ impl BlueprintEditorPanel {
             return;
         }
 
-        tracing::info!(
-            ">>> initialize_workspace: open_tabs={}, self.graph.nodes={}, graph_panels before={}",
-            self.open_tabs.len(),
-            self.graph.nodes.len(),
-            self.graph_panels.len(),
-        );
-
-        for tab in &self.open_tabs {
-            tracing::info!(
-                ">>> initialize_workspace: tab id={} is_main={} nodes={} connections={}",
-                tab.id,
-                tab.is_main,
-                tab.graph.nodes.len(),
-                tab.graph.connections.len(),
-            );
-        }
+        self.sync_profile_data();
+        self.refresh_catalog(cx);
 
         let editor_weak = cx.entity().downgrade();
 
@@ -66,38 +54,37 @@ impl BlueprintEditorPanel {
             let find_panel = cx.new(|cx| FindPanel::new(editor_weak.clone(), cx));
             self.find_panel = Some(find_panel.clone());
             let properties_panel = cx.new(|cx| PropertiesPanel::new(editor_weak.clone(), cx));
-            let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = self
+            let pending: Vec<(String, String, bool, TabDoc)> = self
                 .open_tabs
-                .iter()
-                .map(|tab| {
-                    let tid = tab.id.clone();
-                    let tname = tab.name.clone();
-                    let tis_main = tab.is_main;
-                    let tgraph = tab.graph.clone();
-                    let tracing_id = tid.clone();
-                    let tracing_nodes = tgraph.nodes.len();
-                    tracing::info!(
-                        ">>> initialize_workspace: creating canvas for tab {} with {} nodes",
-                        tracing_id,
-                        tracing_nodes,
-                    );
+                .iter_mut()
+                .filter_map(|tab| {
+                    tab.pending
+                        .take()
+                        .map(|doc| (tab.id.clone(), tab.name.clone(), tab.is_main, doc))
+                })
+                .collect();
+            let profile_data = self.profile_data.clone();
+            let center_panels: Vec<(String, Entity<GraphCanvasPanel>)> = pending
+                .into_iter()
+                .map(|(tid, tname, tis_main, doc)| {
                     let ew = editor_weak.clone();
+                    let profile_data = profile_data.clone();
+                    let id = tid.clone();
                     let panel = cx.new(|cx| {
-                        let canvas =
-                            GraphCanvasPanel::new(
+                        let canvas = GraphCanvasPanel::new(
                             ew,
                             tid.clone(),
                             tname,
                             tis_main,
-                            tgraph,
-                            self.profile.clone(),
+                            doc,
+                            profile_data,
                             window,
                             cx,
                         );
                         self.adopt_graph_history(&tid, &canvas.history);
                         canvas
                     });
-                    (tab.id.clone(), panel)
+                    (id, panel)
                 })
                 .collect();
 
@@ -124,9 +111,6 @@ impl BlueprintEditorPanel {
             }
 
             // Left sidebar: Components/Find (multi-tab), Macros/Events (multi-tab), Variables
-            // A profile without Blueprint concepts keeps only the canvas and the
-            // property panel (a node's parameters are edited there).
-            let stripped = self.profile.as_ref().is_some_and(|p| !p.side_panels());
             let left = DockItem::split(
                 Axis::Vertical,
                 vec![
@@ -167,46 +151,20 @@ impl BlueprintEditorPanel {
             );
 
             // Right sidebar: live properties, compiler output, and serialized save data.
-            let mut right_panels = vec![Arc::new(properties_panel) as Arc<dyn ui::dock::PanelView>];
-            if !stripped {
-                right_panels.push(Arc::new(compiler_panel) as Arc<dyn ui::dock::PanelView>);
-                right_panels.push(Arc::new(asset_inspector_panel) as Arc<dyn ui::dock::PanelView>);
-            }
-            let properties = DockItem::tabs(right_panels, None, &dock_area_weak, window, cx);
-            // A profile may put a preview above the Properties panel.
-            let preview = self.profile.clone().and_then(|profile| {
-                let file = self.get_graph_file_path();
-                profile.preview_panel(file.as_deref(), window, cx)
-            });
-            let right = match preview {
-                Some(preview) => DockItem::split(
-                    Axis::Vertical,
-                    vec![
-                        DockItem::tabs(vec![preview], None, &dock_area_weak, window, cx),
-                        properties,
-                    ],
-                    &dock_area_weak,
-                    window,
-                    cx,
-                ),
-                None => properties,
-            };
-
-            // A profile may put its own panel on the left instead of the Blueprint ones.
-            let profile_left = self.profile.clone().map(|profile| {
-                let file = self.get_graph_file_path();
-                profile.left_panels(editor_weak.clone(), file.as_deref(), window, cx)
-            });
-            let left = match profile_left {
-                Some(panels) if stripped && !panels.is_empty() => {
-                    Some(DockItem::tabs(panels, None, &dock_area_weak, window, cx))
-                }
-                _ => (!stripped).then_some(left),
-            };
-
+            let right = DockItem::tabs(
+                vec![
+                    Arc::new(properties_panel) as Arc<dyn ui::dock::PanelView>,
+                    Arc::new(compiler_panel) as Arc<dyn ui::dock::PanelView>,
+                    Arc::new(asset_inspector_panel) as Arc<dyn ui::dock::PanelView>,
+                ],
+                None,
+                &dock_area_weak,
+                window,
+                cx,
+            );
             workspace.initialize(
                 center,
-                left,
+                Some(left),
                 Some(right),
                 None,
                 window,
@@ -251,11 +209,6 @@ impl BlueprintEditorPanel {
                     };
                     if new_index != this.active_tab_index {
                         this.active_tab_index = new_index;
-                        if let Some((_, canvas)) =
-                            this.graph_panels.iter().find(|(id, _)| id == &tab_id)
-                        {
-                            this.graph = canvas.read(cx).graph.clone();
-                        }
                         cx.notify();
                     }
                 },

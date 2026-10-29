@@ -89,7 +89,7 @@ impl DebugSession {
 
 // ─── Breakpoint API on the panel ─────────────────────────────────────────────
 
-impl crate::editor::workspace_panels::GraphCanvasPanel {
+impl crate::editor::graph_canvas_panel::GraphCanvasPanel {
     pub fn toggle_breakpoint(&mut self, node_id: String, cx: &mut Context<Self>) {
         if self.breakpoints.contains(&node_id) {
             self.breakpoints.remove(&node_id);
@@ -169,50 +169,9 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         cx.notify();
     }
 
-    /// Smoothly animate the viewport so `node_id` is centred on screen.
+    /// Centre the viewport on `node_id`.
     pub fn animate_viewport_to_node(&mut self, node_id: &str, cx: &mut Context<Self>) {
-        let Some(node) = self.graph.nodes.iter().find(|n| n.id == node_id) else {
-            return;
-        };
-        let target_graph_cx = node.position.x + node.size.width * 0.5;
-        let target_graph_cy = node.position.y + node.size.height * 0.5;
-
-        let (vw, vh) = self
-            .element_bounds
-            .map(|b| (b.size.width.as_f32(), b.size.height.as_f32()))
-            .unwrap_or((1280.0, 720.0));
-        let zoom = self.graph.zoom_level;
-
-        // Solve: (target + pan) * zoom = viewport/2  →  pan = viewport/(2*zoom) - target
-        let target_pan_x = vw / (2.0 * zoom) - target_graph_cx;
-        let target_pan_y = vh / (2.0 * zoom) - target_graph_cy;
-        let start_pan_x = self.graph.pan_offset.x;
-        let start_pan_y = self.graph.pan_offset.y;
-
-        let weak = cx.weak_entity();
-        // `cx` in the spawn closure is `&mut AsyncApp` per GPUI's spawn signature.
-        cx.spawn(async move |_, cx| {
-            const STEPS: u32 = 18;
-            const STEP_MS: u64 = 14; // ~250 ms total
-            for i in 1..=STEPS {
-                let t = i as f32 / STEPS as f32;
-                let t_eased = 1.0 - (1.0 - t).powi(3); // cubic ease-out
-                let pan_x = start_pan_x + (target_pan_x - start_pan_x) * t_eased;
-                let pan_y = start_pan_y + (target_pan_y - start_pan_y) * t_eased;
-                if weak
-                    .update(cx, |panel, cx| {
-                        panel.graph.pan_offset.x = pan_x;
-                        panel.graph.pan_offset.y = pan_y;
-                        cx.notify();
-                    })
-                    .is_err()
-                {
-                    break;
-                }
-                smol::Timer::after(std::time::Duration::from_millis(STEP_MS)).await;
-            }
-        })
-        .detach();
+        self.animate_pan_to_node(node_id, cx);
     }
 
     /// Generate a plausible fake pin value for display in the debug HUD.
@@ -277,30 +236,37 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
     }
 
     /// Collect fake pin values for all data inputs of `node_id`.
-    fn fake_frame_for_node(&self, node_id: &str, step: usize) -> BreakpointFrame {
+    fn fake_frame_for_node(&self, node_id: &str, step: usize, cx: &App) -> BreakpointFrame {
+        let title_of = |id: &str, fallback: &str| {
+            self.canvas
+                .read(cx)
+                .scene()
+                .node(id)
+                .map(|n| n.presentation.title.clone())
+                .unwrap_or_else(|| fallback.to_string())
+        };
         let (title, pin_values) = self
-            .graph
+            .graph(cx)
             .nodes
-            .iter()
-            .find(|n| n.id == node_id)
+            .get(node_id)
             .map(|node| {
                 let values: Vec<PinValue> = node
                     .inputs
                     .iter()
-                    .filter(|p| !p.data_type.is_execution())
+                    .filter(|p| !p.data_type().is_execution())
                     .enumerate()
                     .map(|(i, pin)| PinValue {
                         pin_id: pin.id.clone(),
-                        pin_name: pin.name.clone(),
-                        type_label: format!("{:?}", pin.data_type)
+                        pin_name: pin.pin.name.clone(),
+                        type_label: format!("{:?}", pin.data_type())
                             .split('(')
                             .next()
                             .unwrap_or("?")
                             .to_string(),
-                        value: Self::fake_pin_value(&pin.name, step.wrapping_add(i * 37)),
+                        value: Self::fake_pin_value(&pin.pin.name, step.wrapping_add(i * 37)),
                     })
                     .collect();
-                (node.title.clone(), values)
+                (title_of(&node.id, &node.node_type), values)
             })
             .unwrap_or_default();
 
@@ -328,7 +294,9 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
     ///     (`pause_after_step = true`).  This means Step always advances to a
     ///     *different* node — never loops back to the same breakpoint node.
     pub fn start_fake_execution_simulation(&mut self, cx: &mut Context<Self>) {
-        let node_ids: Vec<String> = self.graph.nodes.iter().map(|n| n.id.clone()).collect();
+        let graph = self.graph(cx).clone();
+        let mut node_ids: Vec<String> = graph.nodes.keys().cloned().collect();
+        node_ids.sort();
         if node_ids.is_empty() {
             return;
         }
@@ -344,11 +312,8 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
         // Also track which nodes have at least one incoming exec connection
         // so we can identify true entry points.
         let mut has_exec_input = vec![false; node_ids.len()];
-        for conn in &self.graph.connections {
-            if matches!(
-                conn.connection_type,
-                blueprint_graph::ConnectionType::Execution
-            ) {
+        for conn in &graph.connections {
+            if conn.connection_type == graphy::ConnectionType::Execution {
                 if let (Some(&src), Some(&dst)) = (
                     node_index.get(&conn.source_node),
                     node_index.get(&conn.target_node),
@@ -361,16 +326,14 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
 
         // Entry points: prefer Event/MacroEntry nodes; fall back to any node
         // that has no incoming execution connection.
-        let mut entry_nodes: Vec<usize> = self
-            .graph
-            .nodes
+        let mut entry_nodes: Vec<usize> = node_ids
             .iter()
             .enumerate()
-            .filter(|(_, n)| {
-                matches!(
-                    n.node_type,
-                    crate::core::types::NodeType::Event | crate::core::types::NodeType::MacroEntry
-                )
+            .filter(|(_, id)| {
+                graph.nodes.get(*id).is_some_and(|n| {
+                    n.node_type == "macro_entry"
+                        || crate::editor::panel::BlueprintEditorPanel::node_type_is_event(&n.node_type)
+                })
             })
             .map(|(i, _)| i)
             .collect();
@@ -417,7 +380,7 @@ impl crate::editor::workspace_panels::GraphCanvasPanel {
                     // Push a frame and suspend.
                     if weak_panel
                         .update(cx, |panel, cx| {
-                            let frame = panel.fake_frame_for_node(&node_id, step);
+                            let frame = panel.fake_frame_for_node(&node_id, step, cx);
                             // Clear the single-step flag before pausing so that
                             // when the user presses Continue we don't re-pause.
                             if let Some(s) = &mut panel.debug_session {

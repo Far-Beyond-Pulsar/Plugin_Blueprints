@@ -7,9 +7,8 @@ pub mod panel;
 // Re-export commonly used types
 pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
 
-use crate::core::types::{BlueprintNode, NodeType, Pin, PinType};
 use crate::editor::panel::BlueprintEditorPanel;
-use crate::editor::workspace_panels::GraphCanvasPanel;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use engine_backend::scene::ComponentInstance;
 use gpui::{AppContext, Context, Entity, Window};
 use pulsar_reflection::{REGISTRY, RUNTIME_TYPE_REGISTRY};
@@ -27,7 +26,7 @@ pub struct PrefabAsset {
     #[serde(default)]
     pub blueprint_class: Option<BlueprintClassRef>,
     #[serde(default)]
-    pub script_graph: Option<blueprint_graph::GraphDescription>,
+    pub script_graph: Option<graphy_blueprint::GraphDescription>,
 }
 
 /// One prefab component: the component record plus its **slot id**.
@@ -167,33 +166,23 @@ impl GraphCanvasPanel {
         component_index: usize,
         slot_id: String,
         class_name: String,
-        position: gpui::Point<f32>,
+        position: graphy_render::Vec2,
         cx: &mut Context<Self>,
     ) {
-        let node = BlueprintNode {
-            id: format!("get_component_node_{}", uuid::Uuid::new_v4()),
-            definition_id: format!("get_component_ref::{}::{}", class_name, component_index),
-            title: format!("Get {}", class_name),
-            icon: "📦".to_string(),
-            node_type: NodeType::Object,
-            position,
-            size: gpui::Size::new(220.0, 80.0),
-            inputs: vec![],
-            outputs: vec![Pin {
-                id: "component".to_string(),
-                name: class_name.clone(),
-                pin_type: PinType::Output,
-                data_type: crate::core::types::PinDataType::from_type_str(&class_name),
-            }],
-            properties: HashMap::from([
-                ("component_index".to_string(), component_index.to_string()),
-                ("component_class".to_string(), class_name.clone()),
-                ("slot_id".to_string(), slot_id),
-            ]),
-            is_selected: false,
-            description: format!("Gets a runtime reference to component {}", class_name),
-            color: Some("#9B59B6".to_string()),
-        };
+        let mut node = graphy::NodeInstance::new(
+            format!("get_component_node_{}", uuid::Uuid::new_v4()),
+            format!("get_component_ref::{}::{}", class_name, component_index),
+            graphy::Position::new(f64::from(position.x), f64::from(position.y)),
+        );
+        node.outputs.push(crate::features::macros::operations::pin_instance(
+            "component",
+            &class_name,
+            crate::canvas_profile::datatype_from_str(&class_name),
+            graphy::PinType::Output,
+        ));
+        node.set_property("component_index", component_index.to_string());
+        node.set_property("component_class", class_name.clone());
+        node.set_property("slot_id", slot_id);
 
         self.add_node(node, cx);
     }
@@ -205,16 +194,7 @@ impl GraphCanvasPanel {
         window_pos: gpui::Point<gpui::Pixels>,
         cx: &mut Context<Self>,
     ) {
-        let origin = *self.canvas_origin.borrow();
-        let canvas = gpui::Point::new(
-            window_pos.x.as_f32() - origin.x,
-            window_pos.y.as_f32() - origin.y,
-        );
-        let z = self.graph.zoom_level;
-        let graph_pos = gpui::Point::new(
-            canvas.x / z - self.graph.pan_offset.x,
-            canvas.y / z - self.graph.pan_offset.y,
-        );
+        let graph_pos = self.canvas.read(cx).window_to_graph(window_pos);
 
         self.create_component_getter_node(
             drag.component_index,
@@ -254,60 +234,6 @@ impl BlueprintEditorPanel {
         self.prefab_asset = prefab;
         self.prefab_property_state.clear();
         self.selected_prefab_component = None;
-        Ok(())
-    }
-
-    pub fn save_prefab_sidecar(&mut self) -> Result<(), String> {
-        self.sync_prefab_to_script()?;
-
-        let Some(path) = self.prefab_file_path() else {
-            return Err("No class path available for prefab save".to_string());
-        };
-
-        // Class identity and slot ids (#921): levels refer to the class by
-        // its GUID and to its components by slot id.
-        self.prefab_asset.fill_missing_slot_ids();
-        if let Some(class_dir) = path.parent() {
-            std::fs::create_dir_all(class_dir)
-                .map_err(|e| format!("Failed to create class directory: {e}"))?;
-            ensure_class_id(class_dir)?;
-        }
-
-        crate::io::prefab::save_prefab(&path, &self.prefab_asset)
-    }
-
-    pub fn sync_prefab_to_script(&mut self) -> Result<(), String> {
-        if self.prefab_asset.prefab_version == 0 {
-            self.prefab_asset.prefab_version = 1;
-        }
-
-        if self.prefab_asset.name.trim().is_empty() {
-            let fallback = self
-                .current_class_path
-                .as_deref()
-                .and_then(crate::features::class_dirs::class_name_of)
-                .unwrap_or_else(|| "Prefab".to_string());
-            self.prefab_asset.name = fallback;
-        }
-
-        if let Some(path) = self.current_class_path.as_ref() {
-            let class_path = path.display().to_string();
-            let mut defaults = HashMap::new();
-            for var in &self.class_variables {
-                if let Some(v) = &var.default_value {
-                    defaults.insert(var.name.clone(), serde_json::Value::String(v.clone()));
-                }
-            }
-
-            self.prefab_asset.blueprint_class = Some(BlueprintClassRef {
-                class_path,
-                variable_defaults: defaults,
-            });
-        }
-
-        let graph = self.graph.clone();
-        let graph_desc = self.convert_to_graph_description(&graph)?;
-        self.prefab_asset.script_graph = Some(graph_desc);
         Ok(())
     }
 

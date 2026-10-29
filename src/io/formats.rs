@@ -1,5 +1,5 @@
 //! Blueprint persistence uses the shared, headless schema.
-pub use blueprint_graph::{
+pub use graphy_blueprint::{
     BlueprintAsset, BlueprintEditorState, EventDefDescription, EventFieldDescription,
 };
 
@@ -33,7 +33,7 @@ pub fn generate_file_header() -> String {
     )
 }
 
-pub use blueprint_graph::codec::{
+pub use graphy_blueprint::codec::{
     current_format_version, deserialize_blueprint, is_version_supported, strip_header_comments,
 };
 

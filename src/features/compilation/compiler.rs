@@ -49,98 +49,14 @@ impl BlueprintEditorPanel {
         }
     }
 
-    /// The main event-graph tab — compilation always targets this graph, never
-    /// whatever tab the user happens to have focused (e.g. a macro/subgraph
-    /// tab, which legitimately has no event nodes and would otherwise trip the
-    /// "No event nodes found in graph" check).
-    fn main_graph_tab(&self) -> &crate::editor::tabs::GraphTab {
-        self.open_tabs
-            .iter()
-            .find(|t| t.is_main)
-            .unwrap_or(&self.open_tabs[0])
-    }
-
-    /// Dump the active graph (editor view + the `graphy::GraphDescription` that gets
-    /// sent to the compiler) to `blueprint_graph_debug.json` in the working
-    /// directory, so event-node detection mismatches can be diagnosed by
-    /// comparing the editor's classification against the `pulsar_std` catalogue.
-    fn dump_graph_debug_info(&self, graph: &graphy::GraphDescription) {
-        #[derive(serde::Serialize)]
-        struct EditorNodeDebug {
-            id: String,
-            definition_id: String,
-            title: String,
-            editor_node_type: String,
-            definition_is_event: Option<bool>,
-            metadata_found: bool,
-            metadata_node_type: Option<String>,
-        }
-
-        #[derive(serde::Serialize)]
-        struct GraphDescNodeDebug {
-            id: String,
-            node_type: String,
-        }
-
-        #[derive(serde::Serialize)]
-        struct GraphDebugDump {
-            active_tab: String,
-            editor_nodes: Vec<EditorNodeDebug>,
-            graph_description_nodes: Vec<GraphDescNodeDebug>,
-        }
-
-        let node_definitions = crate::core::definitions::NodeDefinitions::load();
-        let metadata = crate::core::definitions::extract_canonical_node_metadata();
-        let main_tab = self.main_graph_tab();
-
-        let editor_nodes = main_tab
-            .graph
-            .nodes
-            .iter()
-            .map(|n| {
-                let def = node_definitions.get_node_definition(&n.definition_id);
-                let meta = metadata.get(&n.definition_id);
-                EditorNodeDebug {
-                    id: n.id.clone(),
-                    definition_id: n.definition_id.clone(),
-                    title: n.title.clone(),
-                    editor_node_type: format!("{:?}", n.node_type),
-                    definition_is_event: def.map(|d| d.is_event),
-                    metadata_found: meta.is_some(),
-                    metadata_node_type: meta.map(|m| format!("{:?}", m.node_type)),
-                }
-            })
-            .collect();
-
-        let graph_description_nodes = graph
-            .nodes
-            .values()
-            .map(|n| GraphDescNodeDebug {
-                id: n.id.clone(),
-                node_type: n.node_type.clone(),
-            })
-            .collect();
-
-        let dump = GraphDebugDump {
-            active_tab: main_tab.name.clone(),
-            editor_nodes,
-            graph_description_nodes,
-        };
-
-        match serde_json::to_string_pretty(&dump) {
-            Ok(json) => match std::fs::write("blueprint_graph_debug.json", &json) {
-                Ok(()) => tracing::info!(
-                    "[Blueprint debug] Wrote graph snapshot to ./blueprint_graph_debug.json"
-                ),
-                Err(e) => {
-                    tracing::warn!("[Blueprint debug] Failed to write graph debug dump: {}", e)
-                }
-            },
-            Err(e) => tracing::warn!(
-                "[Blueprint debug] Failed to serialize graph debug dump: {}",
-                e
-            ),
-        }
+    /// Whether a node type is an event entry point (a catalogue event or an
+    /// engine/component event).
+    pub(crate) fn node_type_is_event(node_type: &str) -> bool {
+        crate::core::definitions::NodeDefinitions::load()
+            .get_node_definition(node_type)
+            .is_some_and(|def| def.is_event)
+            || crate::features::events::engine_events::describe_node_type(node_type)
+                .is_some_and(|(_, is_event)| is_event)
     }
 
     /// Build a `graphy::GraphDescription` for the whole blueprint file: the main
@@ -157,12 +73,10 @@ impl BlueprintEditorPanel {
     ///
     /// `pub(crate)` since #656 — the validation stage runs the SAME expanded
     /// graph codegen consumes.
-    pub(crate) fn build_graphy_description(&self) -> Result<graphy::GraphDescription, String> {
-        let authored = self.convert_graph_to_description(&self.main_graph_tab().graph)?;
+    pub(crate) fn build_graphy_description(&self, cx: &App) -> Result<graphy::GraphDescription, String> {
+        let authored = self.main_authored_graph(cx)?;
         let graph =
-            blueprint_compiler::authored::expand_graph(&authored, self.collect_macro_library()?)?;
-
-        self.dump_graph_debug_info(&graph);
+            blueprint_compiler::authored::expand_graph(&authored, self.collect_macro_library(cx)?)?;
 
         Ok(graph)
     }
@@ -174,6 +88,7 @@ impl BlueprintEditorPanel {
     pub(crate) fn run_validation_stage(
         &mut self,
         target: crate::features::validation::ValidationTarget,
+        cx: &App,
     ) -> crate::features::validation::ValidationReport {
         use crate::features::validation::{
             check_ui_graph_diagnostics, ValidationReport, ValidationTarget,
@@ -185,8 +100,7 @@ impl BlueprintEditorPanel {
         };
 
         // Structural pass on the UI-level description of the main tab.
-        let main_tab = self.main_graph_tab();
-        match self.convert_graph_to_description(&main_tab.graph) {
+        match self.main_authored_graph(cx) {
             Ok(description) => {
                 report.merge(check_ui_graph_diagnostics(&description));
             }
@@ -198,7 +112,7 @@ impl BlueprintEditorPanel {
 
         // Conversion + macro expansion + data-flow analysis on the exact
         // pipeline codegen uses.
-        match self.build_graphy_description() {
+        match self.build_graphy_description(cx) {
             Ok(graph) => {
                 let metadata_provider = crate::std_nodes::StdNodeProvider::new();
                 if let Err(e) = graphy::DataResolver::build(&graph, &metadata_provider) {
@@ -218,7 +132,8 @@ impl BlueprintEditorPanel {
     /// `to_blueprint_asset`'s save snapshot) — plus shared library macros.
     fn collect_macro_library(
         &self,
-    ) -> Result<HashMap<String, blueprint_graph::GraphDescription>, String> {
+        cx: &App,
+    ) -> Result<HashMap<String, graphy_blueprint::GraphDescription>, String> {
         let mut macros = self.subgraphs.clone();
         for tab in self
             .open_tabs
@@ -226,7 +141,9 @@ impl BlueprintEditorPanel {
             .filter(|tab| !tab.is_main && !tab.is_library_macro)
         {
             if let Some(macro_def) = macros.iter_mut().find(|m| m.id == tab.id) {
-                macro_def.graph = self.convert_graph_to_description(&tab.graph)?;
+                macro_def.graph = self
+                    .tab_authored_graph(&tab.id, cx)
+                    .ok_or_else(|| format!("Subgraph tab {} is not available", tab.id))?;
             }
         }
 
@@ -246,7 +163,7 @@ impl BlueprintEditorPanel {
     /// Compile the class to an engine script module: the one language-neutral
     /// result both compile targets are built from (see `blueprint_compiler`).
     /// `Err` carries every diagnostic.
-    fn compile_module(&self) -> Result<pulsar_script_vm::Module, String> {
+    fn compile_module(&self, cx: &App) -> Result<pulsar_script_vm::Module, String> {
         let class_path = self
             .current_class_path
             .as_ref()
@@ -263,7 +180,7 @@ impl BlueprintEditorPanel {
                 default: v.default_value.as_deref().map(property_value_from_raw),
             })
             .collect();
-        let graph = self.build_graphy_description()?;
+        let graph = self.build_graphy_description(cx)?;
         // Engine events (#924): this class's custom events are declared;
         // event nodes are checked against the built-in and other classes'.
         let events = crate::features::events::engine_events::event_sources(&self.local_event_defs);
@@ -293,7 +210,7 @@ impl BlueprintEditorPanel {
     /// Compile the class to an engine script module and write it to
     /// `<class_path>/events/.build/module.json`: the language-neutral
     /// bytecode `pulsar_script_runtime` loads (see `blueprint_compiler`).
-    pub fn compile_to_script_module(&self) -> Result<PathBuf, String> {
+    pub fn compile_to_script_module(&self, cx: &App) -> Result<PathBuf, String> {
         let class_path = self
             .current_class_path
             .as_ref()
@@ -301,7 +218,7 @@ impl BlueprintEditorPanel {
         let build_dir = class_path.join("events").join(".build");
         let out_path = build_dir.join("module.json");
         crate::features::class_dirs::check_language(class_path)?;
-        let module = self.compile_module().inspect_err(|_| {
+        let module = self.compile_module(cx).inspect_err(|_| {
             // Never leave a module from an older graph behind.
             let _ = std::fs::remove_file(&out_path);
         })?;
@@ -333,13 +250,13 @@ impl BlueprintEditorPanel {
 
     /// Compile current graph to Rust source code: the class's script module,
     /// exported as an `Actor` (see `pulsar_script_codegen`).
-    pub fn compile_to_rust(&self) -> Result<String, String> {
+    pub fn compile_to_rust(&self, cx: &App) -> Result<String, String> {
         let blueprint_name = self
             .current_class_path
             .as_deref()
             .and_then(crate::features::class_dirs::class_name_of)
             .unwrap_or_else(|| "compiled_blueprint".to_owned());
-        let module = self.compile_module()?;
+        let module = self.compile_module(cx)?;
         let mut source = pulsar_script_codegen::actor::generate_actor(
             &blueprint_name,
             &module,
@@ -367,7 +284,7 @@ impl BlueprintEditorPanel {
     }
 
     /// Compile and save events to class directory structure
-    pub fn compile_to_class_directory(&self) -> Result<(), String> {
+    pub fn compile_to_class_directory(&self, cx: &App) -> Result<(), String> {
         let class_path = self
             .current_class_path
             .as_ref()
@@ -382,11 +299,15 @@ impl BlueprintEditorPanel {
             .map_err(|e| format!("Failed to create events directory: {}", e))?;
 
         let has_events = self
-            .main_graph_tab()
-            .graph
-            .nodes
-            .iter()
-            .any(|n| n.node_type == crate::NodeType::Event);
+            .main_canvas()
+            .is_some_and(|canvas| {
+                canvas
+                    .read(cx)
+                    .graph(cx)
+                    .nodes
+                    .values()
+                    .any(|n| Self::node_type_is_event(&n.node_type))
+            });
         if !has_events {
             return Err("No event nodes found in graph".to_string());
         }
@@ -398,7 +319,7 @@ impl BlueprintEditorPanel {
         // The same module the VM target writes, exported as an Actor class.
         // Classes the exporter cannot represent are refused with a reason
         // rather than exported with behaviour silently missing.
-        let generated = self.compile_to_rust()?;
+        let generated = self.compile_to_rust(cx)?;
 
         // Write all events into a single file
         let events_file = events_dir.join("events.rs");
@@ -462,35 +383,6 @@ impl BlueprintEditorPanel {
 
     /// Start compilation (called from toolbar)
     pub fn start_compilation(&mut self, cx: &mut Context<Self>) {
-        // Another kind of graph checks itself instead of generating code.
-        if let Some(profile) = self.profile.clone() {
-            self.sync_all_canvases_to_tabs(cx);
-            let (problems, asset) = match self.to_blueprint_asset() {
-                Ok(asset) => (profile.validate(&asset), Some(asset)),
-                Err(error) => (vec![error], None),
-            };
-            if let (true, Some(asset)) = (problems.is_empty(), asset) {
-                let file = self.get_graph_file_path();
-                profile.graph_applied(file.as_deref(), &asset, cx);
-            }
-            self.compilation_status = if problems.is_empty() {
-                CompilationStatus {
-                    state: CompilationState::Success,
-                    message: "✓ Graph is valid".to_string(),
-                    progress: 1.0,
-                    is_compiling: false,
-                }
-            } else {
-                CompilationStatus {
-                    state: CompilationState::Error,
-                    message: format!("✗ {}", problems.join("; ")),
-                    progress: 0.0,
-                    is_compiling: false,
-                }
-            };
-            cx.notify();
-            return;
-        }
         let panel_entity = cx.weak_entity();
         cx.spawn(async move |_entity, mut cx| {
             Self::compile_async(panel_entity, &mut cx).await;
@@ -536,7 +428,7 @@ impl BlueprintEditorPanel {
                 CompileMode::DirectRust => ValidationTarget::DirectRust,
                 CompileMode::BytecodeVm => ValidationTarget::BytecodeVm,
             };
-            let report = panel.run_validation_stage(validation_target);
+            let report = panel.run_validation_stage(validation_target, cx);
             panel.validation_problems = report.diagnostics.clone();
             panel.push_compilation_history(
                 if report.has_errors() {
@@ -578,8 +470,8 @@ impl BlueprintEditorPanel {
                         ),
                     );
                     cx.notify();
-                    panel.sync_all_canvases_to_tabs(cx);
-                    panel.compile_to_class_directory().map(|_| None::<PathBuf>)
+                    
+                    panel.compile_to_class_directory(cx).map(|_| None::<PathBuf>)
                 }
                 CompileMode::BytecodeVm => {
                     panel.push_compilation_history(
@@ -593,13 +485,13 @@ impl BlueprintEditorPanel {
                         ),
                     );
                     cx.notify();
-                    panel.sync_all_canvases_to_tabs(cx);
+                    
                     // The engine script module is what the game runtime runs.
                     // Remove bytecode left by the old PBGC VM path.
                     if let Some(class_path) = &panel.current_class_path {
                         let _ = std::fs::remove_file(class_path.join("events").join(".build").join("bytecode.json"));
                     }
-                    panel.compile_to_script_module().map(Some)
+                    panel.compile_to_script_module(cx).map(Some)
                 }
             }
         });

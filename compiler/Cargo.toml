@@ -5,7 +5,7 @@ edition = "2021"
 description = "Compiles Blueprint graphs to Pulsar engine script modules (pulsar_script_vm)."
 
 [dependencies]
-blueprint_graph = { path = "../graph" }
+graphy-blueprint = { path = "../../../../crates/third-party/graphy/crates/graphy-blueprint" }
 # Same Graphy revision as the plugin; Pulsar-Native patches both to its submodule.
 graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
 pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ffbecda91982c3997ebff801c5b872df0a455ef" }

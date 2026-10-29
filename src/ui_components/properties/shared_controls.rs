@@ -1,9 +1,9 @@
 //! Shared property inspector cards, controls, and node details.
 
 use super::PropertiesRenderer;
-use crate::core::types::{BlueprintNode, NodeType, Pin};
-use crate::editor::workspace_panels::GraphCanvasPanel;
-use crate::features::connections::compatibility::is_pin_connected;
+use super::view::{NodeView, PinView};
+use crate::core::types::NodeType;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use std::any::Any;
@@ -74,32 +74,18 @@ impl PropertiesRenderer {
         div().w_full().h_px().bg(cx.theme().border.opacity(0.3))
     }
 
-    pub(super) fn get_node_type_color<T>(node_type: &NodeType, cx: &mut Context<T>) -> gpui::Hsla {
-        match node_type {
-            NodeType::Event => cx.theme().danger,
-            NodeType::Logic => cx.theme().primary,
-            NodeType::Math => cx.theme().success,
-            NodeType::Object => cx.theme().warning,
+    pub(super) fn get_node_type_color<T>(node: &NodeView, cx: &mut Context<T>) -> gpui::Hsla {
+        let purple = |s: f32, l: f32| gpui::Hsla {
+            h: 0.75,
+            s,
+            l,
+            a: 1.0,
+        };
+        match node.node_type {
             NodeType::Reroute => cx.theme().accent,
             NodeType::Conversion => cx.theme().primary,
-            NodeType::MacroEntry => gpui::Hsla {
-                h: 0.75,
-                s: 0.7,
-                l: 0.6,
-                a: 1.0,
-            },
-            NodeType::MacroExit => gpui::Hsla {
-                h: 0.75,
-                s: 0.7,
-                l: 0.6,
-                a: 1.0,
-            },
-            NodeType::SubGraphCall => gpui::Hsla {
-                h: 0.75,
-                s: 0.5,
-                l: 0.5,
-                a: 1.0,
-            },
+            NodeType::MacroEntry | NodeType::MacroExit => purple(0.7, 0.6),
+            NodeType::SubGraphCall => purple(0.5, 0.5),
             NodeType::CustomEvent => gpui::Hsla {
                 h: 0.08,
                 s: 0.8,
@@ -111,6 +97,12 @@ impl PropertiesRenderer {
                 s: 0.8,
                 l: 0.5,
                 a: 1.0,
+            },
+            NodeType::Other if node.is_event => cx.theme().danger,
+            NodeType::Other => match node.category.as_str() {
+                "Math" => cx.theme().success,
+                "Object" => cx.theme().warning,
+                _ => cx.theme().primary,
             },
         }
     }
@@ -141,7 +133,7 @@ impl PropertiesRenderer {
     /// is sourced entirely from `PinDataType`/`RuntimeTypeInfo`, the same
     /// canonical reflection-backed lookup the graph view uses for pin colors,
     /// so the panel and graph always agree visually.
-    pub(super) fn render_pin_list<T>(pins: &[Pin], cx: &mut Context<T>) -> impl IntoElement {
+    pub(super) fn render_pin_list<T>(pins: &[PinView], cx: &mut Context<T>) -> impl IntoElement {
         v_flex()
             .gap_1p5()
             .children(pins.iter().map(|pin| Self::render_pin_row(pin, cx)))
@@ -150,7 +142,7 @@ impl PropertiesRenderer {
     pub(super) fn render_pin_editors(
         canvas: &mut GraphCanvasPanel,
         canvas_entity: &Entity<GraphCanvasPanel>,
-        node: &BlueprintNode,
+        node: &NodeView,
         window: &mut Window,
         cx: &mut Context<GraphCanvasPanel>,
     ) -> impl IntoElement {
@@ -164,13 +156,13 @@ impl PropertiesRenderer {
     pub(super) fn render_input_pin_row(
         canvas: &mut GraphCanvasPanel,
         canvas_entity: &Entity<GraphCanvasPanel>,
-        node: &BlueprintNode,
-        pin: &Pin,
+        node: &NodeView,
+        pin: &PinView,
         window: &mut Window,
         cx: &mut Context<GraphCanvasPanel>,
     ) -> AnyElement {
         let row = Self::render_pin_row(pin, cx);
-        if is_pin_connected(&node.id, &pin.id, true, &canvas.graph) {
+        if canvas.is_pin_connected(&node.id, &pin.id, true, cx) {
             return row.into_any_element();
         }
 
@@ -229,7 +221,7 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
-    pub(super) fn read_pin_property_value(node: &BlueprintNode, pin_id: &str) -> serde_json::Value {
+    pub(super) fn read_pin_property_value(node: &NodeView, pin_id: &str) -> serde_json::Value {
         let Some(raw_value) = node.properties.get(pin_id) else {
             return serde_json::Value::Null;
         };
@@ -238,7 +230,7 @@ impl PropertiesRenderer {
             .unwrap_or_else(|_| serde_json::Value::String(raw_value.clone()))
     }
 
-    pub(super) fn render_pin_row<T>(pin: &Pin, cx: &mut Context<T>) -> impl IntoElement {
+    pub(super) fn render_pin_row<T>(pin: &PinView, cx: &mut Context<T>) -> impl IntoElement {
         let badge_color: gpui::Hsla = rgba_to_hsla(pin.data_type.display_color()).into();
 
         let type_label = if pin.data_type.is_execution() {
@@ -290,7 +282,7 @@ impl PropertiesRenderer {
     }
 
     pub(super) fn render_node_properties<T>(
-        node: &BlueprintNode,
+        node: &NodeView,
         cx: &mut Context<T>,
     ) -> impl IntoElement {
         v_flex().gap_3().children(
@@ -336,7 +328,7 @@ impl PropertiesRenderer {
     }
 
     pub(super) fn render_node_info<T>(
-        node: &BlueprintNode,
+        node: &NodeView,
         cx: &mut Context<T>,
     ) -> impl IntoElement {
         v_flex()

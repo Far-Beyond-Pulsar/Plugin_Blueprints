@@ -4,9 +4,9 @@
 //! constructors, and basic accessors.
 
 use gpui::*;
-use std::cell::RefCell;
+
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+
 use ui::{
     input::{InputEvent, InputState},
     resizable::ResizableState,
@@ -14,15 +14,14 @@ use ui::{
     VirtualListScrollHandle,
 };
 
-use super::tabs::GraphTab;
+use super::tabs::{GraphTab, TabDoc};
 use crate::core::{events::*, graph::*, types::*};
-use crate::editor::workspace_panels::{FindPanel, GraphCanvasPanel};
-use crate::features::connections::operations::ConnectionDrag;
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
+use crate::editor::workspace_panels::FindPanel;
 
 use crate::features::prefabs::PrefabAsset;
 use crate::features::variables::ClassVariable;
-use crate::ui_components::palette_view::NodePaletteView;
-use blueprint_graph::{LibraryManager, SubGraph};
+use graphy_blueprint::{LibraryManager, SubGraph};
 use ui::dock::{DockItem, DockPlacement};
 use ui::dropdown::{SearchableList, SearchableListEvent};
 
@@ -36,9 +35,8 @@ pub enum RenameTarget {
 /// Main Blueprint Editor Panel struct
 pub struct BlueprintEditorPanel {
     pub(super) focus_handle: FocusHandle,
-    pub graph: BlueprintGraph,
     /// Asset metadata is kept intact across UI edits and serialization.
-    pub blueprint_metadata: blueprint_graph::BlueprintMetadata,
+    pub blueprint_metadata: graphy_blueprint::BlueprintMetadata,
     /// Project root used for VFS-backed trait discovery and index refresh.
     pub project_root: Option<std::path::PathBuf>,
     pub implemented_trait_catalog: Vec<crate::features::traits::TraitAssetSummary>,
@@ -63,41 +61,11 @@ pub struct BlueprintEditorPanel {
     /// explicit error state instead of presenting an empty, editable document.
     pub load_error: Option<String>,
 
-    // Node drag state
-    pub dragging_node: Option<String>,
-    pub drag_offset: Point<f32>,
-    pub initial_drag_positions: HashMap<String, Point<f32>>,
-    pub initial_comment_drag_positions: HashMap<String, Point<f32>>,
-    pub node_clipboard: Option<BlueprintNode>,
-    /// Node click that *may* become a drag once the mouse moves past the threshold.
-    /// Set on mouse-down; converted to a real drag in mouse-move.
-    pub pending_drag_node: Option<String>,
-    /// Canvas-space position where the pending drag mouse-down landed.
-    pub pending_drag_start: Option<Point<f32>>,
-    // Connection drag state
-    pub dragging_connection: Option<ConnectionDrag>,
 
-    // Panning state
-    pub is_panning: bool,
-    pub pan_start: Point<f32>,
-    pub pan_start_offset: Point<f32>,
 
-    // Selection state
-    pub selection_start: Option<Point<f32>>,
-    pub selection_end: Option<Point<f32>>,
-    pub last_mouse_pos: Option<Point<f32>>,
 
-    // Right-click gesture detection
-    pub right_click_start: Option<Point<f32>>,
 
-    // Double-click for reroute nodes
-    pub last_click_time: Option<std::time::Instant>,
-    pub last_click_pos: Option<Point<f32>>,
 
-    // Coordinate conversion
-    /// Window-space origin of the single bp canvas element, captured each frame during paint.
-    /// Event handlers subtract this to get canvas-relative (= "screen") coordinates.
-    pub canvas_origin: Rc<RefCell<Point<f32>>>,
 
     // Variables system
     pub class_variables: Vec<ClassVariable>,
@@ -118,15 +86,6 @@ pub struct BlueprintEditorPanel {
     pub prefab_expanded_categories: HashSet<(usize, String)>,
     pub selected_prefab_component: Option<usize>,
 
-    // Comment system
-    pub dragging_comment: Option<String>,
-    pub resizing_comment: Option<(String, ResizeHandle)>,
-    pub resizing_comment_start: Option<(Point<f32>, Size<f32>)>,
-    pub editing_comment: Option<String>,
-    /// The profile whose document this editor edits, if it is not a Blueprint.
-    pub profile: Option<std::sync::Arc<dyn crate::profile::EditorProfile>>,
-    pub comment_text_input: Entity<InputState>,
-    pub comment_color_bindings_dirty: bool,
 
     // Subscriptions
     pub subscriptions: Vec<Subscription>,
@@ -159,6 +118,8 @@ pub struct BlueprintEditorPanel {
     pub rename_input: Entity<InputState>,
 
     // Tab system
+    /// Subgraph/library/event data the canvas profile presents nodes from.
+    pub profile_data: crate::canvas_profile::SharedProfileData,
     pub open_tabs: Vec<GraphTab>,
     pub active_tab_index: usize,
     pub graph_panels: Vec<(String, Entity<GraphCanvasPanel>)>,
@@ -172,20 +133,6 @@ pub struct BlueprintEditorPanel {
     pub wire_hidden_test_mode: bool,
     pub running_nodes: HashSet<String>,
     pub graph_anim_start: std::time::Instant,
-
-    // Quick palette overlay (right-click on graph canvas)
-    pub popup_palette_graph_pos: Option<Point<f32>>,
-    /// Whether the right-click quick-palette overlay is currently visible.
-    pub quick_palette_open: bool,
-    /// Whether the quick-palette search input should be focused on next paint.
-    pub quick_palette_focus_pending: bool,
-    /// When opening quick palette from a connection drag, this is the source drag metadata.
-    pub quick_palette_connection_source:
-        Option<crate::features::connections::operations::ConnectionDrag>,
-    /// Window-space position where the user right-clicked (used to anchor the overlay).
-    pub quick_palette_screen_pos: Point<Pixels>,
-    /// The shared palette view rendered inside the overlay.
-    pub quick_palette_view: Entity<NodePaletteView>,
 
     // Pin hover tooltip state
     pub hovered_pin_tooltip: Option<String>,
@@ -201,15 +148,7 @@ pub struct BlueprintEditorPanel {
     /// The host's undo histories (Pulsar-Native#931), once given them.
     pub undo_service: Option<plugin_editor_api::UndoService>,
 
-    // ── GPU renderer ──────────────────────────────────────────────────────────
-    pub bp_renderer: crate::rendering::gpu::BpRenderer,
-    pub bp_surface: Option<gpui::WgpuSurfaceHandle>,
 
-    // ── Context menus (shown as GPUI overlays above the GPU surface) ──────────
-    /// Right-clicked node: (node_id, window-space position for anchoring)
-    pub node_context_menu: Option<(String, Point<Pixels>)>,
-    /// Right-clicked pin: (node_id, pin_id, window-space position)
-    pub pin_context_menu: Option<(String, String, Point<Pixels>)>,
 
     // ── Debugger ──────────────────────────────────────────────────────────────
     /// Set of node IDs that have an active breakpoint.
@@ -255,18 +194,6 @@ pub struct CompilationHistoryEntry {
     pub detail: Option<String>,
 }
 
-/// Resize handle for comment boxes
-#[derive(Clone, Debug, PartialEq)]
-pub enum ResizeHandle {
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight,
-    Top,
-    Bottom,
-    Left,
-    Right,
-}
 
 impl BlueprintEditorPanel {
     /// Bridge synchronous AI tool calls to the GPUI-owned live canvas. Tool
@@ -277,7 +204,11 @@ impl BlueprintEditorPanel {
         file_path: std::path::PathBuf,
         cx: &mut Context<Self>,
     ) {
-        let receiver = crate::ai_tools::register_live_editor(file_path.clone(), self.graph.clone());
+        let initial = self
+            .main_canvas()
+            .map(|canvas| canvas.read(cx).graph(cx).clone())
+            .unwrap_or_else(|| graphy::GraphDescription::new("EventGraph"));
+        let receiver = crate::ai_tools::register_live_editor(file_path.clone(), initial);
         cx.spawn(async move |this, cx| {
             while let Ok(update) = receiver.recv().await {
                 let result = this
@@ -292,11 +223,20 @@ impl BlueprintEditorPanel {
         .detach();
     }
 
+    /// The canvas of the main event graph.
+    pub fn main_canvas(&self) -> Option<&Entity<GraphCanvasPanel>> {
+        let tab = self.open_tabs.iter().find(|tab| tab.is_main)?;
+        self.graph_panels
+            .iter()
+            .find(|(id, _)| id == &tab.id)
+            .map(|(_, canvas)| canvas)
+    }
+
     fn apply_ai_graph_update(
         &mut self,
         file_path: &std::path::Path,
-        before: &crate::core::graph::BlueprintGraph,
-        after: &crate::core::graph::BlueprintGraph,
+        before: &graphy::GraphDescription,
+        after: &graphy::GraphDescription,
         cx: &mut Context<Self>,
     ) -> Result<crate::ai_tools::AiGraphUpdateAck, String> {
         let Some(open_path) = self.current_class_path.as_deref() else {
@@ -310,15 +250,10 @@ impl BlueprintEditorPanel {
             ));
         }
 
-        let Some((tab_id, canvas)) = self.graph_panels.iter().find_map(|(tab_id, canvas)| {
-            canvas
-                .read(cx)
-                .is_main
-                .then_some((tab_id.clone(), canvas.clone()))
-        }) else {
+        let Some(canvas) = self.main_canvas().cloned() else {
             return Err("The main Blueprint graph canvas is not ready".to_string());
         };
-        let current_graph = canvas.read(cx).graph.clone();
+        let current_graph = canvas.read(cx).graph(cx).clone();
         if !crate::ai_tools::graphs_match(&current_graph, before) {
             return Ok(crate::ai_tools::AiGraphUpdateAck {
                 graph: current_graph,
@@ -326,24 +261,12 @@ impl BlueprintEditorPanel {
             });
         }
 
-        canvas.update(cx, |canvas, cx| {
-            let mut command = crate::features::undo::ReplaceGraphCommand::new(
-                current_graph.clone(),
-                after.clone(),
-            );
-            command.execute(canvas, cx);
-            canvas.push_undo_command(crate::features::undo::Command::ReplaceGraph(command));
-        });
-        self.graph = after.clone();
-        if let Some(tab) = self.open_tabs.iter_mut().find(|tab| tab.id == tab_id) {
-            tab.graph = after.clone();
-            tab.is_dirty = true;
-        }
-        self.is_dirty = true;
-        cx.notify();
-
+        canvas
+            .update(cx, |canvas, cx| canvas.replace_graph("AI edit", after, cx))
+            .map_err(|error| error.to_string())?;
+        let graph = canvas.read(cx).graph(cx).clone();
         Ok(crate::ai_tools::AiGraphUpdateAck {
-            graph: after.clone(),
+            graph,
             applied: true,
         })
     }
@@ -368,12 +291,7 @@ impl BlueprintEditorPanel {
         let mut panel = Self::new_internal(Some(file_path.clone()), window, cx);
         panel.file_loading = true;
         panel.set_path(file_path.clone());
-        // A profile's documents are single files, not `.class` folders.
-        let graph_file = if panel.profile.is_some() {
-            file_path.clone()
-        } else {
-            file_path.join("graph_save.json")
-        };
+        let graph_file = file_path.join("graph_save.json");
         let window_handle = window.window_handle();
         cx.spawn(async move |this, cx| {
             let parsed = cx
@@ -469,27 +387,13 @@ impl BlueprintEditorPanel {
         let _resizable_state = ResizableState::new(cx);
         let _left_sidebar_resizable_state = ResizableState::new(cx);
 
-        // Create demo graph with sample nodes (only if no file is being loaded)
-        let main_graph = if project_path.is_some() {
-            // Empty graph - will be loaded from file
-            BlueprintGraph {
-                nodes: Vec::new().into(),
-                connections: Vec::new().into(),
-                comments: Vec::new().into(),
-                selected_nodes: Vec::new(),
-                selected_comments: Vec::new(),
-                zoom_level: 1.0,
-                pan_offset: Point::new(0.0, 0.0),
-                virtualization_stats: VirtualizationStats::default(),
-            }
+        // A sample graph unless a file is about to be loaded.
+        let main_doc = if project_path.is_some() {
+            TabDoc::empty("EventGraph")
         } else {
-            // No file to load - create sample graph
             Self::create_sample_graph()
         };
 
-        let profile = project_path.as_deref().and_then(crate::profile::profile_for_path);
-        let editor_weak = cx.entity().downgrade();
-        let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, profile.clone(), window, cx));
         let mut engine_classes = pulsar_reflection::REGISTRY.get_class_names();
         // A placed class's own marker component is not a prefab component.
         engine_classes.retain(|name| !crate::features::prefabs::is_internal_component(name));
@@ -598,8 +502,7 @@ impl BlueprintEditorPanel {
 
         Self {
             focus_handle: cx.focus_handle(),
-            graph: main_graph.clone(),
-            blueprint_metadata: blueprint_graph::BlueprintMetadata::default(),
+            blueprint_metadata: graphy_blueprint::BlueprintMetadata::default(),
             project_root: None,
             implemented_trait_catalog: Vec::new(),
             implemented_trait_catalog_error: None,
@@ -614,24 +517,6 @@ impl BlueprintEditorPanel {
             tab_title: None,
             file_loading: false,
             load_error: None,
-            dragging_node: None,
-            drag_offset: Point::new(0.0, 0.0),
-            initial_drag_positions: HashMap::new(),
-            initial_comment_drag_positions: HashMap::new(),
-            node_clipboard: None,
-            pending_drag_node: None,
-            pending_drag_start: None,
-            dragging_connection: None,
-            is_panning: false,
-            pan_start: Point::new(0.0, 0.0),
-            pan_start_offset: Point::new(0.0, 0.0),
-            selection_start: None,
-            selection_end: None,
-            last_mouse_pos: None,
-            right_click_start: None,
-            last_click_time: None,
-            last_click_pos: None,
-            canvas_origin: Rc::new(RefCell::new(Point::new(0.0, 0.0))),
             class_variables: Vec::new(),
             selected_variable: None,
             is_creating_variable: false,
@@ -649,14 +534,6 @@ impl BlueprintEditorPanel {
             prefab_collapsed_categories: HashSet::new(),
             prefab_expanded_categories: HashSet::new(),
             selected_prefab_component: None,
-            dragging_comment: None,
-            resizing_comment: None,
-            resizing_comment_start: None,
-            editing_comment: None,
-            profile,
-            comment_text_input: cx
-                .new(|cx| InputState::new(window, cx).placeholder("Comment text...")),
-            comment_color_bindings_dirty: true,
             subscriptions: Vec::new(),
             compilation_status: CompilationStatus::default(),
             compilation_history: Vec::new(),
@@ -686,15 +563,8 @@ impl BlueprintEditorPanel {
             selected_event: None,
             renaming_target: None,
             rename_input,
-            open_tabs: vec![GraphTab {
-                id: "main".to_string(),
-                name: "EventGraph".to_string(),
-                graph: main_graph,
-                is_main: true,
-                is_dirty: false,
-                is_library_macro: false,
-                library_id: None,
-            }],
+            profile_data: Default::default(),
+            open_tabs: vec![GraphTab::new_main(main_doc)],
             active_tab_index: 0,
             graph_panels: Vec::new(),
             graph_workspace_tabs_dirty: true,
@@ -705,22 +575,12 @@ impl BlueprintEditorPanel {
             wire_hidden_test_mode: false,
             running_nodes: HashSet::new(),
             graph_anim_start: std::time::Instant::now(),
-            popup_palette_graph_pos: None,
-            quick_palette_open: false,
-            quick_palette_focus_pending: false,
-            quick_palette_connection_source: None,
-            quick_palette_screen_pos: Point::default(),
-            quick_palette_view,
             hovered_pin_tooltip: None,
             hovered_pin_tooltip_pos: None,
             dragging_tab: None,
             is_dirty: false,
             is_saving: false,
             undo_service: None,
-            bp_renderer: crate::rendering::gpu::BpRenderer::new(),
-            bp_surface: None,
-            node_context_menu: None,
-            pin_context_menu: None,
             breakpoints: HashSet::new(),
             debug_session: None,
             dragging_macro: None,
@@ -732,303 +592,34 @@ impl BlueprintEditorPanel {
         }
     }
 
-    /// Create a sample graph for demonstration - demonstrates all compiler features
-    fn create_sample_graph() -> BlueprintGraph {
-        use crate::core::types::PinDataType as GraphDataType;
-        use crate::core::types::*;
-
-        let mut nodes = Vec::new();
-
-        // Main event node (defines pub fn main())
-        nodes.push(BlueprintNode {
-            id: "main_event".to_string(),
-            definition_id: "main".to_string(),
-            title: "Main".to_string(),
-            icon: "Play".to_string(),
-            node_type: NodeType::Event,
-            position: Point::new(100.0, 200.0),
-            size: Size::new(240.0, 60.0),
-            inputs: vec![],
-            outputs: vec![Pin {
-                id: "Body".to_string(),
-                name: "Body".to_string(),
-                pin_type: PinType::Output,
-                data_type: GraphDataType::from_type_str("execution"),
-            }],
-            properties: HashMap::new(),
-            is_selected: false,
-            description: "Entry point for the main function".to_string(),
-            color: None,
-        });
-
-        // Pure node: add(2, 3)
-        let mut add_props = HashMap::new();
-        add_props.insert("a".to_string(), "2".to_string());
-        add_props.insert("b".to_string(), "3".to_string());
-
-        nodes.push(BlueprintNode {
-            id: "add_node".to_string(),
-            definition_id: "add".to_string(),
-            title: "Add".to_string(),
-            icon: "Plus".to_string(),
-            node_type: NodeType::Math,
-            position: Point::new(400.0, 80.0),
-            size: Size::new(240.0, 80.0),
-            inputs: vec![
-                Pin {
-                    id: "a".to_string(),
-                    name: "A".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("i64"),
-                },
-                Pin {
-                    id: "b".to_string(),
-                    name: "B".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("i64"),
-                },
-            ],
-            outputs: vec![Pin {
-                id: "result".to_string(),
-                name: "Result".to_string(),
-                pin_type: PinType::Output,
-                data_type: GraphDataType::from_type_str("i64"),
-            }],
-            properties: add_props,
-            is_selected: false,
-            description: "Adds two numbers: (2 + 3) = 5".to_string(),
-            color: None,
-        });
-
-        // Control flow: branch
-        nodes.push(BlueprintNode {
-            id: "branch_node".to_string(),
-            definition_id: "branch".to_string(),
-            title: "Branch".to_string(),
-            icon: "GitBranch".to_string(),
-            node_type: NodeType::Logic,
-            position: Point::new(400.0, 280.0),
-            size: Size::new(240.0, 80.0),
-            inputs: vec![
-                Pin {
-                    id: "exec".to_string(),
-                    name: "".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("execution"),
-                },
-                Pin {
-                    id: "condition".to_string(),
-                    name: "Condition".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("bool"),
-                },
-            ],
-            outputs: vec![
-                Pin {
-                    id: "True".to_string(),
-                    name: "True".to_string(),
-                    pin_type: PinType::Output,
-                    data_type: GraphDataType::from_type_str("execution"),
-                },
-                Pin {
-                    id: "False".to_string(),
-                    name: "False".to_string(),
-                    pin_type: PinType::Output,
-                    data_type: GraphDataType::from_type_str("execution"),
-                },
-            ],
-            properties: HashMap::new(),
-            is_selected: false,
-            description: "Branches execution based on a condition.".to_string(),
-            color: None,
-        });
-
-        // Function node: print (true path)
-        let mut print_true_props = HashMap::new();
-        print_true_props.insert(
-            "message".to_string(),
-            "Result is greater than 3!".to_string(),
-        );
-
-        nodes.push(BlueprintNode {
-            id: "print_true".to_string(),
-            definition_id: "print_string".to_string(),
-            title: "Print String".to_string(),
-            icon: "Terminal".to_string(),
-            node_type: NodeType::Logic,
-            position: Point::new(680.0, 220.0),
-            size: Size::new(260.0, 80.0),
-            inputs: vec![
-                Pin {
-                    id: "exec".to_string(),
-                    name: "".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("execution"),
-                },
-                Pin {
-                    id: "message".to_string(),
-                    name: "Message".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("String"),
-                },
-            ],
-            outputs: vec![Pin {
-                id: "exec_out".to_string(),
-                name: "".to_string(),
-                pin_type: PinType::Output,
-                data_type: GraphDataType::from_type_str("execution"),
-            }],
-            properties: print_true_props,
-            is_selected: false,
-            description: "Prints success message.".to_string(),
-            color: None,
-        });
-
-        // Function node: print (false path)
-        let mut print_false_props = HashMap::new();
-        print_false_props.insert("message".to_string(), "Result is 3 or less.".to_string());
-
-        nodes.push(BlueprintNode {
-            id: "print_false".to_string(),
-            definition_id: "print_string".to_string(),
-            title: "Print String".to_string(),
-            icon: "Terminal".to_string(),
-            node_type: NodeType::Logic,
-            position: Point::new(680.0, 360.0),
-            size: Size::new(260.0, 80.0),
-            inputs: vec![
-                Pin {
-                    id: "exec".to_string(),
-                    name: "".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("execution"),
-                },
-                Pin {
-                    id: "message".to_string(),
-                    name: "Message".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("String"),
-                },
-            ],
-            outputs: vec![Pin {
-                id: "exec_out".to_string(),
-                name: "".to_string(),
-                pin_type: PinType::Output,
-                data_type: GraphDataType::from_type_str("execution"),
-            }],
-            properties: print_false_props,
-            is_selected: false,
-            description: "Prints alternative message.".to_string(),
-            color: None,
-        });
-
-        // Pure node: greater than
-        let mut gt_props = HashMap::new();
-        gt_props.insert("b".to_string(), "3".to_string());
-
-        nodes.push(BlueprintNode {
-            id: "greater_node".to_string(),
-            definition_id: "greater_than".to_string(),
-            title: "Greater Than".to_string(),
-            icon: "ChevronRight".to_string(),
-            node_type: NodeType::Logic,
-            position: Point::new(620.0, 80.0),
-            size: Size::new(240.0, 80.0),
-            inputs: vec![
-                Pin {
-                    id: "a".to_string(),
-                    name: "A".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("i64"),
-                },
-                Pin {
-                    id: "b".to_string(),
-                    name: "B".to_string(),
-                    pin_type: PinType::Input,
-                    data_type: GraphDataType::from_type_str("i64"),
-                },
-            ],
-            outputs: vec![Pin {
-                id: "result".to_string(),
-                name: "Result".to_string(),
-                pin_type: PinType::Output,
-                data_type: GraphDataType::from_type_str("bool"),
-            }],
-            properties: gt_props,
-            is_selected: false,
-            description: "Checks if A > B: result > 3?".to_string(),
-            color: None,
-        });
-
-        let connections = vec![
-            // Execution: main -> branch
-            Connection {
-                id: "conn_main_branch".to_string(),
-                source_node: "main_event".to_string(),
-                source_pin: "Body".to_string(),
-                target_node: "branch_node".to_string(),
-                target_pin: "exec".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Execution,
-            },
-            // Data: add -> greater_than
-            Connection {
-                id: "conn_add_gt".to_string(),
-                source_node: "add_node".to_string(),
-                source_pin: "result".to_string(),
-                target_node: "greater_node".to_string(),
-                target_pin: "a".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Data,
-            },
-            // Data: greater_than -> branch
-            Connection {
-                id: "conn_gt_branch".to_string(),
-                source_node: "greater_node".to_string(),
-                source_pin: "result".to_string(),
-                target_node: "branch_node".to_string(),
-                target_pin: "condition".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Data,
-            },
-            // Execution: branch(True) -> print_true
-            Connection {
-                id: "conn_branch_true".to_string(),
-                source_node: "branch_node".to_string(),
-                source_pin: "True".to_string(),
-                target_node: "print_true".to_string(),
-                target_pin: "exec".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Execution,
-            },
-            // Execution: branch(False) -> print_false
-            Connection {
-                id: "conn_branch_false".to_string(),
-                source_node: "branch_node".to_string(),
-                source_pin: "False".to_string(),
-                target_node: "print_false".to_string(),
-                target_pin: "exec".to_string(),
-                connection_type: blueprint_graph::ConnectionType::Execution,
-            },
-        ];
-
-        BlueprintGraph {
-            nodes: nodes.into(),
-            connections: connections.into(),
-            comments: vec![].into(),
-            selected_nodes: vec![],
-            selected_comments: vec![],
-            zoom_level: 1.0,
-            pan_offset: Point::new(0.0, 0.0),
-            virtualization_stats: VirtualizationStats::default(),
+    /// A small demonstration graph: an event wired to a print node.
+    fn create_sample_graph() -> TabDoc {
+        use graphy_gpui::GraphProfile as _;
+        let profile = crate::canvas_profile::BlueprintProfile::blueprint(Default::default());
+        let mut graph = graphy::GraphDescription::new("EventGraph");
+        let begin = profile.create_node("begin_play", "begin", graphy::Position::new(100.0, 200.0));
+        let print = profile.create_node("print_string", "print", graphy::Position::new(420.0, 200.0));
+        if let (Some(begin), Some(print)) = (begin, print) {
+            let from = begin.outputs.iter().find(|p| p.data_type().is_execution()).map(|p| p.id.clone());
+            let to = print.inputs.iter().find(|p| p.data_type().is_execution()).map(|p| p.id.clone());
+            graph.add_node(begin);
+            graph.add_node(print);
+            if let (Some(from), Some(to)) = (from, to) {
+                graph.add_connection(graphy::Connection::execution("begin", from, "print", to));
+            }
         }
+        TabDoc::new(graph, Default::default())
     }
 
-    /// Replace the current runtime execution set used by GPU debug rendering.
+    /// Replace the current runtime execution set used by node highlighting.
     pub fn set_running_nodes<I, S>(&mut self, node_ids: I, cx: &mut Context<Self>)
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        self.running_nodes.clear();
-        for id in node_ids {
-            self.running_nodes.insert(id.as_ref().to_string());
+        let ids: Vec<String> = node_ids.into_iter().map(|id| id.as_ref().to_string()).collect();
+        for (_, canvas) in self.graph_panels.clone() {
+            canvas.update(cx, |canvas, cx| canvas.set_running_nodes(ids.iter(), cx));
         }
         cx.notify();
     }
@@ -1040,18 +631,29 @@ impl BlueprintEditorPanel {
         running: bool,
         cx: &mut Context<Self>,
     ) {
-        if running {
-            self.running_nodes.insert(node_id.as_ref().to_string());
-        } else {
-            self.running_nodes.remove(node_id.as_ref());
+        let node_id = node_id.as_ref().to_string();
+        for (_, canvas) in self.graph_panels.clone() {
+            canvas.update(cx, |canvas, cx| {
+                let mut ids: std::collections::HashSet<String> = canvas
+                    .profile_data
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .running
+                    .clone();
+                if running {
+                    ids.insert(node_id.clone());
+                } else {
+                    ids.remove(&node_id);
+                }
+                canvas.set_running_nodes(ids, cx);
+            });
         }
         cx.notify();
     }
 
     /// Clear all runtime execution highlights.
     pub fn clear_running_nodes(&mut self, cx: &mut Context<Self>) {
-        self.running_nodes.clear();
-        cx.notify();
+        self.set_running_nodes(std::iter::empty::<&str>(), cx);
     }
 
     /// Get focus handle
@@ -1059,70 +661,9 @@ impl BlueprintEditorPanel {
         &self.focus_handle
     }
 
-    /// Return the active graph canvas entity, if one exists.
-    /// Adds a node of the profile's catalogue to the active graph, at the centre of
-    /// the view, with `properties` set, and lets the profile bring its pins and title
-    /// in line with them. How a profile's own panels put a node on the canvas.
-    pub fn add_profile_node(
-        &mut self,
-        definition_id: &str,
-        properties: Vec<(String, String)>,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(profile) = self.profile.clone() else {
-            return;
-        };
-        let definitions = crate::profile::definitions_for(Some(&profile));
-        let Some(definition) = definitions.get_node_definition(definition_id) else {
-            return;
-        };
-        let Some(canvas) = self.active_canvas().cloned() else {
-            return;
-        };
-        canvas.update(cx, |canvas, cx| {
-            let centre = crate::features::viewport::coordinates::screen_to_graph_pos(
-                Point::new(gpui::px(960.0), gpui::px(540.0)),
-                &canvas.graph,
-            );
-            let mut node = crate::core::types::BlueprintNode::from_definition(definition, centre);
-            for (key, value) in properties {
-                node.properties.insert(key, value);
-            }
-            let id = node.id.clone();
-            canvas.add_node(node, cx);
-            profile.parameter_changed(&mut canvas.graph, &id);
-            cx.notify();
-        });
-        self.is_dirty = true;
-        cx.notify();
-    }
-
-    /// Arranges the active graph with the profile's layout (the toolbar's Auto
-    /// Layout button).
-    pub fn auto_layout(&mut self, cx: &mut Context<Self>) {
-        let Some(profile) = self.profile.clone() else {
-            return;
-        };
-        let Some(canvas) = self.active_canvas().cloned() else {
-            return;
-        };
-        let changed = canvas.update(cx, |canvas, cx| {
-            let changed = profile.auto_layout(&mut canvas.graph);
-            if changed {
-                canvas.is_dirty = true;
-                cx.notify();
-            }
-            changed
-        });
-        if changed {
-            self.is_dirty = true;
-            cx.notify();
-        }
-    }
-
     pub fn active_canvas(
         &self,
-    ) -> Option<&Entity<crate::editor::workspace_panels::GraphCanvasPanel>> {
+    ) -> Option<&Entity<crate::editor::graph_canvas_panel::GraphCanvasPanel>> {
         let tab_id = self.open_tabs.get(self.active_tab_index)?.id.as_str();
         self.graph_panels
             .iter()
@@ -1157,9 +698,10 @@ impl BlueprintEditorPanel {
     pub fn clear_graph_selections(&mut self, cx: &mut Context<Self>) {
         if let Some(canvas) = self.active_canvas().cloned() {
             canvas.update(cx, |canvas, cx| {
-                canvas.graph.selected_nodes.clear();
-                canvas.graph.selected_comments.clear();
-                cx.notify();
+                canvas.canvas.update(cx, |c, cx| {
+                    c.controller_mut().selection.clear();
+                    cx.notify();
+                });
             });
         }
     }
@@ -1168,12 +710,14 @@ impl BlueprintEditorPanel {
     // Tab Operations
     // ============================================================================
 
-    pub(crate) fn ensure_active_graph_panel_state(&mut self, tab_id: &str) {
-        if let Some(tab_index) = self.open_tabs.iter().position(|tab| tab.id == tab_id) {
-            if tab_index != self.active_tab_index {
-                self.sync_graph_to_active_tab();
-                self.active_tab_index = tab_index;
-                self.load_active_tab_graph();
+    /// Takes every tab's canvas panel out of the dock (a new document is loading).
+    pub(crate) fn remove_graph_panels(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let previous: Vec<_> = self.graph_panels.drain(..).collect();
+        if let Some(workspace) = self.workspace.clone() {
+            for (_, panel) in previous {
+                workspace.update(cx, |workspace, cx| {
+                    workspace.remove_panel(panel, DockPlacement::Center, window, cx);
+                });
             }
         }
     }
@@ -1219,31 +763,42 @@ impl BlueprintEditorPanel {
             .retain(|(tab_id, _)| desired_ids.contains(tab_id));
 
         let editor_weak = cx.entity().downgrade();
-        for tab in &self.open_tabs {
-            if self
-                .graph_panels
-                .iter()
-                .any(|(tab_id, _)| tab_id == &tab.id)
-            {
-                continue;
-            }
-
-            let tab_id = tab.id.clone();
-            let tab_name = tab.name.clone();
-            let tab_is_main = tab.is_main;
-            let tab_graph = tab.graph.clone();
+        self.sync_profile_data();
+        self.refresh_catalog(cx);
+        let pending: Vec<(String, String, bool, bool, Option<String>, TabDoc)> = self
+            .open_tabs
+            .iter_mut()
+            .filter(|tab| !self.graph_panels.iter().any(|(id, _)| id == &tab.id))
+            .filter_map(|tab| {
+                tab.pending.take().map(|doc| {
+                    (
+                        tab.id.clone(),
+                        tab.name.clone(),
+                        tab.is_main,
+                        tab.is_library_macro,
+                        tab.library_id.clone(),
+                        doc,
+                    )
+                })
+            })
+            .collect();
+        for (tab_id, tab_name, tab_is_main, is_library_macro, library_id, doc) in pending {
             let ew = editor_weak.clone();
+            let profile_data = self.profile_data.clone();
+            let id = tab_id.clone();
             let panel = cx.new(|cx| {
-                let canvas = GraphCanvasPanel::new(
+                let mut canvas = GraphCanvasPanel::new(
                     ew,
                     tab_id.clone(),
                     tab_name,
                     tab_is_main,
-                    tab_graph,
-                    self.profile.clone(),
+                    doc,
+                    profile_data,
                     window,
                     cx,
                 );
+                canvas.is_library_macro = is_library_macro;
+                canvas.library_id = library_id;
                 self.adopt_graph_history(&tab_id, &canvas.history);
                 canvas
             });
@@ -1252,7 +807,7 @@ impl BlueprintEditorPanel {
                 workspace.add_panel(panel.clone(), DockPlacement::Center, window, cx);
             });
 
-            self.graph_panels.push((tab.id.clone(), panel));
+            self.graph_panels.push((id, panel));
         }
 
         self.activate_graph_workspace_tab(self.active_tab_index, window, cx);
@@ -1368,51 +923,10 @@ impl BlueprintEditorPanel {
             .focus(window, cx);
     }
 
-    /// Switch to a different tab, flushing the current canvas first.
+    /// Switch to a different tab.
     pub fn switch_to_tab(&mut self, tab_index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if tab_index < self.open_tabs.len() && tab_index != self.active_tab_index {
-            tracing::info!(
-                ">>> switch_to_tab: from {} ({} nodes) to {} ({} nodes), graph_panels={}",
-                self.active_tab_index,
-                self.graph.nodes.len(),
-                tab_index,
-                self.open_tabs
-                    .get(tab_index)
-                    .map(|t| t.graph.nodes.len())
-                    .unwrap_or(0),
-                self.graph_panels.len(),
-            );
-
-            // Flush the current active canvas into its tab snapshot before leaving.
-            let active_tab_id = self
-                .open_tabs
-                .get(self.active_tab_index)
-                .map(|t| t.id.clone());
-            if let Some(tab_id) = active_tab_id {
-                if let Some((_, canvas)) = self.graph_panels.iter().find(|(id, _)| id == &tab_id) {
-                    let live = canvas.read(cx).graph.clone();
-                    tracing::info!(
-                        ">>> switch_to_tab: flushing canvas {} ({} nodes) to tab",
-                        tab_id,
-                        live.nodes.len(),
-                    );
-                    self.graph = live.clone();
-                    if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-                        tab.graph = live;
-                    }
-                }
-            }
             self.active_tab_index = tab_index;
-            // Update self.graph shadow from the new active tab.
-            if let Some(tab) = self.open_tabs.get(tab_index) {
-                tracing::info!(
-                    ">>> switch_to_tab: loading tab {} ({} nodes) into self.graph",
-                    tab.id,
-                    tab.graph.nodes.len(),
-                );
-                self.graph = tab.graph.clone();
-                self.comment_color_bindings_dirty = true;
-            }
             self.activate_graph_workspace_tab(tab_index, window, cx);
             cx.notify();
         }
@@ -1431,74 +945,34 @@ impl BlueprintEditorPanel {
         self.open_local_macro(macro_id.to_string(), macro_name, window, cx);
     }
 
-    /// Flush the active canvas's live graph into its tab snapshot.
-    /// Only call when a canvas exists for the active tab.
-    /// Kept for legacy call-sites that run before any canvas is created.
-    pub fn sync_graph_to_active_tab(&mut self) {
-        if let Some(tab) = self.open_tabs.get_mut(self.active_tab_index) {
-            tab.graph = self.graph.clone();
+    /// Publishes subgraph, library and event data to the canvas profile.
+    pub fn sync_profile_data(&self) {
+        let mut data = self.profile_data.write().unwrap_or_else(|e| e.into_inner());
+        data.subgraphs = self.subgraphs.clone();
+        data.library = self.library_manager.clone();
+        data.event_names = self
+            .local_event_defs
+            .iter()
+            .map(|def| (def.uid.clone(), def.name.clone()))
+            .collect();
+    }
+
+    /// Re-presents every canvas after subgraph or event definitions changed.
+    pub fn refresh_canvases(&mut self, cx: &mut Context<Self>) {
+        self.sync_profile_data();
+        self.refresh_catalog(cx);
+        for (_, canvas) in self.graph_panels.clone() {
+            canvas.update(cx, |canvas, cx| canvas.refresh_presentation(cx));
+        }
+    }
+
+    /// An edit happened on the canvas of tab `tab_id`.
+    pub(crate) fn on_graph_edited(&mut self, tab_id: &str, cx: &mut Context<Self>) {
+        if let Some(tab) = self.open_tabs.iter_mut().find(|tab| tab.id == tab_id) {
             tab.is_dirty = true;
         }
-    }
-
-    /// Flush every open canvas's live graph back into its matching tab snapshot.
-    ///
-    /// This is the **only** correct sync direction: canvas → tab.
-    /// All serialisation paths must call this before reading `open_tabs`.
-    pub fn sync_all_canvases_to_tabs(&mut self, cx: &App) {
-        let canvas_count = self.graph_panels.len();
-        tracing::info!(
-            ">>> sync_all_canvases_to_tabs: {} canvas panels, {} open tabs",
-            canvas_count,
-            self.open_tabs.len(),
-        );
-
-        let snapshots: Vec<(String, crate::core::graph::BlueprintGraph)> = self
-            .graph_panels
-            .iter()
-            .map(|(tab_id, canvas)| {
-                let g = canvas.read(cx);
-                tracing::info!(
-                    ">>> sync_all_canvases_to_tabs: reading canvas tab={} nodes={} connections={}",
-                    tab_id,
-                    g.graph.nodes.len(),
-                    g.graph.connections.len(),
-                );
-                (tab_id.clone(), g.graph.clone())
-            })
-            .collect();
-
-        for (tab_id, live_graph) in &snapshots {
-            if let Some(tab) = self.open_tabs.iter_mut().find(|t| t.id == *tab_id) {
-                tracing::info!(
-                    ">>> sync_all_canvases_to_tabs: writing to tab={} nodes={} connections={} (was nodes={})",
-                    tab_id,
-                    live_graph.nodes.len(),
-                    live_graph.connections.len(),
-                    tab.graph.nodes.len(),
-                );
-                tab.graph = live_graph.clone();
-            } else {
-                tracing::warn!(
-                    ">>> sync_all_canvases_to_tabs: no matching tab for canvas tab_id={}",
-                    tab_id,
-                );
-            }
-        }
-
-        if canvas_count == 0 {
-            tracing::info!(
-                ">>> sync_all_canvases_to_tabs: NO canvas panels exist — tabs retain their current graph data"
-            );
-        }
-    }
-
-    /// Update `self.graph` shadow from the active tab (or its live canvas if one exists).
-    pub fn load_active_tab_graph(&mut self) {
-        if let Some(tab) = self.open_tabs.get(self.active_tab_index) {
-            self.graph = tab.graph.clone();
-            self.comment_color_bindings_dirty = true;
-        }
+        self.is_dirty = true;
+        cx.notify();
     }
 
     // ============================================================================
@@ -1539,13 +1013,8 @@ impl BlueprintEditorPanel {
 
         self.load_from_path(&path, window, cx)?;
 
-        tracing::info!(
-            ">>> load_blueprint: after load_from_path: open_tabs={}, self.graph.nodes={}, graph_panels={}, current_class_path={:?}",
-            self.open_tabs.len(), self.graph.nodes.len(), self.graph_panels.len(), self.current_class_path,
-        );
-
         // Reload library manager so any library macros are available.
-        self.library_manager = blueprint_graph::LibraryManager::default();
+        self.library_manager = graphy_blueprint::LibraryManager::default();
         if let Err(e) = self
             .library_manager
             .load_all_libraries(crate::io::libraries::load_directory)
@@ -1561,113 +1030,30 @@ impl BlueprintEditorPanel {
         let macros_file = class_path.join("macros.json");
         if !macros_file.exists() {
             self.subgraphs
-                .retain(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Collapsed);
+                .retain(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed);
             return Ok(());
         }
 
         let content = std::fs::read_to_string(&macros_file)
             .map_err(|e| format!("Failed to read macros.json: {}", e))?;
-        let macros: Vec<blueprint_graph::SubGraph> = serde_json::from_str(&content)
+        let macros: Vec<graphy_blueprint::SubGraph> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse macros.json: {}", e))?;
 
         self.subgraphs
-            .retain(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Collapsed);
+            .retain(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed);
         self.subgraphs.extend(
             macros
                 .into_iter()
-                .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro),
+                .filter(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Macro),
         );
         println!(
             "📂 Loaded {} local macros from macros.json",
             self.subgraphs
                 .iter()
-                .filter(|subgraph| subgraph.kind == blueprint_graph::SubGraphKind::Macro)
+                .filter(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Macro)
                 .count()
         );
         Ok(())
     }
 
-    /// Restore tabs from tabs.json
-    fn restore_tabs_state(
-        &mut self,
-        class_path: &std::path::Path,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Result<(), String> {
-        #[derive(serde::Deserialize)]
-        struct SerializedGraphTab {
-            pub id: String,
-            pub name: String,
-            pub is_main: bool,
-            pub is_library_macro: bool,
-            pub library_id: Option<String>,
-        }
-
-        let tabs_file = class_path.join("tabs.json");
-        if !tabs_file.exists() {
-            return Ok(());
-        }
-
-        let content = std::fs::read_to_string(&tabs_file)
-            .map_err(|e| format!("Failed to read tabs.json: {}", e))?;
-        let serialized_tabs: Vec<SerializedGraphTab> = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse tabs.json: {}", e))?;
-
-        self.open_tabs.retain(|tab| tab.is_main);
-        self.active_tab_index = 0;
-
-        for ser_tab in serialized_tabs {
-            if ser_tab.is_main {
-                continue;
-            }
-
-            if ser_tab.is_library_macro {
-                let macro_graph = self
-                    .library_manager
-                    .get_subgraph(&ser_tab.id)
-                    .map(|m| m.graph.clone());
-
-                if let Some(graph) = macro_graph {
-                    if let Ok(blueprint_graph) =
-                        self.convert_graph_description_to_blueprint(&graph, window, cx)
-                    {
-                        self.open_tabs.push(GraphTab {
-                            id: ser_tab.id.clone(),
-                            name: ser_tab.name.clone(),
-                            graph: blueprint_graph,
-                            is_main: false,
-                            is_dirty: false,
-                            is_library_macro: true,
-                            library_id: ser_tab.library_id.clone(),
-                        });
-                    }
-                }
-            } else {
-                let macro_graph = self
-                    .subgraphs
-                    .iter()
-                    .find(|m| m.id == ser_tab.id)
-                    .map(|m| m.graph.clone());
-
-                if let Some(graph) = macro_graph {
-                    if let Ok(blueprint_graph) =
-                        self.convert_graph_description_to_blueprint(&graph, window, cx)
-                    {
-                        self.open_tabs.push(GraphTab {
-                            id: ser_tab.id.clone(),
-                            name: ser_tab.name.clone(),
-                            graph: blueprint_graph,
-                            is_main: false,
-                            is_dirty: false,
-                            is_library_macro: false,
-                            library_id: None,
-                        });
-                    }
-                }
-            }
-        }
-
-        println!("📂 Restored {} tabs from tabs.json", self.open_tabs.len());
-        Ok(())
-    }
 }

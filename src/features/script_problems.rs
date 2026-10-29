@@ -74,8 +74,6 @@ impl BlueprintEditorPanel {
                     if let Some(canvas) = self.active_canvas().cloned() {
                         canvas.update(cx, |canvas, cx| {
                             canvas.debug_pin_values.clear();
-                            canvas.hovered_pin_tooltip = None;
-                            canvas.hovered_pin_tooltip_pos = None;
                             cx.notify();
                         });
                     }
@@ -100,8 +98,8 @@ impl BlueprintEditorPanel {
                                     )
                                 })
                                 .collect();
-                            if canvas.graph.nodes.iter().any(|n| n.id == node) {
-                                canvas.graph.selected_nodes = vec![node];
+                            if canvas.graph(cx).nodes.contains_key(&node) {
+                                canvas.canvas.update(cx, |c, cx| c.select_nodes([node], cx));
                             }
                             cx.notify();
                         });
