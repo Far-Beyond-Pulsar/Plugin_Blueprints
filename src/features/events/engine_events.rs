@@ -108,21 +108,14 @@ fn animation_catalog(
     if referenced_assets.is_empty() {
         return Vec::new();
     }
-    let catalog = engine_backend::project_animation_notify_events(&root);
+    // Asset-source-aware: only the assets the component names (its graph's
+    // closure, or its single sequence) are read, through the asset index.
+    let catalog = engine_backend::component_animation_notify_events(&root, referenced_assets);
     for diagnostic in catalog.diagnostics {
         tracing::warn!(path = %diagnostic.path.display(), error = %diagnostic.error,
             "could not discover animation notify events");
     }
-    catalog
-        .events
-        .into_iter()
-        .filter(|(_, descriptor)| {
-            descriptor
-                .name
-                .split_once('.')
-                .is_some_and(|(sequence_id, _)| referenced_assets.contains(sequence_id))
-        })
-        .collect()
+    catalog.events
 }
 
 /// Animation schemas are available to a class only when its prefab has a
@@ -158,7 +151,13 @@ fn referenced_animation_asset_ids_from_json(
                     .unwrap_or(true)
         })
         .filter_map(|component| {
-            let id = component.get("data")?.get("animation")?.as_str()?;
+            let data = component.get("data")?;
+            // the Animation Graph is the authored source; `animation` is the
+            // one-release compatibility key of the old single sequence
+            let id = data
+                .get("animation_graph")
+                .and_then(serde_json::Value::as_str)
+                .or_else(|| data.get("animation")?.as_str())?;
             uuid::Uuid::parse_str(id).ok().map(|id| id.to_string())
         })
         .collect()
@@ -174,7 +173,11 @@ pub fn animation_asset_ids_from_prefab(
         .iter()
         .filter(|component| component.enabled && component.class_name == "SkeletalMeshComponent")
         .filter_map(|component| {
-            let id = component.data.get("animation")?.as_str()?;
+            let id = component
+                .data
+                .get("animation_graph")
+                .and_then(serde_json::Value::as_str)
+                .or_else(|| component.data.get("animation")?.as_str())?;
             uuid::Uuid::parse_str(id).ok().map(|id| id.to_string())
         })
         .collect()
