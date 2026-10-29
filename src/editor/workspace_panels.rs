@@ -19,7 +19,10 @@ use crate::features::prefabs::panel::PrefabHierarchyRenderer;
 use crate::features::traits::ImplementedTraitsRenderer;
 use crate::features::variables::rendering::VariablesRenderer;
 use crate::ui_components::asset_inspector::{AssetInspectorRenderer, AssetInspectorSnapshot};
-use crate::ui_components::palette_view::NodePaletteView;
+use graphy_gpui::picker::{NodePicker, PickerEvent};
+use graphy_gpui::GraphProfile as _;
+
+use crate::canvas_profile::{BlueprintProfile, ADD_CUSTOM_EVENT};
 use crate::ui_components::properties::PropertiesRenderer;
 
 macro_rules! editor_panel_shell {
@@ -302,14 +305,15 @@ impl Render for PrefabHierarchyPanel {
 // Palette Panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Palette panel – thin dock wrapper around [`NodePaletteView`].
-///
-/// All palette logic (search, category headers, virtual list, node placement)
-/// lives in `NodePaletteView` so the same component can be reused in both this
-/// panel and the quick right-click overlay on the graph canvas.
+/// Palette panel: the shared node picker docked beside the graph. Choosing a
+/// node adds it at the centre of the active canvas.
 pub struct PalettePanel {
     focus_handle: FocusHandle,
-    palette_view: Entity<NodePaletteView>,
+    editor: WeakEntity<BlueprintEditorPanel>,
+    picker: Entity<NodePicker>,
+    profile: BlueprintProfile,
+    catalog_version: u64,
+    _subscription: Subscription,
 }
 
 impl PalettePanel {
@@ -318,19 +322,67 @@ impl PalettePanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let palette_view = cx.new(|cx| NodePaletteView::new(editor, window, cx));
+        let data = editor
+            .upgrade()
+            .map(|editor| editor.read(cx).profile_data.clone())
+            .unwrap_or_default();
+        let profile = BlueprintProfile::blueprint(data);
+        let entries = profile.catalog();
+        let picker = cx.new(|cx| NodePicker::new(entries, None, window, cx));
+        let subscription = cx.subscribe_in(
+            &picker,
+            window,
+            |this, _picker, event: &PickerEvent, window, cx| {
+                if let PickerEvent::Chosen(definition) = event {
+                    this.place(definition, window, cx);
+                }
+            },
+        );
         Self {
             focus_handle: cx.focus_handle(),
-            palette_view,
+            editor,
+            picker,
+            profile,
+            catalog_version: 0,
+            _subscription: subscription,
         }
+    }
+
+    /// Adds `definition` to the active canvas, staggered so repeats do not stack.
+    fn place(&mut self, definition: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(canvas) = self
+            .editor
+            .upgrade()
+            .and_then(|editor| editor.read(cx).active_canvas().cloned())
+        else {
+            return;
+        };
+        let definition = definition.to_string();
+        canvas.update(cx, |canvas, cx| {
+            if definition == ADD_CUSTOM_EVENT {
+                canvas.add_custom_event_from_picker(window, cx);
+                return;
+            }
+            let base = canvas.view_center(cx);
+            let stagger = (canvas.graph(cx).nodes.len() % 8) as f32 * 18.0;
+            let at = graphy_render::Vec2::new(base.x + stagger, base.y + stagger);
+            canvas.add_definition_node(&definition, at, None, cx);
+        });
     }
 }
 
 impl EventEmitter<PanelEvent> for PalettePanel {}
 
 impl Render for PalettePanel {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().size_full().child(self.palette_view.clone())
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let version = self.profile.data_version();
+        if version != self.catalog_version {
+            self.catalog_version = version;
+            let entries = self.profile.catalog();
+            self.picker
+                .update(cx, |picker, cx| picker.set_entries(entries, cx));
+        }
+        div().size_full().child(self.picker.clone())
     }
 }
 

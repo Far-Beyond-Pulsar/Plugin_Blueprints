@@ -21,7 +21,6 @@ use crate::editor::workspace_panels::FindPanel;
 
 use crate::features::prefabs::PrefabAsset;
 use crate::features::variables::ClassVariable;
-use crate::ui_components::palette_view::NodePaletteView;
 use graphy_blueprint::{LibraryManager, SubGraph};
 use ui::dock::{DockItem, DockPlacement};
 use ui::dropdown::{SearchableList, SearchableListEvent};
@@ -134,20 +133,6 @@ pub struct BlueprintEditorPanel {
     pub wire_hidden_test_mode: bool,
     pub running_nodes: HashSet<String>,
     pub graph_anim_start: std::time::Instant,
-
-    // Quick palette overlay (right-click on graph canvas)
-    pub popup_palette_graph_pos: Option<Point<f32>>,
-    /// Whether the right-click quick-palette overlay is currently visible.
-    pub quick_palette_open: bool,
-    /// Whether the quick-palette search input should be focused on next paint.
-    pub quick_palette_focus_pending: bool,
-    /// When opening quick palette from a connection drag, this is the source drag metadata.
-    pub quick_palette_connection_source:
-        Option<crate::editor::graph_canvas_panel::ConnectionDrag>,
-    /// Window-space position where the user right-clicked (used to anchor the overlay).
-    pub quick_palette_screen_pos: Point<Pixels>,
-    /// The shared palette view rendered inside the overlay.
-    pub quick_palette_view: Entity<NodePaletteView>,
 
     // Pin hover tooltip state
     pub hovered_pin_tooltip: Option<String>,
@@ -409,8 +394,6 @@ impl BlueprintEditorPanel {
             Self::create_sample_graph()
         };
 
-        let editor_weak = cx.entity().downgrade();
-        let quick_palette_view = cx.new(|cx| NodePaletteView::new(editor_weak, window, cx));
         let mut engine_classes = pulsar_reflection::REGISTRY.get_class_names();
         // A placed class's own marker component is not a prefab component.
         engine_classes.retain(|name| !crate::features::prefabs::is_internal_component(name));
@@ -592,12 +575,6 @@ impl BlueprintEditorPanel {
             wire_hidden_test_mode: false,
             running_nodes: HashSet::new(),
             graph_anim_start: std::time::Instant::now(),
-            popup_palette_graph_pos: None,
-            quick_palette_open: false,
-            quick_palette_focus_pending: false,
-            quick_palette_connection_source: None,
-            quick_palette_screen_pos: Point::default(),
-            quick_palette_view,
             hovered_pin_tooltip: None,
             hovered_pin_tooltip_pos: None,
             dragging_tab: None,
@@ -787,6 +764,7 @@ impl BlueprintEditorPanel {
 
         let editor_weak = cx.entity().downgrade();
         self.sync_profile_data();
+        self.refresh_catalog(cx);
         let pending: Vec<(String, String, bool, bool, Option<String>, TabDoc)> = self
             .open_tabs
             .iter_mut()
@@ -982,6 +960,7 @@ impl BlueprintEditorPanel {
     /// Re-presents every canvas after subgraph or event definitions changed.
     pub fn refresh_canvases(&mut self, cx: &mut Context<Self>) {
         self.sync_profile_data();
+        self.refresh_catalog(cx);
         for (_, canvas) in self.graph_panels.clone() {
             canvas.update(cx, |canvas, cx| canvas.refresh_presentation(cx));
         }

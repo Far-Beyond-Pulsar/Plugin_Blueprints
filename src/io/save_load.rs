@@ -714,6 +714,7 @@ impl BlueprintEditorPanel {
             .collect();
 
         self.sync_profile_data();
+        self.refresh_catalog(cx);
 
         let mut main_doc = Self::tab_doc_from_authored(&graph_desc);
         let mut open_tabs = Vec::new();

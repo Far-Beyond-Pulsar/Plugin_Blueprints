@@ -1,15 +1,22 @@
 //! Rendering of a tab's canvas: the Graphy canvas element plus the
-//! Blueprint-only layers over it (context menu, quick palette, comment title
-//! editor, breakpoint badges).
+//! Blueprint-only layers over it (comment title editor, breakpoint badges, debug HUD,
+//! macro pin editor). The context menu and node picker belong to the canvas.
 
 use gpui::prelude::*;
 use gpui::*;
-use ui::ActiveTheme;
 
-use crate::editor::graph_canvas_panel::{CanvasMenu, GraphCanvasPanel};
+use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 
 impl Render for GraphCanvasPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = crate::theme::graph_theme(cx);
+        if self.canvas.read(cx).theme() != &theme {
+            self.canvas.update(cx, |canvas, cx| canvas.set_theme(theme, cx));
+        }
+        let theme = crate::theme::graph_theme(cx);
+        if self.canvas.read(cx).theme() != &theme {
+            self.canvas.update(cx, |canvas, cx| canvas.set_theme(theme, cx));
+        }
         let mut root = div()
             .relative()
             .size_full()
@@ -45,8 +52,6 @@ impl Render for GraphCanvasPanel {
         root = root.child(canvas);
 
         root = root
-            .child(self.render_quick_palette(cx))
-            .child(self.render_context_menu(cx))
             .child(self.render_breakpoint_badges(cx))
             .child(Self::render_debug_hud(self, cx))
             .child(Self::render_macro_pin_editor(self, cx))
@@ -56,141 +61,6 @@ impl Render for GraphCanvasPanel {
 }
 
 impl GraphCanvasPanel {
-    fn render_quick_palette(&self, cx: &mut Context<Self>) -> AnyElement {
-        if !self.quick_palette_open {
-            return div().into_any_element();
-        }
-        let this = cx.entity();
-        deferred(
-            anchored()
-                .position(self.quick_palette_screen_pos)
-                .snap_to_window_with_margin(px(8.0))
-                .anchor(gpui::Corner::TopLeft)
-                .child(
-                    div()
-                        .occlude()
-                        .w(px(320.0))
-                        .h(px(480.0))
-                        .shadow_lg()
-                        .rounded(px(6.0))
-                        .overflow_hidden()
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .child(self.quick_palette_view.clone())
-                        .on_children_prepainted({
-                            let this = this.clone();
-                            move |_, window, cx| {
-                                this.update(cx, |canvas, cx| {
-                                    if !canvas.quick_palette_focus_pending {
-                                        return;
-                                    }
-                                    let handle =
-                                        canvas.quick_palette_view.read(cx).search_focus_handle(cx);
-                                    canvas.quick_palette_focus_pending = false;
-                                    window.focus(&handle, cx);
-                                });
-                            }
-                        })
-                        .on_mouse_down_out(move |_, _, cx| {
-                            this.update(cx, |canvas, cx| {
-                                canvas.close_quick_palette();
-                                cx.notify();
-                            });
-                        }),
-                ),
-        )
-        .with_priority(1)
-        .into_any_element()
-    }
-
-    pub fn close_quick_palette(&mut self) {
-        self.quick_palette_open = false;
-        self.quick_palette_focus_pending = false;
-        self.quick_palette_connection_source = None;
-        self.popup_palette_graph_pos = None;
-    }
-
-    fn render_context_menu(&self, cx: &mut Context<Self>) -> AnyElement {
-        let Some(menu) = self.context_menu.clone() else {
-            return div().into_any_element();
-        };
-        let this = cx.entity();
-        let mut list = div()
-            .occlude()
-            .w(px(220.0))
-            .bg(cx.theme().popover)
-            .border_1()
-            .border_color(cx.theme().border)
-            .shadow_lg()
-            .rounded(px(6.0))
-            .py(px(4.0));
-        for item in menu.items.iter().cloned() {
-            list = list.children(Self::menu_entry(item, &menu, &this, cx));
-        }
-        deferred(
-            anchored()
-                .position(menu.at)
-                .snap_to_window_with_margin(px(8.0))
-                .anchor(gpui::Corner::TopLeft)
-                .child(list.on_mouse_down_out(move |_, _, cx| {
-                    this.update(cx, |canvas, cx| {
-                        canvas.context_menu = None;
-                        cx.notify();
-                    });
-                })),
-        )
-        .with_priority(2)
-        .into_any_element()
-    }
-
-    /// One menu entry (and its children, flattened below it).
-    fn menu_entry(
-        item: graphy_gpui::MenuItem,
-        menu: &CanvasMenu,
-        this: &Entity<Self>,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let mut out: Vec<AnyElement> = Vec::new();
-        if item.separator_before {
-            out.push(
-                div()
-                    .my(px(4.0))
-                    .mx(px(8.0))
-                    .h(px(1.0))
-                    .bg(cx.theme().border)
-                    .into_any_element(),
-            );
-        }
-        let foreground = if item.enabled {
-            cx.theme().popover_foreground
-        } else {
-            cx.theme().muted_foreground
-        };
-        let id = item.id.clone();
-        let mut row = div()
-            .px(px(12.0))
-            .py(px(6.0))
-            .text_sm()
-            .text_color(foreground)
-            .child(item.label.clone());
-        if item.enabled {
-            let this = this.clone();
-            let menu = menu.clone();
-            row = row
-                .cursor_pointer()
-                .hover(|s| s.bg(cx.theme().accent.opacity(0.12)))
-                .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
-                    let (menu, id) = (menu.clone(), id.clone());
-                    this.update(cx, |canvas, cx| canvas.run_menu_item(menu, &id, window, cx));
-                });
-        }
-        out.push(row.into_any_element());
-        for child in item.children {
-            out.extend(Self::menu_entry(child, menu, this, cx));
-        }
-        out
-    }
-
     /// Title editor over the comment being renamed.
     fn render_comment_title_editor(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(index) = self.editing_comment else {

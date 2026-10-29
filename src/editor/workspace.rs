@@ -23,6 +23,7 @@ impl BlueprintEditorPanel {
         }
 
         self.sync_profile_data();
+        self.refresh_catalog(cx);
 
         let editor_weak = cx.entity().downgrade();
 

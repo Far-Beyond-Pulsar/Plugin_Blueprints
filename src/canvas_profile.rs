@@ -22,7 +22,7 @@ use graphy_render::presenter::{
     category_accent, CommentPresentation, NodePresentation, PinShape, PinStyle, Presenter, WireStyle,
 };
 use graphy_render::WireRouting;
-use graphy_render::geom::rgba;
+use graphy_render::geom::{parse_hex, rgba};
 
 use crate::core::definitions::{NodeDefinition, NodeDefinitions};
 use crate::core::subgraph_ref::SubGraphReference;
@@ -30,16 +30,11 @@ use crate::core::types::PinDataType;
 
 /// Menu item ids this profile adds.
 pub const MENU_OPEN_GRAPH: &str = "blueprint.open_graph";
-
-fn parse_hex(hex: &str) -> Option<[f32; 4]> {
-    let hex = hex.trim_start_matches('#');
-    let byte = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok();
-    match hex.len() {
-        6 => Some(rgba(byte(0)?, byte(2)?, byte(4)?, 1.0)),
-        8 => Some(rgba(byte(0)?, byte(2)?, byte(4)?, f32::from(byte(6)?) / 255.0)),
-        _ => None,
-    }
-}
+pub const MENU_BREAKPOINT: &str = "blueprint.breakpoint";
+pub const MENU_COLLAPSE: &str = "blueprint.collapse";
+/// Catalogue entry that creates a custom event instead of a node; the editor
+/// handles it when it is picked.
+pub const ADD_CUSTOM_EVENT: &str = "__add_custom_event__";
 
 /// What the profile reads from the editor that owns the asset: subgraph
 /// definitions (for call-node titles), the library, custom event names and the
@@ -53,6 +48,12 @@ pub struct ProfileData {
     pub running: HashSet<String>,
     /// Draw wires as right-angle (circuit-style) routes.
     pub angular_wires: bool,
+    /// Picker entries that depend on the open asset (local macros, custom event
+    /// dispatch, engine and component events); the editor refreshes them when
+    /// those change.
+    pub extra_catalog: Vec<CatalogEntry>,
+    /// Bumped whenever [`Self::extra_catalog`] is replaced.
+    pub catalog_version: u64,
 }
 
 pub type SharedProfileData = Arc<RwLock<ProfileData>>;
@@ -272,6 +273,9 @@ pub struct BlueprintProfile {
     id: String,
     presenter: BlueprintPresenter,
     resolver: BlueprintResolver,
+    /// The macro graph this profile serves; a macro cannot contain itself, so
+    /// its own call node is left out of the picker.
+    editing_macro: Option<String>,
 }
 
 impl BlueprintProfile {
@@ -286,7 +290,29 @@ impl BlueprintProfile {
                 data,
             },
             resolver: BlueprintResolver,
+            editing_macro: None,
         }
+    }
+
+    /// Version of the picker entries the editor published (see [`ProfileData`]).
+    pub fn data_version(&self) -> u64 {
+        self.presenter
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .catalog_version
+    }
+
+    /// Marks the macro graph this profile belongs to.
+    pub fn editing_macro(mut self, id: Option<String>) -> Self {
+        self.editing_macro = id;
+        self
+    }
+
+    fn is_collapsed_node(&self, node: &NodeInstance) -> bool {
+        let data = self.presenter.data.read().unwrap_or_else(|e| e.into_inner());
+        SubGraphReference::decode(&node.node_type, &data.subgraphs)
+            .is_some_and(|r| r.kind == graphy_blueprint::SubGraphKind::Collapsed)
     }
 
     /// The profile for a Blueprint asset, over the Blueprint node catalogue.
@@ -357,19 +383,50 @@ impl GraphProfile for BlueprintProfile {
     }
 
     fn catalog(&self) -> Vec<CatalogEntry> {
-        self.presenter
-            .definitions
-            .categories
-            .iter()
-            .flat_map(|category| {
-                category.nodes.iter().map(|n| CatalogEntry {
+        let mut entries = Vec::new();
+        for category in &self.presenter.definitions.categories {
+            let color = parse_hex(&category.color);
+            for n in &category.nodes {
+                entries.push(CatalogEntry {
                     definition: n.id.clone(),
                     title: n.name.clone(),
                     category: category.name.clone(),
-                    keywords: vec![n.description.clone()],
-                })
-            })
-            .collect()
+                    description: n.description.clone(),
+                    icon: n.icon.clone(),
+                    color,
+                    inputs: Some(
+                        n.inputs
+                            .iter()
+                            .map(|p| datatype_from_str(&p.data_type.to_string()))
+                            .collect(),
+                    ),
+                    ..Default::default()
+                });
+            }
+            if category.name == "Events" {
+                entries.push(CatalogEntry {
+                    definition: ADD_CUSTOM_EVENT.into(),
+                    title: "Add Custom Event".into(),
+                    category: category.name.clone(),
+                    description: "Create a new custom event definition".into(),
+                    icon: "📡".into(),
+                    color,
+                    inputs: Some(Vec::new()),
+                    ..Default::default()
+                });
+            }
+        }
+        let data = self.presenter.data.read().unwrap_or_else(|e| e.into_inner());
+        let own = self.editing_macro.as_ref().map(|id| {
+            SubGraphReference::new(id.clone(), graphy_blueprint::SubGraphKind::Macro).encode()
+        });
+        entries.extend(
+            data.extra_catalog
+                .iter()
+                .filter(|e| own.as_deref() != Some(e.definition.as_str()))
+                .cloned(),
+        );
+        entries
     }
 
     fn create_node(&self, definition: &str, id: &str, pos: Position) -> Option<NodeInstance> {
@@ -454,15 +511,24 @@ impl GraphProfile for BlueprintProfile {
     }
 
     fn menu_items(&self, graph: &GraphDescription, target: &MenuTarget) -> Vec<MenuItem> {
-        match target {
-            MenuTarget::Node(id) => graph
-                .nodes
-                .get(id)
-                .and_then(|n| self.macro_target(n))
-                .map(|_| vec![MenuItem::new(MENU_OPEN_GRAPH, "Open Graph").separated()])
-                .unwrap_or_default(),
-            _ => Vec::new(),
+        let MenuTarget::Node(id) = target else {
+            return Vec::new();
+        };
+        let Some(node) = graph.nodes.get(id) else {
+            return Vec::new();
+        };
+        let collapsed = self.is_collapsed_node(node);
+        let mut items = vec![
+            MenuItem::new(MENU_BREAKPOINT, "Toggle Breakpoint  ⏹").separated(),
+            MenuItem::new(
+                MENU_COLLAPSE,
+                if collapsed { "Uncollapse Node" } else { "Collapse to Node" },
+            ),
+        ];
+        if self.macro_target(node).is_some() {
+            items.push(MenuItem::new(MENU_OPEN_GRAPH, "Open Graph"));
         }
+        items
     }
 
     fn run_menu_item(
@@ -478,6 +544,10 @@ impl GraphProfile for BlueprintProfile {
                 .and_then(|n| self.macro_target(n))
                 .map(|t| vec![Action::OpenGraph(t)])
                 .unwrap_or_default(),
+            (MenuTarget::Node(_), MENU_BREAKPOINT | MENU_COLLAPSE) => vec![Action::Custom {
+                id: item.to_string(),
+                target: target.clone(),
+            }],
             _ => Vec::new(),
         }
     }

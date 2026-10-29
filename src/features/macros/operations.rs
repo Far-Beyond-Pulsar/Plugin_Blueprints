@@ -605,18 +605,11 @@ impl BlueprintEditorPanel {
 
     // ─── Palette invalidation ─────────────────────────────────────────────────
 
-    /// Notify the active canvas's quick-palette to rebuild so local macros appear.
+    /// Republishes the picker entries that depend on macros and events, so the
+    /// canvases' pickers and the docked palette list them.
     pub fn invalidate_palette(&self, cx: &mut Context<Self>) {
-        if let Some(canvas) = self.active_canvas().cloned() {
-            cx.defer(move |cx| {
-                canvas.update(cx, |canvas, cx| {
-                    let v = canvas.quick_palette_view.clone();
-                    cx.defer(move |cx| {
-                        v.update(cx, |view, cx| view.rebuild_items(cx));
-                    });
-                });
-            });
-        }
+        self.refresh_catalog(cx);
+        cx.notify();
     }
 }
 

@@ -12,44 +12,25 @@ use std::sync::Arc;
 use gpui::*;
 use graphy::{GraphCommand, GraphDescription, NodeInstance, Position};
 use graphy_gpui::canvas::{CanvasEvent, GraphCanvas};
-use graphy_gpui::{Action, GraphProfile as _, MenuItem, MenuTarget};
+use graphy_gpui::{Action, GraphProfile as _, MenuTarget};
 use graphy_render::Vec2;
 use ui::dock::{Panel, PanelEvent};
 use ui::input::{InputEvent, InputState};
 use ui_common::reflected_properties_panel::PropertyStateManager;
 
-use crate::canvas_profile::{BlueprintProfile, SharedProfileData};
+use crate::canvas_profile::{
+    BlueprintProfile, SharedProfileData, ADD_CUSTOM_EVENT, MENU_BREAKPOINT, MENU_COLLAPSE,
+};
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::tabs::TabDoc;
 use crate::features::undo::Command;
 use crate::io::canvas_doc::{self, AuthoredSidecar};
-use crate::ui_components::palette_view::NodePaletteView;
-
-pub const MENU_BREAKPOINT: &str = "blueprint.breakpoint";
-pub const MENU_COLLAPSE: &str = "blueprint.collapse";
 
 /// Grid the canvas snaps nodes and comments to.
 pub const GRID: f64 = 10.0;
 
 fn snap(v: f64) -> f64 {
     (v / GRID).round() * GRID
-}
-
-/// A context menu requested on the canvas, shown over it.
-#[derive(Clone, Debug)]
-pub struct CanvasMenu {
-    pub at: Point<Pixels>,
-    pub local: Vec2,
-    pub target: MenuTarget,
-    pub items: Vec<MenuItem>,
-}
-
-/// Source pin of a connection dropped on empty canvas.
-#[derive(Clone, Debug)]
-pub struct ConnectionDrag {
-    pub source_node: String,
-    pub source_pin: String,
-    pub source_pin_type: crate::core::types::PinDataType,
 }
 
 /// One open tab's canvas.
@@ -81,17 +62,6 @@ pub struct GraphCanvasPanel {
     pub debug_session: Option<crate::features::debug::DebugSession>,
     /// Latest Play-in-Editor values keyed by opaque source node and pin ids.
     pub debug_pin_values: HashMap<(String, String), String>,
-
-    // ── Context menu / overlays ────────────────────────────────────────────
-    pub context_menu: Option<CanvasMenu>,
-
-    // ── Quick palette (right-click on canvas / dropped connection) ─────────
-    pub quick_palette_open: bool,
-    pub quick_palette_focus_pending: bool,
-    pub quick_palette_connection_source: Option<ConnectionDrag>,
-    pub quick_palette_screen_pos: Point<Pixels>,
-    pub popup_palette_graph_pos: Option<Vec2>,
-    pub quick_palette_view: Entity<NodePaletteView>,
 
     // ── Comments ───────────────────────────────────────────────────────────
     /// Index of the comment whose title is being edited.
@@ -131,11 +101,20 @@ impl GraphCanvasPanel {
             sidecar,
             view,
         } = doc;
-        let bp_profile = Arc::new(BlueprintProfile::blueprint(profile_data.clone()));
+        let bp_profile = Arc::new(
+            BlueprintProfile::blueprint(profile_data.clone())
+                .editing_macro((!is_main).then(|| id.clone())),
+        );
         let canvas = {
             let bp_profile = bp_profile.clone();
             cx.new(|cx| {
-                let mut canvas = GraphCanvas::new(graph, bp_profile, graphy_gpui::canvas::system_fonts(), cx)
+                let mut canvas = GraphCanvas::new(
+                    graph,
+                    bp_profile,
+                    graphy_gpui::canvas::system_fonts(),
+                    crate::theme::graph_theme(cx),
+                    cx,
+                )
                     .expect("the bundled canvas font parses");
                 if let Some(((pan_x, pan_y), zoom)) = view {
                     canvas.set_view(Vec2::new(pan_x, pan_y), zoom, cx);
@@ -146,10 +125,6 @@ impl GraphCanvasPanel {
         cx.subscribe_in(&canvas, window, Self::on_canvas_event)
             .detach();
 
-        let canvas_weak = cx.entity().downgrade();
-        let quick_palette_view = cx.new(|cx| {
-            NodePaletteView::new_for_canvas(canvas_weak, panel.clone(), window, cx)
-        });
         let comment_text_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Comment text..."));
         cx.subscribe_in(
@@ -182,13 +157,6 @@ impl GraphCanvasPanel {
             breakpoints: HashSet::new(),
             debug_session: None,
             debug_pin_values: HashMap::new(),
-            context_menu: None,
-            quick_palette_open: false,
-            quick_palette_focus_pending: false,
-            quick_palette_connection_source: None,
-            quick_palette_screen_pos: Point::default(),
-            popup_palette_graph_pos: None,
-            quick_palette_view,
             editing_comment: None,
             comment_text_input,
             comment_pickers: HashMap::new(),
@@ -327,7 +295,6 @@ impl GraphCanvasPanel {
                 } else {
                     self.push_undo_command(Command::new(*label, commands.clone(), changes.clone()));
                 }
-                self.context_menu = None;
                 self.notify_editor_changed(cx);
                 cx.notify();
             }
@@ -340,32 +307,16 @@ impl GraphCanvasPanel {
             }
             CanvasEvent::ViewChanged => {}
             CanvasEvent::Request(action) => self.on_canvas_request(action.clone(), window, cx),
+            CanvasEvent::NodePicked {
+                definition,
+                graph_pos,
+                source,
+            } => self.place_picked(definition, *graph_pos, source.clone(), window, cx),
         }
     }
 
     fn on_canvas_request(&mut self, action: Action, window: &mut Window, cx: &mut Context<Self>) {
         match action {
-            Action::ContextMenu { at, target, items } => {
-                self.quick_palette_open = false;
-                let screen = self.canvas.read(cx).local_to_window(at);
-                if let MenuTarget::Canvas { graph_pos } = target {
-                    self.popup_palette_graph_pos = Some(graph_pos);
-                    self.quick_palette_screen_pos = screen;
-                    self.quick_palette_connection_source = None;
-                    self.quick_palette_open = true;
-                    self.quick_palette_focus_pending = true;
-                    self.context_menu = None;
-                } else {
-                    let items = self.with_blueprint_items(items, &target, cx);
-                    self.context_menu = Some(CanvasMenu {
-                        at: screen,
-                        local: at,
-                        target,
-                        items,
-                    });
-                }
-                cx.notify();
-            }
             Action::OpenGraph(target) => {
                 let panel = self.panel.clone();
                 let window_handle = window.window_handle();
@@ -381,38 +332,7 @@ impl GraphCanvasPanel {
             }
             Action::NodeActivated(id) => self.node_activated(&id, cx),
             Action::CommentActivated(index) => self.start_comment_title_editing(index, window, cx),
-            Action::ConnectionDropped { from, side, at } => {
-                if side != graphy_render::PinSide::Output {
-                    return;
-                }
-                let Some(pin) = self
-                    .graph(cx)
-                    .nodes
-                    .get(&from.node)
-                    .and_then(|n| n.outputs.iter().find(|p| p.id == from.pin))
-                else {
-                    return;
-                };
-                let source_pin_type = match pin.data_type() {
-                    graphy::DataType::Exec => crate::core::types::PinDataType::execution(),
-                    graphy::DataType::Data(info) => {
-                        crate::core::types::PinDataType::from_type_str(info.type_string.clone())
-                    }
-                };
-                let canvas = self.canvas.read(cx);
-                let screen = canvas.local_to_window(at);
-                let graph_pos = canvas.window_to_graph(screen);
-                self.quick_palette_connection_source = Some(ConnectionDrag {
-                    source_node: from.node,
-                    source_pin: from.pin,
-                    source_pin_type,
-                });
-                self.popup_palette_graph_pos = Some(graph_pos);
-                self.quick_palette_screen_pos = screen;
-                self.quick_palette_open = true;
-                self.quick_palette_focus_pending = true;
-                cx.notify();
-            }
+            Action::Custom { id, target } => self.run_menu_command(&id, target, window, cx),
             Action::ConnectionRefused(why) => tracing::debug!("connection refused: {why}"),
             _ => {}
         }
@@ -450,41 +370,6 @@ impl GraphCanvasPanel {
         }
     }
 
-    /// Blueprint's own entries in a node menu.
-    fn with_blueprint_items(
-        &self,
-        mut items: Vec<MenuItem>,
-        target: &MenuTarget,
-        cx: &App,
-    ) -> Vec<MenuItem> {
-        if let MenuTarget::Node(id) = target {
-            let collapsed = self.is_collapsed_graph_node(id, cx);
-            let has_bp = self.has_breakpoint(id);
-            let mut extra = vec![
-                MenuItem::new(
-                    MENU_BREAKPOINT,
-                    if has_bp {
-                        "Remove Breakpoint"
-                    } else {
-                        "Add Breakpoint  ⏹"
-                    },
-                )
-                .separated(),
-                MenuItem::new(
-                    MENU_COLLAPSE,
-                    if collapsed {
-                        "Uncollapse Node"
-                    } else {
-                        "Collapse to Node"
-                    },
-                ),
-            ];
-            extra.append(&mut items);
-            return extra;
-        }
-        items
-    }
-
     pub(crate) fn is_collapsed_graph_node(&self, id: &str, cx: &App) -> bool {
         let Some(node) = self.graph(cx).nodes.get(id) else {
             return false;
@@ -494,16 +379,15 @@ impl GraphCanvasPanel {
             .is_some_and(|r| r.kind == graphy_blueprint::SubGraphKind::Collapsed)
     }
 
-    /// Runs a menu entry the user chose in [`Self::context_menu`].
-    pub fn run_menu_item(
+    /// Runs a Blueprint entry of a node menu (the profile lists them).
+    fn run_menu_command(
         &mut self,
-        menu: CanvasMenu,
         id: &str,
+        target: MenuTarget,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.context_menu = None;
-        match (id, &menu.target) {
+        match (id, &target) {
             (MENU_BREAKPOINT, MenuTarget::Node(node)) => self.toggle_breakpoint(node.clone(), cx),
             (MENU_COLLAPSE, MenuTarget::Node(node)) => {
                 if self.is_collapsed_graph_node(node, cx) {
@@ -512,13 +396,44 @@ impl GraphCanvasPanel {
                     self.collapse_selected_nodes(cx);
                 }
             }
-            _ => {
-                let (target, local) = (menu.target, menu.local);
-                self.canvas
-                    .update(cx, |canvas, cx| canvas.run_menu_item(&target, id, local, cx));
-            }
+            _ => {}
         }
         cx.notify();
+    }
+
+    /// Adds the node picked in the canvas's picker where it was opened, wired to
+    /// the dragged wire's source if there was one.
+    fn place_picked(
+        &mut self,
+        definition: &str,
+        at: Vec2,
+        source: Option<graphy::PinRef>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if definition == ADD_CUSTOM_EVENT {
+            self.add_custom_event_from_picker(window, cx);
+            return;
+        }
+        self.add_definition_node(definition, at, source, cx);
+    }
+
+    /// The picker's "Add Custom Event": creates the event and its On node.
+    pub fn add_custom_event_from_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let panel = self.panel.clone();
+        let canvas_id = self.id.clone();
+        let window_handle = window.window_handle();
+        cx.defer(move |cx| {
+            let _ = cx.update_window(window_handle, |_, _, cx| {
+                if let Some(panel) = panel.upgrade() {
+                    panel.update(cx, |panel, cx| {
+                        let uid = panel.create_event_def("NewEvent".to_string(), String::new());
+                        panel.sync_event_to_tab(&uid, &canvas_id, cx);
+                        cx.notify();
+                    });
+                }
+            });
+        });
     }
 
     // ── Editor notifications ───────────────────────────────────────────────
@@ -653,7 +568,7 @@ impl GraphCanvasPanel {
         &mut self,
         definition: &str,
         at: Vec2,
-        source: Option<ConnectionDrag>,
+        source: Option<graphy::PinRef>,
         cx: &mut Context<Self>,
     ) -> Option<String> {
         let pos = Position::new(snap(f64::from(at.x)), snap(f64::from(at.y)));
@@ -661,70 +576,17 @@ impl GraphCanvasPanel {
         let id = node.id.clone();
         let mut commands = vec![GraphCommand::AddNode(node.clone())];
         if let Some(source) = source {
-            commands.extend(self.connect_new_node_commands(&source, &node, cx));
+            let mut wiring =
+                graphy_gpui::connect_new_node_commands(&*self.bp_profile, self.graph(cx), &source, &node);
+            for command in &mut wiring {
+                if let GraphCommand::Connect(conn) = command {
+                    conn.id = Some(uuid::Uuid::new_v4().to_string());
+                }
+            }
+            commands.extend(wiring);
         }
         self.apply("Add node", commands, cx).ok()?;
         Some(id)
-    }
-
-    /// Commands wiring `source` (an output pin) to the first compatible input
-    /// of the freshly added `node`, replacing whatever occupied either end.
-    fn connect_new_node_commands(
-        &self,
-        source: &ConnectionDrag,
-        node: &NodeInstance,
-        cx: &App,
-    ) -> Vec<GraphCommand> {
-        let graph = self.graph(cx);
-        let Some(src_pin) = graph
-            .nodes
-            .get(&source.source_node)
-            .and_then(|n| n.outputs.iter().find(|p| p.id == source.source_pin))
-        else {
-            return Vec::new();
-        };
-        let resolver = self.bp_profile.type_resolver();
-        let Some(target) = node.inputs.iter().find(|p| {
-            resolver
-                .compatibility(src_pin.data_type(), p.data_type())
-                .is_connectable()
-        }) else {
-            return Vec::new();
-        };
-        let exec = src_pin.data_type().is_execution();
-        let mut commands = Vec::new();
-        // An execution output (or a reroute's) drives one wire.
-        let single_output = exec
-            || graph
-                .nodes
-                .get(&source.source_node)
-                .is_some_and(|n| n.is_reroute());
-        if single_output {
-            commands.extend(
-                graph
-                    .connections
-                    .iter()
-                    .filter(|c| {
-                        c.source_node == source.source_node && c.source_pin == source.source_pin
-                    })
-                    .cloned()
-                    .map(GraphCommand::Disconnect),
-            );
-        }
-        let mut conn = graphy::Connection::new(
-            &source.source_node,
-            &source.source_pin,
-            &node.id,
-            &target.id,
-            if exec {
-                graphy::ConnectionType::Execution
-            } else {
-                graphy::ConnectionType::Data
-            },
-        );
-        conn.id = Some(uuid::Uuid::new_v4().to_string());
-        commands.push(GraphCommand::Connect(conn));
-        commands
     }
 
     /// Sets (or, for `null`, removes) a node property from an editor value.
