@@ -52,6 +52,12 @@ pub struct ProfileData {
     /// dispatch, engine and component events); the editor refreshes them when
     /// those change.
     pub extra_catalog: Vec<CatalogEntry>,
+    /// The node definitions behind [`Self::extra_catalog`]'s event entries,
+    /// by node type. The static node library has no class-specific events
+    /// (a trait's methods, this class's own, other classes'), so
+    /// [`BlueprintProfile::create_node`] creates them from here. Entries and
+    /// definitions are published together.
+    pub extra_definitions: HashMap<String, NodeDefinition>,
     /// Bumped whenever [`Self::extra_catalog`] is replaced.
     pub catalog_version: u64,
 }
@@ -456,8 +462,20 @@ impl GraphProfile for BlueprintProfile {
             node.set_property("conversion_id", conversion.id);
             return Some(node);
         }
-        let def = self.presenter.definitions.get_node_definition(definition)?;
-        Some(self.instantiate(def, id, pos))
+        if let Some(def) = self.presenter.definitions.get_node_definition(definition) {
+            return Some(self.instantiate(def, id, pos));
+        }
+        // Not in the static library: an event node the editor published with
+        // its menu entry (a trait method, a class's custom event, ...).
+        let def = self
+            .presenter
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .extra_definitions
+            .get(definition)
+            .cloned()?;
+        Some(self.instantiate(&def, id, pos))
     }
 
     fn create_reroute(&self, id: &str, pos: Position, data_type: &DataType) -> NodeInstance {
