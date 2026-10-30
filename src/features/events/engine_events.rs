@@ -98,6 +98,125 @@ pub fn project_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
     events
 }
 
+// ---- input action events -----------------------------------------------------
+
+/// The phases of an input action, each raising `input::<Action>.<phase>`.
+const INPUT_PHASES: [&str; 5] = ["started", "ongoing", "triggered", "completed", "canceled"];
+
+/// The fields every input action event carries (`entity` is the object the
+/// mapping is attached to; the rest describe the value).
+const INPUT_FIELDS: [&str; 7] = [
+    "entity",
+    "value",
+    "x",
+    "y",
+    "z",
+    "elapsed",
+    "triggered_for",
+];
+
+/// The name an action's events go by: its `identifier`, else its file name
+/// made into one. Mirrors `input_plugin::model::action::to_identifier`; this
+/// editor pins the engine by revision, so it reads the `.inputaction` files
+/// instead of linking the plugin.
+fn input_action_name(identifier: &str, file_stem: &str) -> String {
+    let identifier = identifier.trim();
+    if !identifier.is_empty() {
+        return identifier.to_owned();
+    }
+    let mut out = String::new();
+    let mut upper_next = true;
+    for c in file_stem.trim().chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            out.push(if upper_next { c.to_ascii_uppercase() } else { c });
+            upper_next = false;
+        } else {
+            upper_next = true;
+        }
+    }
+    if out.is_empty() || out.starts_with(|c: char| c.is_ascii_digit()) {
+        out.insert(0, '_');
+    }
+    out
+}
+
+/// The events of the input actions in the project at `root`, as the input
+/// runtime registers them: five per action, in the `input` namespace.
+fn read_input_events(root: &Path) -> Vec<EventDescriptor> {
+    let mut names: Vec<String> = engine_fs::virtual_fs::find_by_extension(root, "inputaction")
+        .iter()
+        .filter_map(|path| {
+            let text = engine_fs::virtual_fs::read_file(path).ok()?;
+            let asset: serde_json::Value = serde_json::from_slice(&text).ok()?;
+            let identifier = asset.get("identifier").and_then(|v| v.as_str()).unwrap_or("");
+            let stem = path.file_stem()?.to_str()?;
+            Some(input_action_name(identifier, stem))
+        })
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+        .iter()
+        .flat_map(|name| INPUT_PHASES.map(|phase| format!("{name}.{phase}")))
+        .filter_map(|event| {
+            EventDescriptor::dynamic_in(
+                "input",
+                event,
+                INPUT_FIELDS.map(|field| {
+                    let ty = if field == "entity" { FieldType::U64 } else { FieldType::F64 };
+                    (field, ty)
+                }),
+            )
+            .ok()
+        })
+        .collect()
+}
+
+/// How long a read of the project's input actions is reused: the palette and
+/// every compile ask, and the project is not walked each time.
+const INPUT_CACHE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Input action events of the project the class at `class_path` belongs to,
+/// one "On" node per phase of every action: a character Blueprint handles
+/// `input::Move.triggered` here, with `Self` scope (the first field is
+/// `entity`, so that is the node's default), and hears only its own player.
+/// The mapping that raises them is the one the level's player controller
+/// brings to the character at possession. "Send"/"Broadcast" nodes are not
+/// offered: input events are the runtime's to raise.
+pub fn input_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
+    use std::sync::Mutex;
+    use std::time::Instant;
+    static CACHE: Mutex<Option<(PathBuf, Instant, Vec<EventDescriptor>)>> = Mutex::new(None);
+
+    let Some(root) = class_path.and_then(crate::features::class_dirs::project_root_of) else {
+        return Vec::new();
+    };
+    let descriptors = {
+        let mut cache = CACHE.lock().unwrap_or_else(|p| p.into_inner());
+        match cache.as_ref() {
+            Some((cached, at, found)) if *cached == root && at.elapsed() < INPUT_CACHE => {
+                found.clone()
+            }
+            _ => {
+                let found = read_input_events(&root);
+                *cache = Some((root, Instant::now(), found.clone()));
+                found
+            }
+        }
+    };
+    descriptors
+        .iter()
+        .filter_map(|descriptor| {
+            let action = descriptor.name.split('.').next().unwrap_or_default();
+            Some(PaletteEvent {
+                signature: signature_of(descriptor)?,
+                category: format!("Input/{action}"),
+                declared_here: false,
+            })
+        })
+        .collect()
+}
+
 fn animation_catalog(
     class_path: Option<&Path>,
     referenced_assets: &std::collections::HashSet<String>,
@@ -242,6 +361,7 @@ pub fn known_event_signatures(class_path: Option<&Path>) -> Vec<EventSignature> 
     builtin_events()
         .into_iter()
         .chain(project_events(class_path))
+        .chain(input_events(class_path))
         .chain(animation_events(class_path))
         .map(|e| e.signature)
         .collect()
@@ -270,6 +390,7 @@ pub fn known_event_signatures_with_components_and_animation_assets(
     let mut signatures = builtin_events()
         .into_iter()
         .chain(project_events(class_path))
+        .chain(input_events(class_path))
         .chain(
             animation_catalog(class_path, animation_assets)
                 .iter()
@@ -358,6 +479,13 @@ pub fn event_node_definitions(
         .iter()
         .map(|node| (node.category.clone(), node_definition(node)))
         .collect::<Vec<_>>();
+    // Input actions: entry points only.
+    definitions.extend(
+        event_nodes(&input_events(class_path))
+            .iter()
+            .filter(|node| node.is_event)
+            .map(|node| (node.category.clone(), node_definition(node))),
+    );
     definitions.extend(animation_notify_component_nodes(
         class_path,
         animation_assets,

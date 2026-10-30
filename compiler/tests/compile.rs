@@ -2097,6 +2097,43 @@ mod engine_events {
         }
     }
 
+    /// A character Blueprint handles the player's `input::Move.triggered`: the
+    /// node is offered as an entry point that listens on the object's own
+    /// channel by default (the event's first field is `entity`), so it hears
+    /// only its own player's input.
+    #[test]
+    fn an_input_action_event_is_a_self_scoped_entry_point() {
+        let mut fields = vec![EventField::new("entity", Type::Entity)];
+        fields.extend(["value", "x", "y", "z", "elapsed", "triggered_for"].map(|f| EventField::new(f, Type::Float)));
+        let signature = EventSignature { id: 7_001, name: "input::Move.triggered".into(), fields };
+
+        let nodes = event_nodes(&[PaletteEvent {
+            signature: signature.clone(),
+            category: "Input/Move".into(),
+            declared_here: false,
+        }]);
+        let on = nodes.iter().find(|n| n.node_type == "event::on::input::Move.triggered").unwrap();
+        assert!(on.is_event);
+        assert_eq!(on.category, "Events/Input/Move");
+        assert_eq!(on.properties, vec![("scope".to_owned(), "self".to_owned())]);
+        assert_eq!(on.outputs[0], ("entity".to_owned(), "Entity".to_owned()));
+        assert_eq!(on.outputs[2], ("x".to_owned(), "f64".to_owned()));
+
+        let mut pins = vec![P::ExecOut("Body"), P::Out("entity", "Entity")];
+        pins.extend(["value", "x", "y", "z", "elapsed", "triggered_for"].map(|f| P::Out(f, "f64")));
+        let mut graph = Graph::default();
+        graph.node("on_move", "event::on::input::Move.triggered", &pins);
+        let graph = graph.build();
+        let module = compile(
+            &ClassSource { name: "Hero", graph: &graph, variables: &[], events: &[], known_events: &[signature], version: 0 },
+            &natives(),
+        )
+        .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}"));
+        assert_eq!(module.subscriptions.len(), 1);
+        assert_eq!(module.subscriptions[0].scope, SubscriptionScope::Self_);
+        assert_eq!(module.subscriptions[0].event, EventRef::Name("input::Move.triggered".into()));
+    }
+
     #[test]
     fn palette_lists_event_nodes_by_category() {
         let events = [
