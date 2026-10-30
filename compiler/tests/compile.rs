@@ -2069,6 +2069,35 @@ mod engine_events {
     }
 
     #[test]
+    fn animation_state_events_are_component_scoped_entry_points_filtered_to_their_graph() {
+        for kind in ["state_entered", "state_exited", "state_transition_started", "state_transition_completed"] {
+            let name = format!("animgraph::6f3f5b1e-9e4c-4f7f-b97d-7e37f21f8d44.{kind}");
+            let mut event_fields = vec![EventField::new("entity", Type::Entity), EventField::new("source", Type::Entity)];
+            event_fields.push(EventField::new("machine", Type::Str));
+            event_fields.push(EventField::new("state", Type::Str));
+            let signature = EventSignature { id: 93, name: name.clone(), fields: event_fields.clone() };
+            let mut pins = vec![P::In("component_ref", "SkeletalMeshComponent"), P::ExecOut("Body")];
+            pins.push(P::Out("entity", "Entity"));
+            pins.push(P::Out("source", "Entity"));
+            pins.push(P::Out("machine", "String"));
+            pins.push(P::Out("state", "String"));
+            let mut graph = Graph::default();
+            graph
+                .node("on_event", &format!("event::on_component::SkeletalMeshComponent.{name}"), &pins)
+                .prop("on_event", "component_type", json!("SkeletalMeshComponent"));
+            let graph = graph.build();
+            let module = compile(
+                &ClassSource { name: "StateReceiver", graph: &graph, variables: &[], events: &[], known_events: &[signature], version: 0 },
+                &natives(),
+            )
+            .unwrap_or_else(|diagnostics| panic!("{kind}: {diagnostics:?}"));
+            assert_eq!(module.subscriptions.len(), 1, "{kind}");
+            assert!(matches!(module.subscriptions[0].scope, SubscriptionScope::Component(_)), "{kind}");
+            assert_eq!(module.subscriptions[0].event, EventRef::Name(name), "the event keeps the graph's canonical name");
+        }
+    }
+
+    #[test]
     fn palette_lists_event_nodes_by_category() {
         let events = [
             PaletteEvent {

@@ -396,6 +396,8 @@ pub fn animation_event_nodes(catalog: Vec<(String, EventDescriptor)>) -> Vec<(St
         let kind = descriptor.namespace.as_deref().unwrap_or("animseq");
         let (group, source_noun) = if kind == "montage" {
             ("Montage", "Montage")
+        } else if kind == "animgraph" {
+            ("Animation Graph", "Animation Graph")
         } else {
             ("Animation", "animation sequence")
         };
@@ -525,6 +527,9 @@ pub fn describe_node_type(node_type: &str) -> Option<(String, bool)> {
         if event_name.starts_with("SkeletalMeshComponent.animseq::") {
             return Some(("On Animation Notify".to_owned(), true));
         }
+        if event_name.starts_with("SkeletalMeshComponent.animgraph::") {
+            return Some(("On Animation State".to_owned(), true));
+        }
         if event_name.starts_with("SkeletalMeshComponent.montage::") {
             let lifecycle = event_name.contains(".lifecycle_");
             return Some((if lifecycle { "On Montage Event" } else { "On Montage Notify" }.to_owned(), true));
@@ -583,6 +588,24 @@ mod animation_event_tests {
             ],
         )
         .expect("montage is a valid namespace")
+    }
+
+    #[test]
+    fn state_machine_events_become_component_bound_entry_points_of_their_graph() {
+        let descriptor = EventDescriptor::dynamic_in(
+            "animgraph",
+            "11111111-2222-4333-8444-555555555555.state_entered",
+            [("entity".to_owned(), FieldType::U64), ("source".to_owned(), FieldType::U64), ("machine".to_owned(), FieldType::Str)],
+        )
+        .expect("animgraph is a valid namespace");
+        let nodes = animation_event_nodes(vec![("Locomotion state entered".to_owned(), descriptor)]);
+        assert_eq!(nodes.len(), 1);
+        let (category, node) = &nodes[0];
+        assert_eq!(category, "Events/Components/SkeletalMeshComponent/Animation Graph/11111111");
+        assert!(node.id.starts_with("event::on_component::SkeletalMeshComponent.animgraph::11111111-2222-4333-8444-555555555555."));
+        assert_eq!(node.inputs[0].id, "component_ref");
+        assert_eq!(node.properties.get("animation_source_kind").map(String::as_str), Some("animgraph"));
+        assert_eq!(describe_node_type(&node.id), Some(("On Animation State".to_owned(), true)));
     }
 
     #[test]

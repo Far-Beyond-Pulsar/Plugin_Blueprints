@@ -2429,7 +2429,7 @@ fn component_event_name(node_type: &str) -> Option<String> {
         // subscription path. The component prefix names the SceneDB source
         // reference; it is not part of the event name.
         if let Some((component, event_name)) = event.split_once('.') {
-            if component == "SkeletalMeshComponent" && (event_name.starts_with("animseq::") || event_name.starts_with("montage::")) {
+            if component == "SkeletalMeshComponent" && (event_name.starts_with("animseq::") || event_name.starts_with("montage::") || event_name.starts_with("animgraph::")) {
                 return Some(event_name.to_owned());
             }
         }
