@@ -438,7 +438,7 @@ impl BlueprintEditorPanel {
              window,
              cx| {
                 if let SearchableListEvent::Select(asset) = event {
-                    editor.add_implemented_trait(&asset.path, window, cx);
+                    editor.add_implemented_trait(&asset.id, window, cx);
                 }
             },
         )

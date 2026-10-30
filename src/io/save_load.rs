@@ -197,9 +197,12 @@ fn persist_prefab_sidecar(path: &Path, json: &str) -> Result<(), String> {
     std::fs::write(path, json).map_err(|error| format!("Failed to write prefab sidecar: {error}"))
 }
 
-fn refresh_blueprint_trait_index_at(project_root: Option<&Path>) {
+/// Bring the trait index up to date with the Blueprint just written at
+/// `saved`. Only that file is re-read (`BlueprintTraitIndex::update_path`);
+/// opening a project does the full scan.
+fn refresh_blueprint_trait_index_at(project_root: Option<&Path>, saved: &Path) {
     if let Some(project_root) = project_root {
-        if let Err(error) = engine_fs::BlueprintTraitIndex::rebuild(project_root) {
+        if let Err(error) = engine_fs::BlueprintTraitIndex::update_path(project_root, saved) {
             tracing::warn!(
                 project_root = %project_root.display(),
                 %error,
@@ -210,6 +213,13 @@ fn refresh_blueprint_trait_index_at(project_root: Option<&Path>) {
 }
 
 impl BlueprintEditorPanel {
+    /// The Blueprint as it would be saved right now, as JSON: what trait
+    /// conformance is checked against, unsaved edits included.
+    pub(crate) fn current_blueprint_json(&self, cx: &App) -> Result<serde_json::Value, String> {
+        let asset = self.snapshot_blueprint_for_save(cx)?.into_asset()?;
+        serde_json::to_value(&asset).map_err(|error| format!("Could not serialize Blueprint: {error}"))
+    }
+
     fn snapshot_blueprint_for_save(&self, cx: &App) -> Result<BlueprintSaveSnapshot, String> {
         if let Some(error) = self.load_error.as_deref() {
             return Err(format!(
@@ -367,7 +377,7 @@ impl BlueprintEditorPanel {
                     }
 
                     task.report_progress(0.9, "Refreshing Blueprint index");
-                    refresh_blueprint_trait_index_at(project_root.as_deref());
+                    refresh_blueprint_trait_index_at(project_root.as_deref(), &task_path);
 
                     tracing::info!(">>> plugin_save: SUCCESS wrote to {:?}", task_path);
                     task.report_progress(1.0, "Blueprint saved");
@@ -563,7 +573,7 @@ impl BlueprintEditorPanel {
                 .as_deref()
                 .and_then(crate::features::class_dirs::project_root_of)
         });
-        refresh_blueprint_trait_index_at(project_root.as_deref());
+        refresh_blueprint_trait_index_at(project_root.as_deref(), &target_path);
 
         tracing::info!(
             ">>> save_to_path: wrote {} bytes to {:?}",

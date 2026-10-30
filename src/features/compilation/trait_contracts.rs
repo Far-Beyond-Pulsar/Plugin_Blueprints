@@ -1,8 +1,10 @@
 //! Resolves Blueprint trait assignments and emits their Rust declarations.
 //!
-//! Trait assignment is metadata today. The generated module makes each
-//! referenced Rust trait declaration available to the class crate, but it
-//! does not claim that the Blueprint graph provides method implementations.
+//! A Blueprint's declarations are checked before this runs
+//! (`engine_fs::trait_conformance`): it must provide the methods of the traits
+//! it declares. The generated module makes each referenced Rust trait
+//! declaration available to the class crate; it does not bind graph functions
+//! to the Rust methods.
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path};
@@ -22,7 +24,7 @@ pub(super) fn generate_module(project_root: &Path, raw_paths: &[String]) -> Resu
     let mut module = String::from(
         "//! Trait declarations selected by this Blueprint.\n\
          //! Generated from project `.trait.json` assets.\n\
-         //! Trait assignment does not yet bind Blueprint functions to these methods.\n\n\
+         //! The compiler checks the Blueprint provides these traits' methods.\n\n\
          pub mod trait_contracts {\n",
     );
 

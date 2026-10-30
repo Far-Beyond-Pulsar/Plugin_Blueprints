@@ -12,6 +12,8 @@ use crate::editor::panel::BlueprintEditorPanel;
 
 #[derive(Clone, Debug)]
 pub struct TraitAssetSummary {
+    /// Stable id; Blueprints reference the trait by this.
+    pub id: String,
     pub path: String,
     pub name: String,
     pub display_name: String,
@@ -32,7 +34,7 @@ impl ImplementedTraitsRenderer {
         }
 
         let theme = cx.theme();
-        let selected = editor.blueprint_metadata.implemented_traits.clone();
+        let selected = editor.implemented_trait_refs();
         let catalog = editor.implemented_trait_catalog.clone();
         let catalog_error = editor.implemented_trait_catalog_error.clone();
         let status = editor.implemented_trait_status.clone();
@@ -104,15 +106,17 @@ impl ImplementedTraitsRenderer {
                         .child("No traits are implemented yet."),
                 )
             })
-            .children(selected.iter().map(|path| {
-                let summary = catalog.iter().find(|asset| &asset.path == path);
+            .children(selected.iter().map(|reference| {
+                let summary = catalog
+                    .iter()
+                    .find(|asset| &asset.id == reference || &asset.path == reference);
                 let title = summary
                     .map(|asset| asset.display_name.clone())
-                    .unwrap_or_else(|| format!("Missing trait: {}", path));
+                    .unwrap_or_else(|| format!("Missing trait: {}", reference));
                 let detail = summary
                     .map(|asset| format!("{} · {}", asset.name, asset.path))
-                    .unwrap_or_else(|| path.clone());
-                let path = path.clone();
+                    .unwrap_or_else(|| reference.clone());
+                let path = reference.clone();
                 let remove = Button::new(format!("remove-trait-{}", stable_button_key(&path)))
                     .label("Remove")
                     .danger()

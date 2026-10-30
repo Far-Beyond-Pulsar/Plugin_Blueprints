@@ -1,7 +1,7 @@
 use crate::editor::panel::BlueprintEditorPanel;
 use gpui::{Context, Window};
 use std::collections::BTreeSet;
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
 
 impl BlueprintEditorPanel {
     /// Refreshes the project-relative `.trait.json` catalog using the active
@@ -40,6 +40,7 @@ impl BlueprintEditorPanel {
                 match result {
                     Ok(catalog) => {
                         editor.implemented_trait_catalog = catalog;
+                        editor.reconcile_trait_references();
                         editor.implemented_trait_catalog_error = None;
                     }
                     Err(error) => {
@@ -68,65 +69,132 @@ impl BlueprintEditorPanel {
         self.refresh_implemented_trait_catalog(cx);
     }
 
+    /// Assign the trait with this id. Both the id (authoritative) and the
+    /// trait's current path (a hint for readers that predate ids) are stored.
     pub fn add_implemented_trait(
         &mut self,
-        trait_path: &str,
+        trait_id: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(trait_path) = normalize_trait_path(trait_path) else {
-            self.implemented_trait_status =
-                Some("Trait path is not a canonical project-relative .trait.json path".to_owned());
-            cx.notify();
-            return;
-        };
-        if !self
+        let Some(asset) = self
             .implemented_trait_catalog
             .iter()
-            .any(|asset| asset.path == trait_path)
-        {
+            .find(|asset| asset.id == trait_id)
+            .cloned()
+        else {
             self.implemented_trait_status = Some(format!(
-                "Trait asset '{}' is not available in this project",
-                trait_path
+                "Trait '{}' is not available in this project",
+                trait_id
             ));
             cx.notify();
             return;
-        }
+        };
 
-        let selected = &mut self.blueprint_metadata.implemented_traits;
-        if selected.iter().any(|path| path == &trait_path) {
+        let metadata = &mut self.blueprint_metadata;
+        if metadata.implemented_trait_ids.iter().any(|id| id == &asset.id) {
             return;
         }
-        selected.push(trait_path);
-        selected.sort();
+        metadata.implemented_trait_ids.push(asset.id.clone());
+        metadata.implemented_trait_ids.sort();
+        if is_trait_file(&asset.path) && !metadata.implemented_traits.contains(&asset.path) {
+            metadata.implemented_traits.push(asset.path.clone());
+            metadata.implemented_traits.sort();
+        }
         self.sync_implemented_trait_picker(cx);
         self.persist_trait_assignments(window, cx);
     }
 
+    /// Remove an assigned trait. `trait_ref` is a trait id, or the path of a
+    /// reference that names no trait any more.
     pub fn remove_implemented_trait(
         &mut self,
-        trait_path: &str,
+        trait_ref: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(trait_path) = normalize_trait_path(trait_path) else {
-            self.implemented_trait_status = Some("Trait path is not canonical".to_owned());
-            cx.notify();
-            return;
-        };
-        self.blueprint_metadata
+        let current_path = self
+            .implemented_trait_catalog
+            .iter()
+            .find(|asset| asset.id == trait_ref)
+            .map(|asset| asset.path.clone());
+        let metadata = &mut self.blueprint_metadata;
+        metadata.implemented_trait_ids.retain(|id| id != trait_ref);
+        metadata
             .implemented_traits
-            .retain(|path| path != &trait_path);
+            .retain(|path| path != trait_ref && Some(path) != current_path.as_ref());
         self.sync_implemented_trait_picker(cx);
         self.persist_trait_assignments(window, cx);
     }
 
+    /// What the traits panel lists: the ids of assigned traits, then the
+    /// paths of references that resolve to no trait.
+    pub fn implemented_trait_refs(&self) -> Vec<String> {
+        let mut refs = self.blueprint_metadata.implemented_trait_ids.clone();
+        refs.extend(
+            self.blueprint_metadata
+                .implemented_traits
+                .iter()
+                .filter(|path| {
+                    !self
+                        .implemented_trait_catalog
+                        .iter()
+                        .any(|asset| &asset.path == *path)
+                })
+                .cloned(),
+        );
+        refs
+    }
+
+    /// Bring the Blueprint's trait references in step with the project's
+    /// traits, in memory: path-only references (assets saved before trait ids
+    /// existed) gain the id of the trait they name, and every path becomes the
+    /// trait's current one after a rename or move. Nothing is marked dirty;
+    /// the next save writes the result. A path that names no trait stays so it
+    /// is shown as missing, unless every id resolves, which makes it only a
+    /// stale hint.
+    pub fn reconcile_trait_references(&mut self) {
+        if self.implemented_trait_catalog.is_empty() {
+            return;
+        }
+        let catalog = &self.implemented_trait_catalog;
+        let metadata = &mut self.blueprint_metadata;
+        let ids_cover_paths = !metadata.implemented_trait_ids.is_empty()
+            && metadata
+                .implemented_trait_ids
+                .iter()
+                .all(|id| catalog.iter().any(|asset| &asset.id == id));
+
+        let mut ids: BTreeSet<String> = metadata.implemented_trait_ids.iter().cloned().collect();
+        let mut unresolved_paths = BTreeSet::new();
+        for path in &metadata.implemented_traits {
+            match catalog.iter().find(|asset| &asset.path == path) {
+                Some(asset) => {
+                    ids.insert(asset.id.clone());
+                }
+                None if !ids_cover_paths => {
+                    unresolved_paths.insert(path.clone());
+                }
+                None => {}
+            }
+        }
+        let mut paths = unresolved_paths;
+        paths.extend(
+            ids.iter()
+                .filter_map(|id| catalog.iter().find(|asset| &asset.id == id))
+                .filter(|asset| is_trait_file(&asset.path))
+                .map(|asset| asset.path.clone()),
+        );
+        metadata.implemented_trait_ids = ids.into_iter().collect();
+        metadata.implemented_traits = paths.into_iter().collect();
+    }
+
     fn sync_implemented_trait_picker(&self, cx: &mut Context<Self>) {
-        let selected = &self.blueprint_metadata.implemented_traits;
+        let selected = &self.blueprint_metadata.implemented_trait_ids;
         let available = self
             .implemented_trait_catalog
             .iter()
-            .filter(|asset| !selected.iter().any(|path| path == &asset.path))
+            .filter(|asset| !selected.iter().any(|id| id == &asset.id))
             .cloned()
             .collect();
         self.implemented_trait_picker
@@ -174,57 +242,24 @@ fn is_trait_catalog_event_path(path: &Path, project_root: Option<&Path>) -> bool
     normalized.ends_with(".trait.json")
 }
 
+/// The project's traits from the trait index (which also gives any trait
+/// that lacks one a stable id).
 fn load_trait_catalog(
     root: &Path,
 ) -> Result<Vec<crate::features::traits::TraitAssetSummary>, String> {
-    let manifest = engine_fs::virtual_fs::manifest(root)
-        .map_err(|error| format!("Could not scan project traits: {error}"))?;
-    let mut assets = Vec::new();
-    let mut paths = BTreeSet::new();
-    for entry in manifest.into_iter().filter(|entry| !entry.is_dir) {
-        let Some(path) = normalize_trait_path(&entry.path) else {
-            continue;
-        };
-        if !paths.insert(path.clone()) {
-            continue;
-        }
-        let file_path = root.join(&path);
-        let bytes = match engine_fs::virtual_fs::read_file(&file_path) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                tracing::warn!(path = %path, %error, "Skipping unreadable trait asset");
-                continue;
-            }
-        };
-        let value: serde_json::Value = match serde_json::from_slice(&bytes) {
-            Ok(value) => value,
-            Err(error) => {
-                tracing::warn!(path = %path, %error, "Skipping malformed trait asset");
-                continue;
-            }
-        };
-        let Some(name) = value.get("name").and_then(serde_json::Value::as_str) else {
-            tracing::warn!(path = %path, "Skipping trait asset without a name");
-            continue;
-        };
-        let display_name = value
-            .get("displayName")
-            .or_else(|| value.get("display_name"))
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or(name)
-            .to_owned();
-        let description = value
-            .get("description")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        assets.push(crate::features::traits::TraitAssetSummary {
-            path,
-            name: name.to_owned(),
-            display_name,
-            description,
-        });
-    }
+    let index = engine_fs::BlueprintTraitIndex::load_or_rebuild(root)
+        .map_err(|error| format!("Could not scan project traits: {error:#}"))?;
+    let mut assets: Vec<_> = index
+        .traits()
+        .iter()
+        .map(|record| crate::features::traits::TraitAssetSummary {
+            id: record.id.clone(),
+            path: record.path.clone(),
+            name: record.name.clone(),
+            display_name: record.display_name.clone(),
+            description: record.description.clone().unwrap_or_default(),
+        })
+        .collect();
     assets.sort_by(|left, right| {
         left.display_name
             .cmp(&right.display_name)
@@ -233,29 +268,6 @@ fn load_trait_catalog(
     Ok(assets)
 }
 
-fn normalize_trait_path(raw: &str) -> Option<String> {
-    let normalized = raw.replace('\\', "/");
-    let path = PathBuf::from(&normalized);
-    if path.is_absolute()
-        || path.components().any(|component| {
-            matches!(
-                component,
-                Component::ParentDir | Component::RootDir | Component::Prefix(_)
-            )
-        })
-    {
-        return None;
-    }
-    let parts = path
-        .components()
-        .filter_map(|component| match component {
-            Component::Normal(value) => value.to_str(),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    if parts.is_empty() {
-        return None;
-    }
-    let path = parts.join("/");
-    path.ends_with(".trait.json").then_some(path)
+fn is_trait_file(path: &str) -> bool {
+    path.ends_with(".trait.json")
 }

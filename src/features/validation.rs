@@ -55,6 +55,10 @@ pub fn validate_project_classes_with_component_events(
     let mut class_files: Vec<_> = class_files.into_iter().collect();
     class_files.sort();
     let mut failures: Vec<String> = Vec::new();
+    // Declared traits are part of the contract Play builds against: a
+    // Blueprint missing a method of a trait it declares fails here, before the
+    // project builds. Without a readable index there is nothing to check.
+    let trait_index = engine_fs::BlueprintTraitIndex::load_or_rebuild(root).ok();
 
     for path in class_files {
         let problem = std::fs::read_to_string(&path)
@@ -83,8 +87,18 @@ pub fn validate_project_classes_with_component_events(
                 }
             })
             .and_then(|asset| {
-                let problems =
+                let mut problems =
                     validate_asset_with_component_events(&asset, path.parent(), component_events);
+                if let (Some(index), Ok(value)) = (&trait_index, serde_json::to_value(&asset)) {
+                    problems.extend(
+                        engine_fs::trait_conformance::check_blueprint(index.db(), &value)
+                            .into_iter()
+                            .filter(|issue| {
+                                issue.severity == engine_fs::trait_conformance::Severity::Error
+                            })
+                            .map(|issue| format!("trait {}: {}", issue.trait_name, issue.message)),
+                    );
+                }
                 if problems.is_empty() {
                     Ok(())
                 } else {

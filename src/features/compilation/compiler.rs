@@ -263,7 +263,9 @@ impl BlueprintEditorPanel {
             &self.export_components(),
         )
         .map_err(|e| format!("Compilation failed: {e}"))?;
-        if !self.blueprint_metadata.implemented_traits.is_empty() {
+        let declares_traits = !self.blueprint_metadata.implemented_traits.is_empty()
+            || !self.blueprint_metadata.implemented_trait_ids.is_empty();
+        if declares_traits {
             let class_path = self
                 .current_class_path
                 .as_deref()
@@ -273,9 +275,50 @@ impl BlueprintEditorPanel {
                 .clone()
                 .or_else(|| crate::features::class_dirs::project_root_of(class_path))
                 .ok_or("Could not determine project root to resolve Blueprint traits")?;
+            let index = engine_fs::BlueprintTraitIndex::load_or_rebuild(&project_root)
+                .map_err(|error| format!("Could not read the project's traits: {error:#}"))?;
+
+            // A Blueprint that declares a trait must provide its methods.
+            // Declarations from before trait ids are warnings (see
+            // `engine_fs::trait_conformance`).
+            let issues = engine_fs::trait_conformance::check_blueprint(
+                index.db(),
+                &self.current_blueprint_json(cx)?,
+            );
+            for issue in issues
+                .iter()
+                .filter(|issue| issue.severity == engine_fs::trait_conformance::Severity::Warning)
+            {
+                tracing::warn!("{} Blueprint trait contract: {}", blueprint_name, issue.message);
+            }
+            let errors: Vec<_> = issues
+                .iter()
+                .filter(|issue| issue.severity == engine_fs::trait_conformance::Severity::Error)
+                .cloned()
+                .collect();
+            if !errors.is_empty() {
+                return Err(format!(
+                    "Blueprint does not satisfy the traits it declares:\n{}",
+                    engine_fs::trait_conformance::format_issues(&errors)
+                ));
+            }
+
+            // Emit each declared trait by its current path, whatever the
+            // Blueprint remembers.
+            let paths: Vec<String> = self
+                .blueprint_metadata
+                .implemented_trait_ids
+                .iter()
+                .chain(&self.blueprint_metadata.implemented_traits)
+                .filter_map(|reference| index.resolve_trait(reference))
+                .map(|record| record.path.clone())
+                .filter(|path| path.ends_with(".trait.json"))
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
             let declarations = crate::features::compilation::trait_contracts::generate_module(
                 &project_root,
-                &self.blueprint_metadata.implemented_traits,
+                &paths,
             )?;
             source.push('\n');
             source.push_str(&declarations);
