@@ -1,5 +1,6 @@
 //! Trait asset discovery and Blueprint implementation assignments.
 
+pub mod events;
 mod operations;
 mod panel;
 

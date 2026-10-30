@@ -18,6 +18,9 @@ pub struct TraitAssetSummary {
     pub name: String,
     pub display_name: String,
     pub description: String,
+    /// The methods an implementer provides (supertraits' included), each of
+    /// which becomes an event node in the Add menu.
+    pub methods: Vec<super::events::TraitMethodSpec>,
 }
 
 /// Renderer for the Blueprint's implemented-trait sidebar tab.
@@ -57,8 +60,7 @@ impl ImplementedTraitsRenderer {
             .label("Refresh")
             .ghost()
             .on_click(cx.listener(|editor, _, _, cx| {
-                editor.implemented_trait_catalog_loaded = false;
-                editor.refresh_implemented_trait_catalog(cx);
+                editor.rescan_implemented_trait_catalog(cx);
                 cx.notify();
             }));
 

@@ -328,7 +328,7 @@ pub(crate) fn compile_asset(
     let class_name = class_dir
         .and_then(crate::features::class_dirs::class_name_of)
         .unwrap_or_else(|| "validation".to_owned());
-    let events: Vec<blueprint_compiler::EventSource> = asset
+    let mut events: Vec<blueprint_compiler::EventSource> = asset
         .local_events
         .iter()
         .map(|e| blueprint_compiler::EventSource {
@@ -341,6 +341,15 @@ pub(crate) fn compile_asset(
                 .collect(),
         })
         .collect();
+    // Trait events a Blueprint declares are part of what it compiles with.
+    if let Some(root) = class_dir.and_then(crate::features::class_dirs::project_root_of) {
+        let local: Vec<&str> = asset.local_events.iter().map(|e| e.name.as_str()).collect();
+        events.extend(crate::features::traits::events::declared_event_sources(
+            &asset.blueprint_metadata,
+            &root,
+            &local,
+        ));
+    }
     let known_events =
         crate::features::events::engine_events::known_event_signatures_with_components(
             class_dir,

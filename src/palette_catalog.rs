@@ -131,7 +131,32 @@ impl BlueprintEditorPanel {
                 engine_events::component_event_node_definitions(&catalog.events),
             );
         }
+        push_event_categories(&mut out, self.trait_event_definitions());
         out
+    }
+
+    /// The Add-menu nodes of the declared traits' methods (memory only).
+    fn trait_event_definitions(&self) -> Vec<(String, NodeDefinition)> {
+        crate::features::traits::events::node_definitions(
+            &self.trait_event_class_name(),
+            &self.trait_method_specs(),
+        )
+    }
+
+    /// Republishes only the trait entries of the Add menu. Adding or removing
+    /// a trait takes this path, not [`Self::refresh_catalog`], which also reads
+    /// other classes' compiled modules from disk.
+    pub fn refresh_trait_catalog(&self) {
+        let mut entries = Vec::new();
+        push_event_categories(&mut entries, self.trait_event_definitions());
+        let mut data = self.profile_data.write().unwrap_or_else(|e| e.into_inner());
+        data.extra_catalog.retain(|entry| {
+            !entry
+                .category
+                .starts_with(crate::features::traits::events::TRAIT_EVENT_CATEGORY)
+        });
+        data.extra_catalog.extend(entries);
+        data.catalog_version += 1;
     }
 
     /// Publishes [`Self::catalog_extras`] to the canvas profile. Call it when

@@ -183,7 +183,25 @@ impl BlueprintEditorPanel {
         let graph = self.build_graphy_description(cx)?;
         // Engine events (#924): this class's custom events are declared;
         // event nodes are checked against the built-in and other classes'.
-        let events = crate::features::events::engine_events::event_sources(&self.local_event_defs);
+        let mut events =
+            crate::features::events::engine_events::event_sources(&self.local_event_defs);
+        // Declared traits contribute one event per required method.
+        let local_names: Vec<&str> = self
+            .local_event_defs
+            .iter()
+            .map(|def| def.name.as_str())
+            .collect();
+        if let Some(root) = self
+            .project_root
+            .clone()
+            .or_else(|| crate::features::class_dirs::project_root_of(class_path))
+        {
+            events.extend(crate::features::traits::events::declared_event_sources(
+                &self.blueprint_metadata,
+                &root,
+                &local_names,
+            ));
+        }
         let animation_assets =
             crate::features::events::engine_events::animation_asset_ids_from_prefab(
                 &self.prefab_asset,
