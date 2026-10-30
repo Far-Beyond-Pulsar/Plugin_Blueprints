@@ -239,6 +239,14 @@ impl GraphCanvasPanel {
         length: f64,
         cx: &mut Context<Self>,
     ) {
+        if self
+            .graph(cx)
+            .zip_ties
+            .get(index)
+            .is_some_and(|tie| (tie.straight_length - length).abs() < 1e-6)
+        {
+            return;
+        }
         let _ = self.canvas.update(cx, |canvas, cx| {
             canvas.apply(
                 "Edit zip tie straight section",
