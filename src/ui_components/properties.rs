@@ -179,11 +179,10 @@ impl PropertiesRenderer {
         let com_count = sel_comments.len();
 
         if sel_ties.len() == 1 && sel_count == 0 && com_count == 0 {
-            if let Some(active_canvas) = active_canvas_opt {
+            if let Some(active_canvas) = active_canvas_opt.clone() {
                 let index = sel_ties[0];
-                return active_canvas.update(cx, |canvas, cx| {
-                    Self::render_zip_tie_properties(canvas, index, window, cx)
-                });
+                let input = active_canvas.update(cx, |canvas, cx| canvas.sync_zip_tie_length_input(index, window, cx));
+                return Self::render_zip_tie_properties(&active_canvas, index, input, cx);
             }
         }
 
@@ -808,17 +807,20 @@ impl PropertiesRenderer {
     }
 
     fn render_zip_tie_properties(
-        canvas: &mut GraphCanvasPanel,
+        canvas: &Entity<GraphCanvasPanel>,
         index: usize,
-        window: &mut Window,
+        input: Entity<InputState>,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
-        let Some(tie) = canvas.graph(cx).zip_ties.get(index) else {
-            return Self::render_empty_state(cx);
+        let Some((wire_count, position)) = canvas
+            .read(cx)
+            .graph(cx)
+            .zip_ties
+            .get(index)
+            .map(|tie| (tie.wires.len(), (tie.position.x, tie.position.y)))
+        else {
+            return Self::render_empty_state(cx).into_any_element();
         };
-        let wire_count = tie.wires.len();
-        let position = tie.position;
-        let input = canvas.sync_zip_tie_length_input(index, window, cx);
         Self::render_card(
             [
                 Self::render_section_header("Zip Tie", IconName::Link, cx)
@@ -844,7 +846,7 @@ impl PropertiesRenderer {
                     .child(Self::render_info_row("Clamped wires", &wire_count.to_string(), cx))
                     .child(Self::render_info_row(
                         "Position",
-                        &format!("({:.1}, {:.1})", position.x, position.y),
+                        &format!("({:.1}, {:.1})", position.0, position.1),
                         cx,
                     ))
                     .into_any_element(),
