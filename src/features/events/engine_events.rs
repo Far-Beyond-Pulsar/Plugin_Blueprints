@@ -108,21 +108,14 @@ fn animation_catalog(
     if referenced_assets.is_empty() {
         return Vec::new();
     }
-    let catalog = engine_backend::project_animation_notify_events(&root);
+    // Asset-source-aware: only the assets the component names (its graph's
+    // closure, or its single sequence) are read, through the asset index.
+    let catalog = engine_backend::component_animation_notify_events(&root, referenced_assets);
     for diagnostic in catalog.diagnostics {
         tracing::warn!(path = %diagnostic.path.display(), error = %diagnostic.error,
             "could not discover animation notify events");
     }
-    catalog
-        .events
-        .into_iter()
-        .filter(|(_, descriptor)| {
-            descriptor
-                .name
-                .split_once('.')
-                .is_some_and(|(sequence_id, _)| referenced_assets.contains(sequence_id))
-        })
-        .collect()
+    catalog.events
 }
 
 /// Animation schemas are available to a class only when its prefab has a
@@ -158,7 +151,13 @@ fn referenced_animation_asset_ids_from_json(
                     .unwrap_or(true)
         })
         .filter_map(|component| {
-            let id = component.get("data")?.get("animation")?.as_str()?;
+            let data = component.get("data")?;
+            // the Animation Graph is the authored source; `animation` is the
+            // one-release compatibility key of the old single sequence
+            let id = data
+                .get("animation_graph")
+                .and_then(serde_json::Value::as_str)
+                .or_else(|| data.get("animation")?.as_str())?;
             uuid::Uuid::parse_str(id).ok().map(|id| id.to_string())
         })
         .collect()
@@ -174,7 +173,11 @@ pub fn animation_asset_ids_from_prefab(
         .iter()
         .filter(|component| component.enabled && component.class_name == "SkeletalMeshComponent")
         .filter_map(|component| {
-            let id = component.data.get("animation")?.as_str()?;
+            let id = component
+                .data
+                .get("animation_graph")
+                .and_then(serde_json::Value::as_str)
+                .or_else(|| component.data.get("animation")?.as_str())?;
             uuid::Uuid::parse_str(id).ok().map(|id| id.to_string())
         })
         .collect()
@@ -370,17 +373,34 @@ fn animation_notify_component_nodes(
     class_path: Option<&Path>,
     animation_assets: &std::collections::HashSet<String>,
 ) -> Vec<(String, NodeDefinition)> {
+    animation_event_nodes(animation_catalog(class_path, animation_assets))
+}
+
+/// Entry points for canonical animation event descriptors: `animseq` ones are
+/// notifies and notify states of a Sequence, `montage` ones are what a Montage
+/// owns (its own notifies and states, and its lifecycle events). Each is
+/// filtered to its source asset by its canonical name and bound to one
+/// `SkeletalMeshComponent` reference.
+pub fn animation_event_nodes(catalog: Vec<(String, EventDescriptor)>) -> Vec<(String, NodeDefinition)> {
     let mut nodes = Vec::new();
-    for (label, descriptor) in animation_catalog(class_path, animation_assets) {
+    for (label, descriptor) in catalog {
         let Some(signature) = signature_of(&descriptor) else {
             continue;
         };
-        let sequence_id = descriptor
+        let source_id = descriptor
             .name
             .split_once('.')
-            .map(|(sequence, _)| sequence)
+            .map(|(source, _)| source)
             .unwrap_or_default();
-        let sequence_label: String = sequence_id.chars().take(8).collect();
+        let source_label: String = source_id.chars().take(8).collect();
+        let kind = descriptor.namespace.as_deref().unwrap_or("animseq");
+        let (group, source_noun) = if kind == "montage" {
+            ("Montage", "Montage")
+        } else if kind == "animgraph" {
+            ("Animation Graph", "Animation Graph")
+        } else {
+            ("Animation", "animation sequence")
+        };
         let mut outputs = vec![pin("Body", "execution", PinType::Output)];
         outputs.extend(signature.fields.iter().map(|field| {
             pin(
@@ -392,11 +412,11 @@ fn animation_notify_component_nodes(
         let title = format!("On {label}");
         nodes.push((
             format!(
-                "Events/Components/SkeletalMeshComponent/Animation/{sequence_label}"
+                "Events/Components/SkeletalMeshComponent/{group}/{source_label}"
             ),
             NodeDefinition {
                 // `component_event_name` strips the component qualifier for
-                // animation notify nodes, leaving the canonical animseq name.
+                // animation asset events, leaving the canonical asset name.
                 id: format!(
                     "event::on_component::SkeletalMeshComponent.{}",
                     signature.name
@@ -404,10 +424,10 @@ fn animation_notify_component_nodes(
                 name: title.clone(),
                 icon: "📡".to_owned(),
                 description: format!(
-                    "Runs for this SkeletalMeshComponent reference when animation asset {sequence_id} emits {label}."
+                    "Runs for this SkeletalMeshComponent reference when {source_noun} {source_id} emits {label}."
                 ),
                 documentation: format!(
-                    "Asset-owned notify `{}` from animation sequence `{sequence_id}`. Connect a `SkeletalMeshComponent` reference to `component_ref` to subscribe to that SceneDB component instance. The event is delivered on the referenced actor's entity channel; it is not a global broadcast.",
+                    "Asset-owned event `{}` of {source_noun} `{source_id}`. Connect a `SkeletalMeshComponent` reference to `component_ref` to subscribe to that SceneDB component instance. The event is delivered on the referenced actor's entity channel; it is not a global broadcast. Notify states raise it for each phase: check `notify_phase` (`begin`, `tick`, `end`) and `end_reason`.",
                     signature.name
                 ),
                 inputs: vec![pin(
@@ -418,7 +438,8 @@ fn animation_notify_component_nodes(
                 outputs,
                 properties: std::collections::HashMap::from([
                     ("component_type".to_owned(), "SkeletalMeshComponent".to_owned()),
-                    ("animation_sequence_id".to_owned(), sequence_id.to_owned()),
+                    ("animation_sequence_id".to_owned(), source_id.to_owned()),
+                    ("animation_source_kind".to_owned(), kind.to_owned()),
                 ]),
                 color: Some("#C0392B".to_owned()),
                 is_event: true,
@@ -506,6 +527,13 @@ pub fn describe_node_type(node_type: &str) -> Option<(String, bool)> {
         if event_name.starts_with("SkeletalMeshComponent.animseq::") {
             return Some(("On Animation Notify".to_owned(), true));
         }
+        if event_name.starts_with("SkeletalMeshComponent.animgraph::") {
+            return Some(("On Animation State".to_owned(), true));
+        }
+        if event_name.starts_with("SkeletalMeshComponent.montage::") {
+            let lifecycle = event_name.contains(".lifecycle_");
+            return Some((if lifecycle { "On Montage Event" } else { "On Montage Notify" }.to_owned(), true));
+        }
         let (component, member) = event_name.split_once('.')?;
         return Some((format!("On {} ({component})", title_case(member)), true));
     }
@@ -542,4 +570,94 @@ fn title_case(snake: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod animation_event_tests {
+    use super::*;
+
+    fn montage_descriptor(item: &str) -> EventDescriptor {
+        EventDescriptor::dynamic_in(
+            "montage",
+            format!("11111111-2222-4333-8444-555555555555.{item}"),
+            [
+                ("entity".to_owned(), FieldType::U64),
+                ("source".to_owned(), FieldType::U64),
+                ("result".to_owned(), FieldType::Str),
+                ("instance".to_owned(), FieldType::I64),
+            ],
+        )
+        .expect("montage is a valid namespace")
+    }
+
+    #[test]
+    fn state_machine_events_become_component_bound_entry_points_of_their_graph() {
+        let descriptor = EventDescriptor::dynamic_in(
+            "animgraph",
+            "11111111-2222-4333-8444-555555555555.state_entered",
+            [("entity".to_owned(), FieldType::U64), ("source".to_owned(), FieldType::U64), ("machine".to_owned(), FieldType::Str)],
+        )
+        .expect("animgraph is a valid namespace");
+        let nodes = animation_event_nodes(vec![("Locomotion state entered".to_owned(), descriptor)]);
+        assert_eq!(nodes.len(), 1);
+        let (category, node) = &nodes[0];
+        assert_eq!(category, "Events/Components/SkeletalMeshComponent/Animation Graph/11111111");
+        assert!(node.id.starts_with("event::on_component::SkeletalMeshComponent.animgraph::11111111-2222-4333-8444-555555555555."));
+        assert_eq!(node.inputs[0].id, "component_ref");
+        assert_eq!(node.properties.get("animation_source_kind").map(String::as_str), Some("animgraph"));
+        assert_eq!(describe_node_type(&node.id), Some(("On Animation State".to_owned(), true)));
+    }
+
+    #[test]
+    fn montage_events_become_component_bound_entry_points_filtered_to_their_asset() {
+        let catalog = vec![
+            ("Swing ended".to_owned(), montage_descriptor("lifecycle_ended")),
+            ("Swing.Hit [abc]".to_owned(), montage_descriptor("hit")),
+        ];
+        let nodes = animation_event_nodes(catalog);
+        assert_eq!(nodes.len(), 2);
+        for (category, node) in &nodes {
+            assert_eq!(category, "Events/Components/SkeletalMeshComponent/Montage/11111111");
+            assert!(node.is_event);
+            assert!(
+                node.id.starts_with("event::on_component::SkeletalMeshComponent.montage::11111111-2222-4333-8444-555555555555."),
+                "{}",
+                node.id
+            );
+            // bound to one component reference, never a global broadcast
+            assert_eq!(node.inputs.len(), 1);
+            assert_eq!(node.inputs[0].id, "component_ref");
+            assert_eq!(node.properties.get("component_type").map(String::as_str), Some("SkeletalMeshComponent"));
+            assert_eq!(node.properties.get("animation_source_kind").map(String::as_str), Some("montage"));
+            assert_eq!(
+                node.properties.get("animation_sequence_id").map(String::as_str),
+                Some("11111111-2222-4333-8444-555555555555")
+            );
+            let outputs: Vec<_> = node.outputs.iter().map(|p| p.id.as_str()).collect();
+            assert_eq!(outputs, ["Body", "entity", "source", "result", "instance"]);
+        }
+    }
+
+    #[test]
+    fn sequence_notifies_and_states_stay_in_the_animation_group() {
+        let descriptor = EventDescriptor::dynamic_in(
+            "animseq",
+            "99999999-2222-4333-8444-555555555555.swing",
+            [("entity".to_owned(), FieldType::U64), ("notify_phase".to_owned(), FieldType::Str)],
+        )
+        .unwrap();
+        let nodes = animation_event_nodes(vec![("Walk.Swing".to_owned(), descriptor)]);
+        assert_eq!(nodes[0].0, "Events/Components/SkeletalMeshComponent/Animation/99999999");
+        assert_eq!(nodes[0].1.properties.get("animation_source_kind").map(String::as_str), Some("animseq"));
+    }
+
+    #[test]
+    fn saved_montage_nodes_are_described_as_entry_points() {
+        let notify = "event::on_component::SkeletalMeshComponent.montage::m1.hit";
+        assert_eq!(describe_node_type(notify), Some(("On Montage Notify".to_owned(), true)));
+        let lifecycle = "event::on_component::SkeletalMeshComponent.montage::m1.lifecycle_ended";
+        assert_eq!(describe_node_type(lifecycle), Some(("On Montage Event".to_owned(), true)));
+        let sequence = "event::on_component::SkeletalMeshComponent.animseq::s1.step";
+        assert_eq!(describe_node_type(sequence), Some(("On Animation Notify".to_owned(), true)));
+    }
 }

@@ -47,6 +47,7 @@ enum SelectionKind {
     Variable,
     GraphNode(usize),
     Comment(usize),
+    ZipTie(usize),
     Multi,
     None,
 }
@@ -102,7 +103,8 @@ impl PropertiesRenderer {
             let canvas = canvas.read(cx);
             let n = canvas.selected_nodes(cx).len();
             let c = canvas.selected_comments(cx).len();
-            if n > 1 || (n > 0 && c > 0) || c > 1 {
+            let t = canvas.selected_ties(cx).len();
+            if n > 1 || (n > 0 && (c > 0 || t > 0)) || c > 1 || (c > 0 && t > 0) || t > 1 {
                 return SelectionKind::Multi;
             }
             if n == 1 {
@@ -110,6 +112,9 @@ impl PropertiesRenderer {
             }
             if c == 1 {
                 return SelectionKind::Comment(1);
+            }
+            if t == 1 {
+                return SelectionKind::ZipTie(1);
             }
         }
         SelectionKind::None
@@ -126,6 +131,7 @@ impl PropertiesRenderer {
             SelectionKind::Variable => ("Properties", IconName::Component, "Variable"),
             SelectionKind::GraphNode(_) => ("Properties", IconName::Component, "Node"),
             SelectionKind::Comment(_) => ("Properties", IconName::Info, "Comment"),
+            SelectionKind::ZipTie(_) => ("Properties", IconName::Link, "Zip Tie"),
             SelectionKind::Multi => ("Properties", IconName::Copy, "Multiple"),
             SelectionKind::None => ("Properties", IconName::Settings, "None"),
         };
@@ -168,8 +174,17 @@ impl PropertiesRenderer {
 
         let sel_nodes = canvas.selected_nodes(cx);
         let sel_comments = canvas.selected_comments(cx);
+        let sel_ties = canvas.selected_ties(cx);
         let sel_count = sel_nodes.len();
         let com_count = sel_comments.len();
+
+        if sel_ties.len() == 1 && sel_count == 0 && com_count == 0 {
+            if let Some(active_canvas) = active_canvas_opt.clone() {
+                let index = sel_ties[0];
+                let input = active_canvas.update(cx, |canvas, cx| canvas.sync_zip_tie_length_input(index, window, cx));
+                return Self::render_zip_tie_properties(&active_canvas, index, input, cx);
+            }
+        }
 
         // ── Single comment selected ──────────────────────────────────────
         if com_count == 1 && sel_count == 0 {
@@ -789,6 +804,56 @@ impl PropertiesRenderer {
                 cx,
             ))
             .into_any_element()
+    }
+
+    fn render_zip_tie_properties(
+        canvas: &Entity<GraphCanvasPanel>,
+        index: usize,
+        input: Entity<InputState>,
+        cx: &mut Context<BlueprintEditorPanel>,
+    ) -> AnyElement {
+        let Some((wire_count, position)) = canvas
+            .read(cx)
+            .graph(cx)
+            .zip_ties
+            .get(index)
+            .map(|tie| (tie.wires.len(), (tie.position.x, tie.position.y)))
+        else {
+            return Self::render_empty_state(cx).into_any_element();
+        };
+        Self::render_card(
+            [
+                Self::render_section_header("Zip Tie", IconName::Link, cx)
+                    .px_3()
+                    .pt_3()
+                    .into_any_element(),
+                v_flex()
+                    .w_full()
+                    .p_3()
+                    .gap_3()
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_semibold()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("Straight-through length (graph units)"),
+                            )
+                            .child(div().w_full().child(input)),
+                    )
+                    .child(Self::render_info_row("Clamped wires", &wire_count.to_string(), cx))
+                    .child(Self::render_info_row(
+                        "Position",
+                        &format!("({:.1}, {:.1})", position.0, position.1),
+                        cx,
+                    ))
+                    .into_any_element(),
+            ],
+            cx,
+        )
+        .into_any_element()
     }
 
     fn render_comment_properties(
