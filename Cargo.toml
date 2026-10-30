@@ -43,7 +43,7 @@ pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native
 pulsar_std         = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ffbecda91982c3997ebff801c5b872df0a455ef" }
 
 # Compiler graph types paired with the current Blueprint integration.
-graphy = { git = "https://github.com/Far-Beyond-Pulsar/Graphy", rev = "c43924070aa0955302f8015708625be279da77a7" }
+graphy = { path = "../../../crates/third-party/graphy" }
 # Graph -> engine script module compiler (this repository's `compiler/`).
 blueprint_compiler = { path = "compiler" }
 pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3ffbecda91982c3997ebff801c5b872df0a455ef" }
