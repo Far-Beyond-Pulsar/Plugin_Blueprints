@@ -229,9 +229,12 @@ fn animation_catalog(
     }
     // Asset-source-aware: only the assets the component names (its graph's
     // closure, or its single sequence) are read, through the asset index.
-    let catalog = engine_backend::component_animation_notify_events(&root, referenced_assets);
-    for diagnostic in catalog.diagnostics {
-        tracing::warn!(path = %diagnostic.path.display(), error = %diagnostic.error,
+    // The skeletal mesh's plugin answers for its class
+    // (`engine_backend::ComponentEventsRegistration`).
+    let catalog =
+        engine_backend::component_asset_events("SkeletalMeshComponent", &root, referenced_assets);
+    for (path, error) in catalog.diagnostics {
+        tracing::warn!(path = %path.display(), %error,
             "could not discover animation notify events");
     }
     catalog.events
