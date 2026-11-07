@@ -314,3 +314,6 @@ impl EditorPluginScripting for BlueprintEditorPlugin {
 // process-global dynamic loader symbols shared by every plugin.
 #[cfg(not(feature = "builtin"))]
 export_plugin!(BlueprintEditorPlugin, scripting);
+
+// This plugin's descriptor (`pulsar-plugin.toml`): linking the crate installs it.
+pulsar_plugins::installed!("pulsar-plugin.toml");

@@ -1,7 +1,8 @@
 //! The Blueprint editor as a built-in editor provider.
 //!
 //! Built into a binary (feature `builtin`) the plugin registers itself at
-//! link time through `plugin_manager::LinkedEditorProvider`, exactly like
+//! link time through `plugin_manager::PluginEditorProvider` (offered only
+//! while the plugin is enabled for the project), exactly like
 //! any other editor that is part of a build: the editor shell does not
 //! depend on this crate, and a build without it simply has no Blueprint
 //! editor and no Blueprint scripting language. All types, vtables and drop
@@ -12,7 +13,7 @@ use std::sync::Arc;
 
 use gpui::{App, AppContext, Window};
 use plugin_editor_api::*;
-use plugin_manager::{BuiltinEditorProvider, EditorContext, LinkedEditorProvider};
+use plugin_manager::{BuiltinEditorProvider, EditorContext, PluginEditorProvider};
 use ui::dock::PanelView;
 
 pub struct BlueprintEditorBuiltinProvider;
@@ -93,7 +94,10 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
 }
 
 plugin_manager::inventory::submit! {
-    LinkedEditorProvider { create: || Arc::new(BlueprintEditorBuiltinProvider) }
+    PluginEditorProvider {
+        origin: pulsar_plugins::origin!(),
+        create: || Arc::new(BlueprintEditorBuiltinProvider),
+    }
 }
 
 // The headless tools (`pulsar package`, CI) find languages through the same
