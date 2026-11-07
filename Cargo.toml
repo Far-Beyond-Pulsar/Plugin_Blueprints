@@ -20,6 +20,8 @@ test = false
 builtin = ["dep:plugin_manager"]
 
 [dependencies]
+# The plugin's descriptor and its editor provider's registration.
+pulsar_plugins = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "c49f7b393afe468aec47895c3f159a7451d23963" }
 engine_fs = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3e11097f4ec51e0b4d18ec3148c33ff78cf116fc" }
 editor_task_queue = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3e11097f4ec51e0b4d18ec3148c33ff78cf116fc" }
 ui_types_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3e11097f4ec51e0b4d18ec3148c33ff78cf116fc" }
