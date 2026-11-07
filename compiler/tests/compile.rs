@@ -2046,7 +2046,7 @@ mod engine_events {
             let mut event_fields = vec![EventField::new("entity", Type::Entity), EventField::new("source", Type::Entity)];
             event_fields.extend(fields);
             let signature = EventSignature { id: 92, name: name.clone(), fields: event_fields.clone() };
-            let mut pins = vec![P::In("component_ref", "SkeletalMeshComponent"), P::ExecOut("Body")];
+            let mut pins = vec![P::In("component_ref", "AnimationComponent"), P::ExecOut("Body")];
             pins.push(P::Out("entity", "Entity"));
             pins.push(P::Out("source", "Entity"));
             for field in event_fields.iter().skip(2) {
@@ -2054,8 +2054,8 @@ mod engine_events {
             }
             let mut graph = Graph::default();
             graph
-                .node("on_event", &format!("event::on_component::SkeletalMeshComponent.{name}"), &pins)
-                .prop("on_event", "component_type", json!("SkeletalMeshComponent"));
+                .node("on_event", &format!("event::on_component::AnimationComponent.{name}"), &pins)
+                .prop("on_event", "component_type", json!("AnimationComponent"));
             let graph = graph.build();
             let module = compile(
                 &ClassSource { name: "MontageReceiver", graph: &graph, variables: &[], events: &[], known_events: &[signature], version: 0 },
@@ -2076,15 +2076,15 @@ mod engine_events {
             event_fields.push(EventField::new("machine", Type::Str));
             event_fields.push(EventField::new("state", Type::Str));
             let signature = EventSignature { id: 93, name: name.clone(), fields: event_fields.clone() };
-            let mut pins = vec![P::In("component_ref", "SkeletalMeshComponent"), P::ExecOut("Body")];
+            let mut pins = vec![P::In("component_ref", "AnimationComponent"), P::ExecOut("Body")];
             pins.push(P::Out("entity", "Entity"));
             pins.push(P::Out("source", "Entity"));
             pins.push(P::Out("machine", "String"));
             pins.push(P::Out("state", "String"));
             let mut graph = Graph::default();
             graph
-                .node("on_event", &format!("event::on_component::SkeletalMeshComponent.{name}"), &pins)
-                .prop("on_event", "component_type", json!("SkeletalMeshComponent"));
+                .node("on_event", &format!("event::on_component::AnimationComponent.{name}"), &pins)
+                .prop("on_event", "component_type", json!("AnimationComponent"));
             let graph = graph.build();
             let module = compile(
                 &ClassSource { name: "StateReceiver", graph: &graph, variables: &[], events: &[], known_events: &[signature], version: 0 },
