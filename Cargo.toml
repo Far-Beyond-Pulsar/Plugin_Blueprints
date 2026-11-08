@@ -104,15 +104,15 @@ pulsar_reflection_codegen = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar
 pulsar_scenedb = { git = "https://github.com//Far-Beyond-Pulsar/SceneDB", rev = "017252c3c84331a29e53eaa627185597954a3241" }
 pulsar_scenedb_derive = { git = "https://github.com//Far-Beyond-Pulsar/SceneDB", rev = "017252c3c84331a29e53eaa627185597954a3241" }
 
-# Cargo only applies patches from the invocation root. Helio requires
-# the same reusable-command-buffer fork as the pinned Pulsar workspace.
+# Cargo only applies patches from the invocation root. Helio builds on the
+# same wgpu fork branch as the pinned Pulsar workspace (its [patch.crates-io]).
 [patch.crates-io]
-naga = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1-reusable-command-buffers" }
-wgpu = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1-reusable-command-buffers" }
-wgpu-core = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1-reusable-command-buffers" }
-wgpu-core-deps-apple = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1-reusable-command-buffers" }
-wgpu-core-deps-emscripten = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1-reusable-command-buffers" }
-wgpu-core-deps-windows-linux-android = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1-reusable-command-buffers" }
-wgpu-hal = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1-reusable-command-buffers" }
-wgpu-naga-bridge = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1-reusable-command-buffers" }
-wgpu-types = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1-reusable-command-buffers" }
+naga = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1" }
+wgpu = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1" }
+wgpu-core = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1" }
+wgpu-core-deps-apple = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1" }
+wgpu-core-deps-emscripten = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1" }
+wgpu-core-deps-windows-linux-android = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1" }
+wgpu-hal = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1" }
+wgpu-naga-bridge = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1" }
+wgpu-types = { git = "https://github.com/Far-Beyond-Pulsar/wgpu", branch = "helio/v30.0.1" }
