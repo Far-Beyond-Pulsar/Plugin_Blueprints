@@ -84,20 +84,41 @@ tool_registry_macros = { git = "https://github.com/Far-Beyond-Pulsar/ToolbeltRS"
 windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common"] }
 parking_lot = "0.12"
 
+# Every Pulsar-Native crate in the graph resolves to the one pinned
+# revision: Graphy pins its GPUI crates at another Pulsar-Native revision and
+# Helio pins the profiler at another, and two copies of a crate are two sets
+# of types. The `//` URL spelling lets a patch point at a revision of the
+# same repository (as Pulsar-Native's root does for SceneDB); the patches
+# below use it too, so every copy lands on one source. Graphy is the Pulsar
+# checkout's (its path dependencies above).
+[patch."https://github.com/Far-Beyond-Pulsar/Pulsar-Native"]
+gpui-ce = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+ui = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+ui-macros = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+profiling = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_reflection = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_reflection_derive = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_reflection_codegen = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+graphy-blueprint = { path = "../../../crates/third-party/graphy/crates/graphy-blueprint" }
+
+# The profiler's own repository is Pulsar-Native's copy too (its root maps it).
+[patch."https://github.com/Far-Beyond-Pulsar/Pulsar-Profiling"]
+profiling = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+
 [patch."https://github.com/Far-Beyond-Pulsar/WGPUI"]
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+gpui-ce = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
 
 [patch."https://github.com/Far-Beyond-Pulsar/WGPUI-Component"]
-ui = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
-ui-macros = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+ui = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+ui-macros = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
 
 # Public reflection types must come from the same published Pulsar snapshot
 # as ui_common, the VM and the scene registry. Local host integration belongs
 # in the explicit --config file, never in the standalone dependency graph.
 [patch."https://github.com/Far-Beyond-Pulsar/Pulsar-Reflection"]
-pulsar_reflection = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
-pulsar_reflection_derive = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
-pulsar_reflection_codegen = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_reflection = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_reflection_derive = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_reflection_codegen = { git = "https://github.com//Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
 
 # Mirror the SceneDB revision inherited by the pinned Pulsar workspace.
 [patch."https://github.com/Far-Beyond-Pulsar/SceneDB"]
