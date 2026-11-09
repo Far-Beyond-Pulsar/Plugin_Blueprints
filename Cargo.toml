@@ -40,6 +40,8 @@ plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native"
 plugin_manager = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3e11097f4ec51e0b4d18ec3148c33ff78cf116fc", optional = true }
 ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3e11097f4ec51e0b4d18ec3148c33ff78cf116fc" }
 engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3e11097f4ec51e0b4d18ec3148c33ff78cf116fc" }
+# The one prefab model (`prefab.json`), with its record migrations on load.
+pulsar_class       = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3e11097f4ec51e0b4d18ec3148c33ff78cf116fc" }
 pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3e11097f4ec51e0b4d18ec3148c33ff78cf116fc" }
 # The `#[blueprint]` node registry the palette and graph checks read.
 pulsar_std         = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "3e11097f4ec51e0b4d18ec3148c33ff78cf116fc" }

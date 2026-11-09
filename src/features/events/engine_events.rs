@@ -254,52 +254,21 @@ fn is_animator_class(class: &str) -> bool {
 /// Animation schemas are available to a class only when its prefab has a
 /// typed skeletal animation asset reference. This keeps the event palette
 /// aligned with the asset refs in the class's SceneDB component defaults.
+/// The prefab comes through `pulsar_class`'s model (record migrations included).
 fn referenced_animation_asset_ids(class_path: &Path) -> std::collections::HashSet<String> {
-    let path = class_path.join("prefab.json");
-    let Ok(bytes) = engine_fs::virtual_fs::read_file(&path) else {
-        return std::collections::HashSet::new();
-    };
-    let Ok(prefab) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-        return std::collections::HashSet::new();
-    };
-    referenced_animation_asset_ids_from_json(&prefab)
-}
-
-fn referenced_animation_asset_ids_from_json(
-    prefab: &serde_json::Value,
-) -> std::collections::HashSet<String> {
-    prefab
-        .get("components")
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|component| {
-            component
-                .get("class_name")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(is_animator_class)
-                && component
-                    .get("enabled")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(true)
-        })
-        .filter_map(|component| {
-            let data = component.get("data")?;
-            // the Animation Graph is the authored source; `animation` is the
-            // one-release compatibility key of the old single sequence
-            let id = data
-                .get("animation_graph")
-                .and_then(serde_json::Value::as_str)
-                .or_else(|| data.get("animation")?.as_str())?;
-            uuid::Uuid::parse_str(id).ok().map(|id| id.to_string())
-        })
-        .collect()
+    match pulsar_class::prefab::PrefabAsset::load_from_dir(class_path) {
+        Ok(prefab) => animation_asset_ids_from_prefab(&prefab),
+        Err(error) => {
+            tracing::warn!("Could not read the class prefab for animation events: {error}");
+            std::collections::HashSet::new()
+        }
+    }
 }
 
 /// Animation assets named by this class's current prefab component defaults.
 /// The in-memory prefab is authoritative while its inspector has unsaved edits.
 pub fn animation_asset_ids_from_prefab(
-    prefab: &crate::features::prefabs::PrefabAsset,
+    prefab: &pulsar_class::prefab::PrefabAsset,
 ) -> std::collections::HashSet<String> {
     prefab
         .components

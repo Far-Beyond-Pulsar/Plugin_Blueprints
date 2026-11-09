@@ -16,7 +16,7 @@ pub struct PrefabPropertiesRenderer;
 
 impl PrefabHierarchyRenderer {
     /// Get the parent index of a component from its data
-    fn get_parent_index(component: &engine_backend::ComponentInstance) -> Option<usize> {
+    fn get_parent_index(component: &pulsar_class::prefab::PrefabComponent) -> Option<usize> {
         component
             .data
             .get("__parent_index")
@@ -25,7 +25,7 @@ impl PrefabHierarchyRenderer {
     }
 
     /// Get all children indices of a component
-    fn get_children(components: &[super::PrefabComponent], parent_index: usize) -> Vec<usize> {
+    fn get_children(components: &[pulsar_class::prefab::PrefabComponent], parent_index: usize) -> Vec<usize> {
         components
             .iter()
             .enumerate()
@@ -76,8 +76,7 @@ impl PrefabHierarchyRenderer {
             .map(|(index, component)| {
                 let children_indices = Self::get_children(components, index);
                 ComponentHierarchyItem {
-                    component: component.component.clone(),
-                    slot_id: component.slot_id.clone(),
+                    component: component.clone(),
                     index,
                     is_selected: panel.selected_prefab_component == Some(index),
                     children_indices,
@@ -242,7 +241,7 @@ impl PrefabHierarchyRenderer {
     fn render_component_item(
         panel: &BlueprintEditorPanel,
         idx: usize,
-        component: engine_backend::scene::ComponentInstance,
+        component: pulsar_class::prefab::PrefabComponent,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
         let selected = panel.selected_prefab_component == Some(idx);

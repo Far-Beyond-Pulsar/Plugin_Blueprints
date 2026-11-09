@@ -32,13 +32,16 @@ struct BlueprintSaveTabSnapshot {
 
 struct PrefabSaveSnapshot {
     path: PathBuf,
-    asset: crate::features::prefabs::PrefabAsset,
+    asset: pulsar_class::prefab::PrefabAsset,
     graph_tab_id: String,
 }
 
 impl PrefabSaveSnapshot {
     fn into_json(mut self, graph: &graphy_blueprint::GraphDescription) -> Result<(PathBuf, String), String> {
-        self.asset.script_graph = Some(graph.clone());
+        // `script_graph` is an open section of the shared model.
+        let graph = serde_json::to_value(graph)
+            .map_err(|error| format!("Failed to serialize prefab script graph: {error}"))?;
+        self.asset.extra.insert("script_graph".into(), graph);
         let json = serde_json::to_string_pretty(&self.asset)
             .map_err(|error| format!("Failed to serialize prefab: {error}"))?;
         Ok((self.path, json))
@@ -250,7 +253,7 @@ impl BlueprintEditorPanel {
                     );
                 }
             }
-            self.prefab_asset.blueprint_class = Some(crate::features::prefabs::BlueprintClassRef {
+            self.prefab_asset.blueprint_class = Some(pulsar_class::prefab::BlueprintClassRef {
                 class_path: path.display().to_string(),
                 variable_defaults: defaults,
             });
