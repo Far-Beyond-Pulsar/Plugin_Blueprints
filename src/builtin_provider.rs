@@ -96,6 +96,7 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
 plugin_manager::inventory::submit! {
     PluginEditorProvider {
         origin: pulsar_plugins::origin!(),
+        id: "com.pulsar.blueprint-editor",
         create: || Arc::new(BlueprintEditorBuiltinProvider),
     }
 }
@@ -103,5 +104,9 @@ plugin_manager::inventory::submit! {
 // The headless tools (`pulsar package`, CI) find languages through the same
 // link-time registration, so they select this compiler by this id.
 plugin_editor_api::inventory::submit! {
-    plugin_editor_api::LinkedScriptLanguage { create: crate::script_language }
+    plugin_editor_api::LinkedScriptLanguage {
+        origin: pulsar_plugins::origin!(),
+        id: crate::LANGUAGE_ID,
+        create: crate::script_language,
+    }
 }

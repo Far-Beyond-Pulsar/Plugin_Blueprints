@@ -6,7 +6,7 @@
 //! for efficient access to node metadata throughout the application.
 
 use super::types::{PinDataType, PinType};
-use crate::features::prefabs::PrefabAsset;
+use pulsar_class::prefab::PrefabAsset;
 use pulsar_reflection::{RuntimeTypeInfo, REGISTRY};
 use serde::Deserialize;
 use std::collections::HashMap;

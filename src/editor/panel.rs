@@ -19,7 +19,7 @@ use crate::core::{events::*, graph::*, types::*};
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::editor::workspace_panels::FindPanel;
 
-use crate::features::prefabs::PrefabAsset;
+use pulsar_class::prefab::PrefabAsset;
 use crate::features::variables::ClassVariable;
 use graphy_blueprint::{LibraryManager, SubGraph};
 use ui::dock::{DockItem, DockPlacement};
@@ -526,7 +526,11 @@ impl BlueprintEditorPanel {
                 .new(|cx| ui::dropdown::DropdownState::new(Vec::new(), None, window, cx)),
             dragging_variable: None,
             variable_drop_menu_position: None,
-            prefab_asset: PrefabAsset::new("Prefab"),
+            prefab_asset: PrefabAsset {
+                prefab_version: 1,
+                name: "Prefab".into(),
+                ..Default::default()
+            },
             prefab_component_list,
             show_add_component_dialog: false,
             prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager::new(

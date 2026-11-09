@@ -9,60 +9,10 @@ pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
 
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
-use engine_backend::scene::ComponentInstance;
 use gpui::{AppContext, Context, Entity, Window};
 use pulsar_reflection::{REGISTRY, RUNTIME_TYPE_REGISTRY};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use ui::PixelsExt;
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct PrefabAsset {
-    pub prefab_version: u32,
-    pub name: String,
-    #[serde(default)]
-    pub components: Vec<PrefabComponent>,
-    #[serde(default)]
-    pub blueprint_class: Option<BlueprintClassRef>,
-    #[serde(default)]
-    pub script_graph: Option<graphy_blueprint::GraphDescription>,
-}
-
-/// One prefab component: the component record plus its **slot id**.
-///
-/// The slot id is a UUID, unique within this class. The class's compiled
-/// script names the component by it (a `get_component_ref` node carries it),
-/// and levels key per-instance overrides by it. It exists only on disk:
-/// placing the class resolves each slot id once into a handle to the placed
-/// instance's real component. It must never change once assigned; files
-/// without one (or with the readable `<Class>_<n>` ids of early builds) get a
-/// fresh UUID on load, saved right away (`pulsar_class` does the same).
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PrefabComponent {
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub slot_id: String,
-    #[serde(flatten)]
-    pub component: ComponentInstance,
-}
-
-impl std::ops::Deref for PrefabComponent {
-    type Target = ComponentInstance;
-    fn deref(&self) -> &ComponentInstance {
-        &self.component
-    }
-}
-
-impl std::ops::DerefMut for PrefabComponent {
-    fn deref_mut(&mut self) -> &mut ComponentInstance {
-        &mut self.component
-    }
-}
-
-/// Whether `slot_id` is a valid slot id (a UUID).
-pub fn is_slot_uuid(slot_id: &str) -> bool {
-    uuid::Uuid::parse_str(slot_id.trim()).is_ok()
-}
 
 /// Component classes the prefab editor never offers: `ClassInstance` marks a
 /// placed class in a level and only comes from placing one.
@@ -111,47 +61,6 @@ pub fn ensure_class_id(class_dir: &std::path::Path) -> Result<String, String> {
     let text = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
     std::fs::write(&path, text).map_err(|e| format!("Failed to write class.json: {e}"))?;
     Ok(id)
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct BlueprintClassRef {
-    pub class_path: String,
-    #[serde(default)]
-    pub variable_defaults: HashMap<String, serde_json::Value>,
-}
-
-impl PrefabAsset {
-    pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            prefab_version: 1,
-            name: name.into(),
-            components: Vec::new(),
-            blueprint_class: None,
-            script_graph: None,
-        }
-    }
-
-    /// Give every component whose slot id is missing, duplicated or not a
-    /// UUID a fresh UUID. Returns whether anything changed.
-    pub fn fill_missing_slot_ids(&mut self) -> bool {
-        let mut used = std::collections::HashSet::new();
-        let mut changed = false;
-        for component in &mut self.components {
-            let id = component.slot_id.trim().to_string();
-            if !is_slot_uuid(&id) || !used.insert(id) {
-                let fresh = uuid::Uuid::new_v4().to_string();
-                used.insert(fresh.clone());
-                component.slot_id = fresh;
-                changed = true;
-            }
-        }
-        changed
-    }
-
-    /// A fresh slot id for a new component.
-    pub fn new_slot_id(&self) -> String {
-        uuid::Uuid::new_v4().to_string()
-    }
 }
 
 impl GraphCanvasPanel {
@@ -222,14 +131,13 @@ impl BlueprintEditorPanel {
             return Ok(());
         }
 
-        let mut prefab = crate::io::prefab::load_prefab(&path)?;
-        if prefab.fill_missing_slot_ids() {
-            // Assigned once, saved at once: levels and the compiled script
-            // refer to these ids.
-            if let Err(error) = crate::io::prefab::save_prefab(&path, &prefab) {
-                tracing::warn!("Could not save assigned component slot ids: {error}");
-            }
-        }
+        // `pulsar_class` owns the model: it runs the record migrations and
+        // assigns (and saves) the component slot ids on load.
+        let class_dir = self
+            .current_class_path
+            .as_deref()
+            .ok_or_else(|| "No class path available for prefab load".to_string())?;
+        let prefab = pulsar_class::prefab::PrefabAsset::load_from_dir(class_dir)?;
 
         self.prefab_asset = prefab;
         self.prefab_property_state.clear();
@@ -267,15 +175,15 @@ impl BlueprintEditorPanel {
             values.insert(prop.name.to_string(), json_value);
         }
 
-        let slot_id = self.prefab_asset.new_slot_id();
-        self.prefab_asset.components.push(PrefabComponent {
-            slot_id,
-            component: ComponentInstance {
+        let slot_id = pulsar_class::prefab::new_slot_id();
+        self.prefab_asset
+            .components
+            .push(pulsar_class::prefab::PrefabComponent {
+                slot_id,
                 class_name: class_name.to_string(),
                 enabled: true,
                 data: serde_json::Value::Object(values),
-            },
-        });
+            });
         self.selected_prefab_component = Some(self.prefab_asset.components.len().saturating_sub(1));
         self.prefab_property_state.clear();
         self.is_dirty = true;

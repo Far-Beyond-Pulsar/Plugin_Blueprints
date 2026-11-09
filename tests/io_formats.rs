@@ -125,14 +125,13 @@ fn prefab_components_get_uuid_slot_ids() {
     )
     .unwrap();
 
-    let mut prefab = blueprint_editor_plugin::io::prefab::load_prefab(&path).unwrap();
-    assert!(prefab.fill_missing_slot_ids());
+    // The shared model assigns the ids on load and saves them at once.
+    let mut prefab = pulsar_class::prefab::PrefabAsset::load_from_dir(&dir).unwrap();
     let ids: Vec<String> = prefab.components.iter().map(|c| c.slot_id.clone()).collect();
     assert!(ids.iter().all(|id| uuid::Uuid::parse_str(id).is_ok()), "{ids:?}");
     assert_eq!(ids[2], kept, "valid UUIDs are kept");
     assert!(!prefab.fill_missing_slot_ids(), "idempotent");
 
-    blueprint_editor_plugin::io::prefab::save_prefab(&path, &prefab).unwrap();
     let saved: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(saved["components"][0]["slot_id"], ids[0].as_str());
     assert_eq!(saved["components"][0]["class_name"], "LightComponent");

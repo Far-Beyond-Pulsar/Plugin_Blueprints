@@ -10,7 +10,6 @@ pub mod canvas_doc;
 pub mod formats;
 pub mod legacy;
 pub mod libraries;
-pub mod prefab;
 pub mod save_load;
 
 // Re-export main types and functions

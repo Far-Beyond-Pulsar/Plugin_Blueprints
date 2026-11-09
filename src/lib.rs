@@ -258,7 +258,7 @@ pub struct BlueprintLanguage;
 
 impl ScriptLanguage for BlueprintLanguage {
     fn id(&self) -> &str {
-        "blueprint"
+        LANGUAGE_ID
     }
 
     fn display_name(&self) -> &str {
@@ -300,6 +300,9 @@ impl ScriptLanguage for BlueprintLanguage {
 }
 
 /// The Blueprint scripting language, for hosts that embed this plugin.
+/// The Blueprint language's id.
+pub const LANGUAGE_ID: &str = "blueprint";
+
 pub fn script_language() -> Arc<dyn ScriptLanguage> {
     Arc::new(BlueprintLanguage)
 }

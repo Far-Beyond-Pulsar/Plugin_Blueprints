@@ -1,8 +1,8 @@
-//! HierarchyItem implementation for ComponentInstance (Prefab Components)
+//! HierarchyItem implementation for PrefabComponent (Prefab Components)
 //!
 //! This allows prefab components to be displayed in the HierarchicalTreeView with nesting support
 
-use engine_backend::ComponentInstance;
+use pulsar_class::prefab::PrefabComponent;
 use gpui::*;
 use std::sync::Arc;
 use ui::{menu::popup_menu::PopupMenu, ActiveTheme, HierarchyItem, IconName};
@@ -16,11 +16,10 @@ pub struct ComponentDrag {
     pub class_name: String,
 }
 
-/// Wrapper for ComponentInstance that implements HierarchyItem
+/// Wrapper for PrefabComponent that implements HierarchyItem
 #[derive(Clone)]
 pub struct ComponentHierarchyItem {
-    pub component: ComponentInstance,
-    pub slot_id: String,
+    pub component: PrefabComponent,
     pub index: usize,
     pub is_selected: bool,
     pub children_indices: Vec<usize>,
@@ -61,7 +60,7 @@ impl HierarchyItem for ComponentHierarchyItem {
     fn create_drag_payload(&self) -> Self::DragPayload {
         ComponentDrag {
             component_index: self.index,
-            slot_id: self.slot_id.clone(),
+            slot_id: self.component.slot_id.clone(),
             class_name: self.component.class_name.clone(),
         }
     }
