@@ -269,14 +269,6 @@ fn builtin_event(node_type: &str) -> Option<(&'static str, Vec<(&'static str, Ty
         "on_tick" => ("tick", vec![("delta_time", Type::Float)]),
         "on_end_play" => ("end_play", vec![]),
         "main" => ("main", vec![]),
-        "on_input_key" => (
-            "on_input_key",
-            vec![("key", Type::Str), ("pressed", Type::Bool)],
-        ),
-        "on_input_action" => (
-            "on_input_action",
-            vec![("action", Type::Str), ("pressed", Type::Bool)],
-        ),
         _ => return None,
     })
 }
@@ -2431,7 +2423,11 @@ fn component_event_name(node_type: &str) -> Option<String> {
         if let Some((component, event_name)) = event.split_once('.') {
             // `AnimationComponent` raises them; graphs saved before the animator
             // split from the skinned mesh name `SkeletalMeshComponent`.
-            if matches!(component, "AnimationComponent" | "SkeletalMeshComponent") && (event_name.starts_with("animseq::") || event_name.starts_with("montage::") || event_name.starts_with("animgraph::")) {
+            if matches!(component, "AnimationComponent" | "SkeletalMeshComponent")
+                && (event_name.starts_with("animseq::")
+                    || event_name.starts_with("montage::")
+                    || event_name.starts_with("animgraph::"))
+            {
                 return Some(event_name.to_owned());
             }
         }

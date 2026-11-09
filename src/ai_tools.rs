@@ -14,8 +14,8 @@ use tool_registry::{PluginToolRegistry, ToolContext, ToolRegistry};
 use tool_registry_macros::tool;
 use tracing::debug;
 
-use crate::core::definitions::NodeDefinitions;
 use crate::canvas_profile::BlueprintProfile;
+use crate::core::definitions::NodeDefinitions;
 use crate::core::types::NodeType;
 use crate::features::macros::operations::type_string;
 use crate::io::canvas_doc::{connection_id as edge_id, property_string, property_value};
@@ -997,7 +997,9 @@ pub fn blueprint_add_connection(
         }
         session.dirty = true;
 
-        Ok(json!({ "ok": true, "connection_id": edge_id(&conn), "connection": connection_to_json(&conn) }))
+        Ok(
+            json!({ "ok": true, "connection_id": edge_id(&conn), "connection": connection_to_json(&conn) }),
+        )
     })
 }
 

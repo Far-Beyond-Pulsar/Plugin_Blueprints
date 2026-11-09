@@ -105,15 +105,7 @@ const INPUT_PHASES: [&str; 5] = ["started", "ongoing", "triggered", "completed",
 
 /// The fields every input action event carries (`entity` is the object the
 /// mapping is attached to; the rest describe the value).
-const INPUT_FIELDS: [&str; 7] = [
-    "entity",
-    "value",
-    "x",
-    "y",
-    "z",
-    "elapsed",
-    "triggered_for",
-];
+const INPUT_FIELDS: [&str; 7] = ["entity", "value", "x", "y", "z", "elapsed", "triggered_for"];
 
 /// The name an action's events go by: its `identifier`, else its file name
 /// made into one. Mirrors `input_plugin::model::action::to_identifier`; this
@@ -128,7 +120,11 @@ fn input_action_name(identifier: &str, file_stem: &str) -> String {
     let mut upper_next = true;
     for c in file_stem.trim().chars() {
         if c.is_ascii_alphanumeric() || c == '_' {
-            out.push(if upper_next { c.to_ascii_uppercase() } else { c });
+            out.push(if upper_next {
+                c.to_ascii_uppercase()
+            } else {
+                c
+            });
             upper_next = false;
         } else {
             upper_next = true;
@@ -148,7 +144,10 @@ fn read_input_events(root: &Path) -> Vec<EventDescriptor> {
         .filter_map(|path| {
             let text = engine_fs::virtual_fs::read_file(path).ok()?;
             let asset: serde_json::Value = serde_json::from_slice(&text).ok()?;
-            let identifier = asset.get("identifier").and_then(|v| v.as_str()).unwrap_or("");
+            let identifier = asset
+                .get("identifier")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let stem = path.file_stem()?.to_str()?;
             Some(input_action_name(identifier, stem))
         })
@@ -163,7 +162,11 @@ fn read_input_events(root: &Path) -> Vec<EventDescriptor> {
                 "input",
                 event,
                 INPUT_FIELDS.map(|field| {
-                    let ty = if field == "entity" { FieldType::U64 } else { FieldType::F64 };
+                    let ty = if field == "entity" {
+                        FieldType::U64
+                    } else {
+                        FieldType::F64
+                    };
                     (field, ty)
                 }),
             )
@@ -231,8 +234,7 @@ fn animation_catalog(
     // closure, or its single sequence) are read, through the asset index.
     // The skeletal mesh's plugin answers for its class
     // (`engine_backend::ComponentEventsRegistration`).
-    let catalog =
-        engine_backend::component_asset_events(ANIMATOR, &root, referenced_assets);
+    let catalog = engine_backend::component_asset_events(ANIMATOR, &root, referenced_assets);
     for (path, error) in catalog.diagnostics {
         tracing::warn!(path = %path.display(), %error,
             "could not discover animation notify events");
@@ -492,7 +494,9 @@ fn animation_notify_component_nodes(
 /// owns (its own notifies and states, and its lifecycle events). Each is
 /// filtered to its source asset by its canonical name and bound to one
 /// `AnimationComponent` reference.
-pub fn animation_event_nodes(catalog: Vec<(String, EventDescriptor)>) -> Vec<(String, NodeDefinition)> {
+pub fn animation_event_nodes(
+    catalog: Vec<(String, EventDescriptor)>,
+) -> Vec<(String, NodeDefinition)> {
     let mut nodes = Vec::new();
     for (label, descriptor) in catalog {
         let Some(signature) = signature_of(&descriptor) else {
@@ -653,7 +657,15 @@ pub fn describe_node_type(node_type: &str) -> Option<(String, bool)> {
         }
         if asset_event("montage::") {
             let lifecycle = event_name.contains(".lifecycle_");
-            return Some((if lifecycle { "On Montage Event" } else { "On Montage Notify" }.to_owned(), true));
+            return Some((
+                if lifecycle {
+                    "On Montage Event"
+                } else {
+                    "On Montage Notify"
+                }
+                .to_owned(),
+                true,
+            ));
         }
         let (component, member) = event_name.split_once('.')?;
         return Some((format!("On {} ({component})", title_case(member)), true));
@@ -716,29 +728,51 @@ mod animation_event_tests {
         let descriptor = EventDescriptor::dynamic_in(
             "animgraph",
             "11111111-2222-4333-8444-555555555555.state_entered",
-            [("entity".to_owned(), FieldType::U64), ("source".to_owned(), FieldType::U64), ("machine".to_owned(), FieldType::Str)],
+            [
+                ("entity".to_owned(), FieldType::U64),
+                ("source".to_owned(), FieldType::U64),
+                ("machine".to_owned(), FieldType::Str),
+            ],
         )
         .expect("animgraph is a valid namespace");
-        let nodes = animation_event_nodes(vec![("Locomotion state entered".to_owned(), descriptor)]);
+        let nodes =
+            animation_event_nodes(vec![("Locomotion state entered".to_owned(), descriptor)]);
         assert_eq!(nodes.len(), 1);
         let (category, node) = &nodes[0];
-        assert_eq!(category, "Events/Components/AnimationComponent/Animation Graph/11111111");
+        assert_eq!(
+            category,
+            "Events/Components/AnimationComponent/Animation Graph/11111111"
+        );
         assert!(node.id.starts_with("event::on_component::AnimationComponent.animgraph::11111111-2222-4333-8444-555555555555."));
         assert_eq!(node.inputs[0].id, "component_ref");
-        assert_eq!(node.properties.get("animation_source_kind").map(String::as_str), Some("animgraph"));
-        assert_eq!(describe_node_type(&node.id), Some(("On Animation State".to_owned(), true)));
+        assert_eq!(
+            node.properties
+                .get("animation_source_kind")
+                .map(String::as_str),
+            Some("animgraph")
+        );
+        assert_eq!(
+            describe_node_type(&node.id),
+            Some(("On Animation State".to_owned(), true))
+        );
     }
 
     #[test]
     fn montage_events_become_component_bound_entry_points_filtered_to_their_asset() {
         let catalog = vec![
-            ("Swing ended".to_owned(), montage_descriptor("lifecycle_ended")),
+            (
+                "Swing ended".to_owned(),
+                montage_descriptor("lifecycle_ended"),
+            ),
             ("Swing.Hit [abc]".to_owned(), montage_descriptor("hit")),
         ];
         let nodes = animation_event_nodes(catalog);
         assert_eq!(nodes.len(), 2);
         for (category, node) in &nodes {
-            assert_eq!(category, "Events/Components/AnimationComponent/Montage/11111111");
+            assert_eq!(
+                category,
+                "Events/Components/AnimationComponent/Montage/11111111"
+            );
             assert!(node.is_event);
             assert!(
                 node.id.starts_with("event::on_component::AnimationComponent.montage::11111111-2222-4333-8444-555555555555."),
@@ -748,10 +782,20 @@ mod animation_event_tests {
             // bound to one component reference, never a global broadcast
             assert_eq!(node.inputs.len(), 1);
             assert_eq!(node.inputs[0].id, "component_ref");
-            assert_eq!(node.properties.get("component_type").map(String::as_str), Some("AnimationComponent"));
-            assert_eq!(node.properties.get("animation_source_kind").map(String::as_str), Some("montage"));
             assert_eq!(
-                node.properties.get("animation_sequence_id").map(String::as_str),
+                node.properties.get("component_type").map(String::as_str),
+                Some("AnimationComponent")
+            );
+            assert_eq!(
+                node.properties
+                    .get("animation_source_kind")
+                    .map(String::as_str),
+                Some("montage")
+            );
+            assert_eq!(
+                node.properties
+                    .get("animation_sequence_id")
+                    .map(String::as_str),
                 Some("11111111-2222-4333-8444-555555555555")
             );
             let outputs: Vec<_> = node.outputs.iter().map(|p| p.id.as_str()).collect();
@@ -764,26 +808,54 @@ mod animation_event_tests {
         let descriptor = EventDescriptor::dynamic_in(
             "animseq",
             "99999999-2222-4333-8444-555555555555.swing",
-            [("entity".to_owned(), FieldType::U64), ("notify_phase".to_owned(), FieldType::Str)],
+            [
+                ("entity".to_owned(), FieldType::U64),
+                ("notify_phase".to_owned(), FieldType::Str),
+            ],
         )
         .unwrap();
         let nodes = animation_event_nodes(vec![("Walk.Swing".to_owned(), descriptor)]);
-        assert_eq!(nodes[0].0, "Events/Components/AnimationComponent/Animation/99999999");
-        assert_eq!(nodes[0].1.properties.get("animation_source_kind").map(String::as_str), Some("animseq"));
+        assert_eq!(
+            nodes[0].0,
+            "Events/Components/AnimationComponent/Animation/99999999"
+        );
+        assert_eq!(
+            nodes[0]
+                .1
+                .properties
+                .get("animation_source_kind")
+                .map(String::as_str),
+            Some("animseq")
+        );
     }
 
     #[test]
     fn saved_animation_nodes_are_described_as_entry_points() {
         let notify = "event::on_component::SkeletalMeshComponent.montage::m1.hit";
-        assert_eq!(describe_node_type(notify), Some(("On Montage Notify".to_owned(), true)));
+        assert_eq!(
+            describe_node_type(notify),
+            Some(("On Montage Notify".to_owned(), true))
+        );
         let lifecycle = "event::on_component::SkeletalMeshComponent.montage::m1.lifecycle_ended";
-        assert_eq!(describe_node_type(lifecycle), Some(("On Montage Event".to_owned(), true)));
+        assert_eq!(
+            describe_node_type(lifecycle),
+            Some(("On Montage Event".to_owned(), true))
+        );
         let sequence = "event::on_component::SkeletalMeshComponent.animseq::s1.step";
-        assert_eq!(describe_node_type(sequence), Some(("On Animation Notify".to_owned(), true)));
+        assert_eq!(
+            describe_node_type(sequence),
+            Some(("On Animation Notify".to_owned(), true))
+        );
         // the animator's own ids, as the palette makes them now
         let state = "event::on_component::AnimationComponent.animgraph::g1.enter";
-        assert_eq!(describe_node_type(state), Some(("On Animation State".to_owned(), true)));
+        assert_eq!(
+            describe_node_type(state),
+            Some(("On Animation State".to_owned(), true))
+        );
         let animator = "event::on_component::AnimationComponent.montage::m1.hit";
-        assert_eq!(describe_node_type(animator), Some(("On Montage Notify".to_owned(), true)));
+        assert_eq!(
+            describe_node_type(animator),
+            Some(("On Montage Notify".to_owned(), true))
+        );
     }
 }

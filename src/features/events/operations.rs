@@ -9,7 +9,9 @@ use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::macros::operations::{apply_to_doc, pin_instance};
 use gpui::*;
-use graphy::{DataType, GraphCommand, GraphDescription, NodeInstance, PinInstance, PinType, Position};
+use graphy::{
+    DataType, GraphCommand, GraphDescription, NodeInstance, PinInstance, PinType, Position,
+};
 use uuid::Uuid;
 
 impl BlueprintEditorPanel {
@@ -82,7 +84,12 @@ impl BlueprintEditorPanel {
 
     /// The output pins of an event's On node.
     pub fn event_output_pins(def: &EventDefinition) -> Vec<PinInstance> {
-        let mut pins = vec![pin_instance("Body", "Body", DataType::Exec, PinType::Output)];
+        let mut pins = vec![pin_instance(
+            "Body",
+            "Body",
+            DataType::Exec,
+            PinType::Output,
+        )];
         for field in &def.fields {
             pins.push(pin_instance(
                 &field.name,
@@ -244,7 +251,11 @@ impl BlueprintEditorPanel {
 
     /// Ensure the On node for `uid` exists in the active graph (new events).
     pub fn sync_event_to_active_graph(&mut self, uid: &str, cx: &mut Context<Self>) {
-        if let Some(tab_id) = self.open_tabs.get(self.active_tab_index).map(|t| t.id.clone()) {
+        if let Some(tab_id) = self
+            .open_tabs
+            .get(self.active_tab_index)
+            .map(|t| t.id.clone())
+        {
             self.sync_event_to_tab(uid, &tab_id, cx);
         }
     }

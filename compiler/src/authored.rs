@@ -45,8 +45,8 @@ pub fn property_value_from_raw(raw: &str) -> graphy::JsonValue {
 }
 
 fn to_graphy_datatype(dt: &graphy_blueprint::DataType) -> graphy::DataType {
-    use graphy_blueprint::DataType as PG;
     use graphy::DataType as GD;
+    use graphy_blueprint::DataType as PG;
     match dt {
         PG::Execution => GD::Exec,
         PG::Data(ti) => GD::typed(ti.to_string()),

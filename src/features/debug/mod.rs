@@ -332,7 +332,9 @@ impl crate::editor::graph_canvas_panel::GraphCanvasPanel {
             .filter(|(_, id)| {
                 graph.nodes.get(*id).is_some_and(|n| {
                     n.node_type == "macro_entry"
-                        || crate::editor::panel::BlueprintEditorPanel::node_type_is_event(&n.node_type)
+                        || crate::editor::panel::BlueprintEditorPanel::node_type_is_event(
+                            &n.node_type,
+                        )
                 })
             })
             .map(|(i, _)| i)

@@ -35,5 +35,7 @@ impl plugin_editor_api::UndoEntry for Command {
 
 /// A new graph history, kept until the editor learns its document.
 pub fn new_history() -> plugin_editor_api::SharedHistory<Command> {
-    std::sync::Arc::new(std::sync::Mutex::new(plugin_editor_api::History::with_capacity(100)))
+    std::sync::Arc::new(std::sync::Mutex::new(
+        plugin_editor_api::History::with_capacity(100),
+    ))
 }

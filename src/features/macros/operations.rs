@@ -63,7 +63,12 @@ pub(crate) fn type_string(data_type: &DataType) -> String {
     }
 }
 
-pub(crate) fn pin_instance(id: &str, name: &str, data_type: DataType, kind: PinType) -> PinInstance {
+pub(crate) fn pin_instance(
+    id: &str,
+    name: &str,
+    data_type: DataType,
+    kind: PinType,
+) -> PinInstance {
     PinInstance {
         id: id.to_string(),
         pin: Pin {
@@ -612,7 +617,6 @@ impl BlueprintEditorPanel {
         cx.notify();
     }
 }
-
 
 // ─── Canvas-side macro operations ────────────────────────────────────────────
 

@@ -2039,61 +2039,141 @@ mod engine_events {
     #[test]
     fn montage_events_are_component_scoped_entry_points_with_their_asset_identity() {
         for (item, fields) in [
-            ("lifecycle_ended", vec![EventField::new("result", Type::Str), EventField::new("instance", Type::Int)]),
+            (
+                "lifecycle_ended",
+                vec![
+                    EventField::new("result", Type::Str),
+                    EventField::new("instance", Type::Int),
+                ],
+            ),
             ("hit", vec![EventField::new("notify_phase", Type::Str)]),
         ] {
             let name = format!("montage::6f3f5b1e-9e4c-4f7f-b97d-7e37f21f8d44.{item}");
-            let mut event_fields = vec![EventField::new("entity", Type::Entity), EventField::new("source", Type::Entity)];
+            let mut event_fields = vec![
+                EventField::new("entity", Type::Entity),
+                EventField::new("source", Type::Entity),
+            ];
             event_fields.extend(fields);
-            let signature = EventSignature { id: 92, name: name.clone(), fields: event_fields.clone() };
-            let mut pins = vec![P::In("component_ref", "AnimationComponent"), P::ExecOut("Body")];
+            let signature = EventSignature {
+                id: 92,
+                name: name.clone(),
+                fields: event_fields.clone(),
+            };
+            let mut pins = vec![
+                P::In("component_ref", "AnimationComponent"),
+                P::ExecOut("Body"),
+            ];
             pins.push(P::Out("entity", "Entity"));
             pins.push(P::Out("source", "Entity"));
             for field in event_fields.iter().skip(2) {
-                pins.push(P::Out(Box::leak(field.name.clone().into_boxed_str()), if field.ty == Type::Int { "i64" } else { "String" }));
+                pins.push(P::Out(
+                    Box::leak(field.name.clone().into_boxed_str()),
+                    if field.ty == Type::Int {
+                        "i64"
+                    } else {
+                        "String"
+                    },
+                ));
             }
             let mut graph = Graph::default();
             graph
-                .node("on_event", &format!("event::on_component::AnimationComponent.{name}"), &pins)
+                .node(
+                    "on_event",
+                    &format!("event::on_component::AnimationComponent.{name}"),
+                    &pins,
+                )
                 .prop("on_event", "component_type", json!("AnimationComponent"));
             let graph = graph.build();
             let module = compile(
-                &ClassSource { name: "MontageReceiver", graph: &graph, variables: &[], events: &[], known_events: &[signature], version: 0 },
+                &ClassSource {
+                    name: "MontageReceiver",
+                    graph: &graph,
+                    variables: &[],
+                    events: &[],
+                    known_events: &[signature],
+                    version: 0,
+                },
                 &natives(),
             )
             .unwrap_or_else(|diagnostics| panic!("{item}: {diagnostics:?}"));
             assert_eq!(module.subscriptions.len(), 1, "{item}");
-            assert!(matches!(module.subscriptions[0].scope, SubscriptionScope::Component(_)), "{item}");
-            assert_eq!(module.subscriptions[0].event, EventRef::Name(name), "the event keeps the Montage's canonical name");
+            assert!(
+                matches!(
+                    module.subscriptions[0].scope,
+                    SubscriptionScope::Component(_)
+                ),
+                "{item}"
+            );
+            assert_eq!(
+                module.subscriptions[0].event,
+                EventRef::Name(name),
+                "the event keeps the Montage's canonical name"
+            );
         }
     }
 
     #[test]
     fn animation_state_events_are_component_scoped_entry_points_filtered_to_their_graph() {
-        for kind in ["state_entered", "state_exited", "state_transition_started", "state_transition_completed"] {
+        for kind in [
+            "state_entered",
+            "state_exited",
+            "state_transition_started",
+            "state_transition_completed",
+        ] {
             let name = format!("animgraph::6f3f5b1e-9e4c-4f7f-b97d-7e37f21f8d44.{kind}");
-            let mut event_fields = vec![EventField::new("entity", Type::Entity), EventField::new("source", Type::Entity)];
+            let mut event_fields = vec![
+                EventField::new("entity", Type::Entity),
+                EventField::new("source", Type::Entity),
+            ];
             event_fields.push(EventField::new("machine", Type::Str));
             event_fields.push(EventField::new("state", Type::Str));
-            let signature = EventSignature { id: 93, name: name.clone(), fields: event_fields.clone() };
-            let mut pins = vec![P::In("component_ref", "AnimationComponent"), P::ExecOut("Body")];
+            let signature = EventSignature {
+                id: 93,
+                name: name.clone(),
+                fields: event_fields.clone(),
+            };
+            let mut pins = vec![
+                P::In("component_ref", "AnimationComponent"),
+                P::ExecOut("Body"),
+            ];
             pins.push(P::Out("entity", "Entity"));
             pins.push(P::Out("source", "Entity"));
             pins.push(P::Out("machine", "String"));
             pins.push(P::Out("state", "String"));
             let mut graph = Graph::default();
             graph
-                .node("on_event", &format!("event::on_component::AnimationComponent.{name}"), &pins)
+                .node(
+                    "on_event",
+                    &format!("event::on_component::AnimationComponent.{name}"),
+                    &pins,
+                )
                 .prop("on_event", "component_type", json!("AnimationComponent"));
             let graph = graph.build();
             let module = compile(
-                &ClassSource { name: "StateReceiver", graph: &graph, variables: &[], events: &[], known_events: &[signature], version: 0 },
+                &ClassSource {
+                    name: "StateReceiver",
+                    graph: &graph,
+                    variables: &[],
+                    events: &[],
+                    known_events: &[signature],
+                    version: 0,
+                },
                 &natives(),
             )
             .unwrap_or_else(|diagnostics| panic!("{kind}: {diagnostics:?}"));
             assert_eq!(module.subscriptions.len(), 1, "{kind}");
-            assert!(matches!(module.subscriptions[0].scope, SubscriptionScope::Component(_)), "{kind}");
-            assert_eq!(module.subscriptions[0].event, EventRef::Name(name), "the event keeps the graph's canonical name");
+            assert!(
+                matches!(
+                    module.subscriptions[0].scope,
+                    SubscriptionScope::Component(_)
+                ),
+                "{kind}"
+            );
+            assert_eq!(
+                module.subscriptions[0].event,
+                EventRef::Name(name),
+                "the event keeps the graph's canonical name"
+            );
         }
     }
 
@@ -2104,15 +2184,25 @@ mod engine_events {
     #[test]
     fn an_input_action_event_is_a_self_scoped_entry_point() {
         let mut fields = vec![EventField::new("entity", Type::Entity)];
-        fields.extend(["value", "x", "y", "z", "elapsed", "triggered_for"].map(|f| EventField::new(f, Type::Float)));
-        let signature = EventSignature { id: 7_001, name: "input::Move.triggered".into(), fields };
+        fields.extend(
+            ["value", "x", "y", "z", "elapsed", "triggered_for"]
+                .map(|f| EventField::new(f, Type::Float)),
+        );
+        let signature = EventSignature {
+            id: 7_001,
+            name: "input::Move.triggered".into(),
+            fields,
+        };
 
         let nodes = event_nodes(&[PaletteEvent {
             signature: signature.clone(),
             category: "Input/Move".into(),
             declared_here: false,
         }]);
-        let on = nodes.iter().find(|n| n.node_type == "event::on::input::Move.triggered").unwrap();
+        let on = nodes
+            .iter()
+            .find(|n| n.node_type == "event::on::input::Move.triggered")
+            .unwrap();
         assert!(on.is_event);
         assert_eq!(on.category, "Events/Input/Move");
         assert_eq!(on.properties, vec![("scope".to_owned(), "self".to_owned())]);
@@ -2125,13 +2215,23 @@ mod engine_events {
         graph.node("on_move", "event::on::input::Move.triggered", &pins);
         let graph = graph.build();
         let module = compile(
-            &ClassSource { name: "Hero", graph: &graph, variables: &[], events: &[], known_events: &[signature], version: 0 },
+            &ClassSource {
+                name: "Hero",
+                graph: &graph,
+                variables: &[],
+                events: &[],
+                known_events: &[signature],
+                version: 0,
+            },
             &natives(),
         )
         .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}"));
         assert_eq!(module.subscriptions.len(), 1);
         assert_eq!(module.subscriptions[0].scope, SubscriptionScope::Self_);
-        assert_eq!(module.subscriptions[0].event, EventRef::Name("input::Move.triggered".into()));
+        assert_eq!(
+            module.subscriptions[0].event,
+            EventRef::Name("input::Move.triggered".into())
+        );
     }
 
     #[test]

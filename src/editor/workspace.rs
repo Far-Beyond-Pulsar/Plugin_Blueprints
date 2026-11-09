@@ -7,12 +7,12 @@ use std::sync::Arc;
 use ui::dock::DockItem;
 use ui::workspace::Workspace;
 
-use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
+use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::tabs::TabDoc;
 use crate::editor::workspace_panels::{
-    AssetInspectorPanel, CompilerPanel, EventsPanel, FindPanel,
-    ImplementedTraitsPanel, MacrosPanel, PrefabHierarchyPanel, PropertiesPanel, VariablesPanel,
+    AssetInspectorPanel, CompilerPanel, EventsPanel, FindPanel, ImplementedTraitsPanel,
+    MacrosPanel, PrefabHierarchyPanel, PropertiesPanel, VariablesPanel,
 };
 
 impl BlueprintEditorPanel {
@@ -162,14 +162,7 @@ impl BlueprintEditorPanel {
                 window,
                 cx,
             );
-            workspace.initialize(
-                center,
-                Some(left),
-                Some(right),
-                None,
-                window,
-                cx,
-            );
+            workspace.initialize(center, Some(left), Some(right), None, window, cx);
         });
 
         self.workspace = Some(workspace);

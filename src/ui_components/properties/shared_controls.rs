@@ -1,7 +1,7 @@
 //! Shared property inspector cards, controls, and node details.
 
-use super::PropertiesRenderer;
 use super::view::{NodeView, PinView};
+use super::PropertiesRenderer;
 use crate::core::types::NodeType;
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use gpui::prelude::FluentBuilder;
@@ -327,10 +327,7 @@ impl PropertiesRenderer {
             )
     }
 
-    pub(super) fn render_node_info<T>(
-        node: &NodeView,
-        cx: &mut Context<T>,
-    ) -> impl IntoElement {
+    pub(super) fn render_node_info<T>(node: &NodeView, cx: &mut Context<T>) -> impl IntoElement {
         v_flex()
             .gap_2p5()
             .child(Self::render_info_row("Node ID", &node.id, cx))

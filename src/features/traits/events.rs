@@ -123,7 +123,9 @@ pub fn declared_event_sources(
     let index = match engine_fs::BlueprintTraitIndex::load_or_rebuild(project_root) {
         Ok(index) => index,
         Err(error) => {
-            tracing::warn!("Trait events not declared: could not read the project's traits: {error:#}");
+            tracing::warn!(
+                "Trait events not declared: could not read the project's traits: {error:#}"
+            );
             return Vec::new();
         }
     };
@@ -169,7 +171,10 @@ pub fn node_definitions(class: &str, specs: &[TraitMethodSpec]) -> Vec<(String, 
                 let returns = if spec.return_type == "()" {
                     String::new()
                 } else {
-                    format!(" Returns `{}` in the trait (not carried by events).", spec.return_type)
+                    format!(
+                        " Returns `{}` in the trait (not carried by events).",
+                        spec.return_type
+                    )
                 };
                 definition.description = format!(
                     "Implements `{}::{}` of trait {}.{returns}",
@@ -200,7 +205,10 @@ pub fn orphaned_events(
         .chain(local_events.iter().map(String::as_str))
         .collect();
     let mut orphans = Vec::new();
-    for spec in removed.iter().filter(|spec| !provided.contains(spec.name.as_str())) {
+    for spec in removed
+        .iter()
+        .filter(|spec| !provided.contains(spec.name.as_str()))
+    {
         let node_type = format!(
             "event::on::{}",
             blueprint_compiler::qualified_event_name(class, &spec.name)
@@ -225,7 +233,10 @@ mod tests {
             name: name.into(),
             params: params
                 .iter()
-                .map(|(n, t)| TraitParamRecord { name: (*n).into(), type_name: (*t).into() })
+                .map(|(n, t)| TraitParamRecord {
+                    name: (*n).into(),
+                    type_name: (*t).into(),
+                })
                 .collect(),
             return_type: ret.into(),
             doc: None,
@@ -245,12 +256,20 @@ mod tests {
         };
         TraitDb::build(
             vec![
-                record("a", "Base", &[], vec![method("tick", &[("dt", "f32")], "()")]),
+                record(
+                    "a",
+                    "Base",
+                    &[],
+                    vec![method("tick", &[("dt", "f32")], "()")],
+                ),
                 record(
                     "b",
                     "Mode",
                     &["a"],
-                    vec![method("score", &[("who", "u32")], "i32"), method("odd", &[("x", "Weird<T>")], "()")],
+                    vec![
+                        method("score", &[("who", "u32")], "i32"),
+                        method("odd", &[("x", "Weird<T>")], "()"),
+                    ],
                 ),
             ],
             Vec::new(),
@@ -260,8 +279,14 @@ mod tests {
     #[test]
     fn a_trait_contributes_its_own_and_inherited_methods_once() {
         let specs = specs_for(&db(), &["b".to_owned(), "a".to_owned()]);
-        let names: Vec<_> = specs.iter().map(|s| (s.trait_name.as_str(), s.name.as_str())).collect();
-        assert_eq!(names, [("Mode", "score"), ("Mode", "odd"), ("Base", "tick")]);
+        let names: Vec<_> = specs
+            .iter()
+            .map(|s| (s.trait_name.as_str(), s.name.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            [("Mode", "score"), ("Mode", "odd"), ("Base", "tick")]
+        );
     }
 
     #[test]
@@ -279,12 +304,17 @@ mod tests {
         let specs = specs_for(&db(), &["b".to_owned()]);
         let nodes = node_definitions("Player", &specs);
         assert_eq!(nodes.len(), 2);
-        let (category, score) = nodes.iter().find(|(_, d)| d.id.ends_with("Player.score")).unwrap();
+        let (category, score) = nodes
+            .iter()
+            .find(|(_, d)| d.id.ends_with("Player.score"))
+            .unwrap();
         assert_eq!(category, "Events/Trait/Mode");
         assert!(score.is_event);
         assert!(score.outputs.iter().any(|pin| pin.id == "who"));
         assert!(score.description.contains("Returns `i32`"));
-        assert!(nodes.iter().all(|(c, _)| c.starts_with(TRAIT_EVENT_CATEGORY)));
+        assert!(nodes
+            .iter()
+            .all(|(c, _)| c.starts_with(TRAIT_EVENT_CATEGORY)));
     }
 
     #[test]
@@ -296,8 +326,18 @@ mod tests {
             ("n2".to_owned(), "event::on::Player.tick".to_owned()),
             ("n3".to_owned(), "event::on::Player.other".to_owned()),
         ];
-        assert_eq!(orphaned_events("Player", &removed, &remaining, &[], &placed), ["n1"]);
+        assert_eq!(
+            orphaned_events("Player", &removed, &remaining, &[], &placed),
+            ["n1"]
+        );
         // A custom event of the same name still provides it.
-        assert!(orphaned_events("Player", &removed, &remaining, &["score".to_owned()], &placed).is_empty());
+        assert!(orphaned_events(
+            "Player",
+            &removed,
+            &remaining,
+            &["score".to_owned()],
+            &placed
+        )
+        .is_empty());
     }
 }

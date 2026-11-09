@@ -11,11 +11,13 @@ impl Render for GraphCanvasPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = crate::theme::graph_theme(cx);
         if self.canvas.read(cx).theme() != &theme {
-            self.canvas.update(cx, |canvas, cx| canvas.set_theme(theme, cx));
+            self.canvas
+                .update(cx, |canvas, cx| canvas.set_theme(theme, cx));
         }
         let theme = crate::theme::graph_theme(cx);
         if self.canvas.read(cx).theme() != &theme {
-            self.canvas.update(cx, |canvas, cx| canvas.set_theme(theme, cx));
+            self.canvas
+                .update(cx, |canvas, cx| canvas.set_theme(theme, cx));
         }
         let mut root = div()
             .relative()

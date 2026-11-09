@@ -189,7 +189,9 @@ impl ValidationReport {
 }
 
 /// Structural diagnostics for a UI-level graph description.
-pub(crate) fn check_ui_graph_diagnostics(graph: &graphy_blueprint::GraphDescription) -> Vec<String> {
+pub(crate) fn check_ui_graph_diagnostics(
+    graph: &graphy_blueprint::GraphDescription,
+) -> Vec<String> {
     let mut report = ValidationReport::default();
     check_ui_graph(graph, &mut report);
     report.diagnostics

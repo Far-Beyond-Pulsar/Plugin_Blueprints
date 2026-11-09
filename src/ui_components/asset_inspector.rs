@@ -143,7 +143,8 @@ impl AssetInspectorRenderer {
                             .on_click(cx.listener(move |editor, _, window, cx| {
                                 if editor.subgraphs.iter().any(|subgraph| {
                                     subgraph.id == id
-                                        && subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed
+                                        && subgraph.kind
+                                            == graphy_blueprint::SubGraphKind::Collapsed
                                         && !subgraph_is_referenced(editor, &id, cx)
                                 }) {
                                     let active_tab_id = editor
@@ -231,25 +232,27 @@ fn section_summary(name: &str, value: &serde_json::Value) -> String {
 
 fn subgraph_is_referenced(editor: &BlueprintEditorPanel, graph_id: &str, cx: &App) -> bool {
     let references = |node_type: &str| {
-        crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(node_type) == Some(graph_id)
+        crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(node_type)
+            == Some(graph_id)
     };
-    editor
-        .graph_panels
-        .iter()
-        .any(|(_, canvas)| canvas.read(cx).graph(cx).nodes.values().any(|n| references(&n.node_type)))
-        || editor.open_tabs.iter().any(|tab| {
-            tab.pending
-                .as_ref()
-                .is_some_and(|doc| doc.graph.nodes.values().any(|n| references(&n.node_type)))
-        })
-        || editor.subgraphs.iter().any(|subgraph| {
-            subgraph.id != graph_id
-                && subgraph.graph.nodes.values().any(|node| {
-                    crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(
-                        &node.node_type,
-                    ) == Some(graph_id)
-                })
-        })
+    editor.graph_panels.iter().any(|(_, canvas)| {
+        canvas
+            .read(cx)
+            .graph(cx)
+            .nodes
+            .values()
+            .any(|n| references(&n.node_type))
+    }) || editor.open_tabs.iter().any(|tab| {
+        tab.pending
+            .as_ref()
+            .is_some_and(|doc| doc.graph.nodes.values().any(|n| references(&n.node_type)))
+    }) || editor.subgraphs.iter().any(|subgraph| {
+        subgraph.id != graph_id
+            && subgraph.graph.nodes.values().any(|node| {
+                crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(&node.node_type)
+                    == Some(graph_id)
+            })
+    })
 }
 
 fn stable_key(value: &str) -> u64 {

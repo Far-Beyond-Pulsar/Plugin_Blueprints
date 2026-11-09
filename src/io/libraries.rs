@@ -1,6 +1,6 @@
 //! Project I/O stays in the host; the shared library model accepts bytes.
-use graphy_blueprint::SubGraphLibrary;
 use engine_fs::virtual_fs;
+use graphy_blueprint::SubGraphLibrary;
 use std::path::Path;
 
 pub fn load_directory(path: &Path) -> Result<Vec<SubGraphLibrary>, Box<dyn std::error::Error>> {

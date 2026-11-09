@@ -7,8 +7,8 @@ pub mod panel;
 // Re-export commonly used types
 pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
 
-use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
+use crate::editor::panel::BlueprintEditorPanel;
 use gpui::{AppContext, Context, Entity, Window};
 use pulsar_reflection::{REGISTRY, RUNTIME_TYPE_REGISTRY};
 use std::path::PathBuf;
@@ -83,12 +83,13 @@ impl GraphCanvasPanel {
             format!("get_component_ref::{}::{}", class_name, component_index),
             graphy::Position::new(f64::from(position.x), f64::from(position.y)),
         );
-        node.outputs.push(crate::features::macros::operations::pin_instance(
-            "component",
-            &class_name,
-            crate::canvas_profile::datatype_from_str(&class_name),
-            graphy::PinType::Output,
-        ));
+        node.outputs
+            .push(crate::features::macros::operations::pin_instance(
+                "component",
+                &class_name,
+                crate::canvas_profile::datatype_from_str(&class_name),
+                graphy::PinType::Output,
+            ));
         node.set_property("component_index", component_index.to_string());
         node.set_property("component_class", class_name.clone());
         node.set_property("slot_id", slot_id);

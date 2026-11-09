@@ -25,14 +25,14 @@ use ui::dock::PanelView;
 
 // Module declarations
 mod ai_tools;
-mod palette_catalog;
-mod theme;
 pub mod canvas_profile;
 mod core;
 mod editor;
 mod features;
 pub mod io;
+mod palette_catalog;
 pub mod std_nodes;
+mod theme;
 mod ui_components;
 pub mod validation;
 

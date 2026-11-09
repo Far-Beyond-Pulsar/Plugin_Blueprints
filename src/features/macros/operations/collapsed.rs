@@ -17,8 +17,8 @@ impl GraphCanvasPanel {
         let Some(call_node) = graph.nodes.get(&node_id).cloned() else {
             return;
         };
-        let Some(graph_id) = SubGraphReference::id_from_definition_id(&call_node.node_type)
-            .map(str::to_owned)
+        let Some(graph_id) =
+            SubGraphReference::id_from_definition_id(&call_node.node_type).map(str::to_owned)
         else {
             return;
         };
@@ -46,11 +46,10 @@ impl GraphCanvasPanel {
                     .nodes
                     .values()
                     .any(|n| n.node_type != "macro_entry" && n.node_type != "macro_exit");
-                let has_collapsed_sentinels = g
-                    .nodes
-                    .values()
-                    .any(|n| n.node_type == "macro_entry" && n.id.starts_with("collapsed_entry_"))
-                    && g.nodes.values().any(|n| {
+                let has_collapsed_sentinels =
+                    g.nodes.values().any(|n| {
+                        n.node_type == "macro_entry" && n.id.starts_with("collapsed_entry_")
+                    }) && g.nodes.values().any(|n| {
                         n.node_type == "macro_exit" && n.id.starts_with("collapsed_exit_")
                     });
                 has("macro_entry") && has("macro_exit") && (has_body || has_collapsed_sentinels)
@@ -59,7 +58,13 @@ impl GraphCanvasPanel {
         let mut inner = BlueprintEditorPanel::tab_doc_from_authored(&authored_inner).graph;
         normalize_subgraph_boundary(&mut inner, "macro_entry");
         normalize_subgraph_boundary(&mut inner, "macro_exit");
-        let find = |ty: &str| inner.nodes.values().find(|n| n.node_type == ty).map(|n| n.id.clone());
+        let find = |ty: &str| {
+            inner
+                .nodes
+                .values()
+                .find(|n| n.node_type == ty)
+                .map(|n| n.id.clone())
+        };
         let (Some(entry_id), Some(exit_id)) = (find("macro_entry"), find("macro_exit")) else {
             return;
         };
@@ -69,10 +74,16 @@ impl GraphCanvasPanel {
         let mut outgoing: HashMap<String, Vec<Connection>> = HashMap::new();
         for c in &graph.connections {
             if c.target_node == node_id {
-                incoming.entry(c.target_pin.clone()).or_default().push(c.clone());
+                incoming
+                    .entry(c.target_pin.clone())
+                    .or_default()
+                    .push(c.clone());
             }
             if c.source_node == node_id {
-                outgoing.entry(c.source_pin.clone()).or_default().push(c.clone());
+                outgoing
+                    .entry(c.source_pin.clone())
+                    .or_default()
+                    .push(c.clone());
             }
         }
 
@@ -104,7 +115,8 @@ impl GraphCanvasPanel {
         }
         let mapped = |id: &str| remap.get(id).cloned().unwrap_or_else(|| id.to_string());
         let mut connect = |source: (&str, &str), target: (&str, &str), like: &Connection| {
-            let mut c = Connection::new(source.0, source.1, target.0, target.1, like.connection_type);
+            let mut c =
+                Connection::new(source.0, source.1, target.0, target.1, like.connection_type);
             c.id = Some(uuid::Uuid::new_v4().to_string());
             commands.push(GraphCommand::Connect(c));
         };
@@ -138,9 +150,13 @@ impl GraphCanvasPanel {
         // Collapsed definitions are private to their call sites. Keep the
         // definition while another instance still references it, and remove
         // its saved graph and tab after the last instance expands.
-        let references = |ty: &str| SubGraphReference::id_from_definition_id(ty) == Some(graph_id.as_str());
+        let references =
+            |ty: &str| SubGraphReference::id_from_definition_id(ty) == Some(graph_id.as_str());
         let editor = panel.read(cx);
-        let other_in_this_graph = graph.nodes.values().any(|n| n.id != node_id && references(&n.node_type));
+        let other_in_this_graph = graph
+            .nodes
+            .values()
+            .any(|n| n.id != node_id && references(&n.node_type));
         let other_in_tabs = editor
             .graph_panels
             .iter()
@@ -153,11 +169,15 @@ impl GraphCanvasPanel {
                     .values()
                     .any(|n| references(&n.node_type))
             })
-            || editor.open_tabs.iter().filter(|t| t.id != this_tab).any(|t| {
-                t.pending
-                    .as_ref()
-                    .is_some_and(|doc| doc.graph.nodes.values().any(|n| references(&n.node_type)))
-            });
+            || editor
+                .open_tabs
+                .iter()
+                .filter(|t| t.id != this_tab)
+                .any(|t| {
+                    t.pending.as_ref().is_some_and(|doc| {
+                        doc.graph.nodes.values().any(|n| references(&n.node_type))
+                    })
+                });
         let other_in_definitions = editor
             .subgraphs
             .iter()
@@ -166,7 +186,8 @@ impl GraphCanvasPanel {
         let remove_definition = !(other_in_this_graph || other_in_tabs || other_in_definitions);
 
         let _ = self.apply("Expand collapsed graph", commands, cx);
-        self.canvas.update(cx, |canvas, cx| canvas.select_nodes(restored, cx));
+        self.canvas
+            .update(cx, |canvas, cx| canvas.select_nodes(restored, cx));
 
         if remove_definition {
             panel.update(cx, |editor, panel_cx| {
@@ -216,10 +237,12 @@ impl GraphCanvasPanel {
         moved.sort_by(|a, b| a.id.cmp(&b.id));
         // Macro sentinels belong to their containing graph and cannot be
         // nested as ordinary nodes in a collapsed region.
-        if moved
-            .iter()
-            .any(|n| matches!(NodeType::of(&n.node_type), NodeType::MacroEntry | NodeType::MacroExit))
-        {
+        if moved.iter().any(|n| {
+            matches!(
+                NodeType::of(&n.node_type),
+                NodeType::MacroEntry | NodeType::MacroExit
+            )
+        }) {
             return;
         }
         let rects: Vec<_> = {
@@ -234,8 +257,14 @@ impl GraphCanvasPanel {
         }
         let min_x = rects.iter().map(|r| r.min.x).fold(f32::INFINITY, f32::min);
         let min_y = rects.iter().map(|r| r.min.y).fold(f32::INFINITY, f32::min);
-        let max_x = rects.iter().map(|r| r.max.x).fold(f32::NEG_INFINITY, f32::max);
-        let max_y = rects.iter().map(|r| r.max.y).fold(f32::NEG_INFINITY, f32::max);
+        let max_x = rects
+            .iter()
+            .map(|r| r.max.x)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let max_y = rects
+            .iter()
+            .map(|r| r.max.y)
+            .fold(f32::NEG_INFINITY, f32::max);
         let graph_id = uuid::Uuid::new_v4().to_string();
         let graph_name = format!("Collapsed {}", selected.len());
 
@@ -303,7 +332,12 @@ impl GraphCanvasPanel {
                 interface
                     .inputs
                     .push(interface_pin(&pin_id, &name, &target.pin.data_type));
-                instance_inputs.push(pin_instance(&pin_id, &name, target.pin.data_type.clone(), PinType::Input));
+                instance_inputs.push(pin_instance(
+                    &pin_id,
+                    &name,
+                    target.pin.data_type.clone(),
+                    PinType::Input,
+                ));
                 entry_outputs.push(pin_instance(
                     &pin_id,
                     &target.pin.name,
@@ -331,7 +365,12 @@ impl GraphCanvasPanel {
                 interface
                     .outputs
                     .push(interface_pin(&pin_id, &name, &source.pin.data_type));
-                instance_outputs.push(pin_instance(&pin_id, &name, source.pin.data_type.clone(), PinType::Output));
+                instance_outputs.push(pin_instance(
+                    &pin_id,
+                    &name,
+                    source.pin.data_type.clone(),
+                    PinType::Output,
+                ));
                 exit_inputs.push(pin_instance(
                     &pin_id,
                     &source.pin.name,
@@ -366,13 +405,18 @@ impl GraphCanvasPanel {
         let mut exit = NodeInstance::new(
             &exit_id,
             "macro_exit",
-            Position::new(f64::from(max_x - min_x + 40.0), f64::from((max_y - min_y) / 2.0)),
+            Position::new(
+                f64::from(max_x - min_x + 40.0),
+                f64::from((max_y - min_y) / 2.0),
+            ),
         );
         exit.inputs = exit_inputs;
         inner.add_node(exit);
         inner.connections = internal_connections;
-        let authored_inner =
-            crate::io::canvas_doc::to_authored(&inner, &crate::io::canvas_doc::AuthoredSidecar::default());
+        let authored_inner = crate::io::canvas_doc::to_authored(
+            &inner,
+            &crate::io::canvas_doc::AuthoredSidecar::default(),
+        );
 
         let definition = graphy_blueprint::SubGraph {
             id: graph_id.clone(),

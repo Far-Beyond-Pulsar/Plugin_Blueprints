@@ -30,7 +30,10 @@ pub fn from_authored(graph: &authored::GraphDescription) -> (GraphDescription, A
 }
 
 /// Builds the authored graph for saving or compiling.
-pub fn to_authored(doc: &GraphDescription, sidecar: &AuthoredSidecar) -> authored::GraphDescription {
+pub fn to_authored(
+    doc: &GraphDescription,
+    sidecar: &AuthoredSidecar,
+) -> authored::GraphDescription {
     let mut out = graphy::authored::to_authored(doc);
     out.custom_event_defs = sidecar.custom_event_defs.clone();
     out

@@ -170,9 +170,7 @@ impl ToolbarRenderer {
                     .tooltip("Add Comment to Graph")
                     .on_click(cx.listener(|panel, _, window, cx| {
                         if let Some(canvas) = panel.active_canvas().cloned() {
-                            canvas.update(cx, |canvas, cx| {
-                                canvas.create_comment_at_center(cx)
-                            });
+                            canvas.update(cx, |canvas, cx| canvas.create_comment_at_center(cx));
                         }
                     })),
             )

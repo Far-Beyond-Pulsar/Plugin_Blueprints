@@ -9,7 +9,9 @@ impl crate::editor::panel::BlueprintEditorPanel {
     pub fn set_undo_service(&mut self, service: plugin_editor_api::UndoService, cx: &mut App) {
         self.undo_service = Some(service);
         for (id, canvas) in self.graph_panels.clone() {
-            canvas.update(cx, |canvas, _| self.adopt_graph_history(&id, &canvas.history));
+            canvas.update(cx, |canvas, _| {
+                self.adopt_graph_history(&id, &canvas.history)
+            });
         }
     }
 
