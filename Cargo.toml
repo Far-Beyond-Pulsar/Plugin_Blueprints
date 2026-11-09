@@ -21,10 +21,10 @@ builtin = ["dep:plugin_manager"]
 
 [dependencies]
 # The plugin's descriptor and its editor provider's registration.
-pulsar_plugins = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
-engine_fs = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
-editor_task_queue = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
-ui_types_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_plugins = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
+engine_fs = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
+editor_task_queue = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
+ui_types_common = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
 graphy-blueprint = { path = "../../../crates/third-party/graphy/crates/graphy-blueprint" }
 graphy-gpui = { path = "../../../crates/third-party/graphy/crates/graphy-gpui", features = ["gpui"] }
 graphy-render = { path = "../../../crates/third-party/graphy/crates/graphy-render" }
@@ -32,27 +32,27 @@ graphy-render-wgpu = { path = "../../../crates/third-party/graphy/crates/graphy-
 # Resolve every public UI and engine type through one current Pulsar revision.
 # Mixing the standalone WGPUI repositories with Pulsar's re-exports creates
 # distinct Cargo package identities for otherwise identical GPUI types.
-gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
-ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+gpui-ce = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
+ui      = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
 
-plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+plugin_editor_api = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
 # Only for the built-in provider (feature `builtin`): registers this editor at link time.
-plugin_manager = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73", optional = true }
-ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
-engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+plugin_manager = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b", optional = true }
+ui_common          = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
+engine_backend     = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
 # The one prefab model (`prefab.json`), with its record migrations on load.
-pulsar_class       = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
-pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_class       = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
+pulsar_reflection  = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
 # The `#[blueprint]` node registry the palette and graph checks read.
-pulsar_std         = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_std         = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
 
 # Compiler graph types paired with the current Blueprint integration.
 graphy = { path = "../../../crates/third-party/graphy" }
 # Graph -> engine script module compiler (this repository's `compiler/`).
 blueprint_compiler = { path = "compiler" }
-pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_script_vm = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
 # Exports a compiled class as Rust (the Rust compile target).
-pulsar_script_codegen = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "838f6accad39dc4c1bd9016fca7f9867a06cbe73" }
+pulsar_script_codegen = { git = "https://github.com/Far-Beyond-Pulsar/Pulsar-Native", rev = "380707ef2a6b6d0e3e7ff3cfc827b10c0a093e6b" }
 # Utilities
 uuid = { version = "1.0", features = ["v4"] }
 smol = "2.0"
