@@ -132,14 +132,17 @@ impl BlueprintEditorPanel {
         }
 
         // `pulsar_class` owns the model: it runs the record migrations and
-        // assigns (and saves) the component slot ids on load.
+        // assigns the component slot ids in memory. Opening a class writes
+        // nothing (it may be read-only); the next save writes the migrated
+        // form and records the replaced ids (`prefab_slot_aliases`).
         let class_dir = self
             .current_class_path
             .as_deref()
             .ok_or_else(|| "No class path available for prefab load".to_string())?;
-        let prefab = pulsar_class::prefab::PrefabAsset::load_from_dir(class_dir)?;
+        let load = pulsar_class::prefab::PrefabAsset::read_migrated(class_dir)?;
 
-        self.prefab_asset = prefab;
+        self.prefab_asset = load.prefab;
+        self.prefab_slot_aliases = load.aliases;
         self.prefab_property_state.clear();
         self.selected_prefab_component = None;
         Ok(())

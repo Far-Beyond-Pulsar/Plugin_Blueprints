@@ -254,7 +254,8 @@ fn is_animator_class(class: &str) -> bool {
 /// Animation schemas are available to a class only when its prefab has a
 /// typed skeletal animation asset reference. This keeps the event palette
 /// aligned with the asset refs in the class's SceneDB component defaults.
-/// The prefab comes through `pulsar_class`'s model (record migrations included).
+/// The prefab comes through `pulsar_class`'s model (record migrations included),
+/// loaded purely: a palette is a read path and never rewrites `prefab.json`.
 fn referenced_animation_asset_ids(class_path: &Path) -> std::collections::HashSet<String> {
     match pulsar_class::prefab::PrefabAsset::load_from_dir(class_path) {
         Ok(prefab) => animation_asset_ids_from_prefab(&prefab),
