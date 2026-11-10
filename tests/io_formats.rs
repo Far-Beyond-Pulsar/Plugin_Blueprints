@@ -125,8 +125,8 @@ fn prefab_components_get_uuid_slot_ids() {
     )
     .unwrap();
 
-    // The shared model assigns the ids on load and saves them at once.
-    let mut prefab = pulsar_class::prefab::PrefabAsset::load_from_dir(&dir).unwrap();
+    // The pure load assigns ids in memory and writes nothing; the repair saves them.
+    let (mut prefab, _) = pulsar_class::prefab::PrefabAsset::load_and_repair(&dir).unwrap();
     let ids: Vec<String> = prefab.components.iter().map(|c| c.slot_id.clone()).collect();
     assert!(ids.iter().all(|id| uuid::Uuid::parse_str(id).is_ok()), "{ids:?}");
     assert_eq!(ids[2], kept, "valid UUIDs are kept");
