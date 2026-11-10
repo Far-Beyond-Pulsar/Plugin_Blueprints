@@ -33,21 +33,34 @@ struct BlueprintSaveTabSnapshot {
 struct PrefabSaveSnapshot {
     path: PathBuf,
     asset: pulsar_class::prefab::PrefabAsset,
+    slot_aliases: std::collections::BTreeMap<String, String>,
     graph_tab_id: String,
+}
+
+/// A serialized prefab ready to write, with the readable slot ids its load
+/// replaced (recorded in `class.json` ahead of the prefab, #933).
+struct PrefabWrite {
+    path: PathBuf,
+    json: String,
+    slot_aliases: std::collections::BTreeMap<String, String>,
 }
 
 impl PrefabSaveSnapshot {
     fn into_json(
         mut self,
         graph: &graphy_blueprint::GraphDescription,
-    ) -> Result<(PathBuf, String), String> {
+    ) -> Result<PrefabWrite, String> {
         // `script_graph` is an open section of the shared model.
         let graph = serde_json::to_value(graph)
             .map_err(|error| format!("Failed to serialize prefab script graph: {error}"))?;
         self.asset.extra.insert("script_graph".into(), graph);
         let json = serde_json::to_string_pretty(&self.asset)
             .map_err(|error| format!("Failed to serialize prefab: {error}"))?;
-        Ok((self.path, json))
+        Ok(PrefabWrite {
+            path: self.path,
+            json,
+            slot_aliases: self.slot_aliases,
+        })
     }
 }
 
@@ -189,13 +202,18 @@ fn persist_blueprint_asset(path: &Path, asset: &formats::BlueprintAsset) -> Resu
     Ok(content.len())
 }
 
-fn persist_prefab_sidecar(path: &Path, json: &str) -> Result<(), String> {
+fn persist_prefab_sidecar(write: &PrefabWrite) -> Result<(), String> {
+    let path = write.path.as_path();
     if let Some(class_dir) = path.parent() {
-        std::fs::create_dir_all(class_dir)
+        engine_fs::virtual_fs::create_dir_all(class_dir)
             .map_err(|error| format!("Failed to create class directory: {error}"))?;
         crate::features::prefabs::ensure_class_id(class_dir)?;
+        if !write.slot_aliases.is_empty() {
+            pulsar_class::ClassMeta::record_slot_aliases(class_dir, write.slot_aliases.clone())?;
+        }
     }
-    std::fs::write(path, json).map_err(|error| format!("Failed to write prefab sidecar: {error}"))
+    engine_fs::virtual_fs::write_file(path, write.json.as_bytes())
+        .map_err(|error| format!("Failed to write prefab sidecar: {error}"))
 }
 
 /// Bring the trait index up to date with the Blueprint just written at
@@ -265,6 +283,7 @@ impl BlueprintEditorPanel {
         Ok(PrefabSaveSnapshot {
             path,
             asset: self.prefab_asset.clone(),
+            slot_aliases: self.prefab_slot_aliases.clone(),
             graph_tab_id: self
                 .open_tabs
                 .get(self.active_tab_index)
@@ -370,7 +389,7 @@ impl BlueprintEditorPanel {
                     task.report_progress(0.7, "Writing prefab sidecar");
                     let prefab_error = prefab_json.and_then(|result| {
                         result
-                            .and_then(|(path, json)| persist_prefab_sidecar(&path, &json))
+                            .and_then(|write| persist_prefab_sidecar(&write))
                             .err()
                     });
                     if let Some(error) = &prefab_error {

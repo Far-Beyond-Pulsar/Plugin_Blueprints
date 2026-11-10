@@ -73,6 +73,9 @@ pub struct BlueprintEditorPanel {
 
     // Prefab sidecar authoring
     pub prefab_asset: PrefabAsset,
+    /// Readable slot ids the load replaced, recorded in `class.json` by the
+    /// next save (the load itself writes nothing).
+    pub prefab_slot_aliases: std::collections::BTreeMap<String, String>,
     pub prefab_component_list: Entity<SearchableList<&'static str>>,
     pub show_add_component_dialog: bool,
     pub prefab_property_state: ui_common::reflected_properties_panel::PropertyStateManager,
@@ -516,6 +519,7 @@ impl BlueprintEditorPanel {
                 .new(|cx| ui::dropdown::DropdownState::new(Vec::new(), None, window, cx)),
             dragging_variable: None,
             variable_drop_menu_position: None,
+            prefab_slot_aliases: Default::default(),
             prefab_asset: PrefabAsset {
                 prefab_version: 1,
                 name: "Prefab".into(),
