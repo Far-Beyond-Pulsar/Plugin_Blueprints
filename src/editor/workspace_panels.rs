@@ -401,4 +401,3 @@ impl Panel for PalettePanel {
         "Palette".into_any_element()
     }
 }
-

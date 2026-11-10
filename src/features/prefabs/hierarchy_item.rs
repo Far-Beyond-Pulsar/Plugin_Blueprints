@@ -2,8 +2,8 @@
 //!
 //! This allows prefab components to be displayed in the HierarchicalTreeView with nesting support
 
-use pulsar_class::prefab::PrefabComponent;
 use gpui::*;
+use pulsar_class::prefab::PrefabComponent;
 use std::sync::Arc;
 use ui::{menu::popup_menu::PopupMenu, ActiveTheme, HierarchyItem, IconName};
 

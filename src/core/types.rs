@@ -6,7 +6,6 @@
 
 use serde::{Deserialize, Serialize};
 
-
 // ============================================================================
 // Pin Data Type — canonical reflection-backed type representation
 // ============================================================================
@@ -235,7 +234,9 @@ impl NodeType {
             t if t.starts_with("conversion:") => NodeType::Conversion,
             t if t.starts_with("custom_event_dispatch:") => NodeType::CustomEventDispatch,
             t if t.starts_with("custom_event:") => NodeType::CustomEvent,
-            t if crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(t).is_some() => {
+            t if crate::core::subgraph_ref::SubGraphReference::id_from_definition_id(t)
+                .is_some() =>
+            {
                 NodeType::SubGraphCall
             }
             _ => NodeType::Other,

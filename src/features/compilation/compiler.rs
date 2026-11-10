@@ -73,7 +73,10 @@ impl BlueprintEditorPanel {
     ///
     /// `pub(crate)` since #656 — the validation stage runs the SAME expanded
     /// graph codegen consumes.
-    pub(crate) fn build_graphy_description(&self, cx: &App) -> Result<graphy::GraphDescription, String> {
+    pub(crate) fn build_graphy_description(
+        &self,
+        cx: &App,
+    ) -> Result<graphy::GraphDescription, String> {
         let authored = self.main_authored_graph(cx)?;
         let graph =
             blueprint_compiler::authored::expand_graph(&authored, self.collect_macro_library(cx)?)?;
@@ -307,7 +310,11 @@ impl BlueprintEditorPanel {
                 .iter()
                 .filter(|issue| issue.severity == engine_fs::trait_conformance::Severity::Warning)
             {
-                tracing::warn!("{} Blueprint trait contract: {}", blueprint_name, issue.message);
+                tracing::warn!(
+                    "{} Blueprint trait contract: {}",
+                    blueprint_name,
+                    issue.message
+                );
             }
             let errors: Vec<_> = issues
                 .iter()
@@ -359,16 +366,14 @@ impl BlueprintEditorPanel {
         std::fs::create_dir_all(&events_dir)
             .map_err(|e| format!("Failed to create events directory: {}", e))?;
 
-        let has_events = self
-            .main_canvas()
-            .is_some_and(|canvas| {
-                canvas
-                    .read(cx)
-                    .graph(cx)
-                    .nodes
-                    .values()
-                    .any(|n| Self::node_type_is_event(&n.node_type))
-            });
+        let has_events = self.main_canvas().is_some_and(|canvas| {
+            canvas
+                .read(cx)
+                .graph(cx)
+                .nodes
+                .values()
+                .any(|n| Self::node_type_is_event(&n.node_type))
+        });
         if !has_events {
             return Err("No event nodes found in graph".to_string());
         }

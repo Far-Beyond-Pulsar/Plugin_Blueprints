@@ -96,17 +96,16 @@ impl BlueprintEditorPanel {
             return;
         };
         cx.spawn(async move |this, cx| {
-            let result = cx
-                .background_executor()
-                .spawn(async move {
-                    match changed {
-                        Some(path) => {
-                            engine_fs::BlueprintTraitIndex::update_path(&root, &path).map(|_| ())
+            let result =
+                cx.background_executor()
+                    .spawn(async move {
+                        match changed {
+                            Some(path) => engine_fs::BlueprintTraitIndex::update_path(&root, &path)
+                                .map(|_| ()),
+                            None => engine_fs::BlueprintTraitIndex::rebuild(&root).map(|_| ()),
                         }
-                        None => engine_fs::BlueprintTraitIndex::rebuild(&root).map(|_| ()),
-                    }
-                })
-                .await;
+                    })
+                    .await;
             if let Err(error) = result {
                 tracing::warn!("Could not update the trait index: {error:#}");
             }
@@ -141,7 +140,11 @@ impl BlueprintEditorPanel {
         };
 
         let metadata = &mut self.blueprint_metadata;
-        if metadata.implemented_trait_ids.iter().any(|id| id == &asset.id) {
+        if metadata
+            .implemented_trait_ids
+            .iter()
+            .any(|id| id == &asset.id)
+        {
             return;
         }
         metadata.implemented_trait_ids.push(asset.id.clone());
@@ -292,7 +295,11 @@ impl BlueprintEditorPanel {
         self.blueprint_metadata
             .implemented_trait_ids
             .iter()
-            .filter_map(|id| self.implemented_trait_catalog.iter().find(|asset| &asset.id == id))
+            .filter_map(|id| {
+                self.implemented_trait_catalog
+                    .iter()
+                    .find(|asset| &asset.id == id)
+            })
             .flat_map(|asset| asset.methods.iter())
             .filter(|spec| seen.insert(spec.name.clone()))
             .cloned()
@@ -343,8 +350,18 @@ impl BlueprintEditorPanel {
             .flat_map(|asset| asset.methods.iter().cloned())
             .collect();
         let class = self.trait_event_class_name();
-        let local: Vec<String> = self.local_event_defs.iter().map(|d| d.name.clone()).collect();
-        events::orphaned_events(&class, &all, &self.trait_method_specs(), &local, &self.placed_nodes(cx))
+        let local: Vec<String> = self
+            .local_event_defs
+            .iter()
+            .map(|d| d.name.clone())
+            .collect();
+        events::orphaned_events(
+            &class,
+            &all,
+            &self.trait_method_specs(),
+            &local,
+            &self.placed_nodes(cx),
+        )
     }
 
     pub(crate) fn trait_event_class_name(&self) -> String {

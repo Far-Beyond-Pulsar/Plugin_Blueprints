@@ -25,7 +25,10 @@ impl PrefabHierarchyRenderer {
     }
 
     /// Get all children indices of a component
-    fn get_children(components: &[pulsar_class::prefab::PrefabComponent], parent_index: usize) -> Vec<usize> {
+    fn get_children(
+        components: &[pulsar_class::prefab::PrefabComponent],
+        parent_index: usize,
+    ) -> Vec<usize> {
         components
             .iter()
             .enumerate()

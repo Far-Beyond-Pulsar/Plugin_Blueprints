@@ -17,12 +17,13 @@ use graphy_blueprint::{LibraryManager, SubGraph};
 use graphy_gpui::{
     Action, CatalogEntry, GraphProfile, MacroTarget, MenuItem, MenuTarget, PinUpdate,
 };
-use graphy_render::{NodeShape, PinSide};
+use graphy_render::geom::{parse_hex, rgba};
 use graphy_render::presenter::{
-    category_accent, CommentPresentation, NodePresentation, PinShape, PinStyle, Presenter, WireStyle,
+    category_accent, CommentPresentation, NodePresentation, PinShape, PinStyle, Presenter,
+    WireStyle,
 };
 use graphy_render::WireRouting;
-use graphy_render::geom::{parse_hex, rgba};
+use graphy_render::{NodeShape, PinSide};
 
 use crate::core::definitions::{NodeDefinition, NodeDefinitions};
 use crate::core::subgraph_ref::SubGraphReference;
@@ -166,7 +167,11 @@ impl Presenter for BlueprintPresenter {
             p.shape = NodeShape::Pill;
             p
         } else if ty == "macro_entry" || ty == "macro_exit" {
-            let title = if ty == "macro_entry" { "Subgraph Entry" } else { "Subgraph Exit" };
+            let title = if ty == "macro_entry" {
+                "Subgraph Entry"
+            } else {
+                "Subgraph Exit"
+            };
             let mut p = NodePresentation::card(title, rgba(0x7c, 0x3a, 0xed, 1.0));
             p.icon = Some(if ty == "macro_entry" { '▶' } else { '◀' });
             p
@@ -235,7 +240,11 @@ impl Presenter for BlueprintPresenter {
             .angular_wires;
         WireStyle {
             color: from.color,
-            routing: if angular { WireRouting::Angular } else { WireRouting::Bezier },
+            routing: if angular {
+                WireRouting::Angular
+            } else {
+                WireRouting::Bezier
+            },
             exec: conn.connection_type == graphy::ConnectionType::Execution,
         }
     }
@@ -261,7 +270,8 @@ impl Presenter for BlueprintPresenter {
                     } else {
                         PinShape::Circle
                     },
-                    ringed: info.type_string.starts_with("Vec<") || info.type_string.starts_with('['),
+                    ringed: info.type_string.starts_with("Vec<")
+                        || info.type_string.starts_with('['),
                     color: ty.display_color(),
                 }
             }
@@ -285,16 +295,10 @@ pub struct BlueprintProfile {
 }
 
 impl BlueprintProfile {
-    pub fn new(
-        definitions: &'static NodeDefinitions,
-        data: SharedProfileData,
-    ) -> Self {
+    pub fn new(definitions: &'static NodeDefinitions, data: SharedProfileData) -> Self {
         Self {
             id: "blueprint".to_string(),
-            presenter: BlueprintPresenter {
-                definitions,
-                data,
-            },
+            presenter: BlueprintPresenter { definitions, data },
             resolver: BlueprintResolver,
             editing_macro: None,
         }
@@ -316,7 +320,11 @@ impl BlueprintProfile {
     }
 
     fn is_collapsed_node(&self, node: &NodeInstance) -> bool {
-        let data = self.presenter.data.read().unwrap_or_else(|e| e.into_inner());
+        let data = self
+            .presenter
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         SubGraphReference::decode(&node.node_type, &data.subgraphs)
             .is_some_and(|r| r.kind == graphy_blueprint::SubGraphKind::Collapsed)
     }
@@ -342,9 +350,16 @@ impl BlueprintProfile {
             },
         };
         node.inputs = def.inputs.iter().map(|p| pin(p, PinType::Input)).collect();
-        node.outputs = def.outputs.iter().map(|p| pin(p, PinType::Output)).collect();
+        node.outputs = def
+            .outputs
+            .iter()
+            .map(|p| pin(p, PinType::Output))
+            .collect();
         for (k, v) in &def.properties {
-            node.set_property(k.clone(), blueprint_compiler::authored::property_value_from_raw(v));
+            node.set_property(
+                k.clone(),
+                blueprint_compiler::authored::property_value_from_raw(v),
+            );
         }
         node
     }
@@ -422,7 +437,11 @@ impl GraphProfile for BlueprintProfile {
                 });
             }
         }
-        let data = self.presenter.data.read().unwrap_or_else(|e| e.into_inner());
+        let data = self
+            .presenter
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         let own = self.editing_macro.as_ref().map(|id| {
             SubGraphReference::new(id.clone(), graphy_blueprint::SubGraphKind::Macro).encode()
         });
@@ -524,8 +543,13 @@ impl GraphProfile for BlueprintProfile {
     }
 
     fn macro_target(&self, node: &NodeInstance) -> Option<MacroTarget> {
-        let data = self.presenter.data.read().unwrap_or_else(|e| e.into_inner());
-        SubGraphReference::decode(&node.node_type, &data.subgraphs).map(|r| MacroTarget { graph_id: r.id })
+        let data = self
+            .presenter
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        SubGraphReference::decode(&node.node_type, &data.subgraphs)
+            .map(|r| MacroTarget { graph_id: r.id })
     }
 
     fn menu_items(&self, graph: &GraphDescription, target: &MenuTarget) -> Vec<MenuItem> {
@@ -540,7 +564,11 @@ impl GraphProfile for BlueprintProfile {
             MenuItem::new(MENU_BREAKPOINT, "Toggle Breakpoint  ⏹").separated(),
             MenuItem::new(
                 MENU_COLLAPSE,
-                if collapsed { "Uncollapse Node" } else { "Collapse to Node" },
+                if collapsed {
+                    "Uncollapse Node"
+                } else {
+                    "Collapse to Node"
+                },
             ),
         ];
         if self.macro_target(node).is_some() {
@@ -580,4 +608,3 @@ pub fn datatype_from_str(s: &str) -> DataType {
         graphy_blueprint::DataType::Data(info) => DataType::typed(info.to_string()),
     }
 }
-

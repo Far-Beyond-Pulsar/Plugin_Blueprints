@@ -56,7 +56,11 @@ impl PrefabSaveSnapshot {
         self.asset.extra.insert("script_graph".into(), graph);
         let json = serde_json::to_string_pretty(&self.asset)
             .map_err(|error| format!("Failed to serialize prefab: {error}"))?;
-        Ok(PrefabWrite { path: self.path, json, slot_aliases: self.slot_aliases })
+        Ok(PrefabWrite {
+            path: self.path,
+            json,
+            slot_aliases: self.slot_aliases,
+        })
     }
 }
 
@@ -175,9 +179,7 @@ impl BlueprintSaveSnapshot {
     }
 }
 
-fn serialize_blueprint_asset(
-    asset: &formats::BlueprintAsset,
-) -> Result<String, String> {
+fn serialize_blueprint_asset(asset: &formats::BlueprintAsset) -> Result<String, String> {
     formats::serialize_blueprint_with_header(asset)
 }
 
@@ -194,10 +196,7 @@ fn persist_blueprint_content(path: &Path, content: &str) -> Result<(), String> {
     })
 }
 
-fn persist_blueprint_asset(
-    path: &Path,
-    asset: &formats::BlueprintAsset,
-) -> Result<usize, String> {
+fn persist_blueprint_asset(path: &Path, asset: &formats::BlueprintAsset) -> Result<usize, String> {
     let content = serialize_blueprint_asset(asset)?;
     persist_blueprint_content(path, &content)?;
     Ok(content.len())
@@ -237,7 +236,8 @@ impl BlueprintEditorPanel {
     /// conformance is checked against, unsaved edits included.
     pub(crate) fn current_blueprint_json(&self, cx: &App) -> Result<serde_json::Value, String> {
         let asset = self.snapshot_blueprint_for_save(cx)?.into_asset()?;
-        serde_json::to_value(&asset).map_err(|error| format!("Could not serialize Blueprint: {error}"))
+        serde_json::to_value(&asset)
+            .map_err(|error| format!("Could not serialize Blueprint: {error}"))
     }
 
     fn snapshot_blueprint_for_save(&self, cx: &App) -> Result<BlueprintSaveSnapshot, String> {
@@ -296,9 +296,8 @@ impl BlueprintEditorPanel {
     pub fn plugin_save(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(error) = self.load_error.as_deref() {
             self.compilation_status.state = CompilationState::Error;
-            self.compilation_status.message = format!(
-                "Save blocked because the Blueprint source failed to load: {error}"
-            );
+            self.compilation_status.message =
+                format!("Save blocked because the Blueprint source failed to load: {error}");
             cx.notify();
             return;
         }

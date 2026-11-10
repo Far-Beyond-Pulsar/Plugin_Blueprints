@@ -14,7 +14,6 @@ use super::panel::BlueprintEditorPanel;
 use super::toolbar::ToolbarRenderer;
 use crate::core::events::{OpenEngineLibraryRequest, ShowNodePickerRequest};
 
-
 /// A node entry in the find-panel listing, tagged with its owning subgraph tab
 /// so clicking it can switch tabs and pan to the correct canvas.
 struct FindNodeEntry {
@@ -290,7 +289,12 @@ impl BlueprintEditorPanel {
                                 .node(&n.id)
                                 .map(|s| s.presentation.title.clone())
                                 .unwrap_or_else(|| n.node_type.clone());
-                            (n.id.clone(), title, n.node_type.clone(), (n.position.x, n.position.y))
+                            (
+                                n.id.clone(),
+                                title,
+                                n.node_type.clone(),
+                                (n.position.x, n.position.y),
+                            )
                         })
                         .collect()
                 }
@@ -301,7 +305,14 @@ impl BlueprintEditorPanel {
                         doc.graph
                             .nodes
                             .values()
-                            .map(|n| (n.id.clone(), n.node_type.clone(), n.node_type.clone(), (n.position.x, n.position.y)))
+                            .map(|n| {
+                                (
+                                    n.id.clone(),
+                                    n.node_type.clone(),
+                                    n.node_type.clone(),
+                                    (n.position.x, n.position.y),
+                                )
+                            })
                             .collect()
                     })
                     .unwrap_or_default(),
@@ -456,10 +467,18 @@ impl BlueprintEditorPanel {
                                                         // Pan & select on the correct canvas
                                                         if let Some(ref canvas) = canvas_for_click {
                                                             canvas.update(cx, |canvas, cx| {
-                                                                canvas.canvas.update(cx, |c, cx| {
-                                                                    c.select_nodes([node_id.clone()], cx)
-                                                                });
-                                                                canvas.animate_pan_to_node(&node_id, cx);
+                                                                canvas.canvas.update(
+                                                                    cx,
+                                                                    |c, cx| {
+                                                                        c.select_nodes(
+                                                                            [node_id.clone()],
+                                                                            cx,
+                                                                        )
+                                                                    },
+                                                                );
+                                                                canvas.animate_pan_to_node(
+                                                                    &node_id, cx,
+                                                                );
                                                             });
                                                         }
                                                         cx.notify();
@@ -503,8 +522,7 @@ impl BlueprintEditorPanel {
                                                         .text_color(cx.theme().muted_foreground)
                                                         .child(format!(
                                                             "({:.0}, {:.0})",
-                                                            entry.position.0,
-                                                            entry.position.1
+                                                            entry.position.0, entry.position.1
                                                         )),
                                                 )
                                                 .into_any_element()

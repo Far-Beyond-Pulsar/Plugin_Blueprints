@@ -8,8 +8,8 @@
 //! - Type enumeration
 
 use super::types::{ClassVariable, TypeItem, VariableDrag};
-use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
+use crate::editor::panel::BlueprintEditorPanel;
 use gpui::*;
 
 impl BlueprintEditorPanel {

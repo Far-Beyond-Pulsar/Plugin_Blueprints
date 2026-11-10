@@ -42,7 +42,7 @@ pub struct NodeDefinition {
     pub properties: HashMap<String, String>,
     pub color: Option<String>,
     /// True when this node's underlying Blueprint type is `NodeTypes::event`
-    /// (an entry-point such as `begin_play`, `on_tick`, `on_input_key`, …).
+    /// (an entry-point such as `begin_play`, `on_tick`, …).
     /// Used to classify the node as `NodeType::Event` regardless of which
     /// palette category it lives in (e.g. "Input" events).
     #[serde(default)]

@@ -1,5 +1,5 @@
 use blueprint_editor_plugin::io::formats::{
-    BlueprintAsset, BlueprintEditorState, current_format_version, strip_header_comments,
+    current_format_version, strip_header_comments, BlueprintAsset, BlueprintEditorState,
 };
 use blueprint_editor_plugin::io::legacy::{
     LegacyBlueprintComment, LegacyColor, LegacyConnection, LegacyPosition, LegacySize,
@@ -127,12 +127,20 @@ fn prefab_components_get_uuid_slot_ids() {
 
     // The pure load assigns ids in memory and writes nothing; the repair saves them.
     let (mut prefab, _) = pulsar_class::prefab::PrefabAsset::load_and_repair(&dir).unwrap();
-    let ids: Vec<String> = prefab.components.iter().map(|c| c.slot_id.clone()).collect();
-    assert!(ids.iter().all(|id| uuid::Uuid::parse_str(id).is_ok()), "{ids:?}");
+    let ids: Vec<String> = prefab
+        .components
+        .iter()
+        .map(|c| c.slot_id.clone())
+        .collect();
+    assert!(
+        ids.iter().all(|id| uuid::Uuid::parse_str(id).is_ok()),
+        "{ids:?}"
+    );
     assert_eq!(ids[2], kept, "valid UUIDs are kept");
     assert!(!prefab.fill_missing_slot_ids(), "idempotent");
 
-    let saved: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let saved: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(saved["components"][0]["slot_id"], ids[0].as_str());
     assert_eq!(saved["components"][0]["class_name"], "LightComponent");
     assert_eq!(saved["components"][0]["data"]["__parent_index"], 1);

@@ -116,7 +116,7 @@ impl GraphCanvasPanel {
                     crate::theme::graph_theme(cx),
                     cx,
                 )
-                    .expect("the bundled canvas font parses");
+                .expect("the bundled canvas font parses");
                 if let Some(((pan_x, pan_y), zoom)) = view {
                     canvas.set_view(Vec2::new(pan_x, pan_y), zoom, cx);
                 }
@@ -147,10 +147,23 @@ impl GraphCanvasPanel {
             &zip_tie_length_input,
             window,
             |this, state: &Entity<InputState>, event: &InputEvent, _window, cx| {
-                if matches!(event, InputEvent::Change | InputEvent::Blur | InputEvent::PressEnter { .. }) {
+                if matches!(
+                    event,
+                    InputEvent::Change | InputEvent::Blur | InputEvent::PressEnter { .. }
+                ) {
                     let length = state.read(cx).text().to_string().parse::<f64>().ok();
-                    let selected = this.canvas.read(cx).controller().selection.ties.iter().next().copied();
-                    if let (Some(index), Some(length)) = (selected, length.filter(|n| n.is_finite())) {
+                    let selected = this
+                        .canvas
+                        .read(cx)
+                        .controller()
+                        .selection
+                        .ties
+                        .iter()
+                        .next()
+                        .copied();
+                    if let (Some(index), Some(length)) =
+                        (selected, length.filter(|n| n.is_finite()))
+                    {
                         this.set_zip_tie_straight_length(index, length, cx);
                     }
                 }
@@ -263,7 +276,11 @@ impl GraphCanvasPanel {
         cx: &mut Context<Self>,
     ) -> Entity<InputState> {
         let input = self.zip_tie_length_input.clone();
-        let length = self.graph(cx).zip_ties.get(index).map(|tie| tie.straight_length);
+        let length = self
+            .graph(cx)
+            .zip_ties
+            .get(index)
+            .map(|tie| tie.straight_length);
         if let Some(length) = length {
             let focused = input.read(cx).focus_handle(cx).is_focused(window);
             let value = format!("{length:.1}");
@@ -556,14 +573,16 @@ impl GraphCanvasPanel {
                 .map(|id| id.as_ref().to_string())
                 .collect();
         }
-        self.canvas.update(cx, |canvas, cx| canvas.refresh_scene(cx));
+        self.canvas
+            .update(cx, |canvas, cx| canvas.refresh_scene(cx));
         cx.notify();
     }
 
     /// Re-presents every node after profile-side data (subgraph names, event
     /// names) changed.
     pub fn refresh_presentation(&mut self, cx: &mut Context<Self>) {
-        self.canvas.update(cx, |canvas, cx| canvas.refresh_scene(cx));
+        self.canvas
+            .update(cx, |canvas, cx| canvas.refresh_scene(cx));
     }
 
     // ── Nodes ──────────────────────────────────────────────────────────────
@@ -603,7 +622,9 @@ impl GraphCanvasPanel {
                 .and_then(|reference| {
                     data.subgraphs
                         .iter()
-                        .find(|s| s.id == reference.id && s.kind == graphy_blueprint::SubGraphKind::Macro)
+                        .find(|s| {
+                            s.id == reference.id && s.kind == graphy_blueprint::SubGraphKind::Macro
+                        })
                         .cloned()
                 })
         };
@@ -647,8 +668,12 @@ impl GraphCanvasPanel {
         let id = node.id.clone();
         let mut commands = vec![GraphCommand::AddNode(node.clone())];
         if let Some(source) = source {
-            let mut wiring =
-                graphy_gpui::connect_new_node_commands(&*self.bp_profile, self.graph(cx), &source, &node);
+            let mut wiring = graphy_gpui::connect_new_node_commands(
+                &*self.bp_profile,
+                self.graph(cx),
+                &source,
+                &node,
+            );
             for command in &mut wiring {
                 if let GraphCommand::Connect(conn) = command {
                     conn.id = Some(uuid::Uuid::new_v4().to_string());
@@ -780,10 +805,16 @@ impl GraphCanvasPanel {
             if !rects.is_empty() {
                 let left = rects.iter().map(|r| r.min.x).fold(f32::INFINITY, f32::min) - PADDING;
                 let top = rects.iter().map(|r| r.min.y).fold(f32::INFINITY, f32::min) - PADDING;
-                let right =
-                    rects.iter().map(|r| r.max.x).fold(f32::NEG_INFINITY, f32::max) + PADDING;
-                let bottom =
-                    rects.iter().map(|r| r.max.y).fold(f32::NEG_INFINITY, f32::max) + PADDING;
+                let right = rects
+                    .iter()
+                    .map(|r| r.max.x)
+                    .fold(f32::NEG_INFINITY, f32::max)
+                    + PADDING;
+                let bottom = rects
+                    .iter()
+                    .map(|r| r.max.y)
+                    .fold(f32::NEG_INFINITY, f32::max)
+                    + PADDING;
                 comment.position = Position::new(snap(f64::from(left)), snap(f64::from(top)));
                 comment.size = (
                     snap(f64::from(right - left)).max(100.0),
@@ -938,7 +969,8 @@ impl GraphCanvasPanel {
             let mut data = self.profile_data.write().unwrap_or_else(|e| e.into_inner());
             data.angular_wires = !data.angular_wires;
         }
-        self.canvas.update(cx, |canvas, cx| canvas.refresh_scene(cx));
+        self.canvas
+            .update(cx, |canvas, cx| canvas.refresh_scene(cx));
         cx.notify();
     }
 }

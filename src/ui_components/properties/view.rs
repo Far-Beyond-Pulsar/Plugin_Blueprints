@@ -107,7 +107,9 @@ impl GraphCanvasPanel {
                 .iter()
                 .map(|(k, v)| (k.clone(), crate::io::canvas_doc::property_string(v)))
                 .collect(),
-            description: definition.map(|d| d.description.clone()).unwrap_or_default(),
+            description: definition
+                .map(|d| d.description.clone())
+                .unwrap_or_default(),
         })
     }
 

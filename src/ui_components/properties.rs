@@ -21,8 +21,8 @@ use ui::{
 };
 
 use self::view::{CommentView, NodeView};
-use crate::editor::panel::BlueprintEditorPanel;
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
+use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::prefabs::panel::group_rows_by_category;
 use std::any::Any;
 use std::sync::Arc;
@@ -181,7 +181,9 @@ impl PropertiesRenderer {
         if sel_ties.len() == 1 && sel_count == 0 && com_count == 0 {
             if let Some(active_canvas) = active_canvas_opt.clone() {
                 let index = sel_ties[0];
-                let input = active_canvas.update(cx, |canvas, cx| canvas.sync_zip_tie_length_input(index, window, cx));
+                let input = active_canvas.update(cx, |canvas, cx| {
+                    canvas.sync_zip_tie_length_input(index, window, cx)
+                });
                 return Self::render_zip_tie_properties(&active_canvas, index, input, cx);
             }
         }
@@ -577,12 +579,10 @@ impl PropertiesRenderer {
                                 .px_2()
                                 .py_1()
                                 .rounded(px(4.0))
-                                .bg(Self::get_node_type_color(&selected_node, cx)
-                                    .opacity(0.15))
+                                .bg(Self::get_node_type_color(&selected_node, cx).opacity(0.15))
                                 .border_1()
                                 .border_color(
-                                    Self::get_node_type_color(&selected_node, cx)
-                                        .opacity(0.3),
+                                    Self::get_node_type_color(&selected_node, cx).opacity(0.3),
                                 )
                                 .text_xs()
                                 .font_semibold()
@@ -711,12 +711,10 @@ impl PropertiesRenderer {
                                 .px_2()
                                 .py_1()
                                 .rounded(px(4.0))
-                                .bg(Self::get_node_type_color(&selected_node, cx)
-                                    .opacity(0.15))
+                                .bg(Self::get_node_type_color(&selected_node, cx).opacity(0.15))
                                 .border_1()
                                 .border_color(
-                                    Self::get_node_type_color(&selected_node, cx)
-                                        .opacity(0.3),
+                                    Self::get_node_type_color(&selected_node, cx).opacity(0.3),
                                 )
                                 .text_xs()
                                 .font_semibold()
@@ -843,7 +841,11 @@ impl PropertiesRenderer {
                             )
                             .child(div().w_full().child(input)),
                     )
-                    .child(Self::render_info_row("Clamped wires", &wire_count.to_string(), cx))
+                    .child(Self::render_info_row(
+                        "Clamped wires",
+                        &wire_count.to_string(),
+                        cx,
+                    ))
                     .child(Self::render_info_row(
                         "Position",
                         &format!("({:.1}, {:.1})", position.0, position.1),
@@ -870,7 +872,9 @@ impl PropertiesRenderer {
         if let Some(canvas) = active_canvas {
             comment_text_input = Some(canvas.read(cx).comment_text_input.clone());
             let (index, id) = (comment.index, comment.id.clone());
-            color_picker = Some(canvas.update(cx, |canvas, cx| canvas.comment_picker(index, &id, window, cx)));
+            color_picker = Some(canvas.update(cx, |canvas, cx| {
+                canvas.comment_picker(index, &id, window, cx)
+            }));
         }
 
         // Keep the picker controls initialized from the selected comment.

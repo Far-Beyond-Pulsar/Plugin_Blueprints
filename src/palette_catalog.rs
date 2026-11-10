@@ -112,8 +112,7 @@ impl BlueprintEditorPanel {
             .as_deref()
             .and_then(crate::features::class_dirs::class_name_of)
             .unwrap_or_else(|| "unnamed_blueprint".to_owned());
-        let animation_assets =
-            engine_events::animation_asset_ids_from_prefab(&self.prefab_asset);
+        let animation_assets = engine_events::animation_asset_ids_from_prefab(&self.prefab_asset);
         push_event_categories(
             &mut out,
             &mut definitions,
@@ -190,7 +189,8 @@ pub(crate) fn publish_trait_entries(
     for id in stale {
         data.extra_definitions.remove(&id);
     }
-    data.extra_catalog.retain(|entry| !is_trait(&entry.category));
+    data.extra_catalog
+        .retain(|entry| !is_trait(&entry.category));
     let mut entries = Vec::new();
     push_event_categories(&mut entries, &mut data.extra_definitions, definitions);
     data.extra_catalog.extend(entries);
@@ -211,7 +211,10 @@ mod tests {
             trait_id: "t1".into(),
             trait_name: "Mode".into(),
             name: name.into(),
-            params: params.iter().map(|(n, t)| ((*n).into(), (*t).into())).collect(),
+            params: params
+                .iter()
+                .map(|(n, t)| ((*n).into(), (*t).into()))
+                .collect(),
             return_type: "()".into(),
             doc: String::new(),
         }
@@ -259,10 +262,17 @@ mod tests {
             node_definitions("Player", &[spec("on_game_start", &[])]),
         );
         let profile = BlueprintProfile::blueprint(data.clone());
-        assert!(profile.create_node("event::on::Player.on_game_start", "a", Position::zero()).is_some());
+        assert!(profile
+            .create_node("event::on::Player.on_game_start", "a", Position::zero())
+            .is_some());
 
         publish_trait_entries(&mut data.write().unwrap(), Vec::new());
-        assert!(profile.catalog().iter().all(|e| e.definition != "event::on::Player.on_game_start"));
-        assert!(profile.create_node("event::on::Player.on_game_start", "b", Position::zero()).is_none());
+        assert!(profile
+            .catalog()
+            .iter()
+            .all(|e| e.definition != "event::on::Player.on_game_start"));
+        assert!(profile
+            .create_node("event::on::Player.on_game_start", "b", Position::zero())
+            .is_none());
     }
 }

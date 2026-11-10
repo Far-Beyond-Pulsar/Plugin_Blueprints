@@ -19,9 +19,9 @@ use crate::core::{events::*, graph::*, types::*};
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::editor::workspace_panels::FindPanel;
 
-use pulsar_class::prefab::PrefabAsset;
 use crate::features::variables::ClassVariable;
 use graphy_blueprint::{LibraryManager, SubGraph};
+use pulsar_class::prefab::PrefabAsset;
 use ui::dock::{DockItem, DockPlacement};
 use ui::dropdown::{SearchableList, SearchableListEvent};
 
@@ -61,12 +61,6 @@ pub struct BlueprintEditorPanel {
     /// explicit error state instead of presenting an empty, editable document.
     pub load_error: Option<String>,
 
-
-
-
-
-
-
     // Variables system
     pub class_variables: Vec<ClassVariable>,
     pub selected_variable: Option<usize>,
@@ -88,7 +82,6 @@ pub struct BlueprintEditorPanel {
     pub prefab_collapsed_categories: HashSet<(usize, String)>,
     pub prefab_expanded_categories: HashSet<(usize, String)>,
     pub selected_prefab_component: Option<usize>,
-
 
     // Subscriptions
     pub subscriptions: Vec<Subscription>,
@@ -151,8 +144,6 @@ pub struct BlueprintEditorPanel {
     /// The host's undo histories (Pulsar-Native#931), once given them.
     pub undo_service: Option<plugin_editor_api::UndoService>,
 
-
-
     // ── Debugger ──────────────────────────────────────────────────────────────
     /// Set of node IDs that have an active breakpoint.
     pub breakpoints: HashSet<String>,
@@ -196,7 +187,6 @@ pub struct CompilationHistoryEntry {
     pub message: String,
     pub detail: Option<String>,
 }
-
 
 impl BlueprintEditorPanel {
     /// Bridge synchronous AI tool calls to the GPUI-owned live canvas. Tool
@@ -606,10 +596,19 @@ impl BlueprintEditorPanel {
         let profile = crate::canvas_profile::BlueprintProfile::blueprint(Default::default());
         let mut graph = graphy::GraphDescription::new("EventGraph");
         let begin = profile.create_node("begin_play", "begin", graphy::Position::new(100.0, 200.0));
-        let print = profile.create_node("print_string", "print", graphy::Position::new(420.0, 200.0));
+        let print =
+            profile.create_node("print_string", "print", graphy::Position::new(420.0, 200.0));
         if let (Some(begin), Some(print)) = (begin, print) {
-            let from = begin.outputs.iter().find(|p| p.data_type().is_execution()).map(|p| p.id.clone());
-            let to = print.inputs.iter().find(|p| p.data_type().is_execution()).map(|p| p.id.clone());
+            let from = begin
+                .outputs
+                .iter()
+                .find(|p| p.data_type().is_execution())
+                .map(|p| p.id.clone());
+            let to = print
+                .inputs
+                .iter()
+                .find(|p| p.data_type().is_execution())
+                .map(|p| p.id.clone());
             graph.add_node(begin);
             graph.add_node(print);
             if let (Some(from), Some(to)) = (from, to) {
@@ -625,7 +624,10 @@ impl BlueprintEditorPanel {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let ids: Vec<String> = node_ids.into_iter().map(|id| id.as_ref().to_string()).collect();
+        let ids: Vec<String> = node_ids
+            .into_iter()
+            .map(|id| id.as_ref().to_string())
+            .collect();
         for (_, canvas) in self.graph_panels.clone() {
             canvas.update(cx, |canvas, cx| canvas.set_running_nodes(ids.iter(), cx));
         }
@@ -1063,5 +1065,4 @@ impl BlueprintEditorPanel {
         );
         Ok(())
     }
-
 }

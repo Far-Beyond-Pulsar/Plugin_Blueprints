@@ -20,7 +20,11 @@ fn catalogue_nodes_instantiate_and_lay_out() {
     let mut graph = GraphDescription::new("t");
     for (i, entry) in catalog.iter().take(50).enumerate() {
         let node = profile
-            .create_node(&entry.definition, &format!("n{i}"), Position::new(i as f64 * 300.0, 0.0))
+            .create_node(
+                &entry.definition,
+                &format!("n{i}"),
+                Position::new(i as f64 * 300.0, 0.0),
+            )
             .unwrap_or_else(|| panic!("{} instantiates", entry.definition));
         assert_eq!(node.node_type, entry.definition);
         graph.add_node(node);
@@ -43,13 +47,26 @@ fn connection_rules_follow_blueprint_type_compatibility() {
     b.add_input_pin("exec", DataType::Exec);
     graph.add_node(a);
     graph.add_node(b);
-    let pin = |n: &str, p: &str| graphy::PinRef { node: n.into(), pin: p.into() };
+    let pin = |n: &str, p: &str| graphy::PinRef {
+        node: n.into(),
+        pin: p.into(),
+    };
 
-    assert!(profile.can_connect(&graph, &pin("a", "f"), &pin("b", "f")).is_ok());
-    assert!(profile.can_connect(&graph, &pin("a", "f"), &pin("b", "s")).is_err());
-    assert!(profile.can_connect(&graph, &pin("a", "exec"), &pin("b", "f")).is_err());
-    assert!(profile.can_connect(&graph, &pin("a", "exec"), &pin("b", "exec")).is_ok());
-    assert!(profile.can_connect(&graph, &pin("a", "f"), &pin("a", "f")).is_err());
+    assert!(profile
+        .can_connect(&graph, &pin("a", "f"), &pin("b", "f"))
+        .is_ok());
+    assert!(profile
+        .can_connect(&graph, &pin("a", "f"), &pin("b", "s"))
+        .is_err());
+    assert!(profile
+        .can_connect(&graph, &pin("a", "exec"), &pin("b", "f"))
+        .is_err());
+    assert!(profile
+        .can_connect(&graph, &pin("a", "exec"), &pin("b", "exec"))
+        .is_ok());
+    assert!(profile
+        .can_connect(&graph, &pin("a", "f"), &pin("a", "f"))
+        .is_err());
 }
 
 #[test]
@@ -72,7 +89,10 @@ fn reroute_takes_the_type_of_what_it_is_wired_to() {
 fn subgraph_call_nodes_open_their_graph() {
     let profile = profile();
     let node = NodeInstance::new("m", "subgraph:macro:once-macro", Position::zero());
-    assert_eq!(profile.macro_target(&node).map(|t| t.graph_id).as_deref(), Some("once-macro"));
+    assert_eq!(
+        profile.macro_target(&node).map(|t| t.graph_id).as_deref(),
+        Some("once-macro")
+    );
     let plain = NodeInstance::new("p", "print_string", Position::zero());
     assert!(profile.macro_target(&plain).is_none());
 }

@@ -47,17 +47,38 @@ fn assert_lossless(graph: &authored::GraphDescription) {
         // `connected_to` is derived from the connections and rebuilt on save
         // (the editor has always written it consistent); everything else is
         // compared verbatim.
-        assert_eq!(json(&strip_backlinks(n)), json(&strip_backlinks(b)), "node {key}");
+        assert_eq!(
+            json(&strip_backlinks(n)),
+            json(&strip_backlinks(b)),
+            "node {key}"
+        );
     }
-    assert_eq!(json(&graph.connections), json(&back.connections), "connection ids and order");
+    assert_eq!(
+        json(&graph.connections),
+        json(&back.connections),
+        "connection ids and order"
+    );
     for c in &back.connections {
-        let src = &back.nodes[&c.source_node].outputs.iter().find(|p| p.id == c.source_pin).unwrap().pin;
-        let dst = &back.nodes[&c.target_node].inputs.iter().find(|p| p.id == c.target_pin).unwrap().pin;
+        let src = &back.nodes[&c.source_node]
+            .outputs
+            .iter()
+            .find(|p| p.id == c.source_pin)
+            .unwrap()
+            .pin;
+        let dst = &back.nodes[&c.target_node]
+            .inputs
+            .iter()
+            .find(|p| p.id == c.target_pin)
+            .unwrap()
+            .pin;
         assert!(src.connected_to.contains(&c.id) && dst.connected_to.contains(&c.id));
     }
     assert_eq!(json(&graph.comments), json(&back.comments), "comments");
     assert_eq!(json(&graph.metadata), json(&back.metadata), "metadata");
-    assert_eq!(json(&graph.custom_event_defs), json(&back.custom_event_defs));
+    assert_eq!(
+        json(&graph.custom_event_defs),
+        json(&back.custom_event_defs)
+    );
 
     // The document is a fixed point.
     let (doc2, side2) = from_authored(&back);
