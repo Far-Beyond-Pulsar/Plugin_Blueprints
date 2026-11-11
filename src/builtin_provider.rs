@@ -101,6 +101,20 @@ plugin_manager::inventory::submit! {
     }
 }
 
+// Blueprints are trait implementers: the project's trait index finds them
+// through this source (`features::traits::source`), and each binds to the
+// script class it compiles to.
+pulsar_traits::inventory::submit! {
+    pulsar_traits::TraitImplementerSource {
+        origin: pulsar_plugins::origin!(),
+        kind: crate::features::traits::source::BLUEPRINT_KIND,
+        label: "Blueprints",
+        claims: Some(crate::features::traits::source::is_blueprint_asset),
+        scan: Some(crate::features::traits::source::scan),
+        list: None,
+    }
+}
+
 // The headless tools (`pulsar package`, CI) find languages through the same
 // link-time registration, so they select this compiler by this id.
 plugin_editor_api::inventory::submit! {

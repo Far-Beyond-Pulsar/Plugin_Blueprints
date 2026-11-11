@@ -23,6 +23,8 @@ builtin = ["dep:plugin_manager"]
 # The plugin's descriptor and its editor provider's registration.
 pulsar_plugins = { workspace = true }
 engine_fs = { workspace = true }
+# Traits: the project's trait index, conformance, and this plugin's Blueprint source.
+pulsar_traits = { workspace = true }
 editor_task_queue = { workspace = true }
 ui_types_common = { workspace = true }
 graphy-blueprint = { workspace = true }
@@ -85,3 +87,6 @@ tool_registry_macros = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common"] }
 parking_lot = "0.12"
+
+[lints]
+workspace = true

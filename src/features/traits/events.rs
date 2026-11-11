@@ -11,7 +11,7 @@
 //! Blueprint's metadata and the project's traits, so removing the trait
 //! removes the entries, and renaming or moving the trait asset changes
 //! nothing. Placing the node is what provides the method for
-//! `engine_fs::trait_conformance`.
+//! `pulsar_traits::conformance`.
 //!
 //! A trait method's return type has no counterpart in the event system, so
 //! it is shown in the node's description but a handler cannot return it.
@@ -49,7 +49,7 @@ pub struct TraitMethodSpec {
 
 /// The methods required by the traits `ids` (and their supertraits), each
 /// name once, nearest trait first.
-pub fn specs_for(db: &engine_fs::TraitDb, ids: &[String]) -> Vec<TraitMethodSpec> {
+pub fn specs_for(db: &pulsar_traits::TraitDb, ids: &[String]) -> Vec<TraitMethodSpec> {
     let mut seen = BTreeSet::new();
     let mut specs = Vec::new();
     for id in ids {
@@ -120,7 +120,7 @@ pub fn declared_event_sources(
     if metadata.implemented_trait_ids.is_empty() && metadata.implemented_traits.is_empty() {
         return Vec::new();
     }
-    let index = match engine_fs::BlueprintTraitIndex::load_or_rebuild(project_root) {
+    let index = match pulsar_traits::TraitIndex::load_or_rebuild(project_root) {
         Ok(index) => index,
         Err(error) => {
             tracing::warn!(
@@ -226,7 +226,7 @@ pub fn orphaned_events(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use engine_fs::{TraitDb, TraitMethodRecord, TraitParamRecord, TraitRecord};
+    use pulsar_traits::{TraitDb, TraitMethodRecord, TraitParamRecord, TraitRecord};
 
     fn db() -> TraitDb {
         let method = |name: &str, params: &[(&str, &str)], ret: &str| TraitMethodRecord {

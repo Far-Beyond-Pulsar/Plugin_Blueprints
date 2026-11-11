@@ -80,7 +80,7 @@ pub fn project_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
             continue;
         }
         let module = class.join("events").join(".build").join("module.json");
-        let Ok(json) = std::fs::read_to_string(&module) else {
+        let Ok(json) = engine_fs::virtual_fs::read_to_string(&module) else {
             continue;
         };
         let Ok(module) = Module::from_json(&json) else {

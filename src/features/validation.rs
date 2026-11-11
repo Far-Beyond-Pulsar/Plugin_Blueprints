@@ -33,13 +33,13 @@ pub fn validate_project_classes_with_component_events(
     }
     // Also support callers that pass a class directory directly.
     let direct_graph = root.join("graph_save.json");
-    if direct_graph.is_file() {
+    if engine_fs::virtual_fs::is_file(&direct_graph) {
         class_files.insert(direct_graph);
     }
 
     // Retain scanning legacy standalone `.blueprint` assets.
     let classes_dir = root.join("src").join("classes");
-    let scan_root = if classes_dir.is_dir() {
+    let scan_root = if engine_fs::virtual_fs::is_dir(&classes_dir) {
         classes_dir.as_path()
     } else {
         root
@@ -58,10 +58,10 @@ pub fn validate_project_classes_with_component_events(
     // Declared traits are part of the contract Play builds against: a
     // Blueprint missing a method of a trait it declares fails here, before the
     // project builds. Without a readable index there is nothing to check.
-    let trait_index = engine_fs::BlueprintTraitIndex::load_or_rebuild(root).ok();
+    let trait_index = pulsar_traits::TraitIndex::load_or_rebuild(root).ok();
 
     for path in class_files {
-        let problem = std::fs::read_to_string(&path)
+        let problem = engine_fs::virtual_fs::read_to_string(&path)
             .map_err(|e| format!("failed to read file: {e}"))
             .and_then(|content| {
                 let content = crate::io::formats::strip_header_comments(&content);
@@ -91,10 +91,10 @@ pub fn validate_project_classes_with_component_events(
                     validate_asset_with_component_events(&asset, path.parent(), component_events);
                 if let (Some(index), Ok(value)) = (&trait_index, serde_json::to_value(&asset)) {
                     problems.extend(
-                        engine_fs::trait_conformance::check_blueprint(index.db(), &value)
+                        crate::features::traits::source::check_blueprint(index.db(), &value)
                             .into_iter()
                             .filter(|issue| {
-                                issue.severity == engine_fs::trait_conformance::Severity::Error
+                                issue.severity == pulsar_traits::conformance::Severity::Error
                             })
                             .map(|issue| format!("trait {}: {}", issue.trait_name, issue.message)),
                     );
@@ -123,12 +123,12 @@ pub fn validate_project_classes_with_component_events(
 }
 
 fn collect_blueprint_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = engine_fs::virtual_fs::list_dir(dir) else {
         return;
     };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
+    for entry in entries {
+        let path = dir.join(&entry.name);
+        if entry.is_dir {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if matches!(name, "target" | ".build" | "node_modules") {
                 continue;
@@ -410,22 +410,22 @@ fn compile_class_dir(
         )]);
     }
     let fail = |message: String| {
-        let _ = std::fs::remove_file(&out);
+        let _ = engine_fs::virtual_fs::delete_path(&out);
         vec![CompileDiagnostic::error(
             class.clone(),
             Some(graph_file.clone()),
             message,
         )]
     };
-    let text =
-        std::fs::read_to_string(&graph_file).map_err(|e| fail(format!("failed to read: {e}")))?;
+    let text = engine_fs::virtual_fs::read_to_string(&graph_file)
+        .map_err(|e| fail(format!("failed to read: {e}")))?;
     let asset = crate::io::formats::deserialize_blueprint(
         &crate::io::formats::strip_header_comments(&text),
     )
     .map_err(|e| fail(format!("failed to parse blueprint asset: {e}")))?;
     let compiled = compile_asset(&asset, Some(dir), natives, component_events);
     let Some(module) = compiled.module else {
-        let _ = std::fs::remove_file(&out);
+        let _ = engine_fs::virtual_fs::delete_path(&out);
         return Err(compiled
             .problems
             .into_iter()
@@ -438,9 +438,9 @@ fn compile_class_dir(
     let json = module
         .to_json()
         .map_err(|e| fail(format!("failed to serialise module: {e}")))?;
-    std::fs::create_dir_all(&out_dir)
+    engine_fs::virtual_fs::create_dir_all(&out_dir)
         .map_err(|e| fail(format!("failed to create {}: {e}", out_dir.display())))?;
-    std::fs::write(&out, json)
+    engine_fs::virtual_fs::write_file(&out, json.as_bytes())
         .map_err(|e| fail(format!("failed to write {}: {e}", out.display())))?;
     crate::features::class_dirs::mark_language(dir)
         .map_err(|e| fail(format!("failed to record the language: {e}")))?;

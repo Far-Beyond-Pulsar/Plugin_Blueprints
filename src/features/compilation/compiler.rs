@@ -241,15 +241,16 @@ impl BlueprintEditorPanel {
         crate::features::class_dirs::check_language(class_path)?;
         let module = self.compile_module(cx).inspect_err(|_| {
             // Never leave a module from an older graph behind.
-            let _ = std::fs::remove_file(&out_path);
+            let _ = engine_fs::virtual_fs::delete_path(&out_path);
         })?;
 
         let json = module
             .to_json()
             .map_err(|e| format!("Failed to serialise module: {e}"))?;
-        std::fs::create_dir_all(&build_dir)
+        engine_fs::virtual_fs::create_dir_all(&build_dir)
             .map_err(|e| format!("Failed to create .build directory: {e}"))?;
-        std::fs::write(&out_path, json).map_err(|e| format!("Failed to write module.json: {e}"))?;
+        engine_fs::virtual_fs::write_file(&out_path, json.as_bytes())
+            .map_err(|e| format!("Failed to write module.json: {e}"))?;
         crate::features::class_dirs::mark_language(class_path)
             .map_err(|e| format!("Failed to record the language: {e}"))?;
         tracing::info!("Script module written to {}", out_path.display());
@@ -296,19 +297,19 @@ impl BlueprintEditorPanel {
                 .clone()
                 .or_else(|| crate::features::class_dirs::project_root_of(class_path))
                 .ok_or("Could not determine project root to resolve Blueprint traits")?;
-            let index = engine_fs::BlueprintTraitIndex::load_or_rebuild(&project_root)
+            let index = pulsar_traits::TraitIndex::load_or_rebuild(&project_root)
                 .map_err(|error| format!("Could not read the project's traits: {error:#}"))?;
 
             // A Blueprint that declares a trait must provide its methods.
             // Declarations from before trait ids are warnings (see
-            // `engine_fs::trait_conformance`).
-            let issues = engine_fs::trait_conformance::check_blueprint(
+            // `pulsar_traits::conformance`).
+            let issues = crate::features::traits::source::check_blueprint(
                 index.db(),
                 &self.current_blueprint_json(cx)?,
             );
             for issue in issues
                 .iter()
-                .filter(|issue| issue.severity == engine_fs::trait_conformance::Severity::Warning)
+                .filter(|issue| issue.severity == pulsar_traits::conformance::Severity::Warning)
             {
                 tracing::warn!(
                     "{} Blueprint trait contract: {}",
@@ -318,13 +319,13 @@ impl BlueprintEditorPanel {
             }
             let errors: Vec<_> = issues
                 .iter()
-                .filter(|issue| issue.severity == engine_fs::trait_conformance::Severity::Error)
+                .filter(|issue| issue.severity == pulsar_traits::conformance::Severity::Error)
                 .cloned()
                 .collect();
             if !errors.is_empty() {
                 return Err(format!(
                     "Blueprint does not satisfy the traits it declares:\n{}",
-                    engine_fs::trait_conformance::format_issues(&errors)
+                    pulsar_traits::conformance::format_issues(&errors)
                 ));
             }
 
@@ -363,7 +364,7 @@ impl BlueprintEditorPanel {
         self.generate_vars_module()?;
 
         let events_dir = class_path.join("events");
-        std::fs::create_dir_all(&events_dir)
+        engine_fs::virtual_fs::create_dir_all(&events_dir)
             .map_err(|e| format!("Failed to create events directory: {}", e))?;
 
         let has_events = self.main_canvas().is_some_and(|canvas| {
@@ -389,7 +390,7 @@ impl BlueprintEditorPanel {
 
         // Write all events into a single file
         let events_file = events_dir.join("events.rs");
-        std::fs::write(&events_file, &generated)
+        engine_fs::virtual_fs::write_file(&events_file, generated.as_bytes())
             .map_err(|e| format!("Failed to write events.rs: {}", e))?;
 
         // Write mod.rs that re-exports everything from events.rs
@@ -407,7 +408,7 @@ impl BlueprintEditorPanel {
             version
         );
         let mod_path = events_dir.join("mod.rs");
-        std::fs::write(&mod_path, mod_content)
+        engine_fs::virtual_fs::write_file(&mod_path, mod_content.as_bytes())
             .map_err(|e| format!("Failed to write mod.rs: {}", e))?;
 
         // ── Update <Class>/mod.rs ─────────────────────────────────────────────
@@ -423,14 +424,14 @@ impl BlueprintEditorPanel {
              pub mod events;\n\
              pub use events::*;\n"
         );
-        std::fs::write(&class_mod, class_mod_content)
+        engine_fs::virtual_fs::write_file(&class_mod, class_mod_content.as_bytes())
             .map_err(|e| format!("Failed to write {blueprint_name}/mod.rs: {e}"))?;
 
         // ── Ensure src/classes/mod.rs declares this class ─────────────────────
         if let Some(classes_dir) = class_path.parent() {
             let classes_mod = classes_dir.join("mod.rs");
             let mod_decl = format!("pub mod {blueprint_name};");
-            let existing = std::fs::read_to_string(&classes_mod).unwrap_or_default();
+            let existing = engine_fs::virtual_fs::read_to_string(&classes_mod).unwrap_or_default();
             if !existing.contains(&mod_decl) {
                 // Append the declaration; preserve any existing hand-written content.
                 let updated = if existing.trim().is_empty() {
@@ -438,7 +439,7 @@ impl BlueprintEditorPanel {
                 } else {
                     format!("{}\n{}\n", existing.trim_end(), mod_decl)
                 };
-                std::fs::write(&classes_mod, updated)
+                engine_fs::virtual_fs::write_file(&classes_mod, updated.as_bytes())
                     .map_err(|e| format!("Failed to update classes/mod.rs: {e}"))?;
             }
         }
@@ -555,7 +556,7 @@ impl BlueprintEditorPanel {
                     // The engine script module is what the game runtime runs.
                     // Remove bytecode left by the old PBGC VM path.
                     if let Some(class_path) = &panel.current_class_path {
-                        let _ = std::fs::remove_file(class_path.join("events").join(".build").join("bytecode.json"));
+                        let _ = engine_fs::virtual_fs::delete_path(&class_path.join("events").join(".build").join("bytecode.json"));
                     }
                     panel.compile_to_script_module(cx).map(Some)
                 }

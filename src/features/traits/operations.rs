@@ -96,16 +96,17 @@ impl BlueprintEditorPanel {
             return;
         };
         cx.spawn(async move |this, cx| {
-            let result =
-                cx.background_executor()
-                    .spawn(async move {
-                        match changed {
-                            Some(path) => engine_fs::BlueprintTraitIndex::update_path(&root, &path)
-                                .map(|_| ()),
-                            None => engine_fs::BlueprintTraitIndex::rebuild(&root).map(|_| ()),
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    match changed {
+                        Some(path) => {
+                            pulsar_traits::TraitIndex::update_path(&root, &path).map(|_| ())
                         }
-                    })
-                    .await;
+                        None => pulsar_traits::TraitIndex::rebuild(&root).map(|_| ()),
+                    }
+                })
+                .await;
             if let Err(error) = result {
                 tracing::warn!("Could not update the trait index: {error:#}");
             }
@@ -398,8 +399,8 @@ fn load_trait_catalog(
 ) -> Result<Vec<crate::features::traits::TraitAssetSummary>, String> {
     // The persisted index is current: saves and trait events update it. A
     // project without one (or from an older engine) is scanned once.
-    let index = engine_fs::BlueprintTraitIndex::load(root)
-        .or_else(|_| engine_fs::BlueprintTraitIndex::rebuild(root))
+    let index = pulsar_traits::TraitIndex::load(root)
+        .or_else(|_| pulsar_traits::TraitIndex::rebuild(root))
         .map_err(|error| format!("Could not scan project traits: {error:#}"))?;
     let mut assets: Vec<_> = index
         .traits()

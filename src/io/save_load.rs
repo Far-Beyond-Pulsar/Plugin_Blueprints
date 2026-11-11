@@ -221,7 +221,7 @@ fn persist_prefab_sidecar(write: &PrefabWrite) -> Result<(), String> {
 /// opening a project does the full scan.
 fn refresh_blueprint_trait_index_at(project_root: Option<&Path>, saved: &Path) {
     if let Some(project_root) = project_root {
-        if let Err(error) = engine_fs::BlueprintTraitIndex::update_path(project_root, saved) {
+        if let Err(error) = pulsar_traits::TraitIndex::update_path(project_root, saved) {
             tracing::warn!(
                 project_root = %project_root.display(),
                 %error,
@@ -859,7 +859,7 @@ impl BlueprintEditorPanel {
     pub fn has_autosave(&self) -> bool {
         if let Some(path) = self.get_graph_file_path() {
             let autosave_path = path.with_extension("blueprint.autosave");
-            autosave_path.exists()
+            engine_fs::virtual_fs::exists(&autosave_path).unwrap_or(false)
         } else {
             false
         }
@@ -876,7 +876,7 @@ impl BlueprintEditorPanel {
             self.load_from_path(&autosave_path, window, cx)?;
 
             // Delete autosave after successful recovery
-            std::fs::remove_file(&autosave_path)
+            engine_fs::virtual_fs::delete_path(&autosave_path)
                 .map_err(|e| format!("Failed to delete autosave file: {}", e))?;
 
             Ok(())
@@ -920,7 +920,7 @@ impl BlueprintEditorPanel {
         let asset = self.to_blueprint_asset(cx)?;
         let content = formats::serialize_blueprint_with_header(&asset)?;
 
-        std::fs::write(export_path, &content)
+        engine_fs::virtual_fs::write_file(export_path, content.as_bytes())
             .map_err(|e| format!("Failed to export blueprint: {}", e))?;
 
         tracing::info!(
