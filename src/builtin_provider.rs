@@ -1,7 +1,7 @@
 //! The Blueprint editor as a built-in editor provider.
 //!
-//! Built into a binary (feature `builtin`) the plugin registers itself at
-//! link time through `plugin_manager::PluginEditorProvider` (offered only
+//! Built into a binary (feature `builtin`) the plugin registers itself
+//! through its root's `build` with `plugin_manager::PluginEditorProvider` (offered only
 //! while the plugin is enabled for the project), exactly like
 //! any other editor that is part of a build: the editor shell does not
 //! depend on this crate, and a build without it simply has no Blueprint
@@ -93,34 +93,32 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
     }
 }
 
-plugin_manager::inventory::submit! {
-    PluginEditorProvider {
-        origin: pulsar_plugins::origin!(),
+/// Registers the editor provider, the trait implementer source and the
+/// script language.
+pub(crate) fn build(p: &mut pulsar_plugins::PluginBuilder) {
+    p.add(PluginEditorProvider {
+        origin: p.origin(),
         id: "com.pulsar.blueprint-editor",
         create: || Arc::new(BlueprintEditorBuiltinProvider),
-    }
-}
+    });
 
-// Blueprints are trait implementers: the project's trait index finds them
-// through this source (`features::traits::source`), and each binds to the
-// script class it compiles to.
-pulsar_traits::inventory::submit! {
-    pulsar_traits::TraitImplementerSource {
-        origin: pulsar_plugins::origin!(),
+    // Blueprints are trait implementers: the project's trait index finds them
+    // through this source (`features::traits::source`), and each binds to the
+    // script class it compiles to.
+    p.add(pulsar_traits::TraitImplementerSource {
+        origin: p.origin(),
         kind: crate::features::traits::source::BLUEPRINT_KIND,
         label: "Blueprints",
         claims: Some(crate::features::traits::source::is_blueprint_asset),
         scan: Some(crate::features::traits::source::scan),
         list: None,
-    }
-}
+    });
 
-// The headless tools (`pulsar package`, CI) find languages through the same
-// link-time registration, so they select this compiler by this id.
-plugin_editor_api::inventory::submit! {
-    plugin_editor_api::LinkedScriptLanguage {
-        origin: pulsar_plugins::origin!(),
+    // The headless tools (`pulsar package`, CI) find languages through the same
+    // registration, so they select this compiler by this id.
+    p.add(plugin_editor_api::LinkedScriptLanguage {
+        origin: p.origin(),
         id: crate::LANGUAGE_ID,
         create: crate::script_language,
-    }
+    });
 }
