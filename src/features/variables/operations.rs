@@ -117,12 +117,12 @@ impl BlueprintEditorPanel {
     ) -> Result<(), String> {
         let vars_file = class_path.join("vars_save.json");
 
-        if !vars_file.exists() {
+        if !engine_fs::virtual_fs::exists(&vars_file).unwrap_or(false) {
             self.class_variables.clear();
             return Ok(());
         }
 
-        let content = std::fs::read_to_string(&vars_file)
+        let content = engine_fs::virtual_fs::read_to_string(&vars_file)
             .map_err(|e| format!("Failed to read vars_save.json: {}", e))?;
         let variables: Vec<ClassVariable> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse vars_save.json: {}", e))?;
@@ -142,7 +142,7 @@ impl BlueprintEditorPanel {
         let json = serde_json::to_string_pretty(&self.class_variables)
             .map_err(|e| format!("Failed to serialize variables: {}", e))?;
 
-        std::fs::write(&vars_file, json)
+        engine_fs::virtual_fs::write_file(&vars_file, json.as_bytes())
             .map_err(|e| format!("Failed to write vars_save.json: {}", e))?;
 
         Ok(())
@@ -156,7 +156,7 @@ impl BlueprintEditorPanel {
             .ok_or_else(|| "No class currently loaded".to_string())?;
 
         let vars_dir = class_path.join("vars");
-        std::fs::create_dir_all(&vars_dir)
+        engine_fs::virtual_fs::create_dir_all(&vars_dir)
             .map_err(|e| format!("Failed to create vars directory: {}", e))?;
 
         let mut code = String::new();
@@ -238,7 +238,7 @@ impl BlueprintEditorPanel {
         }
 
         let vars_mod_file = vars_dir.join("mod.rs");
-        std::fs::write(&vars_mod_file, code)
+        engine_fs::virtual_fs::write_file(&vars_mod_file, code.as_bytes())
             .map_err(|e| format!("Failed to write vars/mod.rs: {}", e))?;
 
         Ok(())

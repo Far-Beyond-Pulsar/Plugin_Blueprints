@@ -1038,13 +1038,13 @@ impl BlueprintEditorPanel {
     /// Load local macros from macros.json
     fn load_subgraphs(&mut self, class_path: &std::path::Path) -> Result<(), String> {
         let macros_file = class_path.join("macros.json");
-        if !macros_file.exists() {
+        if !engine_fs::virtual_fs::exists(&macros_file).unwrap_or(false) {
             self.subgraphs
                 .retain(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed);
             return Ok(());
         }
 
-        let content = std::fs::read_to_string(&macros_file)
+        let content = engine_fs::virtual_fs::read_to_string(&macros_file)
             .map_err(|e| format!("Failed to read macros.json: {}", e))?;
         let macros: Vec<graphy_blueprint::SubGraph> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse macros.json: {}", e))?;

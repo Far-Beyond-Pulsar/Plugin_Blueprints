@@ -24,7 +24,7 @@ pub fn is_internal_component(class_name: &str) -> bool {
 /// rewritten (#921): the level editor rebuilds its placed instances, a
 /// running game reloads its script module.
 pub fn publish_class_updated(class_dir: &std::path::Path) {
-    let id = std::fs::read_to_string(class_dir.join(CLASS_META_FILE))
+    let id = engine_fs::virtual_fs::read_to_string(&class_dir.join(CLASS_META_FILE))
         .ok()
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
         .and_then(|meta| {
@@ -45,10 +45,11 @@ pub const CLASS_META_FILE: &str = "class.json";
 /// the class's first save. Other keys in the file are kept.
 pub fn ensure_class_id(class_dir: &std::path::Path) -> Result<String, String> {
     let path = class_dir.join(CLASS_META_FILE);
-    let mut meta: serde_json::Map<String, serde_json::Value> = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default();
+    let mut meta: serde_json::Map<String, serde_json::Value> =
+        engine_fs::virtual_fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default();
     if let Some(id) = meta
         .get("class_id")
         .and_then(|v| v.as_str())
@@ -59,7 +60,8 @@ pub fn ensure_class_id(class_dir: &std::path::Path) -> Result<String, String> {
     let id = uuid::Uuid::new_v4().to_string();
     meta.insert("class_id".into(), serde_json::Value::String(id.clone()));
     let text = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
-    std::fs::write(&path, text).map_err(|e| format!("Failed to write class.json: {e}"))?;
+    engine_fs::virtual_fs::write_file(&path, text.as_bytes())
+        .map_err(|e| format!("Failed to write class.json: {e}"))?;
     Ok(id)
 }
 
@@ -128,7 +130,7 @@ impl BlueprintEditorPanel {
             return Ok(());
         };
 
-        if !path.exists() {
+        if !engine_fs::virtual_fs::exists(&path).unwrap_or(false) {
             return Ok(());
         }
 

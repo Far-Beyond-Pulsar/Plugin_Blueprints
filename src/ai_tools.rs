@@ -89,9 +89,7 @@ fn normalize_file_key(file_path: &Path) -> PathBuf {
         file_path.to_path_buf()
     };
 
-    candidate
-        .canonicalize()
-        .unwrap_or_else(|_| candidate.to_path_buf())
+    engine_fs::virtual_fs::canonicalize(&candidate).unwrap_or_else(|_| candidate.to_path_buf())
 }
 
 pub(crate) fn same_file_key(left: &Path, right: &Path) -> bool {
@@ -318,7 +316,7 @@ pub(crate) fn graphs_match(left: &GraphDescription, right: &GraphDescription) ->
 }
 
 fn is_blueprint_file(file_path: &Path) -> bool {
-    if file_path.is_dir() {
+    if engine_fs::virtual_fs::is_dir(file_path) {
         return true;
     }
 

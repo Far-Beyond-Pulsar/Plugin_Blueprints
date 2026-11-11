@@ -6,6 +6,7 @@
 //! folder name without the `.class` extension. The engine's
 //! `pulsar_class` registry finds classes by the same rules.
 
+use engine_fs::virtual_fs as vfs;
 use std::path::{Path, PathBuf};
 
 const GRAPH_FILE: &str = "graph_save.json";
@@ -24,7 +25,7 @@ pub fn class_name_of(dir: &Path) -> Option<String> {
 }
 
 fn is_class_dir(dir: &Path) -> bool {
-    dir.join(GRAPH_FILE).is_file()
+    vfs::is_file(&dir.join(GRAPH_FILE))
 }
 
 fn skip_when_searching(name: &str) -> bool {
@@ -52,31 +53,31 @@ pub fn project_root_of(class_dir: &Path) -> Option<PathBuf> {
     }
     parent
         .ancestors()
-        .find(|dir| dir.join("Pulsar").is_dir() || dir.join("Cargo.toml").is_file())
+        .find(|dir| vfs::is_dir(&dir.join("Pulsar")) || vfs::is_file(&dir.join("Cargo.toml")))
         .map(Path::to_path_buf)
 }
 
 /// Every class directory of the project at `root`, sorted.
 pub fn project_class_dirs(root: &Path) -> Vec<PathBuf> {
-    let mut found: Vec<PathBuf> = std::fs::read_dir(root.join("src").join("classes"))
+    let mut found: Vec<PathBuf> = vfs::list_dir(&root.join("src").join("classes"))
         .map(|entries| {
             entries
-                .flatten()
-                .map(|e| e.path())
+                .into_iter()
+                .map(|e| root.join("src").join("classes").join(&e.name))
                 .filter(|p| is_class_dir(p))
                 .collect()
         })
         .unwrap_or_default();
     let mut stack = vec![(root.to_path_buf(), 0usize)];
     while let Some((dir, depth)) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
+        let Ok(entries) = vfs::list_dir(&dir) else {
             continue;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
+        for entry in entries {
+            if !entry.is_dir {
                 continue;
             }
+            let path = dir.join(&entry.name);
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
@@ -105,11 +106,11 @@ pub fn sibling_class_dirs(class_dir: &Path) -> Vec<PathBuf> {
     let Some(parent) = class_dir.parent() else {
         return Vec::new();
     };
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(parent)
+    let mut dirs: Vec<PathBuf> = vfs::list_dir(parent)
         .map(|entries| {
             entries
-                .flatten()
-                .map(|e| e.path())
+                .into_iter()
+                .map(|e| parent.join(&e.name))
                 .filter(|p| is_class_dir(p))
                 .collect()
         })
@@ -129,14 +130,14 @@ const LANGUAGE_MARKER: &str = "language";
 /// a class that also has TypeScript source, or whose compiled module was
 /// written by another language, is refused rather than overwritten.
 pub fn check_language(dir: &Path) -> Result<(), String> {
-    if dir.join("class.ts").is_file() {
+    if vfs::is_file(&dir.join("class.ts")) {
         return Err(
             "this class has both `graph_save.json` (Blueprint) and `class.ts` (TypeScript): \
                     a class has one language, so remove one of them"
                 .to_owned(),
         );
     }
-    match std::fs::read_to_string(dir.join("events").join(".build").join(LANGUAGE_MARKER)) {
+    match vfs::read_to_string(&dir.join("events").join(".build").join(LANGUAGE_MARKER)) {
         Ok(other) if other.trim() != LANGUAGE_ID && !other.trim().is_empty() => Err(format!(
             "its compiled module was written by the `{}` language; delete `events/.build` to compile it as a Blueprint",
             other.trim()
@@ -148,8 +149,9 @@ pub fn check_language(dir: &Path) -> Result<(), String> {
 /// Record that this language produced `dir`'s compiled module.
 pub fn mark_language(dir: &Path) -> std::io::Result<()> {
     let build = dir.join("events").join(".build");
-    std::fs::create_dir_all(&build)?;
-    std::fs::write(build.join(LANGUAGE_MARKER), LANGUAGE_ID)
+    vfs::create_dir_all(&build).map_err(std::io::Error::other)?;
+    vfs::write_file(&build.join(LANGUAGE_MARKER), LANGUAGE_ID.as_bytes())
+        .map_err(std::io::Error::other)
 }
 
 #[cfg(test)]

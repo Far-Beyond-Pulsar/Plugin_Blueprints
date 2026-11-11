@@ -1,7 +1,7 @@
 //! Resolves Blueprint trait assignments and emits their Rust declarations.
 //!
 //! A Blueprint's declarations are checked before this runs
-//! (`engine_fs::trait_conformance`): it must provide the methods of the traits
+//! (`pulsar_traits::conformance`): it must provide the methods of the traits
 //! it declares. The generated module makes each referenced Rust trait
 //! declaration available to the class crate; it does not bind graph functions
 //! to the Rust methods.
