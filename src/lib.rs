@@ -245,12 +245,6 @@ impl EditorPluginComponents for BlueprintEditorPlugin {
         Vec::new()
     }
 }
-impl EditorPluginSubsystems for BlueprintEditorPlugin {
-    fn subsystems(&self) -> Vec<Box<dyn Subsystem>> {
-        Vec::new()
-    }
-}
-
 /// Blueprints as a scripting language: classes compile to engine script
 /// modules (see `blueprint_compiler`); before Play the editor validates
 /// every saved class graph through this.
