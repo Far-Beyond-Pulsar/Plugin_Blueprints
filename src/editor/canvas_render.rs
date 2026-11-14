@@ -58,6 +58,18 @@ impl Render for GraphCanvasPanel {
             .child(Self::render_debug_hud(self, cx))
             .child(Self::render_macro_pin_editor(self, cx))
             .child(self.render_comment_title_editor(cx));
+        let read_only = self
+            .panel
+            .upgrade()
+            .and_then(|p| p.read(cx).current_class_path.clone())
+            .is_some_and(|path| plugin_editor_api::read_only::is_read_only_path(&path));
+        if self.canvas.read(cx).read_only() != read_only {
+            self.canvas
+                .update(cx, |canvas, cx| canvas.set_read_only(read_only, cx));
+        }
+        if read_only {
+            root = root.child(plugin_editor_api::read_only::read_only_watermark());
+        }
         root
     }
 }
