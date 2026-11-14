@@ -15,7 +15,10 @@ const PREFIX: &str = "examples/advanced/";
 fn advanced_files() -> BTreeMap<String, &'static [u8]> {
     example_files()
         .into_iter()
-        .filter_map(|(path, bytes)| path.strip_prefix(PREFIX).map(|rest| (rest.to_owned(), bytes)))
+        .filter_map(|(path, bytes)| {
+            path.strip_prefix(PREFIX)
+                .map(|rest| (rest.to_owned(), bytes))
+        })
         .collect()
 }
 
@@ -24,8 +27,16 @@ fn class_graphs() -> Vec<(String, String)> {
         .into_iter()
         .filter(|(path, _)| path.ends_with(".class/graph_save.json"))
         .map(|(path, bytes)| {
-            let class = path.split('/').next().unwrap().trim_end_matches(".class").to_owned();
-            (class, String::from_utf8(bytes.to_vec()).expect("graph_save.json is UTF-8"))
+            let class = path
+                .split('/')
+                .next()
+                .unwrap()
+                .trim_end_matches(".class")
+                .to_owned();
+            (
+                class,
+                String::from_utf8(bytes.to_vec()).expect("graph_save.json is UTF-8"),
+            )
         })
         .collect()
 }
@@ -40,49 +51,96 @@ fn the_embedded_set_matches_the_asset_folder() {
             if path.is_dir() {
                 walk(&path, base, out);
             } else {
-                out.push(path.strip_prefix(base).unwrap().to_string_lossy().replace('\\', "/"));
+                out.push(
+                    path.strip_prefix(base)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
             }
         }
     }
     walk(&root, &root, &mut on_disk);
     on_disk.sort();
     let embedded: Vec<String> = advanced_files().into_keys().collect();
-    assert_eq!(embedded, on_disk, "every asset file is embedded, and nothing else is");
+    assert_eq!(
+        embedded, on_disk,
+        "every asset file is embedded, and nothing else is"
+    );
 }
 
 #[test]
 fn every_class_loads_and_is_commented() {
     let classes = class_graphs();
-    assert!(classes.len() >= 12, "the advanced set ships many classes, found {}", classes.len());
+    assert!(
+        classes.len() >= 12,
+        "the advanced set ships many classes, found {}",
+        classes.len()
+    );
     for (class, json) in &classes {
         let asset = deserialize_blueprint(json).unwrap_or_else(|e| panic!("{class}: {e}"));
         assert!(!asset.main_graph.nodes.is_empty(), "{class}: has nodes");
-        assert!(!asset.main_graph.metadata.description.is_empty(), "{class}: graph description");
-        assert!(!asset.blueprint_metadata.description.is_empty(), "{class}: class description");
+        assert!(
+            !asset.main_graph.metadata.description.is_empty(),
+            "{class}: graph description"
+        );
+        assert!(
+            !asset.blueprint_metadata.description.is_empty(),
+            "{class}: class description"
+        );
         assert!(
             asset.main_graph.comments.len() >= 3,
             "{class}: an introduction note and step boxes ({} comments)",
             asset.main_graph.comments.len()
         );
         for variable in &asset.variables {
-            assert!(!variable.description.is_empty(), "{class}: variable {} is documented", variable.name);
+            assert!(
+                !variable.description.is_empty(),
+                "{class}: variable {} is documented",
+                variable.name
+            );
         }
         for comment in &asset.main_graph.comments {
-            assert!(comment.text.len() > 30, "{class}: comment {} says something", comment.id);
+            assert!(
+                comment.text.len() > 30,
+                "{class}: comment {} says something",
+                comment.id
+            );
             for id in &comment.contained_node_ids {
-                assert!(asset.main_graph.nodes.contains_key(id), "{class}: comment names node {id}");
+                assert!(
+                    asset.main_graph.nodes.contains_key(id),
+                    "{class}: comment names node {id}"
+                );
             }
         }
         // Wires are consistent with the pins they touch.
         for c in &asset.main_graph.connections {
             let source = &asset.main_graph.nodes[&c.source_node];
             let target = &asset.main_graph.nodes[&c.target_node];
-            assert!(source.outputs.iter().any(|p| p.id == c.source_pin), "{class}: {}:{}", c.source_node, c.source_pin);
-            assert!(target.inputs.iter().any(|p| p.id == c.target_pin), "{class}: {}:{}", c.target_node, c.target_pin);
+            assert!(
+                source.outputs.iter().any(|p| p.id == c.source_pin),
+                "{class}: {}:{}",
+                c.source_node,
+                c.source_pin
+            );
+            assert!(
+                target.inputs.iter().any(|p| p.id == c.target_pin),
+                "{class}: {}:{}",
+                c.target_node,
+                c.target_pin
+            );
         }
         for macro_graph in &asset.subgraphs {
-            assert!(!macro_graph.description.is_empty(), "{class}: macro {} is documented", macro_graph.name);
-            assert!(!macro_graph.graph.comments.is_empty(), "{class}: macro {} is commented", macro_graph.name);
+            assert!(
+                !macro_graph.description.is_empty(),
+                "{class}: macro {} is documented",
+                macro_graph.name
+            );
+            assert!(
+                !macro_graph.graph.comments.is_empty(),
+                "{class}: macro {} is commented",
+                macro_graph.name
+            );
         }
     }
 }
@@ -92,7 +150,10 @@ fn the_readme_indexes_every_class() {
     let files = advanced_files();
     let readme = String::from_utf8(files["README.md"].to_vec()).unwrap();
     for (class, _) in class_graphs() {
-        assert!(readme.contains(&format!("{class}.class")), "README lists {class}");
+        assert!(
+            readme.contains(&format!("{class}.class")),
+            "README lists {class}"
+        );
     }
     assert!(readme.contains("AdvInteractable.trait.json"));
 }
@@ -133,12 +194,20 @@ fn the_whole_set_compiles_and_validates() {
         .collect();
     lines.sort();
     lines.dedup();
-    assert!(failures.is_empty(), "compile problems:\n{}", lines.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "compile problems:\n{}",
+        lines.join("\n")
+    );
     let compiled = blueprint_editor_plugin::validation::project_class_dirs(&root)
         .iter()
-        .filter(|dir| dir.join("events/.build/module.json").is_file())
+        .filter(|dir| pulsar_class::modules::class_module_path(dir).is_some_and(|p| p.is_file()))
         .count();
-    assert_eq!(compiled, class_graphs().len(), "every class produced a module");
+    assert_eq!(
+        compiled,
+        class_graphs().len(),
+        "every class produced a module"
+    );
 
     blueprint_editor_plugin::validation::validate_project_classes(&root)
         .unwrap_or_else(|problems| panic!("{problems}"));

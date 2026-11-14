@@ -130,9 +130,27 @@ pub fn sibling_class_dirs(class_dir: &Path) -> Vec<PathBuf> {
 /// This language's id, as written next to the artifacts it produces.
 pub const LANGUAGE_ID: &str = "blueprint";
 
-/// The file under `events/.build/` that names the language that produced
-/// the class's compiled module.
-const LANGUAGE_MARKER: &str = "language";
+/// The class at `dir` and the module store of its project
+/// (`pulsar_class::modules`): where its compiled module goes, keyed by its
+/// class id. `None` when `dir` is in no project.
+pub fn class_and_store(
+    dir: &Path,
+) -> Option<(pulsar_class::ClassEntry, pulsar_class::ModuleStore)> {
+    pulsar_class::ModuleStore::for_class_dir(dir)
+}
+
+/// The files a Blueprint compile reads, whose hash the module store records
+/// ([`pulsar_class::ModuleSource::source_hash`]).
+pub fn source_files(dir: &Path) -> Vec<PathBuf> {
+    [
+        "graph_save.json",
+        "vars_save.json",
+        pulsar_class::PREFAB_FILE,
+    ]
+    .iter()
+    .map(|name| dir.join(name))
+    .collect()
+}
 
 /// Whether this language may compile `dir`. A class has exactly one language:
 /// a class that also has TypeScript source, or whose compiled module was
@@ -145,21 +163,32 @@ pub fn check_language(dir: &Path) -> Result<(), String> {
                 .to_owned(),
         );
     }
-    match vfs::read_to_string(&dir.join("events").join(".build").join(LANGUAGE_MARKER)) {
-        Ok(other) if other.trim() != LANGUAGE_ID && !other.trim().is_empty() => Err(format!(
-            "its compiled module was written by the `{}` language; delete `events/.build` to compile it as a Blueprint",
-            other.trim()
+    let written_by = class_and_store(dir).and_then(|(entry, store)| store.language(&entry.id));
+    match written_by {
+        Some(other) if other != LANGUAGE_ID => Err(format!(
+            "its compiled module was written by the `{other}` language; delete its module from \
+             the project's {} to compile it as a Blueprint",
+            pulsar_class::modules::STORE_DIR
         )),
         _ => Ok(()),
     }
 }
 
-/// Record that this language produced `dir`'s compiled module.
-pub fn mark_language(dir: &Path) -> std::io::Result<()> {
-    let build = dir.join("events").join(".build");
-    vfs::create_dir_all(&build).map_err(std::io::Error::other)?;
-    vfs::write_file(&build.join(LANGUAGE_MARKER), LANGUAGE_ID.as_bytes())
-        .map_err(std::io::Error::other)
+/// Store `module_json` as `dir`'s compiled module, written by this language.
+/// Returns where it went.
+pub fn store_module(dir: &Path, module_json: &[u8]) -> Result<PathBuf, String> {
+    let (entry, store) =
+        class_and_store(dir).ok_or_else(|| format!("{} is in no project", dir.display()))?;
+    let hash = pulsar_class::modules::source_hash(&source_files(dir));
+    store.write(&entry, LANGUAGE_ID, hash, module_json)
+}
+
+/// Remove `dir`'s compiled module (its graph no longer compiles: no module
+/// from an older graph is left to run).
+pub fn remove_module(dir: &Path) {
+    if let Some((entry, store)) = class_and_store(dir) {
+        store.remove(&entry.id);
+    }
 }
 
 #[cfg(test)]

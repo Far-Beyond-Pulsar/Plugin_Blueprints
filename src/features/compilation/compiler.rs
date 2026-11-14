@@ -228,31 +228,26 @@ impl BlueprintEditorPanel {
         })
     }
 
-    /// Compile the class to an engine script module and write it to
-    /// `<class_path>/events/.build/module.json`: the language-neutral
-    /// bytecode `pulsar_script_runtime` loads (see `blueprint_compiler`).
+    /// Compile the class to an engine script module and store it in the
+    /// project's module store (`pulsar_class::modules`, keyed by the class
+    /// id; the class folder itself is never written, so a read-only class
+    /// compiles too): the language-neutral bytecode `pulsar_script_runtime`
+    /// loads (see `blueprint_compiler`).
     pub fn compile_to_script_module(&self, cx: &App) -> Result<PathBuf, String> {
         let class_path = self
             .current_class_path
             .as_ref()
             .ok_or("No class loaded — cannot compile")?;
-        let build_dir = class_path.join("events").join(".build");
-        let out_path = build_dir.join("module.json");
         crate::features::class_dirs::check_language(class_path)?;
         let module = self.compile_module(cx).inspect_err(|_| {
             // Never leave a module from an older graph behind.
-            let _ = engine_fs::virtual_fs::delete_path(&out_path);
+            crate::features::class_dirs::remove_module(class_path);
         })?;
 
         let json = module
             .to_json()
             .map_err(|e| format!("Failed to serialise module: {e}"))?;
-        engine_fs::virtual_fs::create_dir_all(&build_dir)
-            .map_err(|e| format!("Failed to create .build directory: {e}"))?;
-        engine_fs::virtual_fs::write_file(&out_path, json.as_bytes())
-            .map_err(|e| format!("Failed to write module.json: {e}"))?;
-        crate::features::class_dirs::mark_language(class_path)
-            .map_err(|e| format!("Failed to record the language: {e}"))?;
+        let out_path = crate::features::class_dirs::store_module(class_path, json.as_bytes())?;
         tracing::info!("Script module written to {}", out_path.display());
         Ok(out_path)
     }
@@ -547,17 +542,13 @@ impl BlueprintEditorPanel {
                         "Compiling to an engine script module",
                         Some(
                             "Steps: build graph description, compile to a script module \
-                             (events/.build/module.json)"
+                             (the project's target/pulsar/scripts/<class id>/module.json)"
                                 .to_string(),
                         ),
                     );
                     cx.notify();
                     
                     // The engine script module is what the game runtime runs.
-                    // Remove bytecode left by the old PBGC VM path.
-                    if let Some(class_path) = &panel.current_class_path {
-                        let _ = engine_fs::virtual_fs::delete_path(&class_path.join("events").join(".build").join("bytecode.json"));
-                    }
                     panel.compile_to_script_module(cx).map(Some)
                 }
             }
@@ -594,7 +585,7 @@ impl BlueprintEditorPanel {
                             CompileMode::BytecodeVm => {
                                 let out = maybe_path
                                     .map(|p| p.display().to_string())
-                                    .unwrap_or_else(|| "events/.build/module.json".to_string());
+                                    .unwrap_or_else(|| "the project's module store".to_string());
                                 format!(
                                     "Duration: {} ms | Output: {} | \
                                      Run `cargo run` in your project to execute via the VM runtime",

@@ -388,9 +388,10 @@ pub fn project_class_dirs(root: &Path) -> Vec<std::path::PathBuf> {
 
 const GRAPH_FILE: &str = "graph_save.json";
 
-/// Compile one class directory's saved graph and write its module to
-/// `events/.build/module.json`. On failure no module is left behind (a
-/// stale one would run old code).
+/// Compile one class directory's saved graph and store its module in the
+/// project's module store (`pulsar_class::modules`; the class folder is
+/// never written, so a read-only class compiles too). On failure no module
+/// is left behind (a stale one would run old code).
 fn compile_class_dir(
     dir: &Path,
     natives: &pulsar_script_vm::NativeRegistry,
@@ -399,8 +400,6 @@ fn compile_class_dir(
     use plugin_editor_api::CompileDiagnostic;
     let class = crate::features::class_dirs::class_name_of(dir);
     let graph_file = dir.join(GRAPH_FILE);
-    let out_dir = dir.join("events").join(".build");
-    let out = out_dir.join("module.json");
     // A refusal must not delete the other language's artifact, so it comes before `fail`.
     if let Err(message) = crate::features::class_dirs::check_language(dir) {
         return Err(vec![CompileDiagnostic::error(
@@ -410,7 +409,7 @@ fn compile_class_dir(
         )]);
     }
     let fail = |message: String| {
-        let _ = engine_fs::virtual_fs::delete_path(&out);
+        crate::features::class_dirs::remove_module(dir);
         vec![CompileDiagnostic::error(
             class.clone(),
             Some(graph_file.clone()),
@@ -425,7 +424,7 @@ fn compile_class_dir(
     .map_err(|e| fail(format!("failed to parse blueprint asset: {e}")))?;
     let compiled = compile_asset(&asset, Some(dir), natives, component_events);
     let Some(module) = compiled.module else {
-        let _ = engine_fs::virtual_fs::delete_path(&out);
+        crate::features::class_dirs::remove_module(dir);
         return Err(compiled
             .problems
             .into_iter()
@@ -438,18 +437,13 @@ fn compile_class_dir(
     let json = module
         .to_json()
         .map_err(|e| fail(format!("failed to serialise module: {e}")))?;
-    engine_fs::virtual_fs::create_dir_all(&out_dir)
-        .map_err(|e| fail(format!("failed to create {}: {e}", out_dir.display())))?;
-    engine_fs::virtual_fs::write_file(&out, json.as_bytes())
-        .map_err(|e| fail(format!("failed to write {}: {e}", out.display())))?;
-    crate::features::class_dirs::mark_language(dir)
-        .map_err(|e| fail(format!("failed to record the language: {e}")))?;
+    crate::features::class_dirs::store_module(dir, json.as_bytes()).map_err(fail)?;
     Ok(())
 }
 
 /// Compile every Blueprint class of the project at `root` headlessly
-/// (#879): each `src/classes/<Class>/graph_save.json` to its
-/// `events/.build/module.json`, linking native calls against `natives`.
+/// (#879): each class's `graph_save.json` to its module in the project's
+/// module store, linking native calls against `natives`.
 ///
 /// Classes may handle each other's events, which they learn from their
 /// siblings' compiled modules; a class that fails because a sibling was

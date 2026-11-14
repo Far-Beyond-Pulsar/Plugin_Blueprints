@@ -7,7 +7,7 @@
 //! - the engine's built-in events (`pulsar_events::builtin`: lifecycle,
 //!   world, input, physics, gameplay);
 //! - the custom events of **other** classes in the project, read from their
-//!   compiled modules (`src/classes/<Class>/events/.build/module.json`);
+//!   compiled modules (the project's module store, `pulsar_class::modules`);
 //! - this class's own custom events (its event definitions), declared as
 //!   `<Class>.<Event>` when it compiles.
 //!
@@ -79,7 +79,10 @@ pub fn project_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
         if Some(&name) == current.as_ref() {
             continue;
         }
-        let module = class.join("events").join(".build").join("module.json");
+        let Some((entry, store)) = crate::features::class_dirs::class_and_store(&class) else {
+            continue;
+        };
+        let module = store.module_path(&entry.id);
         let Ok(json) = engine_fs::virtual_fs::read_to_string(&module) else {
             continue;
         };
