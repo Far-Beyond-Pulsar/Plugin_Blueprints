@@ -101,6 +101,7 @@ pub(crate) fn blueprint_file_type() -> FileTypeDefinition {
             }
         }),
         creation_directory: None,
+        cook: plugin_editor_api::file_types::copy_file_for_cook,
         categories: vec!["Blueprints".to_string()],
     }
 }
