@@ -1,0 +1,2415 @@
+// Advanced example Blueprint shipped with the Blueprint Editor plugin.
+// Open it in the Blueprint Editor and read the yellow note boxes and the blue
+// step boxes: every graph is commented. The file is read-only (a plugin folder);
+// copy the .class folder into your project to edit and compile it.
+// The JSON below is the same format the editor writes for any class.
+
+{
+  "format_version": 2,
+  "main_graph": {
+    "nodes": {
+      "bp": {
+        "id": "bp",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          }
+        ]
+      },
+      "m_tag": {
+        "id": "m_tag",
+        "node_type": "macro:print-tagged",
+        "position": {
+          "x": 340,
+          "y": 0
+        },
+        "properties": {
+          "macro_id": "print-tagged",
+          "tag": "AdvMacroLibrary",
+          "message": "macros are expanded at compile time"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "tag",
+            "name": "tag",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "then",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          }
+        ]
+      },
+      "m_hp": {
+        "id": "m_hp",
+        "node_type": "get_health",
+        "position": {
+          "x": 680,
+          "y": 230
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3"
+            ]
+          }
+        ]
+      },
+      "m_heal": {
+        "id": "m_heal",
+        "node_type": "get_heal_amount",
+        "position": {
+          "x": 680,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "heal_amount",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c4"
+            ]
+          }
+        ]
+      },
+      "m_cap": {
+        "id": "m_cap",
+        "node_type": "get_max_health",
+        "position": {
+          "x": 680,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "max_health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c5"
+            ]
+          }
+        ]
+      },
+      "m_clamp": {
+        "id": "m_clamp",
+        "node_type": "macro:clamped-add",
+        "position": {
+          "x": 1020,
+          "y": 0
+        },
+        "properties": {
+          "macro_id": "clamped-add"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "current",
+            "name": "current",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3"
+            ]
+          },
+          {
+            "id": "amount",
+            "name": "amount",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "max",
+            "name": "max",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c5"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "then",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c6"
+            ]
+          },
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ]
+      },
+      "m_set": {
+        "id": "m_set",
+        "node_type": "set_health",
+        "position": {
+          "x": 1360,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c6"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c8"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ]
+      },
+      "m_cat": {
+        "id": "m_cat",
+        "node_type": "string_concat",
+        "position": {
+          "x": 1700,
+          "y": 230
+        },
+        "properties": {
+          "a": "health after clamped heal: "
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ]
+      },
+      "m_tag2": {
+        "id": "m_tag2",
+        "node_type": "macro:print-tagged",
+        "position": {
+          "x": 2040,
+          "y": 0
+        },
+        "properties": {
+          "macro_id": "print-tagged",
+          "tag": "AdvMacroLibrary"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c8"
+            ]
+          },
+          {
+            "id": "tag",
+            "name": "tag",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "then",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "kd": {
+        "id": "kd",
+        "node_type": "event::on::KeyDown",
+        "position": {
+          "x": 0,
+          "y": 1150
+        },
+        "properties": {
+          "scope": "global"
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "key",
+            "name": "key",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "d_db": {
+        "id": "d_db",
+        "node_type": "macro:debounce",
+        "position": {
+          "x": 340,
+          "y": 1150
+        },
+        "properties": {
+          "macro_id": "debounce"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "milliseconds",
+            "name": "milliseconds",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "after quiet",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ]
+      },
+      "d_ms": {
+        "id": "d_ms",
+        "node_type": "get_debounce_ms",
+        "position": {
+          "x": 0,
+          "y": 1380
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "debounce_ms",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12"
+            ]
+          }
+        ]
+      },
+      "d_tag": {
+        "id": "d_tag",
+        "node_type": "macro:print-tagged",
+        "position": {
+          "x": 680,
+          "y": 1150
+        },
+        "properties": {
+          "macro_id": "print-tagged",
+          "tag": "AdvMacroLibrary",
+          "message": "quiet for the debounce time"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c13"
+            ]
+          },
+          {
+            "id": "tag",
+            "name": "tag",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "then",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "rp": {
+        "id": "rp",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c14"
+            ]
+          }
+        ]
+      },
+      "r_n": {
+        "id": "r_n",
+        "node_type": "get_spawn_count",
+        "position": {
+          "x": 0,
+          "y": 2070
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "spawn_count",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          }
+        ]
+      },
+      "r_rep": {
+        "id": "r_rep",
+        "node_type": "macro:repeat",
+        "position": {
+          "x": 340,
+          "y": 1840
+        },
+        "properties": {
+          "macro_id": "repeat"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c14"
+            ]
+          },
+          {
+            "id": "times",
+            "name": "times",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "body",
+            "name": "body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c16"
+            ]
+          }
+        ]
+      },
+      "r_spawn": {
+        "id": "r_spawn",
+        "node_type": "native::entity::spawn",
+        "position": {
+          "x": 680,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c16"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          },
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "bp",
+        "source_pin": "Body",
+        "target_node": "m_tag",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "m_tag",
+        "source_pin": "exec",
+        "target_node": "m_clamp",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c3",
+        "source_node": "m_hp",
+        "source_pin": "value",
+        "target_node": "m_clamp",
+        "target_pin": "current",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c4",
+        "source_node": "m_heal",
+        "source_pin": "value",
+        "target_node": "m_clamp",
+        "target_pin": "amount",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c5",
+        "source_node": "m_cap",
+        "source_pin": "value",
+        "target_node": "m_clamp",
+        "target_pin": "max",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c6",
+        "source_node": "m_clamp",
+        "source_pin": "exec",
+        "target_node": "m_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c7",
+        "source_node": "m_clamp",
+        "source_pin": "result",
+        "target_node": "m_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c8",
+        "source_node": "m_set",
+        "source_pin": "exec_out",
+        "target_node": "m_tag2",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c9",
+        "source_node": "m_set",
+        "source_pin": "value",
+        "target_node": "m_cat",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c10",
+        "source_node": "m_cat",
+        "source_pin": "result",
+        "target_node": "m_tag2",
+        "target_pin": "message",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c11",
+        "source_node": "kd",
+        "source_pin": "Body",
+        "target_node": "d_db",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c12",
+        "source_node": "d_ms",
+        "source_pin": "value",
+        "target_node": "d_db",
+        "target_pin": "milliseconds",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c13",
+        "source_node": "d_db",
+        "source_pin": "exec",
+        "target_node": "d_tag",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c14",
+        "source_node": "rp",
+        "source_pin": "Body",
+        "target_node": "r_rep",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c15",
+        "source_node": "r_n",
+        "source_pin": "value",
+        "target_node": "r_rep",
+        "target_pin": "times",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c16",
+        "source_node": "r_rep",
+        "source_pin": "body",
+        "target_node": "r_spawn",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "Uses the four local macros below as a reusable function library.",
+      "version": "1.0.0",
+      "created_at": "2026-11-14T00:00:00Z",
+      "modified_at": "2026-11-14T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "ADVANCED 9/9: REUSABLE MACROS (a function library)\nA macro is a named sub-graph with its own inputs and outputs (see the tabs at the top of the editor: Main plus\none tab per macro; open them to read their bodies). Instances behave like ordinary nodes, but each one is\nEXPANDED into the caller at compile time, so macros can use exec flow, latent nodes and hidden state\n(a Do Once or Delay inside a macro is separate for every instance). Library macros (Content Browser >\nMacro Library) share macros between classes; the four here are local to this class.\nMacros vs custom events: a custom event is called by name, can be latent and is visible to the world; a macro\nis inlined and is for reusable flow shapes.",
+        "position": [
+          0,
+          -360
+        ],
+        "size": [
+          1500,
+          260
+        ],
+        "color": [
+          0.9,
+          0.75,
+          0.2,
+          0.28
+        ],
+        "contained_node_ids": []
+      },
+      {
+        "id": "comment-2",
+        "text": "1. USING MACROS - PrintTagged logs with a uniform prefix (its `tag` and `message` are typed into the\ninstance's pins). ClampedAdd then adds `heal_amount` to `health` but never beyond `max_health`:\n95 + 20 stays 100. Macro nodes show their input pins on the left and outputs on the right like built-in\nnodes; exec pins are named by the macro author (`then`).",
+        "position": [
+          -30,
+          -70
+        ],
+        "size": [
+          2360,
+          940
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bp",
+          "m_tag",
+          "m_hp",
+          "m_heal",
+          "m_cap",
+          "m_clamp",
+          "m_set",
+          "m_cat",
+          "m_tag2"
+        ]
+      },
+      {
+        "id": "comment-3",
+        "text": "2. DEBOUNCE MACRO - any key press runs the Debounce macro; its output fires only after `debounce_ms` of\nquiet. A named macro makes the intent readable where a bare Retriggerable Delay would not.",
+        "position": [
+          -30,
+          1080
+        ],
+        "size": [
+          1000,
+          480
+        ],
+        "color": [
+          0.25,
+          0.65,
+          0.35,
+          0.22
+        ],
+        "contained_node_ids": [
+          "kd",
+          "d_db",
+          "d_ms",
+          "d_tag"
+        ]
+      },
+      {
+        "id": "comment-4",
+        "text": "3. A MACRO WITH A BODY WIRE - Repeat exposes the `body` exec output, like a For Loop: spawn one object per\niteration. `spawn_count` is a variable so designers tune it per instance.",
+        "position": [
+          -30,
+          1770
+        ],
+        "size": [
+          1000,
+          480
+        ],
+        "color": [
+          0.6,
+          0.35,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "rp",
+          "r_n",
+          "r_rep",
+          "r_spawn"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "subgraphs": [
+    {
+      "id": "print-tagged",
+      "kind": "macro",
+      "name": "PrintTagged",
+      "description": "Log \"[tag] message\" so every class formats logs the same way.",
+      "graph": {
+        "nodes": {
+          "macro_entry": {
+            "id": "macro_entry",
+            "node_type": "macro_entry",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [],
+            "outputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Output",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c6"
+                ]
+              },
+              {
+                "id": "tag",
+                "name": "tag",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c1"
+                ]
+              },
+              {
+                "id": "message",
+                "name": "message",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c4"
+                ]
+              }
+            ]
+          },
+          "macro_exit": {
+            "id": "macro_exit",
+            "node_type": "macro_exit",
+            "position": {
+              "x": 1400,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "exec",
+                "name": "then",
+                "pin_type": "Input",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c7"
+                ]
+              }
+            ],
+            "outputs": []
+          },
+          "cat1": {
+            "id": "cat1",
+            "node_type": "string_concat",
+            "position": {
+              "x": 300,
+              "y": 150
+            },
+            "properties": {
+              "a": "["
+            },
+            "inputs": [
+              {
+                "id": "a",
+                "name": "a",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": []
+              },
+              {
+                "id": "b",
+                "name": "b",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c1"
+                ]
+              }
+            ],
+            "outputs": [
+              {
+                "id": "result",
+                "name": "result",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c2"
+                ]
+              }
+            ]
+          },
+          "cat2": {
+            "id": "cat2",
+            "node_type": "string_concat",
+            "position": {
+              "x": 600,
+              "y": 150
+            },
+            "properties": {
+              "b": "] "
+            },
+            "inputs": [
+              {
+                "id": "a",
+                "name": "a",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c2"
+                ]
+              },
+              {
+                "id": "b",
+                "name": "b",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": []
+              }
+            ],
+            "outputs": [
+              {
+                "id": "result",
+                "name": "result",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c3"
+                ]
+              }
+            ]
+          },
+          "cat3": {
+            "id": "cat3",
+            "node_type": "string_concat",
+            "position": {
+              "x": 900,
+              "y": 150
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "a",
+                "name": "a",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c3"
+                ]
+              },
+              {
+                "id": "b",
+                "name": "b",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c4"
+                ]
+              }
+            ],
+            "outputs": [
+              {
+                "id": "result",
+                "name": "result",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c5"
+                ]
+              }
+            ]
+          },
+          "lg": {
+            "id": "lg",
+            "node_type": "log_info",
+            "position": {
+              "x": 1100,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Input",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c6"
+                ]
+              },
+              {
+                "id": "message",
+                "name": "message",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "String",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c5"
+                ]
+              }
+            ],
+            "outputs": [
+              {
+                "id": "exec_out",
+                "name": "exec_out",
+                "pin_type": "Output",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c7"
+                ]
+              }
+            ]
+          }
+        },
+        "connections": [
+          {
+            "id": "c1",
+            "source_node": "macro_entry",
+            "source_pin": "tag",
+            "target_node": "cat1",
+            "target_pin": "b",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c2",
+            "source_node": "cat1",
+            "source_pin": "result",
+            "target_node": "cat2",
+            "target_pin": "a",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c3",
+            "source_node": "cat2",
+            "source_pin": "result",
+            "target_node": "cat3",
+            "target_pin": "a",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c4",
+            "source_node": "macro_entry",
+            "source_pin": "message",
+            "target_node": "cat3",
+            "target_pin": "b",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c5",
+            "source_node": "cat3",
+            "source_pin": "result",
+            "target_node": "lg",
+            "target_pin": "message",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c6",
+            "source_node": "macro_entry",
+            "source_pin": "exec",
+            "target_node": "lg",
+            "target_pin": "exec",
+            "connection_type": "Execution"
+          },
+          {
+            "id": "c7",
+            "source_node": "lg",
+            "source_pin": "exec_out",
+            "target_node": "macro_exit",
+            "target_pin": "exec",
+            "connection_type": "Execution"
+          }
+        ],
+        "metadata": {
+          "name": "PrintTagged",
+          "description": "Log \"[tag] message\" so every class formats logs the same way.",
+          "version": "1.0.0",
+          "created_at": "2026-11-14T00:00:00Z",
+          "modified_at": "2026-11-14T00:00:00Z"
+        },
+        "comments": [
+          {
+            "id": "comment-1",
+            "text": "Build \"[tag] message\" with three String Concat nodes, log it, continue. Every class using the macro\ngets the same log format; change it here once.",
+            "position": [
+              0,
+              -200
+            ],
+            "size": [
+              900,
+              120
+            ],
+            "color": [
+              0.9,
+              0.75,
+              0.2,
+              0.25
+            ],
+            "contained_node_ids": []
+          }
+        ],
+        "custom_event_defs": {}
+      },
+      "interface": {
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          },
+          {
+            "id": "tag",
+            "name": "tag",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "is_instance_editable": false
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "is_instance_editable": false
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "then",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          }
+        ]
+      },
+      "metadata": {
+        "created_at": "2026-11-14T00:00:00Z",
+        "modified_at": "2026-11-14T00:00:00Z",
+        "tags": [
+          "example"
+        ]
+      },
+      "macro_config": {
+        "is_pure": false,
+        "category": "Advanced Examples",
+        "keywords": [],
+        "tooltip": "Log \"[tag] message\" so every class formats logs the same way.",
+        "instance_editable_pins": [],
+        "parent_class_filter": [],
+        "hide_in_palette": false
+      }
+    },
+    {
+      "id": "clamped-add",
+      "kind": "macro",
+      "name": "ClampedAdd",
+      "description": "Add to a stat but keep it between 0 and a maximum.",
+      "graph": {
+        "nodes": {
+          "macro_entry": {
+            "id": "macro_entry",
+            "node_type": "macro_entry",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [],
+            "outputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Output",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c7"
+                ]
+              },
+              {
+                "id": "current",
+                "name": "current",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c1"
+                ]
+              },
+              {
+                "id": "amount",
+                "name": "amount",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c2"
+                ]
+              },
+              {
+                "id": "max",
+                "name": "max",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c4"
+                ]
+              }
+            ]
+          },
+          "macro_exit": {
+            "id": "macro_exit",
+            "node_type": "macro_exit",
+            "position": {
+              "x": 1400,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "exec",
+                "name": "then",
+                "pin_type": "Input",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c7"
+                ]
+              },
+              {
+                "id": "result",
+                "name": "result",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c6"
+                ]
+              }
+            ],
+            "outputs": []
+          },
+          "sum": {
+            "id": "sum",
+            "node_type": "add",
+            "position": {
+              "x": 300,
+              "y": 100
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "a",
+                "name": "a",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c1"
+                ]
+              },
+              {
+                "id": "b",
+                "name": "b",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c2"
+                ]
+              }
+            ],
+            "outputs": [
+              {
+                "id": "result",
+                "name": "result",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c3"
+                ]
+              }
+            ]
+          },
+          "cap": {
+            "id": "cap",
+            "node_type": "native::int::min",
+            "position": {
+              "x": 600,
+              "y": 100
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "a",
+                "name": "a",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c3"
+                ]
+              },
+              {
+                "id": "b",
+                "name": "b",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c4"
+                ]
+              }
+            ],
+            "outputs": [
+              {
+                "id": "result",
+                "name": "result",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c5"
+                ]
+              }
+            ]
+          },
+          "floor": {
+            "id": "floor",
+            "node_type": "native::int::max",
+            "position": {
+              "x": 900,
+              "y": 100
+            },
+            "properties": {
+              "b": 0
+            },
+            "inputs": [
+              {
+                "id": "a",
+                "name": "a",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c5"
+                ]
+              },
+              {
+                "id": "b",
+                "name": "b",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": []
+              }
+            ],
+            "outputs": [
+              {
+                "id": "result",
+                "name": "result",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c6"
+                ]
+              }
+            ]
+          }
+        },
+        "connections": [
+          {
+            "id": "c1",
+            "source_node": "macro_entry",
+            "source_pin": "current",
+            "target_node": "sum",
+            "target_pin": "a",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c2",
+            "source_node": "macro_entry",
+            "source_pin": "amount",
+            "target_node": "sum",
+            "target_pin": "b",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c3",
+            "source_node": "sum",
+            "source_pin": "result",
+            "target_node": "cap",
+            "target_pin": "a",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c4",
+            "source_node": "macro_entry",
+            "source_pin": "max",
+            "target_node": "cap",
+            "target_pin": "b",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c5",
+            "source_node": "cap",
+            "source_pin": "result",
+            "target_node": "floor",
+            "target_pin": "a",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c6",
+            "source_node": "floor",
+            "source_pin": "result",
+            "target_node": "macro_exit",
+            "target_pin": "result",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c7",
+            "source_node": "macro_entry",
+            "source_pin": "exec",
+            "target_node": "macro_exit",
+            "target_pin": "exec",
+            "connection_type": "Execution"
+          }
+        ],
+        "metadata": {
+          "name": "ClampedAdd",
+          "description": "Add to a stat but keep it between 0 and a maximum.",
+          "version": "1.0.0",
+          "created_at": "2026-11-14T00:00:00Z",
+          "modified_at": "2026-11-14T00:00:00Z"
+        },
+        "comments": [
+          {
+            "id": "comment-1",
+            "text": "result = Max(Min(current + amount, max), 0). Health, ammo and stamina all need a bounded add;\nwrite it once as a macro. Pure nodes are evaluated where the value is used, so the data wires\nneed no exec.",
+            "position": [
+              0,
+              -200
+            ],
+            "size": [
+              900,
+              120
+            ],
+            "color": [
+              0.9,
+              0.75,
+              0.2,
+              0.25
+            ],
+            "contained_node_ids": []
+          }
+        ],
+        "custom_event_defs": {}
+      },
+      "interface": {
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          },
+          {
+            "id": "current",
+            "name": "current",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "is_instance_editable": false
+          },
+          {
+            "id": "amount",
+            "name": "amount",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "is_instance_editable": false
+          },
+          {
+            "id": "max",
+            "name": "max",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "is_instance_editable": false
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "then",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          },
+          {
+            "id": "result",
+            "name": "result",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "is_instance_editable": false
+          }
+        ]
+      },
+      "metadata": {
+        "created_at": "2026-11-14T00:00:00Z",
+        "modified_at": "2026-11-14T00:00:00Z",
+        "tags": [
+          "example"
+        ]
+      },
+      "macro_config": {
+        "is_pure": false,
+        "category": "Advanced Examples",
+        "keywords": [],
+        "tooltip": "Add to a stat but keep it between 0 and a maximum.",
+        "instance_editable_pins": [],
+        "parent_class_filter": [],
+        "hide_in_palette": false
+      }
+    },
+    {
+      "id": "debounce",
+      "kind": "macro",
+      "name": "Debounce",
+      "description": "Continue only after the input has been quiet for the given time.",
+      "graph": {
+        "nodes": {
+          "macro_entry": {
+            "id": "macro_entry",
+            "node_type": "macro_entry",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [],
+            "outputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Output",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c2"
+                ]
+              },
+              {
+                "id": "milliseconds",
+                "name": "milliseconds",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c1"
+                ]
+              }
+            ]
+          },
+          "macro_exit": {
+            "id": "macro_exit",
+            "node_type": "macro_exit",
+            "position": {
+              "x": 1400,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "exec",
+                "name": "after quiet",
+                "pin_type": "Input",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c3"
+                ]
+              }
+            ],
+            "outputs": []
+          },
+          "wait": {
+            "id": "wait",
+            "node_type": "retriggerable_delay",
+            "position": {
+              "x": 400,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Input",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c2"
+                ]
+              },
+              {
+                "id": "delay_ms",
+                "name": "delay_ms",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c1"
+                ]
+              }
+            ],
+            "outputs": [
+              {
+                "id": "Completed",
+                "name": "Completed",
+                "pin_type": "Output",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c3"
+                ]
+              }
+            ]
+          }
+        },
+        "connections": [
+          {
+            "id": "c1",
+            "source_node": "macro_entry",
+            "source_pin": "milliseconds",
+            "target_node": "wait",
+            "target_pin": "delay_ms",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c2",
+            "source_node": "macro_entry",
+            "source_pin": "exec",
+            "target_node": "wait",
+            "target_pin": "exec",
+            "connection_type": "Execution"
+          },
+          {
+            "id": "c3",
+            "source_node": "wait",
+            "source_pin": "Completed",
+            "target_node": "macro_exit",
+            "target_pin": "exec",
+            "connection_type": "Execution"
+          }
+        ],
+        "metadata": {
+          "name": "Debounce",
+          "description": "Continue only after the input has been quiet for the given time.",
+          "version": "1.0.0",
+          "created_at": "2026-11-14T00:00:00Z",
+          "modified_at": "2026-11-14T00:00:00Z"
+        },
+        "comments": [
+          {
+            "id": "comment-1",
+            "text": "A named, documented wrapper around Retriggerable Delay. The macro's `milliseconds` input is wired\nstraight through to the delay.",
+            "position": [
+              0,
+              -200
+            ],
+            "size": [
+              900,
+              100
+            ],
+            "color": [
+              0.9,
+              0.75,
+              0.2,
+              0.25
+            ],
+            "contained_node_ids": []
+          }
+        ],
+        "custom_event_defs": {}
+      },
+      "interface": {
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          },
+          {
+            "id": "milliseconds",
+            "name": "milliseconds",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "is_instance_editable": false
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec",
+            "name": "after quiet",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          }
+        ]
+      },
+      "metadata": {
+        "created_at": "2026-11-14T00:00:00Z",
+        "modified_at": "2026-11-14T00:00:00Z",
+        "tags": [
+          "example"
+        ]
+      },
+      "macro_config": {
+        "is_pure": false,
+        "category": "Advanced Examples",
+        "keywords": [],
+        "tooltip": "Continue only after the input has been quiet for the given time.",
+        "instance_editable_pins": [],
+        "parent_class_filter": [],
+        "hide_in_palette": false
+      }
+    },
+    {
+      "id": "repeat",
+      "kind": "macro",
+      "name": "Repeat",
+      "description": "Run the Body wire a number of times.",
+      "graph": {
+        "nodes": {
+          "macro_entry": {
+            "id": "macro_entry",
+            "node_type": "macro_entry",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [],
+            "outputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Output",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c2"
+                ]
+              },
+              {
+                "id": "times",
+                "name": "times",
+                "pin_type": "Output",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c1"
+                ]
+              }
+            ]
+          },
+          "macro_exit": {
+            "id": "macro_exit",
+            "node_type": "macro_exit",
+            "position": {
+              "x": 1400,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "body",
+                "name": "body",
+                "pin_type": "Input",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c3"
+                ]
+              }
+            ],
+            "outputs": []
+          },
+          "lp": {
+            "id": "lp",
+            "node_type": "for_loop",
+            "position": {
+              "x": 400,
+              "y": 0
+            },
+            "properties": {},
+            "inputs": [
+              {
+                "id": "exec",
+                "name": "exec",
+                "pin_type": "Input",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c2"
+                ]
+              },
+              {
+                "id": "count",
+                "name": "count",
+                "pin_type": "Input",
+                "data_type": {
+                  "Data": {
+                    "base_type": "i64",
+                    "wrappers": [],
+                    "is_wildcard": false
+                  }
+                },
+                "connected_to": [
+                  "c1"
+                ]
+              }
+            ],
+            "outputs": [
+              {
+                "id": "Body",
+                "name": "Body",
+                "pin_type": "Output",
+                "data_type": "Execution",
+                "connected_to": [
+                  "c3"
+                ]
+              }
+            ]
+          }
+        },
+        "connections": [
+          {
+            "id": "c1",
+            "source_node": "macro_entry",
+            "source_pin": "times",
+            "target_node": "lp",
+            "target_pin": "count",
+            "connection_type": "Data"
+          },
+          {
+            "id": "c2",
+            "source_node": "macro_entry",
+            "source_pin": "exec",
+            "target_node": "lp",
+            "target_pin": "exec",
+            "connection_type": "Execution"
+          },
+          {
+            "id": "c3",
+            "source_node": "lp",
+            "source_pin": "Body",
+            "target_node": "macro_exit",
+            "target_pin": "body",
+            "connection_type": "Execution"
+          }
+        ],
+        "metadata": {
+          "name": "Repeat",
+          "description": "Run the Body wire a number of times.",
+          "version": "1.0.0",
+          "created_at": "2026-11-14T00:00:00Z",
+          "modified_at": "2026-11-14T00:00:00Z"
+        },
+        "comments": [
+          {
+            "id": "comment-1",
+            "text": "A macro can expose TWO exec outputs. `body` runs once per iteration (wired to the loop Body);\ncallers hang their per-iteration work off it.",
+            "position": [
+              0,
+              -200
+            ],
+            "size": [
+              900,
+              100
+            ],
+            "color": [
+              0.9,
+              0.75,
+              0.2,
+              0.25
+            ],
+            "contained_node_ids": []
+          }
+        ],
+        "custom_event_defs": {}
+      },
+      "interface": {
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          },
+          {
+            "id": "times",
+            "name": "times",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "is_instance_editable": false
+          }
+        ],
+        "outputs": [
+          {
+            "id": "body",
+            "name": "body",
+            "data_type": "Execution",
+            "is_instance_editable": false
+          }
+        ]
+      },
+      "metadata": {
+        "created_at": "2026-11-14T00:00:00Z",
+        "modified_at": "2026-11-14T00:00:00Z",
+        "tags": [
+          "example"
+        ]
+      },
+      "macro_config": {
+        "is_pure": false,
+        "category": "Advanced Examples",
+        "keywords": [],
+        "tooltip": "Run the Body wire a number of times.",
+        "instance_editable_pins": [],
+        "parent_class_filter": [],
+        "hide_in_palette": false
+      }
+    }
+  ],
+  "local_events": [],
+  "variables": [
+    {
+      "id": "v_hp",
+      "name": "health",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "95",
+      "description": "Starting health, just under the cap so the clamp is visible."
+    },
+    {
+      "id": "v_heal",
+      "name": "heal_amount",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "20",
+      "description": "Healing applied by the ClampedAdd demo."
+    },
+    {
+      "id": "v_max",
+      "name": "max_health",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "100",
+      "description": "Cap used by ClampedAdd."
+    },
+    {
+      "id": "v_ms",
+      "name": "debounce_ms",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "300",
+      "description": "Quiet time the Debounce macro waits for."
+    },
+    {
+      "id": "v_n",
+      "name": "spawn_count",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "3",
+      "description": "How many objects the Repeat macro spawns."
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main"
+    ],
+    "active_tab_index": 0,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 0.0,
+        "pan_offset_y": 0.0,
+        "zoom": 0.7
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Actor",
+    "parent_class": null,
+    "description": "A class that uses four local macros as a reusable library.",
+    "category": "Advanced Examples",
+    "tags": [
+      "macro",
+      "library"
+    ]
+  }
+}

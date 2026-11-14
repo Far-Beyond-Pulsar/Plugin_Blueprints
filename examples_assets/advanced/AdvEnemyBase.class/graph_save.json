@@ -1,0 +1,1027 @@
+// Advanced example Blueprint shipped with the Blueprint Editor plugin.
+// Open it in the Blueprint Editor and read the yellow note boxes and the blue
+// step boxes: every graph is commented. The file is read-only (a plugin folder);
+// copy the .class folder into your project to edit and compile it.
+// The JSON below is the same format the editor writes for any class.
+
+{
+  "format_version": 2,
+  "main_graph": {
+    "nodes": {
+      "bp": {
+        "id": "bp",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          }
+        ]
+      },
+      "bp_log": {
+        "id": "bp_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 340,
+          "y": 0
+        },
+        "properties": {
+          "message": "[AdvEnemyBase] spawned"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "td": {
+        "id": "td",
+        "node_type": "custom_event:take_damage",
+        "position": {
+          "x": 0,
+          "y": 460
+        },
+        "properties": {
+          "event_uid": "take_damage"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c10"
+            ]
+          },
+          {
+            "id": "amount",
+            "name": "amount",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c2"
+            ]
+          }
+        ]
+      },
+      "td_armor": {
+        "id": "td_armor",
+        "node_type": "get_armor",
+        "position": {
+          "x": 340,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "armor",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3"
+            ]
+          }
+        ]
+      },
+      "td_sub": {
+        "id": "td_sub",
+        "node_type": "subtract",
+        "position": {
+          "x": 680,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c4"
+            ]
+          }
+        ]
+      },
+      "td_max": {
+        "id": "td_max",
+        "node_type": "native::int::max",
+        "position": {
+          "x": 1020,
+          "y": 690
+        },
+        "properties": {
+          "b": 1
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ]
+      },
+      "td_hp": {
+        "id": "td_hp",
+        "node_type": "get_health",
+        "position": {
+          "x": 1020,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c5"
+            ]
+          }
+        ]
+      },
+      "td_hp_sub": {
+        "id": "td_hp_sub",
+        "node_type": "subtract",
+        "position": {
+          "x": 1360,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c5"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ]
+      },
+      "td_set": {
+        "id": "td_set",
+        "node_type": "set_health",
+        "position": {
+          "x": 1700,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c10"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          }
+        ]
+      },
+      "td_dead": {
+        "id": "td_dead",
+        "node_type": "less_equal",
+        "position": {
+          "x": 2040,
+          "y": 690
+        },
+        "properties": {
+          "b": 0
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ]
+      },
+      "td_if": {
+        "id": "td_if",
+        "node_type": "branch",
+        "position": {
+          "x": 2380,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c12"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "td_died": {
+        "id": "td_died",
+        "node_type": "custom_event_dispatch:died",
+        "position": {
+          "x": 2720,
+          "y": 460
+        },
+        "properties": {
+          "event_uid": "died"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c12"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "dd": {
+        "id": "dd",
+        "node_type": "custom_event:died",
+        "position": {
+          "x": 0,
+          "y": 1840
+        },
+        "properties": {
+          "event_uid": "died"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ]
+      },
+      "dd_log": {
+        "id": "dd_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 340,
+          "y": 1840
+        },
+        "properties": {
+          "message": "[AdvEnemyBase] died"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c13"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c14"
+            ]
+          }
+        ]
+      },
+      "dd_self": {
+        "id": "dd_self",
+        "node_type": "native::Transform::entity",
+        "position": {
+          "x": 340,
+          "y": 2070
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "self",
+            "name": "self",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Transform",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          }
+        ]
+      },
+      "dd_kill": {
+        "id": "dd_kill",
+        "node_type": "native::entity::despawn",
+        "position": {
+          "x": 680,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c14"
+            ]
+          },
+          {
+            "id": "entity",
+            "name": "entity",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "bp",
+        "source_pin": "Body",
+        "target_node": "bp_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "td",
+        "source_pin": "amount",
+        "target_node": "td_sub",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c3",
+        "source_node": "td_armor",
+        "source_pin": "value",
+        "target_node": "td_sub",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c4",
+        "source_node": "td_sub",
+        "source_pin": "result",
+        "target_node": "td_max",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c5",
+        "source_node": "td_hp",
+        "source_pin": "value",
+        "target_node": "td_hp_sub",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c6",
+        "source_node": "td_max",
+        "source_pin": "result",
+        "target_node": "td_hp_sub",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c7",
+        "source_node": "td_hp_sub",
+        "source_pin": "result",
+        "target_node": "td_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c8",
+        "source_node": "td_set",
+        "source_pin": "value",
+        "target_node": "td_dead",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c9",
+        "source_node": "td_dead",
+        "source_pin": "result",
+        "target_node": "td_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c10",
+        "source_node": "td",
+        "source_pin": "Body",
+        "target_node": "td_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c11",
+        "source_node": "td_set",
+        "source_pin": "exec_out",
+        "target_node": "td_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c12",
+        "source_node": "td_if",
+        "source_pin": "True",
+        "target_node": "td_died",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c13",
+        "source_node": "dd",
+        "source_pin": "Body",
+        "target_node": "dd_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c14",
+        "source_node": "dd_log",
+        "source_pin": "exec_out",
+        "target_node": "dd_kill",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c15",
+        "source_node": "dd_self",
+        "source_pin": "result",
+        "target_node": "dd_kill",
+        "target_pin": "entity",
+        "connection_type": "Data"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "The base enemy contract.",
+      "version": "1.0.0",
+      "created_at": "2026-11-14T00:00:00Z",
+      "modified_at": "2026-11-14T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "ADVANCED 5/9: CLASS INHERITANCE (the base)\nAdvEnemyBase defines the CONTRACT every enemy follows: `take_damage(amount)` reduces health by the\namount minus armor (never less than 1) and raises `died` at zero. Subclasses such as\nAdvEnemyBoss keep these two events and add behaviour. Open AdvEnemyBoss to see the extension.",
+        "position": [
+          0,
+          -270
+        ],
+        "size": [
+          1500,
+          170
+        ],
+        "color": [
+          0.9,
+          0.75,
+          0.2,
+          0.28
+        ],
+        "contained_node_ids": []
+      },
+      {
+        "id": "comment-2",
+        "text": "1. BEGIN PLAY - announce the spawn.",
+        "position": [
+          -40,
+          -80
+        ],
+        "size": [
+          680,
+          270
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bp",
+          "bp_log"
+        ]
+      },
+      {
+        "id": "comment-3",
+        "text": "2. THE CONTRACT: take_damage(amount) - damage reduced by armor with a floor of 1\n(Max(amount - armor, 1) so a high armor never makes the enemy immortal), subtracted from health,\nand `died` is dispatched at zero or below.",
+        "position": [
+          -30,
+          390
+        ],
+        "size": [
+          3040,
+          710
+        ],
+        "color": [
+          0.25,
+          0.65,
+          0.35,
+          0.22
+        ],
+        "contained_node_ids": [
+          "td",
+          "td_armor",
+          "td_sub",
+          "td_max",
+          "td_hp",
+          "td_hp_sub",
+          "td_set",
+          "td_dead",
+          "td_if",
+          "td_died"
+        ]
+      },
+      {
+        "id": "comment-4",
+        "text": "3. DEATH - log and remove this object from the world (its own entity comes from this class's\nTransform). Subclasses may replace this: a boss would also drop loot.",
+        "position": [
+          -40,
+          1760
+        ],
+        "size": [
+          1020,
+          500
+        ],
+        "color": [
+          0.8,
+          0.3,
+          0.3,
+          0.22
+        ],
+        "contained_node_ids": [
+          "dd",
+          "dd_log",
+          "dd_self",
+          "dd_kill"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "subgraphs": [],
+  "local_events": [
+    {
+      "uid": "take_damage",
+      "name": "take_damage",
+      "fields": [
+        {
+          "name": "amount",
+          "type_name": "i64"
+        }
+      ],
+      "return_type": ""
+    },
+    {
+      "uid": "died",
+      "name": "died",
+      "fields": [],
+      "return_type": ""
+    }
+  ],
+  "variables": [
+    {
+      "id": "v_hp",
+      "name": "health",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "100",
+      "description": "Hit points."
+    },
+    {
+      "id": "v_armor",
+      "name": "armor",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "Flat damage reduction per hit."
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main"
+    ],
+    "active_tab_index": 0,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 0.0,
+        "pan_offset_y": 0.0,
+        "zoom": 0.7
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Actor",
+    "parent_class": null,
+    "description": "Base enemy contract: take_damage and died.",
+    "category": "Advanced Examples",
+    "tags": [
+      "inheritance",
+      "enemy"
+    ]
+  }
+}

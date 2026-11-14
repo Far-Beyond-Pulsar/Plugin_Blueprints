@@ -1,0 +1,1536 @@
+// Advanced example Blueprint shipped with the Blueprint Editor plugin.
+// Open it in the Blueprint Editor and read the yellow note boxes and the blue
+// step boxes: every graph is commented. The file is read-only (a plugin folder);
+// copy the .class folder into your project to edit and compile it.
+// The JSON below is the same format the editor writes for any class.
+
+{
+  "format_version": 2,
+  "main_graph": {
+    "nodes": {
+      "gb": {
+        "id": "gb",
+        "node_type": "event::on::GameBegan",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "properties": {
+          "scope": "global"
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "level",
+            "name": "level",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "gb_a1": {
+        "id": "gb_a1",
+        "node_type": "custom_event_dispatch:add_score",
+        "position": {
+          "x": 340,
+          "y": 0
+        },
+        "properties": {
+          "event_uid": "add_score",
+          "points": 40
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "points",
+            "name": "points",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          }
+        ]
+      },
+      "gb_a2": {
+        "id": "gb_a2",
+        "node_type": "custom_event_dispatch:add_score",
+        "position": {
+          "x": 680,
+          "y": 0
+        },
+        "properties": {
+          "event_uid": "add_score",
+          "points": 75
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "points",
+            "name": "points",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "as": {
+        "id": "as",
+        "node_type": "custom_event:add_score",
+        "position": {
+          "x": 0,
+          "y": 460
+        },
+        "properties": {
+          "event_uid": "add_score"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c3"
+            ]
+          },
+          {
+            "id": "points",
+            "name": "points",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7",
+              "c10"
+            ]
+          }
+        ]
+      },
+      "as_g": {
+        "id": "as_g",
+        "node_type": "get_score",
+        "position": {
+          "x": 340,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "score",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ]
+      },
+      "as_add": {
+        "id": "as_add",
+        "node_type": "add",
+        "position": {
+          "x": 680,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          }
+        ]
+      },
+      "as_set": {
+        "id": "as_set",
+        "node_type": "set_score",
+        "position": {
+          "x": 1020,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c3"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "score",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "score",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9",
+              "c11"
+            ]
+          }
+        ]
+      },
+      "as_chg": {
+        "id": "as_chg",
+        "node_type": "custom_event_dispatch:score_changed",
+        "position": {
+          "x": 1360,
+          "y": 460
+        },
+        "properties": {
+          "event_uid": "score_changed"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "total",
+            "name": "total",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          },
+          {
+            "id": "delta",
+            "name": "delta",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c5"
+            ]
+          }
+        ]
+      },
+      "as_lvl": {
+        "id": "as_lvl",
+        "node_type": "divide",
+        "position": {
+          "x": 1360,
+          "y": 690
+        },
+        "properties": {
+          "b": 100
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12",
+              "c16",
+              "c18"
+            ]
+          }
+        ]
+      },
+      "as_last": {
+        "id": "as_last",
+        "node_type": "get_milestone_level",
+        "position": {
+          "x": 1700,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "milestone_level",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ]
+      },
+      "as_higher": {
+        "id": "as_higher",
+        "node_type": "greater_than",
+        "position": {
+          "x": 2040,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c14"
+            ]
+          }
+        ]
+      },
+      "as_if": {
+        "id": "as_if",
+        "node_type": "branch",
+        "position": {
+          "x": 2040,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c5"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c14"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c15"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "as_set_last": {
+        "id": "as_set_last",
+        "node_type": "set_milestone_level",
+        "position": {
+          "x": 2380,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c15"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "milestone_level",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c16"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c17"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "milestone_level",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "as_ms": {
+        "id": "as_ms",
+        "node_type": "custom_event_dispatch:milestone_reached",
+        "position": {
+          "x": 2720,
+          "y": 460
+        },
+        "properties": {
+          "event_uid": "milestone_reached"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c17"
+            ]
+          },
+          {
+            "id": "level",
+            "name": "level",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c18"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "sc": {
+        "id": "sc",
+        "node_type": "custom_event:score_changed",
+        "position": {
+          "x": 0,
+          "y": 1380
+        },
+        "properties": {
+          "event_uid": "score_changed"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c19"
+            ]
+          },
+          {
+            "id": "total",
+            "name": "total",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c21",
+              "c23"
+            ]
+          },
+          {
+            "id": "delta",
+            "name": "delta",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c24"
+            ]
+          }
+        ]
+      },
+      "sc_cat": {
+        "id": "sc_cat",
+        "node_type": "string_concat",
+        "position": {
+          "x": 340,
+          "y": 1610
+        },
+        "properties": {
+          "a": "[AdvEventDispatchers] score is now "
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c21"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c22"
+            ]
+          }
+        ]
+      },
+      "sc_log": {
+        "id": "sc_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 680,
+          "y": 1380
+        },
+        "properties": {
+          "message": ""
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c19"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c22"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c20"
+            ]
+          }
+        ]
+      },
+      "sc_bcast": {
+        "id": "sc_bcast",
+        "node_type": "event::broadcast::AdvEventDispatchers.score_changed",
+        "position": {
+          "x": 1020,
+          "y": 1380
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c20"
+            ]
+          },
+          {
+            "id": "total",
+            "name": "total",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c23"
+            ]
+          },
+          {
+            "id": "delta",
+            "name": "delta",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c24"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "ms_on": {
+        "id": "ms_on",
+        "node_type": "custom_event:milestone_reached",
+        "position": {
+          "x": 0,
+          "y": 2070
+        },
+        "properties": {
+          "event_uid": "milestone_reached"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c25"
+            ]
+          },
+          {
+            "id": "level",
+            "name": "level",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c26"
+            ]
+          }
+        ]
+      },
+      "ms_cat": {
+        "id": "ms_cat",
+        "node_type": "string_concat",
+        "position": {
+          "x": 340,
+          "y": 2300
+        },
+        "properties": {
+          "a": "[AdvEventDispatchers] MILESTONE reached, level "
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c26"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c27"
+            ]
+          }
+        ]
+      },
+      "ms_log": {
+        "id": "ms_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 680,
+          "y": 2070
+        },
+        "properties": {
+          "message": ""
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c25"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c27"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "gb",
+        "source_pin": "Body",
+        "target_node": "gb_a1",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "gb_a1",
+        "source_pin": "exec_out",
+        "target_node": "gb_a2",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c3",
+        "source_node": "as",
+        "source_pin": "Body",
+        "target_node": "as_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c4",
+        "source_node": "as_set",
+        "source_pin": "exec_out",
+        "target_node": "as_chg",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c5",
+        "source_node": "as_chg",
+        "source_pin": "exec_out",
+        "target_node": "as_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c6",
+        "source_node": "as_g",
+        "source_pin": "value",
+        "target_node": "as_add",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c7",
+        "source_node": "as",
+        "source_pin": "points",
+        "target_node": "as_add",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c8",
+        "source_node": "as_add",
+        "source_pin": "result",
+        "target_node": "as_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c9",
+        "source_node": "as_set",
+        "source_pin": "value",
+        "target_node": "as_chg",
+        "target_pin": "total",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c10",
+        "source_node": "as",
+        "source_pin": "points",
+        "target_node": "as_chg",
+        "target_pin": "delta",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c11",
+        "source_node": "as_set",
+        "source_pin": "value",
+        "target_node": "as_lvl",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c12",
+        "source_node": "as_lvl",
+        "source_pin": "result",
+        "target_node": "as_higher",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c13",
+        "source_node": "as_last",
+        "source_pin": "value",
+        "target_node": "as_higher",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c14",
+        "source_node": "as_higher",
+        "source_pin": "result",
+        "target_node": "as_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c15",
+        "source_node": "as_if",
+        "source_pin": "True",
+        "target_node": "as_set_last",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c16",
+        "source_node": "as_lvl",
+        "source_pin": "result",
+        "target_node": "as_set_last",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c17",
+        "source_node": "as_set_last",
+        "source_pin": "exec_out",
+        "target_node": "as_ms",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c18",
+        "source_node": "as_lvl",
+        "source_pin": "result",
+        "target_node": "as_ms",
+        "target_pin": "level",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c19",
+        "source_node": "sc",
+        "source_pin": "Body",
+        "target_node": "sc_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c20",
+        "source_node": "sc_log",
+        "source_pin": "exec_out",
+        "target_node": "sc_bcast",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c21",
+        "source_node": "sc",
+        "source_pin": "total",
+        "target_node": "sc_cat",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c22",
+        "source_node": "sc_cat",
+        "source_pin": "result",
+        "target_node": "sc_log",
+        "target_pin": "message",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c23",
+        "source_node": "sc",
+        "source_pin": "total",
+        "target_node": "sc_bcast",
+        "target_pin": "total",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c24",
+        "source_node": "sc",
+        "source_pin": "delta",
+        "target_node": "sc_bcast",
+        "target_pin": "delta",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c25",
+        "source_node": "ms_on",
+        "source_pin": "Body",
+        "target_node": "ms_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c26",
+        "source_node": "ms_on",
+        "source_pin": "level",
+        "target_node": "ms_cat",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c27",
+        "source_node": "ms_cat",
+        "source_pin": "result",
+        "target_node": "ms_log",
+        "target_pin": "message",
+        "connection_type": "Data"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "Custom events as dispatchers and handlers, the world broadcast, and engine event listeners.",
+      "version": "1.0.0",
+      "created_at": "2026-11-14T00:00:00Z",
+      "modified_at": "2026-11-14T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "ADVANCED 4/9: EVENT DISPATCHERS AND CUSTOM EVENTS\nA custom event (Events panel) has two halves: the red `On <name>` handler node and any number of\n`Call <name>` dispatch nodes. Fields are typed parameters. Three delivery paths are shown:\n 1) Dispatch node: a direct call inside this class.   2) Broadcast: the same event published to the\nworld as `AdvEventDispatchers.score_changed`, so OTHER classes can listen.\n 3) Engine events (GameBegan): the engine calls us. Declared event fields can be bool, integers, floats, String or Entity.",
+        "position": [
+          0,
+          -290
+        ],
+        "size": [
+          1500,
+          190
+        ],
+        "color": [
+          0.9,
+          0.75,
+          0.2,
+          0.28
+        ],
+        "contained_node_ids": []
+      },
+      {
+        "id": "comment-2",
+        "text": "1. LISTEN TO THE ENGINE - `On GameBegan` fires when play starts. It is an engine event with a `level`\noutput. We answer with two calls of our own `add_score` event (40 then 75 points).",
+        "position": [
+          -40,
+          -80
+        ],
+        "size": [
+          1020,
+          270
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "gb",
+          "gb_a1",
+          "gb_a2"
+        ]
+      },
+      {
+        "id": "comment-3",
+        "text": "2. THE SOURCE - `add_score(points)` updates the total, then DISPATCHES `score_changed(total, delta)`\nwith the fresh total (note the data wire from the Set node's output pin) and checks whether a\nnew hundred was crossed (score / 100 higher than `milestone_level`); if so it dispatches\n`milestone_reached(level)`. The producer knows nothing about who listens.",
+        "position": [
+          -30,
+          390
+        ],
+        "size": [
+          3040,
+          710
+        ],
+        "color": [
+          0.25,
+          0.65,
+          0.35,
+          0.22
+        ],
+        "contained_node_ids": [
+          "as",
+          "as_g",
+          "as_add",
+          "as_set",
+          "as_chg",
+          "as_lvl",
+          "as_last",
+          "as_higher",
+          "as_if",
+          "as_set_last",
+          "as_ms"
+        ]
+      },
+      {
+        "id": "comment-4",
+        "text": "3. A HANDLER THAT PUBLISHES - the `On score_changed` handler logs, then BROADCASTS the same event to the\nworld (`Broadcast AdvEventDispatchers.score_changed`). Other objects subscribe with\n`On AdvEventDispatchers.score_changed` (scope global). A HUD class would do exactly that to\nshow the score. `Send ... to` targets one object instead; `Send ... to Class` all instances of a class.",
+        "position": [
+          -30,
+          1310
+        ],
+        "size": [
+          1340,
+          480
+        ],
+        "color": [
+          0.6,
+          0.35,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "sc",
+          "sc_cat",
+          "sc_log",
+          "sc_bcast"
+        ]
+      },
+      {
+        "id": "comment-5",
+        "text": "4. A SIMPLE LISTENER - a milestone is rare, so it just logs. Real games would unlock a door, play\na fanfare or spawn a reward here. Integers are converted to text automatically when wired into a\nString pin.",
+        "position": [
+          -30,
+          2000
+        ],
+        "size": [
+          1000,
+          480
+        ],
+        "color": [
+          0.8,
+          0.3,
+          0.3,
+          0.22
+        ],
+        "contained_node_ids": [
+          "ms_on",
+          "ms_cat",
+          "ms_log"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "subgraphs": [],
+  "local_events": [
+    {
+      "uid": "add_score",
+      "name": "add_score",
+      "fields": [
+        {
+          "name": "points",
+          "type_name": "i64"
+        }
+      ],
+      "return_type": ""
+    },
+    {
+      "uid": "score_changed",
+      "name": "score_changed",
+      "fields": [
+        {
+          "name": "total",
+          "type_name": "i64"
+        },
+        {
+          "name": "delta",
+          "type_name": "i64"
+        }
+      ],
+      "return_type": ""
+    },
+    {
+      "uid": "milestone_reached",
+      "name": "milestone_reached",
+      "fields": [
+        {
+          "name": "level",
+          "type_name": "i64"
+        }
+      ],
+      "return_type": ""
+    }
+  ],
+  "variables": [
+    {
+      "id": "v_score",
+      "name": "score",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "Running total."
+    },
+    {
+      "id": "v_ms",
+      "name": "milestone_level",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "Highest hundred already announced."
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main"
+    ],
+    "active_tab_index": 0,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 0.0,
+        "pan_offset_y": 0.0,
+        "zoom": 0.7
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Actor",
+    "parent_class": null,
+    "description": "Custom events: dispatch, handle, broadcast to the world, listen to engine events.",
+    "category": "Advanced Examples",
+    "tags": [
+      "events",
+      "dispatcher",
+      "broadcast"
+    ]
+  }
+}

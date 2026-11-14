@@ -1,0 +1,2126 @@
+// Advanced example Blueprint shipped with the Blueprint Editor plugin.
+// Open it in the Blueprint Editor and read the yellow note boxes and the blue
+// step boxes: every graph is commented. The file is read-only (a plugin folder);
+// copy the .class folder into your project to edit and compile it.
+// The JSON below is the same format the editor writes for any class.
+
+{
+  "format_version": 2,
+  "main_graph": {
+    "nodes": {
+      "bp": {
+        "id": "bp",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          }
+        ]
+      },
+      "bp_log": {
+        "id": "bp_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 340,
+          "y": 0
+        },
+        "properties": {
+          "message": "[AdvActorLifecycle] begin_play: entered the world"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          }
+        ]
+      },
+      "bp_spin": {
+        "id": "bp_spin",
+        "node_type": "set_is_spinning",
+        "position": {
+          "x": 680,
+          "y": 0
+        },
+        "properties": {
+          "value": true
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "is_spinning",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c3"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "is_spinning",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "bp_spawn": {
+        "id": "bp_spawn",
+        "node_type": "native::entity::spawn",
+        "position": {
+          "x": 1020,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c3"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c5"
+            ]
+          }
+        ]
+      },
+      "bp_child": {
+        "id": "bp_child",
+        "node_type": "set_child",
+        "position": {
+          "x": 1360,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "child",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c5"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          },
+          {
+            "id": "value",
+            "name": "child",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "tk": {
+        "id": "tk",
+        "node_type": "on_tick",
+        "position": {
+          "x": 0,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c6"
+            ]
+          },
+          {
+            "id": "delta_time",
+            "name": "delta_time",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12"
+            ]
+          }
+        ]
+      },
+      "tk_seq": {
+        "id": "tk_seq",
+        "node_type": "sequence",
+        "position": {
+          "x": 340,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Then0",
+            "name": "Then0",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c7"
+            ]
+          },
+          {
+            "id": "Then1",
+            "name": "Then1",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c14"
+            ]
+          },
+          {
+            "id": "Then2",
+            "name": "Then2",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          },
+          {
+            "id": "Then3",
+            "name": "Then3",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "tk_get_spin": {
+        "id": "tk_get_spin",
+        "node_type": "get_is_spinning",
+        "position": {
+          "x": 340,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "is_spinning",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ]
+      },
+      "tk_if": {
+        "id": "tk_if",
+        "node_type": "branch",
+        "position": {
+          "x": 680,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c7"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c8"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "tk_get_drift": {
+        "id": "tk_get_drift",
+        "node_type": "get_drift_speed",
+        "position": {
+          "x": 680,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "drift_speed",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ]
+      },
+      "tk_up": {
+        "id": "tk_up",
+        "node_type": "native::Vec3::new",
+        "position": {
+          "x": 1020,
+          "y": 690
+        },
+        "properties": {
+          "x": 0.0,
+          "z": 0.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "name": "x",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "y",
+            "name": "y",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          },
+          {
+            "id": "z",
+            "name": "z",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Vec3",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c11"
+            ]
+          }
+        ]
+      },
+      "tk_step": {
+        "id": "tk_step",
+        "node_type": "native::Vec3::scale",
+        "position": {
+          "x": 1360,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "v",
+            "name": "v",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Vec3",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "k",
+            "name": "k",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Vec3",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ]
+      },
+      "tk_move": {
+        "id": "tk_move",
+        "node_type": "native::Transform::translate",
+        "position": {
+          "x": 1700,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c8"
+            ]
+          },
+          {
+            "id": "self",
+            "name": "self",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Transform",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "delta",
+            "name": "delta",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Vec3",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "tk_get_ticks": {
+        "id": "tk_get_ticks",
+        "node_type": "get_ticks",
+        "position": {
+          "x": 1020,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "ticks",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          }
+        ]
+      },
+      "tk_inc": {
+        "id": "tk_inc",
+        "node_type": "add",
+        "position": {
+          "x": 1360,
+          "y": 920
+        },
+        "properties": {
+          "b": 1
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c16"
+            ]
+          }
+        ]
+      },
+      "tk_set_ticks": {
+        "id": "tk_set_ticks",
+        "node_type": "set_ticks",
+        "position": {
+          "x": 1700,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c14"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "ticks",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c16"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c17"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "ticks",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c18"
+            ]
+          }
+        ]
+      },
+      "tk_get_life": {
+        "id": "tk_get_life",
+        "node_type": "get_lifetime_ticks",
+        "position": {
+          "x": 1700,
+          "y": 1150
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "lifetime_ticks",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c19"
+            ]
+          }
+        ]
+      },
+      "tk_done": {
+        "id": "tk_done",
+        "node_type": "greater_equal",
+        "position": {
+          "x": 2040,
+          "y": 1150
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c18"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c19"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c20"
+            ]
+          }
+        ]
+      },
+      "tk_if_done": {
+        "id": "tk_if_done",
+        "node_type": "branch",
+        "position": {
+          "x": 2040,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c17"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c20"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c21"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "tk_log_done": {
+        "id": "tk_log_done",
+        "node_type": "log_info",
+        "position": {
+          "x": 2380,
+          "y": 920
+        },
+        "properties": {
+          "message": "[AdvActorLifecycle] lifetime over: destroying this object"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c21"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c22"
+            ]
+          }
+        ]
+      },
+      "tk_self": {
+        "id": "tk_self",
+        "node_type": "native::Transform::entity",
+        "position": {
+          "x": 2380,
+          "y": 1150
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "self",
+            "name": "self",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Transform",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c23"
+            ]
+          }
+        ]
+      },
+      "tk_despawn": {
+        "id": "tk_despawn",
+        "node_type": "native::entity::despawn",
+        "position": {
+          "x": 2720,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c22"
+            ]
+          },
+          {
+            "id": "entity",
+            "name": "entity",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c23"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "kd": {
+        "id": "kd",
+        "node_type": "event::on::KeyDown",
+        "position": {
+          "x": 0,
+          "y": 1610
+        },
+        "properties": {
+          "scope": "global"
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c24"
+            ]
+          },
+          {
+            "id": "key",
+            "name": "key",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c25"
+            ]
+          }
+        ]
+      },
+      "kd_is_space": {
+        "id": "kd_is_space",
+        "node_type": "equals",
+        "position": {
+          "x": 340,
+          "y": 1840
+        },
+        "properties": {
+          "b": 32
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c25"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c26"
+            ]
+          }
+        ]
+      },
+      "kd_if": {
+        "id": "kd_if",
+        "node_type": "branch",
+        "position": {
+          "x": 680,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c24"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c26"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c27"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "kd_get": {
+        "id": "kd_get",
+        "node_type": "get_is_spinning",
+        "position": {
+          "x": 680,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "is_spinning",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c28"
+            ]
+          }
+        ]
+      },
+      "kd_not": {
+        "id": "kd_not",
+        "node_type": "not",
+        "position": {
+          "x": 1020,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "value",
+            "name": "value",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c28"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c29"
+            ]
+          }
+        ]
+      },
+      "kd_set": {
+        "id": "kd_set",
+        "node_type": "set_is_spinning",
+        "position": {
+          "x": 1360,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c27"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "is_spinning",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c29"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c30"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "is_spinning",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "kd_log": {
+        "id": "kd_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 1700,
+          "y": 1610
+        },
+        "properties": {
+          "message": "[AdvActorLifecycle] space pressed: toggled spinning"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c30"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "ep": {
+        "id": "ep",
+        "node_type": "on_end_play",
+        "position": {
+          "x": 0,
+          "y": 2300
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c31"
+            ]
+          }
+        ]
+      },
+      "ep_get_child": {
+        "id": "ep_get_child",
+        "node_type": "get_child",
+        "position": {
+          "x": 340,
+          "y": 2530
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "child",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c32",
+              "c35"
+            ]
+          }
+        ]
+      },
+      "ep_alive": {
+        "id": "ep_alive",
+        "node_type": "native::entity::is_alive",
+        "position": {
+          "x": 680,
+          "y": 2530
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "entity",
+            "name": "entity",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c32"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c33"
+            ]
+          }
+        ]
+      },
+      "ep_if": {
+        "id": "ep_if",
+        "node_type": "branch",
+        "position": {
+          "x": 1020,
+          "y": 2300
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c31"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c33"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c34"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "ep_kill": {
+        "id": "ep_kill",
+        "node_type": "native::entity::despawn",
+        "position": {
+          "x": 1360,
+          "y": 2300
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c34"
+            ]
+          },
+          {
+            "id": "entity",
+            "name": "entity",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c35"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c36"
+            ]
+          }
+        ]
+      },
+      "ep_log": {
+        "id": "ep_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 1700,
+          "y": 2300
+        },
+        "properties": {
+          "message": "[AdvActorLifecycle] end_play: child destroyed, goodbye"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c36"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "bp",
+        "source_pin": "Body",
+        "target_node": "bp_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "bp_log",
+        "source_pin": "exec_out",
+        "target_node": "bp_spin",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c3",
+        "source_node": "bp_spin",
+        "source_pin": "exec_out",
+        "target_node": "bp_spawn",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c4",
+        "source_node": "bp_spawn",
+        "source_pin": "exec_out",
+        "target_node": "bp_child",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c5",
+        "source_node": "bp_spawn",
+        "source_pin": "result",
+        "target_node": "bp_child",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c6",
+        "source_node": "tk",
+        "source_pin": "Body",
+        "target_node": "tk_seq",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c7",
+        "source_node": "tk_seq",
+        "source_pin": "Then0",
+        "target_node": "tk_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c8",
+        "source_node": "tk_if",
+        "source_pin": "True",
+        "target_node": "tk_move",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c9",
+        "source_node": "tk_get_spin",
+        "source_pin": "value",
+        "target_node": "tk_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c10",
+        "source_node": "tk_get_drift",
+        "source_pin": "value",
+        "target_node": "tk_up",
+        "target_pin": "y",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c11",
+        "source_node": "tk_up",
+        "source_pin": "result",
+        "target_node": "tk_step",
+        "target_pin": "v",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c12",
+        "source_node": "tk",
+        "source_pin": "delta_time",
+        "target_node": "tk_step",
+        "target_pin": "k",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c13",
+        "source_node": "tk_step",
+        "source_pin": "result",
+        "target_node": "tk_move",
+        "target_pin": "delta",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c14",
+        "source_node": "tk_seq",
+        "source_pin": "Then1",
+        "target_node": "tk_set_ticks",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c15",
+        "source_node": "tk_get_ticks",
+        "source_pin": "value",
+        "target_node": "tk_inc",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c16",
+        "source_node": "tk_inc",
+        "source_pin": "result",
+        "target_node": "tk_set_ticks",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c17",
+        "source_node": "tk_set_ticks",
+        "source_pin": "exec_out",
+        "target_node": "tk_if_done",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c18",
+        "source_node": "tk_set_ticks",
+        "source_pin": "value",
+        "target_node": "tk_done",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c19",
+        "source_node": "tk_get_life",
+        "source_pin": "value",
+        "target_node": "tk_done",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c20",
+        "source_node": "tk_done",
+        "source_pin": "result",
+        "target_node": "tk_if_done",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c21",
+        "source_node": "tk_if_done",
+        "source_pin": "True",
+        "target_node": "tk_log_done",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c22",
+        "source_node": "tk_log_done",
+        "source_pin": "exec_out",
+        "target_node": "tk_despawn",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c23",
+        "source_node": "tk_self",
+        "source_pin": "result",
+        "target_node": "tk_despawn",
+        "target_pin": "entity",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c24",
+        "source_node": "kd",
+        "source_pin": "Body",
+        "target_node": "kd_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c25",
+        "source_node": "kd",
+        "source_pin": "key",
+        "target_node": "kd_is_space",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c26",
+        "source_node": "kd_is_space",
+        "source_pin": "result",
+        "target_node": "kd_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c27",
+        "source_node": "kd_if",
+        "source_pin": "True",
+        "target_node": "kd_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c28",
+        "source_node": "kd_get",
+        "source_pin": "value",
+        "target_node": "kd_not",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c29",
+        "source_node": "kd_not",
+        "source_pin": "result",
+        "target_node": "kd_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c30",
+        "source_node": "kd_set",
+        "source_pin": "exec_out",
+        "target_node": "kd_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c31",
+        "source_node": "ep",
+        "source_pin": "Body",
+        "target_node": "ep_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c32",
+        "source_node": "ep_get_child",
+        "source_pin": "value",
+        "target_node": "ep_alive",
+        "target_pin": "entity",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c33",
+        "source_node": "ep_alive",
+        "source_pin": "result",
+        "target_node": "ep_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c34",
+        "source_node": "ep_if",
+        "source_pin": "True",
+        "target_node": "ep_kill",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c35",
+        "source_node": "ep_get_child",
+        "source_pin": "value",
+        "target_node": "ep_kill",
+        "target_pin": "entity",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c36",
+        "source_node": "ep_kill",
+        "source_pin": "exec_out",
+        "target_node": "ep_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "A component-style actor: begin_play, tick, input events, spawn and destroy, end_play.",
+      "version": "1.0.0",
+      "created_at": "2026-11-14T00:00:00Z",
+      "modified_at": "2026-11-14T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "ADVANCED 1/9: ACTOR LIFECYCLE\nA Blueprint class placed on an object is driven by the engine's component lifecycle:\nbegin_play once, on_tick every frame, on_end_play once at the end.\nRead the four blue boxes top to bottom. Variables (left panel) are per-instance state.",
+        "position": [
+          0,
+          -270
+        ],
+        "size": [
+          1500,
+          150
+        ],
+        "color": [
+          0.9,
+          0.75,
+          0.2,
+          0.28
+        ],
+        "contained_node_ids": []
+      },
+      {
+        "id": "comment-2",
+        "text": "1. BEGIN PLAY - runs once when the object starts.\nSpawn a helper object at runtime (entity::spawn) and keep its handle in the `child` variable\nso end_play can destroy it. Variables are set with `Set <name>` nodes.",
+        "position": [
+          -40,
+          -80
+        ],
+        "size": [
+          1700,
+          270
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bp",
+          "bp_log",
+          "bp_spin",
+          "bp_spawn",
+          "bp_child"
+        ]
+      },
+      {
+        "id": "comment-3",
+        "text": "2. TICK - runs every frame; `delta_time` is the seconds since the last frame.\nA Sequence runs two independent jobs in order: (Then0) move the object up by\ndrift_speed * delta_time while `is_spinning` is true; (Then1) count the frame and, once\n`ticks` reaches `lifetime_ticks`, destroy this object. Frame-rate independent movement:\nalways multiply a speed by delta_time. Leaving `self` unconnected on a Transform node\nmeans THIS object's Transform.",
+        "position": [
+          -30,
+          390
+        ],
+        "size": [
+          3040,
+          940
+        ],
+        "color": [
+          0.25,
+          0.65,
+          0.35,
+          0.22
+        ],
+        "contained_node_ids": [
+          "tk",
+          "tk_seq",
+          "tk_if",
+          "tk_get_spin",
+          "tk_get_drift",
+          "tk_up",
+          "tk_step",
+          "tk_move",
+          "tk_get_ticks",
+          "tk_inc",
+          "tk_set_ticks",
+          "tk_get_life",
+          "tk_done",
+          "tk_if_done",
+          "tk_log_done",
+          "tk_self",
+          "tk_despawn"
+        ]
+      },
+      {
+        "id": "comment-4",
+        "text": "3. INPUT - `On KeyDown` is an engine event (Input category in the Add menu).\nIt has no Body wire until the key arrives. Its scope is `global` (any key anywhere), so\nwe filter: key 32 is Space. Then flip the bool with `Not`. For gameplay input prefer\nInput Actions (.inputaction): they appear as `On <Action>.triggered` events and are\nremappable; raw KeyDown is the simplest example.",
+        "position": [
+          -30,
+          1540
+        ],
+        "size": [
+          2020,
+          480
+        ],
+        "color": [
+          0.6,
+          0.35,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "kd",
+          "kd_is_space",
+          "kd_if",
+          "kd_get",
+          "kd_not",
+          "kd_set",
+          "kd_log"
+        ]
+      },
+      {
+        "id": "comment-5",
+        "text": "4. END PLAY - runs once when the object is removed or play stops.\nClean up what begin_play created. Always check entity::is_alive first: the child may already\nbe gone (despawned elsewhere), and despawning twice is an error.",
+        "position": [
+          -30,
+          2230
+        ],
+        "size": [
+          2020,
+          480
+        ],
+        "color": [
+          0.8,
+          0.3,
+          0.3,
+          0.22
+        ],
+        "contained_node_ids": [
+          "ep",
+          "ep_get_child",
+          "ep_alive",
+          "ep_if",
+          "ep_kill",
+          "ep_log"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "subgraphs": [],
+  "local_events": [],
+  "variables": [
+    {
+      "id": "v_ticks",
+      "name": "ticks",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "Frames this object has been alive."
+    },
+    {
+      "id": "v_life",
+      "name": "lifetime_ticks",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "600",
+      "description": "Destroy the object after this many frames (about ten seconds at 60 fps)."
+    },
+    {
+      "id": "v_spin",
+      "name": "is_spinning",
+      "data_type": {
+        "Data": {
+          "base_type": "bool",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "true",
+      "description": "Whether the object currently drifts. Space toggles it."
+    },
+    {
+      "id": "v_drift",
+      "name": "drift_speed",
+      "data_type": {
+        "Data": {
+          "base_type": "f64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "2.0",
+      "description": "Units per second the object rises while active."
+    },
+    {
+      "id": "v_child",
+      "name": "child",
+      "data_type": {
+        "Data": {
+          "base_type": "Entity",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": null,
+      "description": "Helper object spawned in begin_play, destroyed in end_play."
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main"
+    ],
+    "active_tab_index": 0,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 0.0,
+        "pan_offset_y": 0.0,
+        "zoom": 0.7
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Actor",
+    "parent_class": null,
+    "description": "Component-style actor showing begin_play, tick, input handling and runtime spawn/destroy.",
+    "category": "Advanced Examples",
+    "tags": [
+      "lifecycle",
+      "tick",
+      "input",
+      "spawn"
+    ]
+  }
+}

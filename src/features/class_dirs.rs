@@ -84,6 +84,14 @@ pub fn project_class_dirs(root: &Path) -> Vec<PathBuf> {
             if skip_when_searching(name) {
                 continue;
             }
+            // `<project>/plugins/` is the mount of the installed plugins' folders, which
+            // ship read-only example classes (this plugin's `examples/`). They are
+            // samples to copy, not classes of the project: compiling or validating them
+            // with the project would fail them on the project's missing siblings and
+            // traits.
+            if depth == 0 && name == "plugins" {
+                continue;
+            }
             let is_class_folder = path.extension().and_then(|e| e.to_str()) == Some("class");
             if is_class_folder && is_class_dir(&path) {
                 found.push(path);

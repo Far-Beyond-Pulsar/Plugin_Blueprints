@@ -1,0 +1,2266 @@
+// Advanced example Blueprint shipped with the Blueprint Editor plugin.
+// Open it in the Blueprint Editor and read the yellow note boxes and the blue
+// step boxes: every graph is commented. The file is read-only (a plugin folder);
+// copy the .class folder into your project to edit and compile it.
+// The JSON below is the same format the editor writes for any class.
+
+{
+  "format_version": 2,
+  "main_graph": {
+    "nodes": {
+      "bp": {
+        "id": "bp",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          }
+        ]
+      },
+      "cd_log0": {
+        "id": "cd_log0",
+        "node_type": "log_info",
+        "position": {
+          "x": 340,
+          "y": 0
+        },
+        "properties": {
+          "message": "[AdvAsyncFlows] countdown 3"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          }
+        ]
+      },
+      "cd_delay0": {
+        "id": "cd_delay0",
+        "node_type": "delay",
+        "position": {
+          "x": 680,
+          "y": 0
+        },
+        "properties": {
+          "milliseconds": 1000
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "milliseconds",
+            "name": "milliseconds",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Completed",
+            "name": "Completed",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c3"
+            ]
+          }
+        ]
+      },
+      "cd_log1": {
+        "id": "cd_log1",
+        "node_type": "log_info",
+        "position": {
+          "x": 1020,
+          "y": 0
+        },
+        "properties": {
+          "message": "[AdvAsyncFlows] countdown 2"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c3"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          }
+        ]
+      },
+      "cd_delay1": {
+        "id": "cd_delay1",
+        "node_type": "delay",
+        "position": {
+          "x": 1360,
+          "y": 0
+        },
+        "properties": {
+          "milliseconds": 1000
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "milliseconds",
+            "name": "milliseconds",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Completed",
+            "name": "Completed",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c5"
+            ]
+          }
+        ]
+      },
+      "cd_log2": {
+        "id": "cd_log2",
+        "node_type": "log_info",
+        "position": {
+          "x": 1700,
+          "y": 0
+        },
+        "properties": {
+          "message": "[AdvAsyncFlows] countdown 1"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c5"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ]
+      },
+      "cd_delay2": {
+        "id": "cd_delay2",
+        "node_type": "delay",
+        "position": {
+          "x": 2040,
+          "y": 0
+        },
+        "properties": {
+          "milliseconds": 1000
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c6"
+            ]
+          },
+          {
+            "id": "milliseconds",
+            "name": "milliseconds",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Completed",
+            "name": "Completed",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ]
+      },
+      "cd_go": {
+        "id": "cd_go",
+        "node_type": "log_info",
+        "position": {
+          "x": 2380,
+          "y": 0
+        },
+        "properties": {
+          "message": "[AdvAsyncFlows] go! starting the heartbeat timer"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c7"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c8"
+            ]
+          }
+        ]
+      },
+      "cd_timer": {
+        "id": "cd_timer",
+        "node_type": "native::timer::set",
+        "position": {
+          "x": 2720,
+          "y": 0
+        },
+        "properties": {
+          "seconds": 2.0,
+          "looping": true
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c8"
+            ]
+          },
+          {
+            "id": "seconds",
+            "name": "seconds",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "looping",
+            "name": "looping",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c9"
+            ]
+          },
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ]
+      },
+      "cd_store": {
+        "id": "cd_store",
+        "node_type": "set_heartbeat_timer",
+        "position": {
+          "x": 3060,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c9"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "heartbeat_timer",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          },
+          {
+            "id": "value",
+            "name": "heartbeat_timer",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "tf": {
+        "id": "tf",
+        "node_type": "event::on::TimerFired",
+        "position": {
+          "x": 0,
+          "y": 690
+        },
+        "properties": {
+          "scope": "self"
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "timer",
+            "name": "timer",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12"
+            ]
+          }
+        ]
+      },
+      "tf_id": {
+        "id": "tf_id",
+        "node_type": "get_heartbeat_timer",
+        "position": {
+          "x": 340,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "heartbeat_timer",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13",
+              "c25"
+            ]
+          }
+        ]
+      },
+      "tf_mine": {
+        "id": "tf_mine",
+        "node_type": "equals",
+        "position": {
+          "x": 680,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c14"
+            ]
+          }
+        ]
+      },
+      "tf_if": {
+        "id": "tf_if",
+        "node_type": "branch",
+        "position": {
+          "x": 1020,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c14"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c15"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "tf_beats": {
+        "id": "tf_beats",
+        "node_type": "get_beats",
+        "position": {
+          "x": 1020,
+          "y": 940
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "beats",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c16"
+            ]
+          }
+        ]
+      },
+      "tf_inc": {
+        "id": "tf_inc",
+        "node_type": "add",
+        "position": {
+          "x": 1360,
+          "y": 940
+        },
+        "properties": {
+          "b": 1
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c16"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c17"
+            ]
+          }
+        ]
+      },
+      "tf_set": {
+        "id": "tf_set",
+        "node_type": "set_beats",
+        "position": {
+          "x": 1700,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c15"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "beats",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c17"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c20"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "beats",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c18",
+              "c22"
+            ]
+          }
+        ]
+      },
+      "tf_cat": {
+        "id": "tf_cat",
+        "node_type": "string_concat",
+        "position": {
+          "x": 1700,
+          "y": 920
+        },
+        "properties": {
+          "a": "[AdvAsyncFlows] heartbeat #"
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c18"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c19"
+            ]
+          }
+        ]
+      },
+      "tf_log": {
+        "id": "tf_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 2040,
+          "y": 690
+        },
+        "properties": {
+          "message": ""
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c20"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c19"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c21"
+            ]
+          }
+        ]
+      },
+      "tf_enough": {
+        "id": "tf_enough",
+        "node_type": "greater_equal",
+        "position": {
+          "x": 2380,
+          "y": 920
+        },
+        "properties": {
+          "b": 3
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c22"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c23"
+            ]
+          }
+        ]
+      },
+      "tf_if2": {
+        "id": "tf_if2",
+        "node_type": "branch",
+        "position": {
+          "x": 2720,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c21"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c23"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c24"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "tf_clear": {
+        "id": "tf_clear",
+        "node_type": "native::timer::clear",
+        "position": {
+          "x": 3060,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c24"
+            ]
+          },
+          {
+            "id": "timer",
+            "name": "timer",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c25"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c26"
+            ]
+          },
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "tf_stop": {
+        "id": "tf_stop",
+        "node_type": "log_info",
+        "position": {
+          "x": 3400,
+          "y": 690
+        },
+        "properties": {
+          "message": "[AdvAsyncFlows] three heartbeats: timer cleared"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c26"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "kd": {
+        "id": "kd",
+        "node_type": "event::on::KeyDown",
+        "position": {
+          "x": 0,
+          "y": 1610
+        },
+        "properties": {
+          "scope": "global"
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c27"
+            ]
+          },
+          {
+            "id": "key",
+            "name": "key",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c28"
+            ]
+          }
+        ]
+      },
+      "kd_space": {
+        "id": "kd_space",
+        "node_type": "equals",
+        "position": {
+          "x": 340,
+          "y": 1840
+        },
+        "properties": {
+          "b": 32
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c28"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c29"
+            ]
+          }
+        ]
+      },
+      "kd_if": {
+        "id": "kd_if",
+        "node_type": "branch",
+        "position": {
+          "x": 680,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c27"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c29"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c30"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "kd_n": {
+        "id": "kd_n",
+        "node_type": "get_presses",
+        "position": {
+          "x": 680,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "presses",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c31"
+            ]
+          }
+        ]
+      },
+      "kd_inc": {
+        "id": "kd_inc",
+        "node_type": "add",
+        "position": {
+          "x": 1020,
+          "y": 1840
+        },
+        "properties": {
+          "b": 1
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c31"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c32"
+            ]
+          }
+        ]
+      },
+      "kd_set": {
+        "id": "kd_set",
+        "node_type": "set_presses",
+        "position": {
+          "x": 1360,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c30"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "presses",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c32"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c33"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "presses",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "kd_wait": {
+        "id": "kd_wait",
+        "node_type": "retriggerable_delay",
+        "position": {
+          "x": 1700,
+          "y": 1610
+        },
+        "properties": {
+          "delay_ms": 500
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c33"
+            ]
+          },
+          {
+            "id": "delay_ms",
+            "name": "delay_ms",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Completed",
+            "name": "Completed",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c34"
+            ]
+          }
+        ]
+      },
+      "kd_log": {
+        "id": "kd_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 2040,
+          "y": 1610
+        },
+        "properties": {
+          "message": "[AdvAsyncFlows] debounced: 500 ms passed since the LAST space press"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c34"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "bp2": {
+        "id": "bp2",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 2530
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c35"
+            ]
+          }
+        ]
+      },
+      "fl_go": {
+        "id": "fl_go",
+        "node_type": "custom_event_dispatch:flash",
+        "position": {
+          "x": 340,
+          "y": 2530
+        },
+        "properties": {
+          "event_uid": "flash"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c35"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "fl": {
+        "id": "fl",
+        "node_type": "custom_event:flash",
+        "position": {
+          "x": 0,
+          "y": 2800
+        },
+        "properties": {
+          "event_uid": "flash"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c36"
+            ]
+          }
+        ]
+      },
+      "fl_on": {
+        "id": "fl_on",
+        "node_type": "log_info",
+        "position": {
+          "x": 340,
+          "y": 2800
+        },
+        "properties": {
+          "message": "[AdvAsyncFlows] flash ON"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c36"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c37"
+            ]
+          }
+        ]
+      },
+      "fl_wait": {
+        "id": "fl_wait",
+        "node_type": "native::wait::frames",
+        "position": {
+          "x": 680,
+          "y": 2800
+        },
+        "properties": {
+          "count": 3
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c37"
+            ]
+          },
+          {
+            "id": "count",
+            "name": "count",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c38"
+            ]
+          }
+        ]
+      },
+      "fl_off": {
+        "id": "fl_off",
+        "node_type": "log_info",
+        "position": {
+          "x": 1020,
+          "y": 2800
+        },
+        "properties": {
+          "message": "[AdvAsyncFlows] flash OFF (three frames later)"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c38"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "bp",
+        "source_pin": "Body",
+        "target_node": "cd_log0",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "cd_log0",
+        "source_pin": "exec_out",
+        "target_node": "cd_delay0",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c3",
+        "source_node": "cd_delay0",
+        "source_pin": "Completed",
+        "target_node": "cd_log1",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c4",
+        "source_node": "cd_log1",
+        "source_pin": "exec_out",
+        "target_node": "cd_delay1",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c5",
+        "source_node": "cd_delay1",
+        "source_pin": "Completed",
+        "target_node": "cd_log2",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c6",
+        "source_node": "cd_log2",
+        "source_pin": "exec_out",
+        "target_node": "cd_delay2",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c7",
+        "source_node": "cd_delay2",
+        "source_pin": "Completed",
+        "target_node": "cd_go",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c8",
+        "source_node": "cd_go",
+        "source_pin": "exec_out",
+        "target_node": "cd_timer",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c9",
+        "source_node": "cd_timer",
+        "source_pin": "exec_out",
+        "target_node": "cd_store",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c10",
+        "source_node": "cd_timer",
+        "source_pin": "result",
+        "target_node": "cd_store",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c11",
+        "source_node": "tf",
+        "source_pin": "Body",
+        "target_node": "tf_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c12",
+        "source_node": "tf",
+        "source_pin": "timer",
+        "target_node": "tf_mine",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c13",
+        "source_node": "tf_id",
+        "source_pin": "value",
+        "target_node": "tf_mine",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c14",
+        "source_node": "tf_mine",
+        "source_pin": "result",
+        "target_node": "tf_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c15",
+        "source_node": "tf_if",
+        "source_pin": "True",
+        "target_node": "tf_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c16",
+        "source_node": "tf_beats",
+        "source_pin": "value",
+        "target_node": "tf_inc",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c17",
+        "source_node": "tf_inc",
+        "source_pin": "result",
+        "target_node": "tf_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c18",
+        "source_node": "tf_set",
+        "source_pin": "value",
+        "target_node": "tf_cat",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c19",
+        "source_node": "tf_cat",
+        "source_pin": "result",
+        "target_node": "tf_log",
+        "target_pin": "message",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c20",
+        "source_node": "tf_set",
+        "source_pin": "exec_out",
+        "target_node": "tf_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c21",
+        "source_node": "tf_log",
+        "source_pin": "exec_out",
+        "target_node": "tf_if2",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c22",
+        "source_node": "tf_set",
+        "source_pin": "value",
+        "target_node": "tf_enough",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c23",
+        "source_node": "tf_enough",
+        "source_pin": "result",
+        "target_node": "tf_if2",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c24",
+        "source_node": "tf_if2",
+        "source_pin": "True",
+        "target_node": "tf_clear",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c25",
+        "source_node": "tf_id",
+        "source_pin": "value",
+        "target_node": "tf_clear",
+        "target_pin": "timer",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c26",
+        "source_node": "tf_clear",
+        "source_pin": "exec_out",
+        "target_node": "tf_stop",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c27",
+        "source_node": "kd",
+        "source_pin": "Body",
+        "target_node": "kd_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c28",
+        "source_node": "kd",
+        "source_pin": "key",
+        "target_node": "kd_space",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c29",
+        "source_node": "kd_space",
+        "source_pin": "result",
+        "target_node": "kd_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c30",
+        "source_node": "kd_if",
+        "source_pin": "True",
+        "target_node": "kd_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c31",
+        "source_node": "kd_n",
+        "source_pin": "value",
+        "target_node": "kd_inc",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c32",
+        "source_node": "kd_inc",
+        "source_pin": "result",
+        "target_node": "kd_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c33",
+        "source_node": "kd_set",
+        "source_pin": "exec_out",
+        "target_node": "kd_wait",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c34",
+        "source_node": "kd_wait",
+        "source_pin": "Completed",
+        "target_node": "kd_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c35",
+        "source_node": "bp2",
+        "source_pin": "Body",
+        "target_node": "fl_go",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c36",
+        "source_node": "fl",
+        "source_pin": "Body",
+        "target_node": "fl_on",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c37",
+        "source_node": "fl_on",
+        "source_pin": "exec_out",
+        "target_node": "fl_wait",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c38",
+        "source_node": "fl_wait",
+        "source_pin": "exec_out",
+        "target_node": "fl_off",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "Latent flows: Delay, Retriggerable Delay, timers, Do N and waiting frames.",
+      "version": "1.0.0",
+      "created_at": "2026-11-14T00:00:00Z",
+      "modified_at": "2026-11-14T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "ADVANCED 6/9: ASYNC AND LATENT FLOWS\nA latent node SUSPENDS the exec chain and resumes it later, without blocking the game. Delay and\nRetriggerable Delay are nodes; `wait::frames` is a native. Timers (`timer::set`) are the other\ntool: they raise the engine event `TimerFired(timer)` instead of suspending a chain.\nRule of thumb: Delay for a one-off sequence, Timer for anything that repeats or must be cancelled.",
+        "position": [
+          0,
+          -290
+        ],
+        "size": [
+          1500,
+          190
+        ],
+        "color": [
+          0.9,
+          0.75,
+          0.2,
+          0.28
+        ],
+        "contained_node_ids": []
+      },
+      {
+        "id": "comment-2",
+        "text": "1. DELAY CHAIN - three Delay nodes (milliseconds) space out the countdown logs; each Delay's\n`Completed` wire continues one second later while the game keeps running. A Delay ignores new\ntriggers while it is counting down. After \"go!\" a LOOPING timer is started (every 2 s) and its\nid stored: `timer::set` returns an i64 handle used to match events and to cancel.",
+        "position": [
+          -30,
+          -70
+        ],
+        "size": [
+          3380,
+          250
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bp",
+          "cd_log0",
+          "cd_delay0",
+          "cd_log1",
+          "cd_delay1",
+          "cd_log2",
+          "cd_delay2",
+          "cd_go",
+          "cd_timer",
+          "cd_store"
+        ]
+      },
+      {
+        "id": "comment-3",
+        "text": "2. TIMER EVENT - `On TimerFired` reports WHICH timer elapsed (`timer` id). Compare it with the id we\nstored so other timers on the object are ignored. Count a heartbeat, log it, and after three\nstop the timer with `timer::clear`. Without clearing, a looping timer runs forever.",
+        "position": [
+          -30,
+          620
+        ],
+        "size": [
+          3720,
+          500
+        ],
+        "color": [
+          0.25,
+          0.65,
+          0.35,
+          0.22
+        ],
+        "contained_node_ids": [
+          "tf",
+          "tf_id",
+          "tf_mine",
+          "tf_if",
+          "tf_beats",
+          "tf_inc",
+          "tf_set",
+          "tf_cat",
+          "tf_log",
+          "tf_enough",
+          "tf_if2",
+          "tf_clear",
+          "tf_stop"
+        ]
+      },
+      {
+        "id": "comment-4",
+        "text": "3. DEBOUNCE - Retriggerable Delay restarts its countdown on every trigger, so the log only appears 500 ms\nafter the LAST space press (typing, charging an attack, saving after edits). A plain Delay would\nignore later presses; this one extends the wait instead.",
+        "position": [
+          -30,
+          1540
+        ],
+        "size": [
+          2360,
+          480
+        ],
+        "color": [
+          0.6,
+          0.35,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "kd",
+          "kd_space",
+          "kd_if",
+          "kd_n",
+          "kd_inc",
+          "kd_set",
+          "kd_wait",
+          "kd_log"
+        ]
+      },
+      {
+        "id": "comment-5",
+        "text": "4. WAITING FRAMES - a custom event can also be latent. `wait::frames(count)` suspends the event's chain for\nthat many ticks (`wait::next_tick` for one). Useful for hit flashes and \"let physics settle\" steps.\nbegin_play starts it by dispatching the custom event; a second begin_play node is fine: all\nbegin_play nodes run, one after another.",
+        "position": [
+          -30,
+          2460
+        ],
+        "size": [
+          1340,
+          520
+        ],
+        "color": [
+          0.8,
+          0.3,
+          0.3,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bp2",
+          "fl_go",
+          "fl",
+          "fl_on",
+          "fl_wait",
+          "fl_off"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "subgraphs": [],
+  "local_events": [
+    {
+      "uid": "flash",
+      "name": "flash",
+      "fields": [],
+      "return_type": ""
+    }
+  ],
+  "variables": [
+    {
+      "id": "v_t",
+      "name": "heartbeat_timer",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "-1",
+      "description": "Id returned by timer::set; -1 before the timer exists."
+    },
+    {
+      "id": "v_b",
+      "name": "beats",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "Heartbeats counted."
+    },
+    {
+      "id": "v_p",
+      "name": "presses",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "Space presses seen by the debounce."
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main"
+    ],
+    "active_tab_index": 0,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 0.0,
+        "pan_offset_y": 0.0,
+        "zoom": 0.7
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Actor",
+    "parent_class": null,
+    "description": "Latent flows: delays, retriggerable delay, timers, wait frames.",
+    "category": "Advanced Examples",
+    "tags": [
+      "async",
+      "timer",
+      "delay"
+    ]
+  }
+}

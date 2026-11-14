@@ -1,0 +1,3354 @@
+// Advanced example Blueprint shipped with the Blueprint Editor plugin.
+// Open it in the Blueprint Editor and read the yellow note boxes and the blue
+// step boxes: every graph is commented. The file is read-only (a plugin folder);
+// copy the .class folder into your project to edit and compile it.
+// The JSON below is the same format the editor writes for any class.
+
+{
+  "format_version": 2,
+  "main_graph": {
+    "nodes": {
+      "bp": {
+        "id": "bp",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          }
+        ]
+      },
+      "a_src": {
+        "id": "a_src",
+        "node_type": "string_split",
+        "position": {
+          "x": 0,
+          "y": 230
+        },
+        "properties": {
+          "text": "30,10,20",
+          "delimiter": ","
+        },
+        "inputs": [
+          {
+            "id": "text",
+            "name": "text",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "delimiter",
+            "name": "delimiter",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3",
+              "c5"
+            ]
+          }
+        ]
+      },
+      "a_p1": {
+        "id": "a_p1",
+        "node_type": "array_push",
+        "position": {
+          "x": 340,
+          "y": 0
+        },
+        "properties": {
+          "item": "5"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "array",
+            "name": "array",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3"
+            ]
+          },
+          {
+            "id": "item",
+            "name": "item",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c4"
+            ]
+          }
+        ]
+      },
+      "a_join": {
+        "id": "a_join",
+        "node_type": "string_join",
+        "position": {
+          "x": 1020,
+          "y": 230
+        },
+        "properties": {
+          "separator": ", "
+        },
+        "inputs": [
+          {
+            "id": "strings",
+            "name": "strings",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "separator",
+            "name": "separator",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ]
+      },
+      "a_has": {
+        "id": "a_has",
+        "node_type": "array_contains",
+        "position": {
+          "x": 1360,
+          "y": 460
+        },
+        "properties": {
+          "item": "10"
+        },
+        "inputs": [
+          {
+            "id": "array",
+            "name": "array",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c5"
+            ]
+          },
+          {
+            "id": "item",
+            "name": "item",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ]
+      },
+      "a_has_s": {
+        "id": "a_has_s",
+        "node_type": "bool_to_string",
+        "position": {
+          "x": 1700,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "value",
+            "name": "value",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ]
+      },
+      "a_cat1": {
+        "id": "a_cat1",
+        "node_type": "string_concat",
+        "position": {
+          "x": 1360,
+          "y": 230
+        },
+        "properties": {
+          "a": "[AdvDataDriven] tiers after push: "
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          }
+        ]
+      },
+      "a_cat2": {
+        "id": "a_cat2",
+        "node_type": "string_concat",
+        "position": {
+          "x": 2040,
+          "y": 230
+        },
+        "properties": {
+          "a": " | contains 10? "
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ]
+      },
+      "a_log": {
+        "id": "a_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 2720,
+          "y": 0
+        },
+        "properties": {
+          "message": ""
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "bm": {
+        "id": "bm",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          }
+        ]
+      },
+      "m_new": {
+        "id": "m_new",
+        "node_type": "hashmap_new",
+        "position": {
+          "x": 0,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String, String",
+                "wrappers": [
+                  "HashMap"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12"
+            ]
+          }
+        ]
+      },
+      "m_i1": {
+        "id": "m_i1",
+        "node_type": "hashmap_insert",
+        "position": {
+          "x": 340,
+          "y": 690
+        },
+        "properties": {
+          "key": "sword",
+          "value": "50"
+        },
+        "inputs": [
+          {
+            "id": "map",
+            "name": "map",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String, String",
+                "wrappers": [
+                  "HashMap"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c12"
+            ]
+          },
+          {
+            "id": "key",
+            "name": "key",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "value",
+            "name": "value",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String, String",
+                "wrappers": [
+                  "HashMap"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ]
+      },
+      "m_i2": {
+        "id": "m_i2",
+        "node_type": "hashmap_insert",
+        "position": {
+          "x": 680,
+          "y": 690
+        },
+        "properties": {
+          "key": "potion",
+          "value": "10"
+        },
+        "inputs": [
+          {
+            "id": "map",
+            "name": "map",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String, String",
+                "wrappers": [
+                  "HashMap"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          },
+          {
+            "id": "key",
+            "name": "key",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "value",
+            "name": "value",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String, String",
+                "wrappers": [
+                  "HashMap"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c14"
+            ]
+          }
+        ]
+      },
+      "m_json": {
+        "id": "m_json",
+        "node_type": "hashmap_to_json",
+        "position": {
+          "x": 1020,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "map",
+            "name": "map",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String, String",
+                "wrappers": [
+                  "HashMap"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c14"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          }
+        ]
+      },
+      "m_cat": {
+        "id": "m_cat",
+        "node_type": "string_concat",
+        "position": {
+          "x": 1360,
+          "y": 690
+        },
+        "properties": {
+          "a": "[AdvDataDriven] price map: "
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c16"
+            ]
+          }
+        ]
+      },
+      "m_log": {
+        "id": "m_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 1700,
+          "y": 690
+        },
+        "properties": {
+          "message": ""
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c16"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "by": {
+        "id": "by",
+        "node_type": "custom_event:buy",
+        "position": {
+          "x": 0,
+          "y": 1610
+        },
+        "properties": {
+          "event_uid": "buy"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c17"
+            ]
+          },
+          {
+            "id": "item",
+            "name": "item",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c30",
+              "c47"
+            ]
+          }
+        ]
+      },
+      "by_reset": {
+        "id": "by_reset",
+        "node_type": "set_row_index",
+        "position": {
+          "x": 340,
+          "y": 1610
+        },
+        "properties": {
+          "value": 0
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c17"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "row_index",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c18"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "row_index",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "by_table": {
+        "id": "by_table",
+        "node_type": "get_item_table",
+        "position": {
+          "x": 340,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "item_table",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c19"
+            ]
+          }
+        ]
+      },
+      "by_rows": {
+        "id": "by_rows",
+        "node_type": "string_split",
+        "position": {
+          "x": 680,
+          "y": 1840
+        },
+        "properties": {
+          "delimiter": ","
+        },
+        "inputs": [
+          {
+            "id": "text",
+            "name": "text",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c19"
+            ]
+          },
+          {
+            "id": "delimiter",
+            "name": "delimiter",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c20",
+              "c25"
+            ]
+          }
+        ]
+      },
+      "by_count": {
+        "id": "by_count",
+        "node_type": "array_length",
+        "position": {
+          "x": 1020,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "array",
+            "name": "array",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c20"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c21"
+            ]
+          }
+        ]
+      },
+      "by_loop": {
+        "id": "by_loop",
+        "node_type": "for_loop",
+        "position": {
+          "x": 1360,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c18"
+            ]
+          },
+          {
+            "id": "count",
+            "name": "count",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c21"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c22"
+            ]
+          }
+        ]
+      },
+      "by_seq": {
+        "id": "by_seq",
+        "node_type": "sequence",
+        "position": {
+          "x": 1700,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c22"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Then0",
+            "name": "Then0",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c23"
+            ]
+          },
+          {
+            "id": "Then1",
+            "name": "Then1",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c24"
+            ]
+          },
+          {
+            "id": "Then2",
+            "name": "Then2",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          },
+          {
+            "id": "Then3",
+            "name": "Then3",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "by_slice": {
+        "id": "by_slice",
+        "node_type": "array_slice",
+        "position": {
+          "x": 1700,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "array",
+            "name": "array",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c25"
+            ]
+          },
+          {
+            "id": "start",
+            "name": "start",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c26"
+            ]
+          },
+          {
+            "id": "end",
+            "name": "end",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c28"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c29"
+            ]
+          }
+        ]
+      },
+      "by_row": {
+        "id": "by_row",
+        "node_type": "string_join",
+        "position": {
+          "x": 1700,
+          "y": 2300
+        },
+        "properties": {
+          "separator": ""
+        },
+        "inputs": [
+          {
+            "id": "strings",
+            "name": "strings",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c29"
+            ]
+          },
+          {
+            "id": "separator",
+            "name": "separator",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c31",
+              "c34"
+            ]
+          }
+        ]
+      },
+      "by_end": {
+        "id": "by_end",
+        "node_type": "add",
+        "position": {
+          "x": 1360,
+          "y": 2300
+        },
+        "properties": {
+          "b": 1
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c27"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c28"
+            ]
+          }
+        ]
+      },
+      "by_idx": {
+        "id": "by_idx",
+        "node_type": "get_row_index",
+        "position": {
+          "x": 1360,
+          "y": 2070
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "row_index",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c26",
+              "c27"
+            ]
+          }
+        ]
+      },
+      "by_key": {
+        "id": "by_key",
+        "node_type": "string_concat",
+        "position": {
+          "x": 1700,
+          "y": 2070
+        },
+        "properties": {
+          "b": ":"
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c30"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c32"
+            ]
+          }
+        ]
+      },
+      "by_match": {
+        "id": "by_match",
+        "node_type": "string_starts_with",
+        "position": {
+          "x": 2040,
+          "y": 2070
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "text",
+            "name": "text",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c31"
+            ]
+          },
+          {
+            "id": "prefix",
+            "name": "prefix",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c32"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c33"
+            ]
+          }
+        ]
+      },
+      "by_if": {
+        "id": "by_if",
+        "node_type": "branch",
+        "position": {
+          "x": 2380,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c23"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c33"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c40"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "by_cols": {
+        "id": "by_cols",
+        "node_type": "string_split",
+        "position": {
+          "x": 2380,
+          "y": 2070
+        },
+        "properties": {
+          "delimiter": ":"
+        },
+        "inputs": [
+          {
+            "id": "text",
+            "name": "text",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c34"
+            ]
+          },
+          {
+            "id": "delimiter",
+            "name": "delimiter",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c35"
+            ]
+          }
+        ]
+      },
+      "by_pslice": {
+        "id": "by_pslice",
+        "node_type": "array_slice",
+        "position": {
+          "x": 2720,
+          "y": 2070
+        },
+        "properties": {
+          "start": 1,
+          "end": 2
+        },
+        "inputs": [
+          {
+            "id": "array",
+            "name": "array",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c35"
+            ]
+          },
+          {
+            "id": "start",
+            "name": "start",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "end",
+            "name": "end",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c36"
+            ]
+          }
+        ]
+      },
+      "by_price_s": {
+        "id": "by_price_s",
+        "node_type": "string_join",
+        "position": {
+          "x": 2720,
+          "y": 2300
+        },
+        "properties": {
+          "separator": ""
+        },
+        "inputs": [
+          {
+            "id": "strings",
+            "name": "strings",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [
+                  "Vec"
+                ],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c36"
+            ]
+          },
+          {
+            "id": "separator",
+            "name": "separator",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c37"
+            ]
+          }
+        ]
+      },
+      "by_price": {
+        "id": "by_price",
+        "node_type": "native::string::parse_int",
+        "position": {
+          "x": 3060,
+          "y": 2070
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "s",
+            "name": "s",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c37"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c39",
+              "c44"
+            ]
+          }
+        ]
+      },
+      "by_gold": {
+        "id": "by_gold",
+        "node_type": "get_gold",
+        "position": {
+          "x": 3060,
+          "y": 2300
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "gold",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c38",
+              "c43"
+            ]
+          }
+        ]
+      },
+      "by_afford": {
+        "id": "by_afford",
+        "node_type": "greater_equal",
+        "position": {
+          "x": 3400,
+          "y": 2300
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c38"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c39"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c41"
+            ]
+          }
+        ]
+      },
+      "by_if2": {
+        "id": "by_if2",
+        "node_type": "branch",
+        "position": {
+          "x": 3400,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c40"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c41"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c42"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c49"
+            ]
+          }
+        ]
+      },
+      "by_pay": {
+        "id": "by_pay",
+        "node_type": "subtract",
+        "position": {
+          "x": 3740,
+          "y": 2300
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c43"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c44"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c45"
+            ]
+          }
+        ]
+      },
+      "by_set_gold": {
+        "id": "by_set_gold",
+        "node_type": "set_gold",
+        "position": {
+          "x": 3740,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c42"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "gold",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c45"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c46"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "gold",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "by_cat": {
+        "id": "by_cat",
+        "node_type": "string_concat",
+        "position": {
+          "x": 4080,
+          "y": 1840
+        },
+        "properties": {
+          "a": "[AdvDataDriven] bought "
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c47"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c48"
+            ]
+          }
+        ]
+      },
+      "by_log": {
+        "id": "by_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 4080,
+          "y": 1610
+        },
+        "properties": {
+          "message": ""
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c46"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c48"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "by_poor": {
+        "id": "by_poor",
+        "node_type": "log_info",
+        "position": {
+          "x": 3740,
+          "y": 2130
+        },
+        "properties": {
+          "message": "[AdvDataDriven] cannot afford that item"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c49"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "by_idx2": {
+        "id": "by_idx2",
+        "node_type": "get_row_index",
+        "position": {
+          "x": 2380,
+          "y": 2530
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "row_index",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c50"
+            ]
+          }
+        ]
+      },
+      "by_next": {
+        "id": "by_next",
+        "node_type": "add",
+        "position": {
+          "x": 2720,
+          "y": 2530
+        },
+        "properties": {
+          "b": 1
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c50"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c51"
+            ]
+          }
+        ]
+      },
+      "by_set_idx": {
+        "id": "by_set_idx",
+        "node_type": "set_row_index",
+        "position": {
+          "x": 3060,
+          "y": 2530
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c24"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "row_index",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c51"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          },
+          {
+            "id": "value",
+            "name": "row_index",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "bs": {
+        "id": "bs",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 2990
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c52"
+            ]
+          }
+        ]
+      },
+      "bs_buy": {
+        "id": "bs_buy",
+        "node_type": "custom_event_dispatch:buy",
+        "position": {
+          "x": 340,
+          "y": 2990
+        },
+        "properties": {
+          "event_uid": "buy",
+          "item": "potion"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c52"
+            ]
+          },
+          {
+            "id": "item",
+            "name": "item",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c53"
+            ]
+          }
+        ]
+      },
+      "bs_vec": {
+        "id": "bs_vec",
+        "node_type": "native::Vec3::new",
+        "position": {
+          "x": 680,
+          "y": 3220
+        },
+        "properties": {
+          "x": 1.5,
+          "y": 0.0,
+          "z": -3.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "name": "x",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "y",
+            "name": "y",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "z",
+            "name": "z",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Vec3",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c54"
+            ]
+          }
+        ]
+      },
+      "bs_x": {
+        "id": "bs_x",
+        "node_type": "native::Vec3::x",
+        "position": {
+          "x": 1020,
+          "y": 3220
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "v",
+            "name": "v",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Vec3",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c54"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c55"
+            ]
+          }
+        ]
+      },
+      "bs_cat": {
+        "id": "bs_cat",
+        "node_type": "string_concat",
+        "position": {
+          "x": 1360,
+          "y": 3220
+        },
+        "properties": {
+          "a": "[AdvDataDriven] spawn offset x = "
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c55"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c56"
+            ]
+          }
+        ]
+      },
+      "bs_log": {
+        "id": "bs_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 1700,
+          "y": 2990
+        },
+        "properties": {
+          "message": ""
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c53"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c56"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "bp",
+        "source_pin": "Body",
+        "target_node": "a_p1",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "a_p1",
+        "source_pin": "exec_out",
+        "target_node": "a_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c3",
+        "source_node": "a_src",
+        "source_pin": "result",
+        "target_node": "a_p1",
+        "target_pin": "array",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c4",
+        "source_node": "a_p1",
+        "source_pin": "result",
+        "target_node": "a_join",
+        "target_pin": "strings",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c5",
+        "source_node": "a_src",
+        "source_pin": "result",
+        "target_node": "a_has",
+        "target_pin": "array",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c6",
+        "source_node": "a_has",
+        "source_pin": "result",
+        "target_node": "a_has_s",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c7",
+        "source_node": "a_join",
+        "source_pin": "result",
+        "target_node": "a_cat1",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c8",
+        "source_node": "a_cat1",
+        "source_pin": "result",
+        "target_node": "a_cat2",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c9",
+        "source_node": "a_has_s",
+        "source_pin": "result",
+        "target_node": "a_cat2",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c10",
+        "source_node": "a_cat2",
+        "source_pin": "result",
+        "target_node": "a_log",
+        "target_pin": "message",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c11",
+        "source_node": "bm",
+        "source_pin": "Body",
+        "target_node": "m_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c12",
+        "source_node": "m_new",
+        "source_pin": "result",
+        "target_node": "m_i1",
+        "target_pin": "map",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c13",
+        "source_node": "m_i1",
+        "source_pin": "result",
+        "target_node": "m_i2",
+        "target_pin": "map",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c14",
+        "source_node": "m_i2",
+        "source_pin": "result",
+        "target_node": "m_json",
+        "target_pin": "map",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c15",
+        "source_node": "m_json",
+        "source_pin": "result",
+        "target_node": "m_cat",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c16",
+        "source_node": "m_cat",
+        "source_pin": "result",
+        "target_node": "m_log",
+        "target_pin": "message",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c17",
+        "source_node": "by",
+        "source_pin": "Body",
+        "target_node": "by_reset",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c18",
+        "source_node": "by_reset",
+        "source_pin": "exec_out",
+        "target_node": "by_loop",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c19",
+        "source_node": "by_table",
+        "source_pin": "value",
+        "target_node": "by_rows",
+        "target_pin": "text",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c20",
+        "source_node": "by_rows",
+        "source_pin": "result",
+        "target_node": "by_count",
+        "target_pin": "array",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c21",
+        "source_node": "by_count",
+        "source_pin": "result",
+        "target_node": "by_loop",
+        "target_pin": "count",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c22",
+        "source_node": "by_loop",
+        "source_pin": "Body",
+        "target_node": "by_seq",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c23",
+        "source_node": "by_seq",
+        "source_pin": "Then0",
+        "target_node": "by_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c24",
+        "source_node": "by_seq",
+        "source_pin": "Then1",
+        "target_node": "by_set_idx",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c25",
+        "source_node": "by_rows",
+        "source_pin": "result",
+        "target_node": "by_slice",
+        "target_pin": "array",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c26",
+        "source_node": "by_idx",
+        "source_pin": "value",
+        "target_node": "by_slice",
+        "target_pin": "start",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c27",
+        "source_node": "by_idx",
+        "source_pin": "value",
+        "target_node": "by_end",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c28",
+        "source_node": "by_end",
+        "source_pin": "result",
+        "target_node": "by_slice",
+        "target_pin": "end",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c29",
+        "source_node": "by_slice",
+        "source_pin": "result",
+        "target_node": "by_row",
+        "target_pin": "strings",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c30",
+        "source_node": "by",
+        "source_pin": "item",
+        "target_node": "by_key",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c31",
+        "source_node": "by_row",
+        "source_pin": "result",
+        "target_node": "by_match",
+        "target_pin": "text",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c32",
+        "source_node": "by_key",
+        "source_pin": "result",
+        "target_node": "by_match",
+        "target_pin": "prefix",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c33",
+        "source_node": "by_match",
+        "source_pin": "result",
+        "target_node": "by_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c34",
+        "source_node": "by_row",
+        "source_pin": "result",
+        "target_node": "by_cols",
+        "target_pin": "text",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c35",
+        "source_node": "by_cols",
+        "source_pin": "result",
+        "target_node": "by_pslice",
+        "target_pin": "array",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c36",
+        "source_node": "by_pslice",
+        "source_pin": "result",
+        "target_node": "by_price_s",
+        "target_pin": "strings",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c37",
+        "source_node": "by_price_s",
+        "source_pin": "result",
+        "target_node": "by_price",
+        "target_pin": "s",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c38",
+        "source_node": "by_gold",
+        "source_pin": "value",
+        "target_node": "by_afford",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c39",
+        "source_node": "by_price",
+        "source_pin": "result",
+        "target_node": "by_afford",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c40",
+        "source_node": "by_if",
+        "source_pin": "True",
+        "target_node": "by_if2",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c41",
+        "source_node": "by_afford",
+        "source_pin": "result",
+        "target_node": "by_if2",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c42",
+        "source_node": "by_if2",
+        "source_pin": "True",
+        "target_node": "by_set_gold",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c43",
+        "source_node": "by_gold",
+        "source_pin": "value",
+        "target_node": "by_pay",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c44",
+        "source_node": "by_price",
+        "source_pin": "result",
+        "target_node": "by_pay",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c45",
+        "source_node": "by_pay",
+        "source_pin": "result",
+        "target_node": "by_set_gold",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c46",
+        "source_node": "by_set_gold",
+        "source_pin": "exec_out",
+        "target_node": "by_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c47",
+        "source_node": "by",
+        "source_pin": "item",
+        "target_node": "by_cat",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c48",
+        "source_node": "by_cat",
+        "source_pin": "result",
+        "target_node": "by_log",
+        "target_pin": "message",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c49",
+        "source_node": "by_if2",
+        "source_pin": "False",
+        "target_node": "by_poor",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c50",
+        "source_node": "by_idx2",
+        "source_pin": "value",
+        "target_node": "by_next",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c51",
+        "source_node": "by_next",
+        "source_pin": "result",
+        "target_node": "by_set_idx",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c52",
+        "source_node": "bs",
+        "source_pin": "Body",
+        "target_node": "bs_buy",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c53",
+        "source_node": "bs_buy",
+        "source_pin": "exec_out",
+        "target_node": "bs_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c54",
+        "source_node": "bs_vec",
+        "source_pin": "result",
+        "target_node": "bs_x",
+        "target_pin": "v",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c55",
+        "source_node": "bs_x",
+        "source_pin": "result",
+        "target_node": "bs_cat",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c56",
+        "source_node": "bs_cat",
+        "source_pin": "result",
+        "target_node": "bs_log",
+        "target_pin": "message",
+        "connection_type": "Data"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "A shop whose catalogue is DATA (a text table), parsed into arrays, with a Vec3 spawn offset.",
+      "version": "1.0.0",
+      "created_at": "2026-11-14T00:00:00Z",
+      "modified_at": "2026-11-14T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "ADVANCED 7/9: DATA-DRIVEN LOGIC (arrays, maps, structs)\nThe catalogue lives in a String variable (`item_table`: \"name:price,name:price\") that designers edit in the\nlevel, not in the graph. Logic reads the table at run time: Split to an array, walk it with a loop,\nsplit each row again. Arrays and maps are VALUES that flow on wires (variables hold bool, integers,\nfloats, String, Entity and object types such as Vec3), so build collections inside one chain.\nStruct-like values (Vec3, Vec2, Transform) have Make/Break style nodes.",
+        "position": [
+          0,
+          -330
+        ],
+        "size": [
+          1500,
+          230
+        ],
+        "color": [
+          0.9,
+          0.75,
+          0.2,
+          0.28
+        ],
+        "contained_node_ids": []
+      },
+      {
+        "id": "comment-2",
+        "text": "1. ARRAYS - `Split` turns \"30,10,20\" into an array of Strings. Array Push appends \"5\",\nArray Join turns it back into text, Array Contains queries it (Array Length feeds the loop in step 3). Array nodes RETURN the\nchanged array on `result` rather than mutating: wire the output into the next node. Their element type is\ninferred from a typed wire, so start from a typed source such as Split (an `Array New` with nothing connected\ncannot know its element type). Note: Array Get/First/Last/Pop give TWO outputs (`present`, `value`); this\nexample reads elements with Array Slice + Array Join instead (see step 3).",
+        "position": [
+          -30,
+          -70
+        ],
+        "size": [
+          3040,
+          710
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bp",
+          "a_src",
+          "a_p1",
+          "a_join",
+          "a_has",
+          "a_has_s",
+          "a_cat1",
+          "a_cat2",
+          "a_log"
+        ]
+      },
+      {
+        "id": "comment-3",
+        "text": "2. MAPS - `HashMap New`, then `HashMap Insert` twice (the pure nodes return the NEW map). The\nmap keys and values are Strings. They are pure, so they run when the JSON text is needed. Use\n`Contains Key`, `Keys` and `Values` to query one. Maps cannot be stored in variables; keep them in\none chain or rebuild them from the data table.",
+        "position": [
+          -30,
+          620
+        ],
+        "size": [
+          2020,
+          480
+        ],
+        "color": [
+          0.25,
+          0.65,
+          0.35,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bm",
+          "m_new",
+          "m_i1",
+          "m_i2",
+          "m_json",
+          "m_cat",
+          "m_log"
+        ]
+      },
+      {
+        "id": "comment-4",
+        "text": "3. DATA-DRIVEN LOOKUP - `buy(item)` walks the table. Split the table at commas into rows; For Loop\nonce per row (count = Array Length). The loop has no index pin, so `row_index` is our own counter:\nreset to 0 first, incremented by the loop body's second Sequence output (Then1) on EVERY iteration.\nThen0 does the work for row i: read it with Array Slice(i, i+1) joined back to text; it matches when it\nstarts with \"<item>:\". Split the row at the colon, slice element 1 (the price), parse it to an integer\nand compare with `gold`. Changing the catalogue needs no graph edit. (Loops always run to the end; a\nmatch simply does its work once because each row is visited once.)",
+        "position": [
+          -30,
+          1540
+        ],
+        "size": [
+          4400,
+          1170
+        ],
+        "color": [
+          0.6,
+          0.35,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "by",
+          "by_reset",
+          "by_table",
+          "by_rows",
+          "by_count",
+          "by_loop",
+          "by_seq",
+          "by_slice",
+          "by_row",
+          "by_end",
+          "by_pslice",
+          "by_idx",
+          "by_key",
+          "by_match",
+          "by_if",
+          "by_cols",
+          "by_price_s",
+          "by_price",
+          "by_gold",
+          "by_afford",
+          "by_if2",
+          "by_pay",
+          "by_set_gold",
+          "by_cat",
+          "by_log",
+          "by_poor",
+          "by_idx2",
+          "by_next",
+          "by_set_idx"
+        ]
+      },
+      {
+        "id": "comment-5",
+        "text": "4. STRUCT-LIKE VALUES AND KICKOFF - begin_play buys a potion through the data table, then builds a Vec3\n(a struct of x, y, z) with `Vec3 New` and reads a field back with `Vec3 X`. Vec2, Vec4, Quat and\nTransform work the same way (see the Types categories in the palette).",
+        "position": [
+          -30,
+          2920
+        ],
+        "size": [
+          2020,
+          480
+        ],
+        "color": [
+          0.8,
+          0.3,
+          0.3,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bs",
+          "bs_buy",
+          "bs_vec",
+          "bs_x",
+          "bs_cat",
+          "bs_log"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "subgraphs": [],
+  "local_events": [
+    {
+      "uid": "buy",
+      "name": "buy",
+      "fields": [
+        {
+          "name": "item",
+          "type_name": "String"
+        }
+      ],
+      "return_type": ""
+    }
+  ],
+  "variables": [
+    {
+      "id": "v_table",
+      "name": "item_table",
+      "data_type": {
+        "Data": {
+          "base_type": "String",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "sword:50,potion:10,shield:75",
+      "description": "The catalogue: name:price rows separated by commas."
+    },
+    {
+      "id": "v_gold",
+      "name": "gold",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "120",
+      "description": "The buyer's money."
+    },
+    {
+      "id": "v_idx",
+      "name": "row_index",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "Loop counter for buy (For Loop has no index pin)."
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main"
+    ],
+    "active_tab_index": 0,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 0.0,
+        "pan_offset_y": 0.0,
+        "zoom": 0.7
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Actor",
+    "parent_class": null,
+    "description": "Data-driven shop: a text table parsed into arrays, maps and Vec3 values.",
+    "category": "Advanced Examples",
+    "tags": [
+      "data",
+      "array",
+      "map",
+      "struct"
+    ]
+  }
+}

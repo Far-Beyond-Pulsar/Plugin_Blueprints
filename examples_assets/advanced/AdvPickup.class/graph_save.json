@@ -1,0 +1,725 @@
+// Advanced example Blueprint shipped with the Blueprint Editor plugin.
+// Open it in the Blueprint Editor and read the yellow note boxes and the blue
+// step boxes: every graph is commented. The file is read-only (a plugin folder);
+// copy the .class folder into your project to edit and compile it.
+// The JSON below is the same format the editor writes for any class.
+
+{
+  "format_version": 2,
+  "main_graph": {
+    "nodes": {
+      "ov": {
+        "id": "ov",
+        "node_type": "event::on::BeginOverlap",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "entity",
+            "name": "entity",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "other",
+            "name": "other",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7",
+              "c8"
+            ]
+          }
+        ]
+      },
+      "ov_once": {
+        "id": "ov_once",
+        "node_type": "do_once",
+        "position": {
+          "x": 340,
+          "y": 0
+        },
+        "properties": {
+          "reset": false
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "reset",
+            "name": "reset",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Then",
+            "name": "Then",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          }
+        ]
+      },
+      "ov_kind": {
+        "id": "ov_kind",
+        "node_type": "get_kind",
+        "position": {
+          "x": 340,
+          "y": 230
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "kind",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3"
+            ]
+          }
+        ]
+      },
+      "ov_coin": {
+        "id": "ov_coin",
+        "node_type": "equals",
+        "position": {
+          "x": 680,
+          "y": 230
+        },
+        "properties": {
+          "b": 0
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c4"
+            ]
+          }
+        ]
+      },
+      "ov_if": {
+        "id": "ov_if",
+        "node_type": "branch",
+        "position": {
+          "x": 1020,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c4"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c5"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ]
+      },
+      "ov_pts": {
+        "id": "ov_pts",
+        "node_type": "get_points",
+        "position": {
+          "x": 1020,
+          "y": 230
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "points",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9",
+              "c10"
+            ]
+          }
+        ]
+      },
+      "ov_score": {
+        "id": "ov_score",
+        "node_type": "event::send::AdvPlayerStats.add_score",
+        "position": {
+          "x": 1360,
+          "y": -60
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c5"
+            ]
+          },
+          {
+            "id": "target",
+            "name": "target",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          },
+          {
+            "id": "points",
+            "name": "points",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          }
+        ]
+      },
+      "ov_heal": {
+        "id": "ov_heal",
+        "node_type": "event::send::AdvPlayerStats.heal",
+        "position": {
+          "x": 1360,
+          "y": 100
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c6"
+            ]
+          },
+          {
+            "id": "target",
+            "name": "target",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          },
+          {
+            "id": "amount",
+            "name": "amount",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c12"
+            ]
+          }
+        ]
+      },
+      "ov_self": {
+        "id": "ov_self",
+        "node_type": "native::Transform::entity",
+        "position": {
+          "x": 1700,
+          "y": 290
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "self",
+            "name": "self",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Transform",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ]
+      },
+      "ov_kill": {
+        "id": "ov_kill",
+        "node_type": "native::entity::despawn",
+        "position": {
+          "x": 2040,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11",
+              "c12"
+            ]
+          },
+          {
+            "id": "entity",
+            "name": "entity",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "ov",
+        "source_pin": "Body",
+        "target_node": "ov_once",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "ov_once",
+        "source_pin": "Then",
+        "target_node": "ov_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c3",
+        "source_node": "ov_kind",
+        "source_pin": "value",
+        "target_node": "ov_coin",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c4",
+        "source_node": "ov_coin",
+        "source_pin": "result",
+        "target_node": "ov_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c5",
+        "source_node": "ov_if",
+        "source_pin": "True",
+        "target_node": "ov_score",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c6",
+        "source_node": "ov_if",
+        "source_pin": "False",
+        "target_node": "ov_heal",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c7",
+        "source_node": "ov",
+        "source_pin": "other",
+        "target_node": "ov_score",
+        "target_pin": "target",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c8",
+        "source_node": "ov",
+        "source_pin": "other",
+        "target_node": "ov_heal",
+        "target_pin": "target",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c9",
+        "source_node": "ov_pts",
+        "source_pin": "value",
+        "target_node": "ov_score",
+        "target_pin": "points",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c10",
+        "source_node": "ov_pts",
+        "source_pin": "value",
+        "target_node": "ov_heal",
+        "target_pin": "amount",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c11",
+        "source_node": "ov_score",
+        "source_pin": "exec_out",
+        "target_node": "ov_kill",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c12",
+        "source_node": "ov_heal",
+        "source_pin": "exec_out",
+        "target_node": "ov_kill",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c13",
+        "source_node": "ov_self",
+        "source_pin": "result",
+        "target_node": "ov_kill",
+        "target_pin": "entity",
+        "connection_type": "Data"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "A collectable: scores or heals whoever overlaps it, then removes itself.",
+      "version": "1.0.0",
+      "created_at": "2026-11-14T00:00:00Z",
+      "modified_at": "2026-11-14T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "ADVANCED 8/9: A SMALL COMPLETE GAME - pickups, score, health\nThree classes cooperate only through events, never through references:\n  AdvPlayerStats (on the player): health, score, win and lose.\n  AdvPickup (on every coin/medkit): on overlap it SENDS `AdvPlayerStats.add_score` or `.heal`\n     to whoever touched it, then removes itself.\n  AdvHazard (spikes): on overlap it applies engine damage; AdvPlayerStats listens to the engine's Damage event.\nCompile order: a class that sends another class's event needs that class compiled first (the Send node\nreads the other class's compiled events), so Compile All builds AdvPlayerStats before AdvPickup.",
+        "position": [
+          0,
+          -360
+        ],
+        "size": [
+          1500,
+          260
+        ],
+        "color": [
+          0.9,
+          0.75,
+          0.2,
+          0.28
+        ],
+        "contained_node_ids": []
+      },
+      {
+        "id": "comment-2",
+        "text": "1. COLLECT - `On BeginOverlap` fires on this object when something enters it; `other` is the toucher.\nDo Once makes a pickup collectable a single time even if two things overlap in the same frame.\n`kind` 0 is a coin: SEND `AdvPlayerStats.add_score` to `other`; any other kind is a medkit and sends\n`AdvPlayerStats.heal`. The Send node targets ONE entity; if `other` is not a player nothing\nhandles the event, so non-players walk over pickups harmlessly. Finally destroy this pickup.",
+        "position": [
+          -30,
+          -130
+        ],
+        "size": [
+          2360,
+          600
+        ],
+        "color": [
+          0.25,
+          0.65,
+          0.35,
+          0.22
+        ],
+        "contained_node_ids": [
+          "ov",
+          "ov_once",
+          "ov_kind",
+          "ov_coin",
+          "ov_if",
+          "ov_pts",
+          "ov_score",
+          "ov_heal",
+          "ov_self",
+          "ov_kill"
+        ]
+      },
+      {
+        "id": "comment-3",
+        "text": "2. TUNING - `kind` and `points` are variables, so ONE class makes coins, gems and medkits: place the class and override the variables on each instance in the level instead of copying the Blueprint.",
+        "position": [
+          220,
+          70
+        ],
+        "size": [
+          1180,
+          430
+        ],
+        "color": [
+          0.6,
+          0.35,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "ov_kind",
+          "ov_pts"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "subgraphs": [],
+  "local_events": [],
+  "variables": [
+    {
+      "id": "v_kind",
+      "name": "kind",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "0 = coin (score), 1 = medkit (heal). Override per instance in the level."
+    },
+    {
+      "id": "v_pts",
+      "name": "points",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "10",
+      "description": "Score or heal amount."
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main"
+    ],
+    "active_tab_index": 0,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 0.0,
+        "pan_offset_y": 0.0,
+        "zoom": 0.7
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Actor",
+    "parent_class": null,
+    "description": "Collectable that scores or heals the toucher.",
+    "category": "Advanced Examples",
+    "tags": [
+      "minigame",
+      "pickup"
+    ]
+  }
+}

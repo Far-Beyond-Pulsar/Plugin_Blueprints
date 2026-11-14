@@ -1,0 +1,956 @@
+// Advanced example Blueprint shipped with the Blueprint Editor plugin.
+// Open it in the Blueprint Editor and read the yellow note boxes and the blue
+// step boxes: every graph is commented. The file is read-only (a plugin folder);
+// copy the .class folder into your project to edit and compile it.
+// The JSON below is the same format the editor writes for any class.
+
+{
+  "format_version": 2,
+  "main_graph": {
+    "nodes": {
+      "bp": {
+        "id": "bp",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          }
+        ]
+      },
+      "bp_log": {
+        "id": "bp_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 340,
+          "y": 0
+        },
+        "properties": {
+          "message": "[AdvInteractableLamp] ready: implements the AdvInteractable trait"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "it": {
+        "id": "it",
+        "node_type": "custom_event:interact",
+        "position": {
+          "x": 0,
+          "y": 460
+        },
+        "properties": {
+          "event_uid": "interact"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "instigator_id",
+            "name": "instigator_id",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "it_used": {
+        "id": "it_used",
+        "node_type": "get_times_used",
+        "position": {
+          "x": 340,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "times_used",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c5"
+            ]
+          }
+        ]
+      },
+      "it_inc": {
+        "id": "it_inc",
+        "node_type": "add",
+        "position": {
+          "x": 680,
+          "y": 690
+        },
+        "properties": {
+          "b": 1
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c5"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ]
+      },
+      "it_set_used": {
+        "id": "it_set_used",
+        "node_type": "set_times_used",
+        "position": {
+          "x": 1020,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c2"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "times_used",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c3"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "times_used",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "it_on": {
+        "id": "it_on",
+        "node_type": "get_is_on",
+        "position": {
+          "x": 1020,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "is_on",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ]
+      },
+      "it_not": {
+        "id": "it_not",
+        "node_type": "not",
+        "position": {
+          "x": 1360,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "value",
+            "name": "value",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          }
+        ]
+      },
+      "it_toggle": {
+        "id": "it_toggle",
+        "node_type": "set_is_on",
+        "position": {
+          "x": 1700,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c3"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "is_on",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "is_on",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ]
+      },
+      "it_if": {
+        "id": "it_if",
+        "node_type": "branch",
+        "position": {
+          "x": 2040,
+          "y": 460
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c10"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          }
+        ]
+      },
+      "it_log_on": {
+        "id": "it_log_on",
+        "node_type": "log_info",
+        "position": {
+          "x": 2380,
+          "y": 330
+        },
+        "properties": {
+          "message": "[AdvInteractableLamp] switched on"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c10"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "it_log_off": {
+        "id": "it_log_off",
+        "node_type": "log_info",
+        "position": {
+          "x": 2380,
+          "y": 690
+        },
+        "properties": {
+          "message": "[AdvInteractableLamp] switched off"
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c11"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "hl": {
+        "id": "hl",
+        "node_type": "custom_event:set_highlight",
+        "position": {
+          "x": 0,
+          "y": 1610
+        },
+        "properties": {
+          "event_uid": "set_highlight"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c12"
+            ]
+          },
+          {
+            "id": "enabled",
+            "name": "enabled",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ]
+      },
+      "hl_set": {
+        "id": "hl_set",
+        "node_type": "set_highlighted",
+        "position": {
+          "x": 340,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c12"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "highlighted",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c13"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          },
+          {
+            "id": "value",
+            "name": "highlighted",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "bp",
+        "source_pin": "Body",
+        "target_node": "bp_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "it",
+        "source_pin": "Body",
+        "target_node": "it_set_used",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c3",
+        "source_node": "it_set_used",
+        "source_pin": "exec_out",
+        "target_node": "it_toggle",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c4",
+        "source_node": "it_toggle",
+        "source_pin": "exec_out",
+        "target_node": "it_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c5",
+        "source_node": "it_used",
+        "source_pin": "value",
+        "target_node": "it_inc",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c6",
+        "source_node": "it_inc",
+        "source_pin": "result",
+        "target_node": "it_set_used",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c7",
+        "source_node": "it_on",
+        "source_pin": "value",
+        "target_node": "it_not",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c8",
+        "source_node": "it_not",
+        "source_pin": "result",
+        "target_node": "it_toggle",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c9",
+        "source_node": "it_toggle",
+        "source_pin": "value",
+        "target_node": "it_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c10",
+        "source_node": "it_if",
+        "source_pin": "True",
+        "target_node": "it_log_on",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c11",
+        "source_node": "it_if",
+        "source_pin": "False",
+        "target_node": "it_log_off",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c12",
+        "source_node": "hl",
+        "source_pin": "Body",
+        "target_node": "hl_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c13",
+        "source_node": "hl",
+        "source_pin": "enabled",
+        "target_node": "hl_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "A lamp that implements the AdvInteractable trait.",
+      "version": "1.0.0",
+      "created_at": "2026-11-14T00:00:00Z",
+      "modified_at": "2026-11-14T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "ADVANCED 3/9: TRAIT IMPLEMENTER (Lamp)\nA trait is a contract (types/traits/AdvInteractable.trait.json): `interact(instigator_id)` and\n`set_highlight(enabled)`. A Blueprint opts in under Class Settings > Traits, which writes the trait's id\ninto this class (blueprint_metadata.implemented_trait_ids). It then MUST provide each trait method:\na custom event with the same name and parameters. The compiler refuses the class until it does.\nCallers (a player, an interaction trace) can then talk to ANY implementer without knowing its class.",
+        "position": [
+          0,
+          -290
+        ],
+        "size": [
+          1500,
+          190
+        ],
+        "color": [
+          0.9,
+          0.75,
+          0.2,
+          0.28
+        ],
+        "contained_node_ids": []
+      },
+      {
+        "id": "comment-2",
+        "text": "1. BEGIN PLAY - nothing trait specific happens here; the contract is satisfied by the two\ncustom events below.",
+        "position": [
+          -40,
+          -80
+        ],
+        "size": [
+          680,
+          270
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bp",
+          "bp_log"
+        ]
+      },
+      {
+        "id": "comment-3",
+        "text": "2. TRAIT METHOD interact(instigator_id) - implemented as a custom event with the SAME name and\nparameter. It counts the use, flips `is_on` (Not) and logs the new state.\nWhoever called the trait method (a player, an AI) is `instigator_id`; here we only count uses.",
+        "position": [
+          -30,
+          260
+        ],
+        "size": [
+          2700,
+          610
+        ],
+        "color": [
+          0.25,
+          0.65,
+          0.35,
+          0.22
+        ],
+        "contained_node_ids": [
+          "it",
+          "it_used",
+          "it_inc",
+          "it_set_used",
+          "it_on",
+          "it_not",
+          "it_toggle",
+          "it_if",
+          "it_log_on",
+          "it_log_off"
+        ]
+      },
+      {
+        "id": "comment-4",
+        "text": "3. TRAIT METHOD set_highlight(enabled) - the interaction system calls it when the player looks at or\naway from the object. A real object would drive an outline or emissive material here; the\nexample just stores the flag so a debugger can show it.",
+        "position": [
+          -40,
+          1530
+        ],
+        "size": [
+          680,
+          270
+        ],
+        "color": [
+          0.6,
+          0.35,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "hl",
+          "hl_set"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "subgraphs": [],
+  "local_events": [
+    {
+      "uid": "interact",
+      "name": "interact",
+      "fields": [
+        {
+          "name": "instigator_id",
+          "type_name": "i64"
+        }
+      ],
+      "return_type": ""
+    },
+    {
+      "uid": "set_highlight",
+      "name": "set_highlight",
+      "fields": [
+        {
+          "name": "enabled",
+          "type_name": "bool"
+        }
+      ],
+      "return_type": ""
+    }
+  ],
+  "variables": [
+    {
+      "id": "v_on",
+      "name": "is_on",
+      "data_type": {
+        "Data": {
+          "base_type": "bool",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "false",
+      "description": "Open (door) or lit (lamp)."
+    },
+    {
+      "id": "v_used",
+      "name": "times_used",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "How often interact was called."
+    },
+    {
+      "id": "v_hl",
+      "name": "highlighted",
+      "data_type": {
+        "Data": {
+          "base_type": "bool",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "false",
+      "description": "Set by set_highlight."
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main"
+    ],
+    "active_tab_index": 0,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 0.0,
+        "pan_offset_y": 0.0,
+        "zoom": 0.7
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Actor",
+    "parent_class": null,
+    "description": "Lamp implementing the AdvInteractable trait.",
+    "category": "Advanced Examples",
+    "tags": [
+      "trait",
+      "interaction"
+    ],
+    "implemented_trait_ids": [
+      "5e0f6c1a-7b3d-4c9e-8a21-3d4f9b6a1c77"
+    ]
+  }
+}

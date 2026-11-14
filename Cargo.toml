@@ -88,5 +88,9 @@ tool_registry_macros = { workspace = true }
 windows = { version = "0.62.2", features = ["Win32_Graphics_Direct3D12", "Win32_Graphics_Dxgi_Common"] }
 parking_lot = "0.12"
 
+[dev-dependencies]
+# Runs the compiled examples (tests/examples.rs).
+pulsar_scenedb = { workspace = true }
+
 [lints]
 workspace = true

@@ -1,0 +1,2085 @@
+// Advanced example Blueprint shipped with the Blueprint Editor plugin.
+// Open it in the Blueprint Editor and read the yellow note boxes and the blue
+// step boxes: every graph is commented. The file is read-only (a plugin folder);
+// copy the .class folder into your project to edit and compile it.
+// The JSON below is the same format the editor writes for any class.
+
+{
+  "format_version": 2,
+  "main_graph": {
+    "nodes": {
+      "bp": {
+        "id": "bp",
+        "node_type": "begin_play",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          }
+        ]
+      },
+      "bp_cat": {
+        "id": "bp_cat",
+        "node_type": "string_concat",
+        "position": {
+          "x": 340,
+          "y": 230
+        },
+        "properties": {
+          "a": "[AdvPlayerStats] ready, health "
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c2"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3"
+            ]
+          }
+        ]
+      },
+      "bp_hp": {
+        "id": "bp_hp",
+        "node_type": "get_health",
+        "position": {
+          "x": 0,
+          "y": 230
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c2"
+            ]
+          }
+        ]
+      },
+      "bp_log": {
+        "id": "bp_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 680,
+          "y": 0
+        },
+        "properties": {
+          "message": ""
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c1"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c3"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "as": {
+        "id": "as",
+        "node_type": "custom_event:add_score",
+        "position": {
+          "x": 0,
+          "y": 690
+        },
+        "properties": {
+          "event_uid": "add_score"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "points",
+            "name": "points",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ]
+      },
+      "as_s": {
+        "id": "as_s",
+        "node_type": "get_score",
+        "position": {
+          "x": 340,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "score",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          }
+        ]
+      },
+      "as_add": {
+        "id": "as_add",
+        "node_type": "add",
+        "position": {
+          "x": 680,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c6"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c7"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          }
+        ]
+      },
+      "as_set": {
+        "id": "as_set",
+        "node_type": "set_score",
+        "position": {
+          "x": 1020,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c4"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "score",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c8"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c5"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "score",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          }
+        ]
+      },
+      "as_win": {
+        "id": "as_win",
+        "node_type": "get_win_score",
+        "position": {
+          "x": 1020,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "win_score",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ]
+      },
+      "as_won": {
+        "id": "as_won",
+        "node_type": "greater_equal",
+        "position": {
+          "x": 1360,
+          "y": 920
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c9"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c10"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c11"
+            ]
+          }
+        ]
+      },
+      "as_if": {
+        "id": "as_if",
+        "node_type": "branch",
+        "position": {
+          "x": 1700,
+          "y": 690
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c5"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c11"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c12"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "as_end": {
+        "id": "as_end",
+        "node_type": "custom_event_dispatch:game_over",
+        "position": {
+          "x": 2040,
+          "y": 690
+        },
+        "properties": {
+          "event_uid": "game_over",
+          "won": true
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c12"
+            ]
+          },
+          {
+            "id": "won",
+            "name": "won",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "hl": {
+        "id": "hl",
+        "node_type": "custom_event:heal",
+        "position": {
+          "x": 0,
+          "y": 1380
+        },
+        "properties": {
+          "event_uid": "heal"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c13"
+            ]
+          },
+          {
+            "id": "amount",
+            "name": "amount",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          }
+        ]
+      },
+      "hl_hp": {
+        "id": "hl_hp",
+        "node_type": "get_health",
+        "position": {
+          "x": 340,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c14"
+            ]
+          }
+        ]
+      },
+      "hl_add": {
+        "id": "hl_add",
+        "node_type": "add",
+        "position": {
+          "x": 680,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c14"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c15"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c16"
+            ]
+          }
+        ]
+      },
+      "hl_cap": {
+        "id": "hl_cap",
+        "node_type": "native::int::min",
+        "position": {
+          "x": 1020,
+          "y": 1610
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c16"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c17"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c18"
+            ]
+          }
+        ]
+      },
+      "hl_max": {
+        "id": "hl_max",
+        "node_type": "get_max_health",
+        "position": {
+          "x": 1020,
+          "y": 1840
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "max_health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c17"
+            ]
+          }
+        ]
+      },
+      "hl_set": {
+        "id": "hl_set",
+        "node_type": "set_health",
+        "position": {
+          "x": 1360,
+          "y": 1380
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c13"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c18"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          },
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "dm": {
+        "id": "dm",
+        "node_type": "event::on::Damage",
+        "position": {
+          "x": 0,
+          "y": 2300
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c19"
+            ]
+          },
+          {
+            "id": "target",
+            "name": "target",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "amount",
+            "name": "amount",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "f64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "instigator",
+            "name": "instigator",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "Entity",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "dm_hp": {
+        "id": "dm_hp",
+        "node_type": "get_health",
+        "position": {
+          "x": 340,
+          "y": 2530
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c21"
+            ]
+          }
+        ]
+      },
+      "dm_sub": {
+        "id": "dm_sub",
+        "node_type": "subtract",
+        "position": {
+          "x": 680,
+          "y": 2530
+        },
+        "properties": {
+          "b": 20
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c21"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c22"
+            ]
+          }
+        ]
+      },
+      "dm_set": {
+        "id": "dm_set",
+        "node_type": "set_health",
+        "position": {
+          "x": 1020,
+          "y": 2300
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c19"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c22"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c20"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "health",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c23"
+            ]
+          }
+        ]
+      },
+      "dm_dead": {
+        "id": "dm_dead",
+        "node_type": "less_equal",
+        "position": {
+          "x": 1360,
+          "y": 2530
+        },
+        "properties": {
+          "b": 0
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c23"
+            ]
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "i64",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c24"
+            ]
+          }
+        ]
+      },
+      "dm_if": {
+        "id": "dm_if",
+        "node_type": "branch",
+        "position": {
+          "x": 1700,
+          "y": 2300
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c20"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c24"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c25"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "dm_end": {
+        "id": "dm_end",
+        "node_type": "custom_event_dispatch:game_over",
+        "position": {
+          "x": 2040,
+          "y": 2300
+        },
+        "properties": {
+          "event_uid": "game_over",
+          "won": false
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c25"
+            ]
+          },
+          {
+            "id": "won",
+            "name": "won",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "go": {
+        "id": "go",
+        "node_type": "custom_event:game_over",
+        "position": {
+          "x": 0,
+          "y": 2990
+        },
+        "properties": {
+          "event_uid": "game_over"
+        },
+        "inputs": [
+          {
+            "id": "__return__",
+            "name": "__return__",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "wildcard",
+                "wrappers": [],
+                "is_wildcard": true
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "Body",
+            "name": "Body",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c26"
+            ]
+          },
+          {
+            "id": "won",
+            "name": "won",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c31"
+            ]
+          }
+        ]
+      },
+      "go_done": {
+        "id": "go_done",
+        "node_type": "get_finished",
+        "position": {
+          "x": 340,
+          "y": 3220
+        },
+        "properties": {},
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "value",
+            "name": "finished",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c27"
+            ]
+          }
+        ]
+      },
+      "go_not": {
+        "id": "go_not",
+        "node_type": "not",
+        "position": {
+          "x": 680,
+          "y": 3220
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "value",
+            "name": "value",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c27"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c28"
+            ]
+          }
+        ]
+      },
+      "go_if": {
+        "id": "go_if",
+        "node_type": "branch",
+        "position": {
+          "x": 1020,
+          "y": 2990
+        },
+        "properties": {},
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c26"
+            ]
+          },
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c28"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "True",
+            "name": "True",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c29"
+            ]
+          },
+          {
+            "id": "False",
+            "name": "False",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      },
+      "go_set": {
+        "id": "go_set",
+        "node_type": "set_finished",
+        "position": {
+          "x": 1360,
+          "y": 2990
+        },
+        "properties": {
+          "value": true
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c29"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "finished",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": [
+              "c30"
+            ]
+          },
+          {
+            "id": "value",
+            "name": "finished",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ]
+      },
+      "go_msg": {
+        "id": "go_msg",
+        "node_type": "select_string",
+        "position": {
+          "x": 1700,
+          "y": 3220
+        },
+        "properties": {
+          "a": "[AdvPlayerStats] YOU WIN",
+          "b": "[AdvPlayerStats] YOU LOSE"
+        },
+        "inputs": [
+          {
+            "id": "condition",
+            "name": "condition",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "bool",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c31"
+            ]
+          },
+          {
+            "id": "a",
+            "name": "a",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": []
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "name": "result",
+            "pin_type": "Output",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c32"
+            ]
+          }
+        ]
+      },
+      "go_log": {
+        "id": "go_log",
+        "node_type": "log_info",
+        "position": {
+          "x": 2040,
+          "y": 2990
+        },
+        "properties": {
+          "message": ""
+        },
+        "inputs": [
+          {
+            "id": "exec",
+            "name": "exec",
+            "pin_type": "Input",
+            "data_type": "Execution",
+            "connected_to": [
+              "c30"
+            ]
+          },
+          {
+            "id": "message",
+            "name": "message",
+            "pin_type": "Input",
+            "data_type": {
+              "Data": {
+                "base_type": "String",
+                "wrappers": [],
+                "is_wildcard": false
+              }
+            },
+            "connected_to": [
+              "c32"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "id": "exec_out",
+            "name": "exec_out",
+            "pin_type": "Output",
+            "data_type": "Execution",
+            "connected_to": []
+          }
+        ]
+      }
+    },
+    "connections": [
+      {
+        "id": "c1",
+        "source_node": "bp",
+        "source_pin": "Body",
+        "target_node": "bp_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c2",
+        "source_node": "bp_hp",
+        "source_pin": "value",
+        "target_node": "bp_cat",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c3",
+        "source_node": "bp_cat",
+        "source_pin": "result",
+        "target_node": "bp_log",
+        "target_pin": "message",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c4",
+        "source_node": "as",
+        "source_pin": "Body",
+        "target_node": "as_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c5",
+        "source_node": "as_set",
+        "source_pin": "exec_out",
+        "target_node": "as_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c6",
+        "source_node": "as_s",
+        "source_pin": "value",
+        "target_node": "as_add",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c7",
+        "source_node": "as",
+        "source_pin": "points",
+        "target_node": "as_add",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c8",
+        "source_node": "as_add",
+        "source_pin": "result",
+        "target_node": "as_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c9",
+        "source_node": "as_set",
+        "source_pin": "value",
+        "target_node": "as_won",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c10",
+        "source_node": "as_win",
+        "source_pin": "value",
+        "target_node": "as_won",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c11",
+        "source_node": "as_won",
+        "source_pin": "result",
+        "target_node": "as_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c12",
+        "source_node": "as_if",
+        "source_pin": "True",
+        "target_node": "as_end",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c13",
+        "source_node": "hl",
+        "source_pin": "Body",
+        "target_node": "hl_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c14",
+        "source_node": "hl_hp",
+        "source_pin": "value",
+        "target_node": "hl_add",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c15",
+        "source_node": "hl",
+        "source_pin": "amount",
+        "target_node": "hl_add",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c16",
+        "source_node": "hl_add",
+        "source_pin": "result",
+        "target_node": "hl_cap",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c17",
+        "source_node": "hl_max",
+        "source_pin": "value",
+        "target_node": "hl_cap",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c18",
+        "source_node": "hl_cap",
+        "source_pin": "result",
+        "target_node": "hl_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c19",
+        "source_node": "dm",
+        "source_pin": "Body",
+        "target_node": "dm_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c20",
+        "source_node": "dm_set",
+        "source_pin": "exec_out",
+        "target_node": "dm_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c21",
+        "source_node": "dm_hp",
+        "source_pin": "value",
+        "target_node": "dm_sub",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c22",
+        "source_node": "dm_sub",
+        "source_pin": "result",
+        "target_node": "dm_set",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c23",
+        "source_node": "dm_set",
+        "source_pin": "value",
+        "target_node": "dm_dead",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c24",
+        "source_node": "dm_dead",
+        "source_pin": "result",
+        "target_node": "dm_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c25",
+        "source_node": "dm_if",
+        "source_pin": "True",
+        "target_node": "dm_end",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c26",
+        "source_node": "go",
+        "source_pin": "Body",
+        "target_node": "go_if",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c27",
+        "source_node": "go_done",
+        "source_pin": "value",
+        "target_node": "go_not",
+        "target_pin": "value",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c28",
+        "source_node": "go_not",
+        "source_pin": "result",
+        "target_node": "go_if",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c29",
+        "source_node": "go_if",
+        "source_pin": "True",
+        "target_node": "go_set",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c30",
+        "source_node": "go_set",
+        "source_pin": "exec_out",
+        "target_node": "go_log",
+        "target_pin": "exec",
+        "connection_type": "Execution"
+      },
+      {
+        "id": "c31",
+        "source_node": "go",
+        "source_pin": "won",
+        "target_node": "go_msg",
+        "target_pin": "condition",
+        "connection_type": "Data"
+      },
+      {
+        "id": "c32",
+        "source_node": "go_msg",
+        "source_pin": "result",
+        "target_node": "go_log",
+        "target_pin": "message",
+        "connection_type": "Data"
+      }
+    ],
+    "metadata": {
+      "name": "EventGraph",
+      "description": "Player health and score with win/lose rules.",
+      "version": "1.0.0",
+      "created_at": "2026-11-14T00:00:00Z",
+      "modified_at": "2026-11-14T00:00:00Z"
+    },
+    "comments": [
+      {
+        "id": "comment-1",
+        "text": "ADVANCED 8/9: A SMALL COMPLETE GAME - pickups, score, health\nThree classes cooperate only through events, never through references:\n  AdvPlayerStats (on the player): health, score, win and lose.\n  AdvPickup (on every coin/medkit): on overlap it SENDS `AdvPlayerStats.add_score` or `.heal`\n     to whoever touched it, then removes itself.\n  AdvHazard (spikes): on overlap it applies engine damage; AdvPlayerStats listens to the engine's Damage event.\nCompile order: a class that sends another class's event needs that class compiled first (the Send node\nreads the other class's compiled events), so Compile All builds AdvPlayerStats before AdvPickup.",
+        "position": [
+          0,
+          -360
+        ],
+        "size": [
+          1500,
+          260
+        ],
+        "color": [
+          0.9,
+          0.75,
+          0.2,
+          0.28
+        ],
+        "contained_node_ids": []
+      },
+      {
+        "id": "comment-2",
+        "text": "1. START - report the starting health. Variable defaults (health 100, score 0, win_score 50) come from the\nVariables panel, so a level can override them per player.",
+        "position": [
+          -40,
+          -80
+        ],
+        "size": [
+          1020,
+          500
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "bp",
+          "bp_hp",
+          "bp_cat",
+          "bp_log"
+        ]
+      },
+      {
+        "id": "comment-3",
+        "text": "2. SCORING - a pickup sends `add_score(points)`. Add it, and when the total reaches `win_score` end the\ngame as a WIN. Rules live in the player so every pickup stays tiny.",
+        "position": [
+          -30,
+          620
+        ],
+        "size": [
+          2360,
+          480
+        ],
+        "color": [
+          0.25,
+          0.65,
+          0.35,
+          0.22
+        ],
+        "contained_node_ids": [
+          "as",
+          "as_s",
+          "as_add",
+          "as_set",
+          "as_win",
+          "as_won",
+          "as_if",
+          "as_end"
+        ]
+      },
+      {
+        "id": "comment-4",
+        "text": "3. HEALING - add the amount but never exceed `max_health` (Min of the sum and the cap). The\nsame Min/Max pattern guards every bounded stat.",
+        "position": [
+          -30,
+          1310
+        ],
+        "size": [
+          1680,
+          710
+        ],
+        "color": [
+          0.6,
+          0.35,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "hl",
+          "hl_hp",
+          "hl_add",
+          "hl_cap",
+          "hl_max",
+          "hl_set"
+        ]
+      },
+      {
+        "id": "comment-5",
+        "text": "4. DAMAGE - the ENGINE event `Damage` (raised by hazards through game::apply_damage) arrives on this\nobject. Every hit costs 20 health; at zero or below the game is lost. (The event carries a float\n`amount`; this simple rule ignores it and uses a flat 20.)",
+        "position": [
+          -30,
+          2230
+        ],
+        "size": [
+          2360,
+          480
+        ],
+        "color": [
+          0.8,
+          0.3,
+          0.3,
+          0.22
+        ],
+        "contained_node_ids": [
+          "dm",
+          "dm_hp",
+          "dm_sub",
+          "dm_set",
+          "dm_dead",
+          "dm_if",
+          "dm_end"
+        ]
+      },
+      {
+        "id": "comment-6",
+        "text": "5. END OF GAME - `game_over(won)` can be raised twice (a coin and a spike in one frame). A `finished`\nflag guards it: only the first call logs the result; `Select String` picks the message from the bool.",
+        "position": [
+          -30,
+          2920
+        ],
+        "size": [
+          2360,
+          480
+        ],
+        "color": [
+          0.25,
+          0.45,
+          0.75,
+          0.22
+        ],
+        "contained_node_ids": [
+          "go",
+          "go_done",
+          "go_not",
+          "go_if",
+          "go_set",
+          "go_msg",
+          "go_log"
+        ]
+      }
+    ],
+    "custom_event_defs": {}
+  },
+  "subgraphs": [],
+  "local_events": [
+    {
+      "uid": "add_score",
+      "name": "add_score",
+      "fields": [
+        {
+          "name": "points",
+          "type_name": "i64"
+        }
+      ],
+      "return_type": ""
+    },
+    {
+      "uid": "heal",
+      "name": "heal",
+      "fields": [
+        {
+          "name": "amount",
+          "type_name": "i64"
+        }
+      ],
+      "return_type": ""
+    },
+    {
+      "uid": "game_over",
+      "name": "game_over",
+      "fields": [
+        {
+          "name": "won",
+          "type_name": "bool"
+        }
+      ],
+      "return_type": ""
+    }
+  ],
+  "variables": [
+    {
+      "id": "v_hp",
+      "name": "health",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "100",
+      "description": "Current health."
+    },
+    {
+      "id": "v_max",
+      "name": "max_health",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "100",
+      "description": "Cap for healing."
+    },
+    {
+      "id": "v_score",
+      "name": "score",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "0",
+      "description": "Points collected."
+    },
+    {
+      "id": "v_win",
+      "name": "win_score",
+      "data_type": {
+        "Data": {
+          "base_type": "i64",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "50",
+      "description": "Reach this score to win."
+    },
+    {
+      "id": "v_fin",
+      "name": "finished",
+      "data_type": {
+        "Data": {
+          "base_type": "bool",
+          "wrappers": [],
+          "is_wildcard": false
+        }
+      },
+      "default_value": "false",
+      "description": "Set once the game is over."
+    }
+  ],
+  "editor_state": {
+    "open_tab_ids": [
+      "main"
+    ],
+    "active_tab_index": 0,
+    "graph_view_states": {
+      "main": {
+        "pan_offset_x": 0.0,
+        "pan_offset_y": 0.0,
+        "zoom": 0.7
+      }
+    }
+  },
+  "blueprint_metadata": {
+    "blueprint_type": "Actor",
+    "parent_class": null,
+    "description": "Mini-game: the player's health, score and win/lose rules.",
+    "category": "Advanced Examples",
+    "tags": [
+      "minigame",
+      "score",
+      "health"
+    ]
+  }
+}

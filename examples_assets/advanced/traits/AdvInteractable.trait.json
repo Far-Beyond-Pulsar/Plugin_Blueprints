@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "typeKind": "trait",
+  "id": "5e0f6c1a-7b3d-4c9e-8a21-3d4f9b6a1c77",
+  "name": "AdvInteractable",
+  "displayName": "Interactable",
+  "description": "Something the player can use: doors, lamps, levers. Implemented by AdvInteractableDoor and AdvInteractableLamp (Blueprint advanced examples).",
+  "methods": [
+    {
+      "name": "interact",
+      "signature": {
+        "params": [
+          {
+            "name": "instigator_id",
+            "type": {
+              "kind": "Primitive",
+              "name": "i64"
+            }
+          }
+        ],
+        "return": {
+          "kind": "Primitive",
+          "name": "()"
+        }
+      },
+      "doc": "The player or AI `instigator_id` used the object."
+    },
+    {
+      "name": "set_highlight",
+      "signature": {
+        "params": [
+          {
+            "name": "enabled",
+            "type": {
+              "kind": "Primitive",
+              "name": "bool"
+            }
+          }
+        ],
+        "return": {
+          "kind": "Primitive",
+          "name": "()"
+        }
+      },
+      "doc": "Show or hide the focus highlight."
+    }
+  ],
+  "meta": {
+    "contractVersion": 1
+  }
+}

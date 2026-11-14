@@ -28,6 +28,7 @@ mod ai_tools;
 pub mod canvas_profile;
 mod core;
 mod editor;
+mod examples;
 mod features;
 pub mod io;
 mod palette_catalog;
@@ -315,10 +316,26 @@ export_plugin!(BlueprintEditorPlugin, scripting);
 // This plugin's descriptor (`pulsar-plugin.toml`): linking the crate installs it.
 pulsar_plugins::installed!("pulsar-plugin.toml", build);
 
-/// Everything the plugin registers (the editor provider, with the `builtin`
-/// feature).
+/// Everything the plugin registers (its folder of example Blueprints, and the
+/// editor provider with the `builtin` feature).
 #[cfg_attr(not(feature = "builtin"), allow(unused_variables))]
 pub fn build(p: &mut pulsar_plugins::PluginBuilder) {
+    // The plugin's folder: the example Blueprints (`examples/`), read-only.
+    p.add(engine_fs::FileProvider {
+        origin: p.origin(),
+        open: examples::open,
+        in_game: engine_fs::InGame::Snapshot,
+    });
     #[cfg(feature = "builtin")]
     builtin_provider::build(p);
+}
+
+/// The embedded example files as `(path inside the plugin folder, bytes)`:
+/// `examples/README.md`, `examples/basics/<Name>.class/graph_save.json`, ...
+/// For tests and tools that load the examples without mounting the folder.
+pub fn example_files() -> Vec<(&'static str, &'static [u8])> {
+    examples::embedded()
+        .iter()
+        .map(|file| (file.path, file.bytes))
+        .collect()
 }
