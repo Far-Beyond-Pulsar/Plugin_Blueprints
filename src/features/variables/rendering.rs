@@ -124,7 +124,10 @@ impl VariablesRenderer {
             ),
         };
 
-        HierarchicalTreeView::new(config).render(cx)
+        let content_key = config.content_key();
+        HierarchicalTreeView::new(config)
+            .with_list_state(panel.variables_list.clone(), content_key)
+            .render(cx)
     }
 
     fn render_variable_creation_form(

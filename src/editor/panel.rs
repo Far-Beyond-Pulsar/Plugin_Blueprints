@@ -113,6 +113,13 @@ pub struct BlueprintEditorPanel {
     pub renaming_target: Option<RenameTarget>,
     pub rename_input: Entity<InputState>,
 
+    // The sidebar trees' rows as persistent lists, so each keeps its scroll
+    // position across renders and builds only the rows on screen.
+    pub variables_list: ui::HierarchyListState<usize>,
+    pub events_list: ui::HierarchyListState<usize>,
+    pub macros_list: ui::HierarchyListState<usize>,
+    pub prefab_components_list: ui::HierarchyListState<usize>,
+
     // Tab system
     /// Subgraph/library/event data the canvas profile presents nodes from.
     pub profile_data: crate::canvas_profile::SharedProfileData,
@@ -561,6 +568,10 @@ impl BlueprintEditorPanel {
             selected_event: None,
             renaming_target: None,
             rename_input,
+            variables_list: Default::default(),
+            events_list: Default::default(),
+            macros_list: Default::default(),
+            prefab_components_list: Default::default(),
             profile_data: Default::default(),
             open_tabs: vec![GraphTab::new_main(main_doc)],
             active_tab_index: 0,

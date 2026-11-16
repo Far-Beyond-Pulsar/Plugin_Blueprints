@@ -135,6 +135,9 @@ impl MacrosRenderer {
             ),
         };
 
-        HierarchicalTreeView::new(config).render(cx)
+        let content_key = config.content_key();
+        HierarchicalTreeView::new(config)
+            .with_list_state(panel.macros_list.clone(), content_key)
+            .render(cx)
     }
 }
