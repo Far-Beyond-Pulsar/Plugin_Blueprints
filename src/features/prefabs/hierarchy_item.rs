@@ -4,7 +4,6 @@
 
 use gpui::*;
 use pulsar_class::prefab::PrefabComponent;
-use std::sync::Arc;
 use ui::{menu::popup_menu::PopupMenu, ActiveTheme, HierarchyItem, IconName};
 
 /// Drag payload for components
@@ -73,7 +72,7 @@ impl HierarchyItem for ComponentHierarchyItem {
     where
         V: Render,
     {
-        use ui::{h_flex, ActiveTheme, StyledExt};
+        use ui::{h_flex, ActiveTheme};
 
         Some(
             h_flex()
@@ -109,7 +108,7 @@ impl HierarchyItem for ComponentHierarchyItem {
 // Implement Render for ComponentDrag to show drag preview
 impl Render for ComponentDrag {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        use ui::{h_flex, ActiveTheme, StyledExt};
+        use ui::{h_flex, ActiveTheme};
 
         h_flex()
             .px_3()

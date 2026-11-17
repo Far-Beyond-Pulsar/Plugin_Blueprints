@@ -5,13 +5,10 @@
 use crate::core::graph::EventDefinition;
 use crate::editor::panel::RenameTarget;
 use gpui::*;
-use std::sync::Arc;
 use ui::{input::InputState, menu::popup_menu::PopupMenu, HierarchyItem, IconName};
 
 #[derive(Clone)]
 pub struct EventDrag {
-    pub event_index: usize,
-    pub event_uid: String,
     pub event_name: String,
 }
 
@@ -41,7 +38,7 @@ impl HierarchyItem for EventHierarchyItem {
         IconName::Activity
     }
 
-    fn icon_color<V>(&self, cx: &Context<V>) -> Hsla
+    fn icon_color<V>(&self, _cx: &Context<V>) -> Hsla
     where
         V: Render,
     {
@@ -71,8 +68,6 @@ impl HierarchyItem for EventHierarchyItem {
 
     fn create_drag_payload(&self) -> Self::DragPayload {
         EventDrag {
-            event_index: self.index,
-            event_uid: self.def.uid.clone(),
             event_name: self.def.name.clone(),
         }
     }
@@ -85,7 +80,7 @@ impl HierarchyItem for EventHierarchyItem {
     where
         V: Render,
     {
-        use ui::{h_flex, ActiveTheme, StyledExt};
+        use ui::{h_flex, ActiveTheme};
 
         if self.is_renaming {
             return None;
@@ -163,7 +158,7 @@ impl HierarchyItem for EventHierarchyItem {
 
 impl Render for EventDrag {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        use ui::{h_flex, ActiveTheme, StyledExt};
+        use ui::{h_flex, ActiveTheme};
 
         h_flex()
             .px_3()

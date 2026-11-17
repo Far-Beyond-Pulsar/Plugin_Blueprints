@@ -1,14 +1,13 @@
 //! Variable list rendering
 use super::hierarchy_item::VariableHierarchyItem;
-use super::types::ClassVariable;
 use crate::editor::panel::BlueprintEditorPanel;
 use gpui::*;
 use std::sync::Arc;
 use ui::{
     button::{Button, ButtonVariants as _},
     dropdown::Dropdown,
-    h_flex, v_flex, ActiveTheme, Colorize, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
-    IconName, PixelsExt, Sizable, StyledExt,
+    h_flex, v_flex, ActiveTheme, HierarchicalTreeView, HierarchyConfig, HierarchyLayout, IconName,
+    StyledExt,
 };
 
 pub struct VariablesRenderer;

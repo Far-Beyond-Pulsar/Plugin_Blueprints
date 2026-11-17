@@ -5,7 +5,7 @@ use ui::{
     dropdown::SearchableList,
     h_flex,
     popover::Popover,
-    v_flex, ActiveTheme, IconName, Sizable, StyledExt,
+    v_flex, ActiveTheme, IconName, Sizable,
 };
 
 use crate::editor::panel::BlueprintEditorPanel;

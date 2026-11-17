@@ -528,18 +528,17 @@ fn loops_run_their_body_every_iteration() {
     // zero-second wait that the runtime resumes on the next tick.
     use pulsar_script_vm::Completion;
     let on_count = run.program.entry("on_count").unwrap();
-    let mut step =
-        |run: &mut Run, i: &mut Instance, resume: Option<pulsar_script_vm::Continuation>| {
-            let mut host = Host::new(&mut run.world, run.entity);
-            let mut budget = Budget::new(1000);
-            match resume {
-                None => run
-                    .vm
-                    .start(&run.program, i, on_count, &[], &mut host, &mut budget),
-                Some(c) => run.vm.resume(&run.program, i, c, &mut host, &mut budget),
-            }
-            .unwrap()
-        };
+    let step = |run: &mut Run, i: &mut Instance, resume: Option<pulsar_script_vm::Continuation>| {
+        let mut host = Host::new(&mut run.world, run.entity);
+        let mut budget = Budget::new(1000);
+        match resume {
+            None => run
+                .vm
+                .start(&run.program, i, on_count, &[], &mut host, &mut budget),
+            Some(c) => run.vm.resume(&run.program, i, c, &mut host, &mut budget),
+        }
+        .unwrap()
+    };
     let mut next = step(&mut run, &mut i, None);
     let mut frames = 1;
     while let Completion::Waiting {

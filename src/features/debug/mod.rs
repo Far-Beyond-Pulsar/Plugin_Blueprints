@@ -17,9 +17,6 @@
 //! animation.
 
 use gpui::*;
-use ui::PixelsExt;
-
-use crate::editor::panel::BlueprintEditorPanel;
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 

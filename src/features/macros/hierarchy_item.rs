@@ -4,7 +4,6 @@
 
 use crate::editor::panel::RenameTarget;
 use gpui::*;
-use std::sync::Arc;
 use ui::{input::InputState, menu::popup_menu::PopupMenu, HierarchyItem, IconName};
 
 /// Drag payload for macros
@@ -43,7 +42,7 @@ impl HierarchyItem for MacroHierarchyItem {
         IconName::Component // Use Component icon for macros
     }
 
-    fn icon_color<V>(&self, cx: &Context<V>) -> Hsla
+    fn icon_color<V>(&self, _cx: &Context<V>) -> Hsla
     where
         V: Render,
     {
@@ -88,7 +87,7 @@ impl HierarchyItem for MacroHierarchyItem {
     where
         V: Render,
     {
-        use ui::{h_flex, ActiveTheme, StyledExt};
+        use ui::{h_flex, ActiveTheme};
 
         if self.is_renaming {
             return None;
@@ -169,7 +168,7 @@ impl HierarchyItem for MacroHierarchyItem {
 // Implement Render for MacroDrag to show drag preview
 impl Render for MacroDrag {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        use ui::{h_flex, ActiveTheme, StyledExt};
+        use ui::{h_flex, ActiveTheme};
 
         h_flex()
             .px_3()

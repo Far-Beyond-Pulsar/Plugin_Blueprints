@@ -6,9 +6,7 @@ use gpui::*;
 use std::collections::HashSet;
 use ui::{
     dock::{Panel, PanelEvent},
-    h_flex,
-    input::{InputEvent, InputState},
-    v_flex, ActiveTheme, PixelsExt,
+    ActiveTheme,
 };
 
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
@@ -19,10 +17,7 @@ use crate::features::prefabs::panel::PrefabHierarchyRenderer;
 use crate::features::traits::ImplementedTraitsRenderer;
 use crate::features::variables::rendering::VariablesRenderer;
 use crate::ui_components::asset_inspector::{AssetInspectorRenderer, AssetInspectorSnapshot};
-use graphy_gpui::picker::{NodePicker, PickerEvent};
-use graphy_gpui::GraphProfile as _;
 
-use crate::canvas_profile::{BlueprintProfile, ADD_CUSTOM_EVENT};
 use crate::ui_components::properties::PropertiesRenderer;
 
 macro_rules! editor_panel_shell {
@@ -61,7 +56,7 @@ macro_rules! editor_panel_shell {
     };
 }
 
-/// Variables Panel
+// Variables Panel
 editor_panel_shell!(VariablesPanel, "variables", "Variables");
 
 impl Render for VariablesPanel {
@@ -77,7 +72,7 @@ impl Render for VariablesPanel {
     }
 }
 
-/// Trait implementation assignments for the current Blueprint class.
+// Trait implementation assignments for the current Blueprint class.
 editor_panel_shell!(ImplementedTraitsPanel, "implemented-traits", "Traits");
 
 impl Render for ImplementedTraitsPanel {
@@ -95,7 +90,7 @@ impl Render for ImplementedTraitsPanel {
     }
 }
 
-/// Macros Panel
+// Macros Panel
 editor_panel_shell!(MacrosPanel, "macros", "Macros");
 
 impl Render for MacrosPanel {
@@ -111,7 +106,7 @@ impl Render for MacrosPanel {
     }
 }
 
-/// Events Panel
+// Events Panel
 editor_panel_shell!(EventsPanel, "events", "Events");
 
 impl Render for EventsPanel {
@@ -127,7 +122,7 @@ impl Render for EventsPanel {
     }
 }
 
-/// Compiler Panel
+// Compiler Panel
 editor_panel_shell!(CompilerPanel, "compiler", "Compiler");
 
 impl Render for CompilerPanel {
@@ -221,7 +216,7 @@ impl AssetInspectorPanel {
 impl EventEmitter<PanelEvent> for AssetInspectorPanel {}
 
 impl Render for AssetInspectorPanel {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if let Some(editor) = self.editor.upgrade() {
             let snapshot = self.snapshot.clone();
             div()
@@ -252,7 +247,7 @@ impl Panel for AssetInspectorPanel {
     }
 }
 
-/// Find Panel
+// Find Panel
 editor_panel_shell!(FindPanel, "find", "Find");
 
 impl Render for FindPanel {
@@ -267,7 +262,7 @@ impl Render for FindPanel {
     }
 }
 
-/// Properties Panel
+// Properties Panel
 editor_panel_shell!(PropertiesPanel, "properties", "Properties");
 
 impl Render for PropertiesPanel {
@@ -285,7 +280,7 @@ impl Render for PropertiesPanel {
     }
 }
 
-/// Prefab Hierarchy Panel
+// Prefab Hierarchy Panel
 editor_panel_shell!(PrefabHierarchyPanel, "prefab-hierarchy", "Components");
 
 impl Render for PrefabHierarchyPanel {
@@ -298,106 +293,5 @@ impl Render for PrefabHierarchyPanel {
         } else {
             div().child("Editor not available")
         }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Palette Panel
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Palette panel: the shared node picker docked beside the graph. Choosing a
-/// node adds it at the centre of the active canvas.
-pub struct PalettePanel {
-    focus_handle: FocusHandle,
-    editor: WeakEntity<BlueprintEditorPanel>,
-    picker: Entity<NodePicker>,
-    profile: BlueprintProfile,
-    catalog_version: u64,
-    _subscription: Subscription,
-}
-
-impl PalettePanel {
-    pub fn new(
-        editor: WeakEntity<BlueprintEditorPanel>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let data = editor
-            .upgrade()
-            .map(|editor| editor.read(cx).profile_data.clone())
-            .unwrap_or_default();
-        let profile = BlueprintProfile::blueprint(data);
-        let entries = profile.catalog();
-        let picker = cx.new(|cx| NodePicker::new(entries, None, window, cx));
-        let subscription = cx.subscribe_in(
-            &picker,
-            window,
-            |this, _picker, event: &PickerEvent, window, cx| {
-                if let PickerEvent::Chosen(definition) = event {
-                    this.place(definition, window, cx);
-                }
-            },
-        );
-        Self {
-            focus_handle: cx.focus_handle(),
-            editor,
-            picker,
-            profile,
-            catalog_version: 0,
-            _subscription: subscription,
-        }
-    }
-
-    /// Adds `definition` to the active canvas, staggered so repeats do not stack.
-    fn place(&mut self, definition: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(canvas) = self
-            .editor
-            .upgrade()
-            .and_then(|editor| editor.read(cx).active_canvas().cloned())
-        else {
-            return;
-        };
-        let definition = definition.to_string();
-        canvas.update(cx, |canvas, cx| {
-            if definition == ADD_CUSTOM_EVENT {
-                canvas.add_custom_event_from_picker(window, cx);
-                return;
-            }
-            let base = canvas.view_center(cx);
-            let stagger = (canvas.graph(cx).nodes.len() % 8) as f32 * 18.0;
-            let at = graphy_render::Vec2::new(base.x + stagger, base.y + stagger);
-            canvas.add_definition_node(&definition, at, None, cx);
-        });
-    }
-}
-
-impl EventEmitter<PanelEvent> for PalettePanel {}
-
-impl Render for PalettePanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let version = self.profile.data_version();
-        if version != self.catalog_version {
-            self.catalog_version = version;
-            let entries = self.profile.catalog();
-            self.picker
-                .update(cx, |picker, cx| picker.set_entries(entries, cx));
-        }
-        div().size_full().child(self.picker.clone())
-    }
-}
-
-impl Focusable for PalettePanel {
-    fn focus_handle(&self, _cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Panel for PalettePanel {
-    fn panel_name(&self) -> &'static str {
-        "palette"
-    }
-
-    fn title(&self, _window: &Window, _cx: &App) -> AnyElement {
-        "Palette".into_any_element()
     }
 }

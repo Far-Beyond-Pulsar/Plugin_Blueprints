@@ -238,15 +238,6 @@ impl NodeDefinitions {
         }
     }
 
-    fn from_node_metadata(
-        metadata: std::collections::HashMap<String, graphy::NodeMetadata>,
-    ) -> NodeDefinitions {
-        let mut categories_map: std::collections::HashMap<String, Vec<NodeDefinition>> =
-            std::collections::HashMap::new();
-        Self::populate_categories_from_metadata(metadata, &mut categories_map);
-        Self::categories_to_definitions(categories_map)
-    }
-
     /// Nodes for every native in the engine's script registry that
     /// pulsar_std's own nodes don't cover. Shapes come from
     /// `blueprint_compiler::palette`, which is what the compiler expects.

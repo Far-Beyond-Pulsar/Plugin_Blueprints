@@ -159,7 +159,6 @@ impl GraphCanvasPanel {
         // ── Pin list ──────────────────────────────────────────────────────────
         let inputs_col = {
             let pe_add = pe.clone();
-            let mid_add = mid.clone();
             let mut col = v_flex().gap(px(3.0)).min_w(px(140.0)).child(
                 h_flex()
                     .gap(px(4.0))
@@ -254,7 +253,6 @@ impl GraphCanvasPanel {
 
         let outputs_col = {
             let pe_add = pe.clone();
-            let mid_add = mid.clone();
             let mut col = v_flex().gap(px(3.0)).min_w(px(140.0)).child(
                 h_flex()
                     .gap(px(4.0))
