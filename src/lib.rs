@@ -18,8 +18,6 @@
 use gpui::*;
 use plugin_editor_api::*;
 use serde_json::json;
-use std::collections::HashMap;
-use std::sync::Mutex;
 use std::{path::PathBuf, sync::Arc};
 use ui::dock::PanelView;
 
@@ -106,27 +104,9 @@ pub(crate) fn blueprint_file_type() -> FileTypeDefinition {
     }
 }
 
-/// Storage for editor instances owned by the plugin
-struct EditorStorage {
-    panel: Arc<dyn ui::dock::PanelView>,
-}
-
 /// The Blueprint Editor Plugin
-pub struct BlueprintEditorPlugin {
-    /// CRITICAL: Plugin owns ALL editor instances to prevent memory leaks!
-    /// The main app only gets raw pointers - it NEVER owns the Arc or Box.
-    editors: Arc<Mutex<HashMap<usize, EditorStorage>>>,
-    next_editor_id: Arc<Mutex<usize>>,
-}
-
-impl Default for BlueprintEditorPlugin {
-    fn default() -> Self {
-        Self {
-            editors: Arc::new(Mutex::new(HashMap::new())),
-            next_editor_id: Arc::new(Mutex::new(0)),
-        }
-    }
-}
+#[derive(Default)]
+pub struct BlueprintEditorPlugin;
 
 impl EditorPlugin for BlueprintEditorPlugin {
     fn metadata(&self) -> PluginMetadata {
@@ -188,29 +168,9 @@ impl BlueprintEditorPlugin {
             }
         });
 
-        let panel_arc: Arc<dyn ui::dock::PanelView> = Arc::new(panel.clone());
+        log::info!("Created blueprint editor for {:?}", file_path);
 
-        let id = {
-            let mut next_id = self.next_editor_id.lock().unwrap();
-            let id = *next_id;
-            *next_id += 1;
-            id
-        };
-
-        self.editors.lock().unwrap().insert(
-            id,
-            EditorStorage {
-                panel: panel_arc.clone(),
-            },
-        );
-
-        log::info!(
-            "Created blueprint editor instance {} for {:?}",
-            id,
-            file_path
-        );
-
-        Ok(panel_arc)
+        Ok(Arc::new(panel))
     }
 }
 

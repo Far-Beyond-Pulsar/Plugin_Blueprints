@@ -8,8 +8,7 @@ use gpui::*;
 use std::sync::Arc;
 use ui::{
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, HierarchicalTreeView, HierarchyConfig, HierarchyLayout,
-    IconName, StyledExt,
+    HierarchicalTreeView, HierarchyConfig, HierarchyLayout, IconName,
 };
 
 use crate::editor::panel::{BlueprintEditorPanel, RenameTarget};

@@ -4,11 +4,10 @@ use super::view::{NodeView, PinView};
 use super::PropertiesRenderer;
 use crate::core::types::NodeType;
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
-use gpui::prelude::FluentBuilder;
 use gpui::*;
 use std::any::Any;
 use std::sync::Arc;
-use ui::{h_flex, v_flex, ActiveTheme as _, Colorize, IconName, PixelsExt, Sizable, StyledExt};
+use ui::{h_flex, v_flex, ActiveTheme as _, IconName, StyledExt};
 use ui_common::reflected_properties_panel::rgba_to_hsla;
 
 impl PropertiesRenderer {
@@ -68,10 +67,6 @@ impl PropertiesRenderer {
                 .text_color(cx.theme().muted_foreground)
                 .child(title.to_uppercase()),
         )
-    }
-
-    pub(super) fn render_separator<T>(cx: &mut Context<T>) -> impl IntoElement {
-        div().w_full().h_px().bg(cx.theme().border.opacity(0.3))
     }
 
     pub(super) fn get_node_type_color<T>(node: &NodeView, cx: &mut Context<T>) -> gpui::Hsla {

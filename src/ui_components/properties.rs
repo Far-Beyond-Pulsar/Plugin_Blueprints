@@ -9,18 +9,14 @@
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use pulsar_reflection::REGISTRY;
+use ui::{button::ButtonVariants as _, h_flex, v_flex, ActiveTheme as _, Sizable, StyledExt};
 use ui::{
-    button::Button,
     input::{InputEvent, InputState},
     scroll::ScrollbarAxis,
     IconName,
 };
-use ui::{
-    button::ButtonVariants as _, h_flex, v_flex, ActiveTheme as _, Colorize, PixelsExt, Sizable,
-    StyledExt,
-};
 
-use self::view::{CommentView, NodeView};
+use self::view::CommentView;
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::editor::panel::BlueprintEditorPanel;
 use crate::features::prefabs::panel::group_rows_by_category;
@@ -124,16 +120,16 @@ impl PropertiesRenderer {
         selection_kind: SelectionKind,
         cx: &Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {
-        let (title, icon, badge) = match &selection_kind {
-            SelectionKind::PrefabComponent => ("Properties", IconName::Component, "Component"),
-            SelectionKind::Macro => ("Properties", IconName::GitBranch, "Macro"),
-            SelectionKind::Event => ("Properties", IconName::Flash, "Event"),
-            SelectionKind::Variable => ("Properties", IconName::Component, "Variable"),
-            SelectionKind::GraphNode(_) => ("Properties", IconName::Component, "Node"),
-            SelectionKind::Comment(_) => ("Properties", IconName::Info, "Comment"),
-            SelectionKind::ZipTie(_) => ("Properties", IconName::Link, "Zip Tie"),
-            SelectionKind::Multi => ("Properties", IconName::Copy, "Multiple"),
-            SelectionKind::None => ("Properties", IconName::Settings, "None"),
+        let (title, badge) = match &selection_kind {
+            SelectionKind::PrefabComponent => ("Properties", "Component"),
+            SelectionKind::Macro => ("Properties", "Macro"),
+            SelectionKind::Event => ("Properties", "Event"),
+            SelectionKind::Variable => ("Properties", "Variable"),
+            SelectionKind::GraphNode(_) => ("Properties", "Node"),
+            SelectionKind::Comment(_) => ("Properties", "Comment"),
+            SelectionKind::ZipTie(_) => ("Properties", "Zip Tie"),
+            SelectionKind::Multi => ("Properties", "Multiple"),
+            SelectionKind::None => ("Properties", "None"),
         };
 
         let has_selection = !matches!(selection_kind, SelectionKind::None);
@@ -547,125 +543,6 @@ impl PropertiesRenderer {
             .into_any_element()
     }
 
-    fn render_selected_node_readonly<T>(
-        selected_node: &NodeView,
-        cx: &mut Context<T>,
-    ) -> AnyElement {
-        v_flex()
-            .gap_3()
-            // Title card
-            .child(Self::render_card(
-                [
-                    h_flex()
-                        .w_full()
-                        .p_3()
-                        .gap_3()
-                        .items_center()
-                        .child(div().text_2xl().child(selected_node.icon.clone()))
-                        .child(
-                            div()
-                                .text_lg()
-                                .font_bold()
-                                .text_color(cx.theme().foreground)
-                                .child(selected_node.title.clone()),
-                        )
-                        .into_any_element(),
-                    div()
-                        .w_full()
-                        .px_3()
-                        .pb_3()
-                        .child(
-                            div()
-                                .px_2()
-                                .py_1()
-                                .rounded(px(4.0))
-                                .bg(Self::get_node_type_color(&selected_node, cx).opacity(0.15))
-                                .border_1()
-                                .border_color(
-                                    Self::get_node_type_color(&selected_node, cx).opacity(0.3),
-                                )
-                                .text_xs()
-                                .font_semibold()
-                                .text_color(Self::get_node_type_color(&selected_node, cx))
-                                .child(selected_node.kind_label()),
-                        )
-                        .into_any_element(),
-                ],
-                cx,
-            ))
-            // Inputs card
-            .when(!selected_node.inputs.is_empty(), |el| {
-                el.child(Self::render_card(
-                    [
-                        Self::render_section_header("Inputs", IconName::ArrowRight, cx)
-                            .px_3()
-                            .pt_3()
-                            .into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_1p5()
-                            .child(Self::render_pin_list(&selected_node.inputs, cx))
-                            .into_any_element(),
-                    ],
-                    cx,
-                ))
-            })
-            // Outputs card
-            .when(!selected_node.outputs.is_empty(), |el| {
-                el.child(Self::render_card(
-                    [
-                        Self::render_section_header("Outputs", IconName::ArrowRight, cx)
-                            .px_3()
-                            .pt_3()
-                            .into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_1p5()
-                            .child(Self::render_pin_list(&selected_node.outputs, cx))
-                            .into_any_element(),
-                    ],
-                    cx,
-                ))
-            })
-            // Properties card
-            .when(!selected_node.properties.is_empty(), |el| {
-                el.child(Self::render_card(
-                    [
-                        Self::render_section_header("Properties", IconName::Settings, cx)
-                            .px_3()
-                            .pt_3()
-                            .into_any_element(),
-                        v_flex()
-                            .w_full()
-                            .p_3()
-                            .gap_2()
-                            .child(Self::render_node_properties(selected_node, cx))
-                            .into_any_element(),
-                    ],
-                    cx,
-                ))
-            })
-            // Node Info card
-            .child(Self::render_card(
-                [
-                    Self::render_section_header("Node Info", IconName::Info, cx)
-                        .px_3()
-                        .pt_3()
-                        .into_any_element(),
-                    v_flex()
-                        .w_full()
-                        .p_3()
-                        .gap_2p5()
-                        .child(Self::render_node_info(selected_node, cx))
-                        .into_any_element(),
-                ],
-                cx,
-            ))
-            .into_any_element()
-    }
-
     fn render_selected_node_properties(
         canvas: &mut GraphCanvasPanel,
         window: &mut Window,
@@ -865,7 +742,7 @@ impl PropertiesRenderer {
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> AnyElement {
         let active_canvas = panel.active_canvas().cloned();
-        let mut comment_color = comment.color;
+        let comment_color = comment.color;
         let mut color_picker = None;
         let mut comment_text_input = None;
 

@@ -18,16 +18,20 @@ use pulsar_traits::conformance::{
     check, is_unit_type, normalize_name, ConformanceIssue, IssueKind, ProvidedMethod,
     ProvidedParam, ProvidedReturn, Severity,
 };
-use pulsar_traits::{Binding, Declared, Scanned, TraitDb};
+#[cfg(feature = "builtin")]
+use pulsar_traits::{Binding, Scanned};
+use pulsar_traits::{Declared, TraitDb};
 use serde_json::Value;
 
 /// The implementer kind of Blueprints.
+#[cfg(feature = "builtin")] // registered by builtin_provider only
 pub const BLUEPRINT_KIND: &str = "pulsar.blueprints.blueprint";
 
 /// Blueprint `format_version`s the editor writes and reads (graphy-blueprint
 /// `codec::is_version_supported`). Version 1 is the original; 2 is current.
 const BLUEPRINT_FORMAT_VERSIONS: [u64; 2] = [1, 2];
 
+#[cfg(feature = "builtin")] // registered by builtin_provider only
 pub fn is_blueprint_asset(path: &str) -> bool {
     path.ends_with(".blueprint.json")
         || std::path::Path::new(path)
@@ -39,6 +43,7 @@ pub fn is_blueprint_asset(path: &str) -> bool {
 /// Parse a Blueprint asset. The editor writes `//` comment lines before the
 /// JSON (graphy-blueprint `codec::strip_header_comments`); they are skipped
 /// the same way. Anything else that is not JSON is `None`.
+#[cfg(feature = "builtin")] // registered by builtin_provider only
 pub fn parse_blueprint_json(bytes: &[u8]) -> Option<Value> {
     let text = std::str::from_utf8(bytes).ok()?;
     let mut rest = text;
@@ -85,6 +90,7 @@ pub fn declared_from_value(value: &Value) -> Option<Declared> {
 /// The source's scan: one Blueprint file's implementer. A class's
 /// `graph_save.json` binds to its class folder; a loose `*.blueprint.json` is
 /// indexed (pickers, conformance) but runs as no class.
+#[cfg(feature = "builtin")] // registered by builtin_provider only
 pub fn scan(relative: &str, bytes: &[u8]) -> Option<Scanned> {
     let value = parse_blueprint_json(bytes)?;
     let declared = declared_from_value(&value)?;

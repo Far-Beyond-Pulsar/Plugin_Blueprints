@@ -93,9 +93,7 @@ impl BlueprintEditorPanel {
         target: crate::features::validation::ValidationTarget,
         cx: &App,
     ) -> crate::features::validation::ValidationReport {
-        use crate::features::validation::{
-            check_ui_graph_diagnostics, ValidationReport, ValidationTarget,
-        };
+        use crate::features::validation::{check_ui_graph_diagnostics, ValidationReport};
 
         let mut report = ValidationReport {
             target: Some(target),
@@ -532,7 +530,7 @@ impl BlueprintEditorPanel {
                         ),
                     );
                     cx.notify();
-                    
+
                     panel.compile_to_class_directory(cx).map(|_| None::<PathBuf>)
                 }
                 CompileMode::BytecodeVm => {
@@ -547,7 +545,7 @@ impl BlueprintEditorPanel {
                         ),
                     );
                     cx.notify();
-                    
+
                     // The engine script module is what the game runtime runs.
                     panel.compile_to_script_module(cx).map(Some)
                 }

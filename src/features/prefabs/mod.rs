@@ -1,18 +1,16 @@
 //! Prefab feature - sidecar prefab authoring integrated into the blueprint editor.
 
-pub mod add_component_dialog;
 pub mod hierarchy_item;
 pub mod panel;
 
 // Re-export commonly used types
-pub use hierarchy_item::{ComponentDrag, ComponentHierarchyItem};
+pub use hierarchy_item::ComponentDrag;
 
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::editor::panel::BlueprintEditorPanel;
-use gpui::{AppContext, Context, Entity, Window};
+use gpui::Context;
 use pulsar_reflection::{REGISTRY, RUNTIME_TYPE_REGISTRY};
 use std::path::PathBuf;
-use ui::PixelsExt;
 
 /// Component classes the prefab editor never offers: `ClassInstance` marks a
 /// placed class in a level and only comes from placing one.

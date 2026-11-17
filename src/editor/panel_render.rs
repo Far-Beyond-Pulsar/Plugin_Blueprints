@@ -7,7 +7,7 @@ use ui::{
     h_flex,
     input::TextInput,
     scroll::Scrollbar,
-    v_flex, v_virtual_list, ActiveTheme, StyledExt,
+    v_flex, v_virtual_list, ActiveTheme,
 };
 
 use super::panel::BlueprintEditorPanel;

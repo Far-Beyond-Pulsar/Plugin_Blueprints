@@ -110,27 +110,6 @@ impl BlueprintEditorPanel {
         result
     }
 
-    /// Load variables from vars_save.json
-    pub(crate) fn load_variables_from_class(
-        &mut self,
-        class_path: &std::path::Path,
-    ) -> Result<(), String> {
-        let vars_file = class_path.join("vars_save.json");
-
-        if !engine_fs::virtual_fs::exists(&vars_file).unwrap_or(false) {
-            self.class_variables.clear();
-            return Ok(());
-        }
-
-        let content = engine_fs::virtual_fs::read_to_string(&vars_file)
-            .map_err(|e| format!("Failed to read vars_save.json: {}", e))?;
-        let variables: Vec<ClassVariable> = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse vars_save.json: {}", e))?;
-
-        self.class_variables = variables;
-        Ok(())
-    }
-
     /// Save variables to vars_save.json
     pub(crate) fn save_variables_to_class(&self) -> Result<(), String> {
         let class_path = self

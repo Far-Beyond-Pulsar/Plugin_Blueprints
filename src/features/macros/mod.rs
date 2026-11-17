@@ -11,4 +11,4 @@ pub mod operations;
 pub mod panel;
 
 // Re-export commonly used types
-pub use hierarchy_item::{MacroDrag, MacroHierarchyItem};
+pub use hierarchy_item::MacroDrag;

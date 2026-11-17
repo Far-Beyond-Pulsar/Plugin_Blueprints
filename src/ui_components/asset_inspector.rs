@@ -88,7 +88,7 @@ impl AssetInspectorRenderer {
     }
 
     pub fn render(
-        editor: &mut BlueprintEditorPanel,
+        _editor: &mut BlueprintEditorPanel,
         snapshot: &AssetInspectorSnapshot,
         cx: &mut Context<BlueprintEditorPanel>,
     ) -> impl IntoElement {

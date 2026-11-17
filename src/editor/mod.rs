@@ -14,5 +14,4 @@ pub mod undo_ops;
 pub mod workspace;
 pub mod workspace_panels;
 
-pub use panel::BlueprintEditorPanel;
 pub use tabs::GraphTab;

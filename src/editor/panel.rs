@@ -15,7 +15,7 @@ use ui::{
 };
 
 use super::tabs::{GraphTab, TabDoc};
-use crate::core::{events::*, graph::*, types::*};
+use crate::core::{events::*, types::*};
 use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 use crate::editor::workspace_panels::FindPanel;
 
@@ -360,24 +360,6 @@ impl BlueprintEditorPanel {
         panel
     }
 
-    /// Create a new blueprint editor for an engine library (virtual blueprint)
-    pub fn new_for_library(
-        library_id: String,
-        library_name: String,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let mut panel = Self::new_internal(None, window, cx);
-        panel.tab_title = Some(format!("Library: {}", library_name));
-
-        if let Some(main_tab) = panel.open_tabs.get_mut(0) {
-            main_tab.name = format!("{} Overview", library_name);
-        }
-
-        println!("Created blueprint editor for library: {}", library_name);
-        panel
-    }
-
     /// Internal constructor with sample graph
     fn new_internal(
         project_path: Option<std::path::PathBuf>,
@@ -458,7 +440,6 @@ impl BlueprintEditorPanel {
         let rename_input: Entity<InputState> =
             cx.new(|cx| InputState::new(window, cx).placeholder("Rename..."));
         // Commit rename on blur or Enter
-        let sub_input = rename_input.clone();
         cx.subscribe_in(
             &rename_input,
             window,
@@ -1043,37 +1024,6 @@ impl BlueprintEditorPanel {
             eprintln!("Failed to reload sub-graph libraries: {}", e);
         }
 
-        Ok(())
-    }
-
-    /// Load local macros from macros.json
-    fn load_subgraphs(&mut self, class_path: &std::path::Path) -> Result<(), String> {
-        let macros_file = class_path.join("macros.json");
-        if !engine_fs::virtual_fs::exists(&macros_file).unwrap_or(false) {
-            self.subgraphs
-                .retain(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed);
-            return Ok(());
-        }
-
-        let content = engine_fs::virtual_fs::read_to_string(&macros_file)
-            .map_err(|e| format!("Failed to read macros.json: {}", e))?;
-        let macros: Vec<graphy_blueprint::SubGraph> = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse macros.json: {}", e))?;
-
-        self.subgraphs
-            .retain(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Collapsed);
-        self.subgraphs.extend(
-            macros
-                .into_iter()
-                .filter(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Macro),
-        );
-        println!(
-            "📂 Loaded {} local macros from macros.json",
-            self.subgraphs
-                .iter()
-                .filter(|subgraph| subgraph.kind == graphy_blueprint::SubGraphKind::Macro)
-                .count()
-        );
         Ok(())
     }
 }

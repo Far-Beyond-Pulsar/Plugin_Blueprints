@@ -5,7 +5,7 @@
 //! and unresolvable node types surface as diagnostics *before* any artifact
 //! is produced.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::Path;
 
 /// Validate every saved class graph under `root` (the project directory).

@@ -5,7 +5,6 @@
 use super::types::{ClassVariable, VariableDrag};
 use crate::editor::panel::BlueprintEditorPanel;
 use gpui::*;
-use std::sync::Arc;
 use ui::{menu::popup_menu::PopupMenu, HierarchyItem, IconName};
 
 /// Wrapper for ClassVariable that implements HierarchyItem
@@ -150,7 +149,7 @@ impl HierarchyItem for VariableHierarchyItem {
 // Implement Render for VariableDrag to show drag preview
 impl Render for VariableDrag {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        use ui::{h_flex, ActiveTheme, StyledExt};
+        use ui::{h_flex, ActiveTheme};
 
         h_flex()
             .px_3()
