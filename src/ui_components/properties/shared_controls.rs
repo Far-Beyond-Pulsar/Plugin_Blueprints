@@ -403,6 +403,10 @@ impl PropertiesRenderer {
         let mut body = v_flex().w_full().p_3().gap_3();
         let mut values = engine_backend::ParamValues::new();
         for param in &family.params {
+            // The node is bound to its primary choice (the action): it is not
+            // offered as a parameter, the palette has a node for each.
+            let bound = crate::features::events::asset_events::primary_choice(family)
+                .is_some_and(|primary| primary.name == param.name);
             let current = node
                 .properties
                 .get(&param.name)
@@ -466,6 +470,9 @@ impl PropertiesRenderer {
                         });
                     })
             });
+            if bound {
+                continue;
+            }
             body = body.child(
                 v_flex()
                     .gap_1p5()

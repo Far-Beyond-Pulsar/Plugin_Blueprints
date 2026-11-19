@@ -808,6 +808,27 @@ impl<'a> Compiler<'a> {
             },
             _ => None,
         };
+        // A wired `component_ref` names the component whose owner is listened
+        // to (dragged off a component, as an asset-owned event is): that
+        // overrides the `scope` property.
+        let wired = self
+            .data_in
+            .contains_key(&(node.id.clone(), "component_ref".to_owned()));
+        let scope = if wired {
+            let component_type = match node.properties.get("component_type") {
+                Some(Json::String(name)) if !name.trim().is_empty() => name.clone(),
+                _ => {
+                    self.error(Some(&node.id), "event node has no component_type");
+                    return;
+                }
+            };
+            let Some(variable) = self.component_subscription_variable(node, &component_type) else {
+                return;
+            };
+            Some(SubscriptionScope::Component(variable))
+        } else {
+            scope
+        };
         let mut shared: Option<Vec<Type>> = None;
         for pair in spec.split(',').map(str::trim).filter(|p| !p.is_empty()) {
             let Some((pin, event)) = pair.split_once('=') else {
@@ -829,6 +850,16 @@ impl<'a> Compiler<'a> {
                 }
                 None => shared = Some(types.clone()),
                 _ => {}
+            }
+            // An exec output nothing is wired to listens to nothing: a node may offer
+            // every phase of an action, and only the ones used are subscribed (an
+            // unheard event costs the runtime nothing).
+            if self
+                .exec_out
+                .get(&(node.id.clone(), pin.to_owned()))
+                .map_or(true, |targets| targets.is_empty())
+            {
+                continue;
             }
             let declared_here = self.module.events.iter().any(|e| e.name == event);
             let scope = scope.unwrap_or_else(|| default_scope(&sig, declared_here));

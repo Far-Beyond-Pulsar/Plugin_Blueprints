@@ -158,7 +158,11 @@ pub fn family_node_type(family_id: &str) -> String {
 
 /// What a node type says about its family: `Some(id)` for a family node.
 pub fn family_of_node_type(node_type: &str) -> Option<&str> {
-    node_type.strip_prefix(FAMILY_PREFIX)
+    // `event::family::<family>` or, for a node bound to one choice,
+    // `event::family::<family>:<choice>`.
+    node_type
+        .strip_prefix(FAMILY_PREFIX)
+        .map(|rest| rest.split(':').next().unwrap_or(rest))
 }
 
 const FAMILY_PREFIX: &str = "event::family::";
@@ -197,6 +201,7 @@ pub fn family_properties(
             .join(";"),
     );
     properties.insert("family".to_owned(), family.id.clone());
+    properties.insert("title".to_owned(), family_title(family, values));
     properties.insert("component_type".to_owned(), class.to_owned());
     // Only this object's own player, as a character expects.
     properties.insert("scope".to_owned(), "self".to_owned());
@@ -219,8 +224,32 @@ pub fn family_output_pins(resolved: &ResolvedFamily) -> Vec<(String, String)> {
         .collect()
 }
 
-/// A family's palette entry: one per family and component class, however many
-/// choices the family has. Starts with the family's default parameters.
+/// The parameter a family's node is bound to when the palette offers one node per
+/// choice (an input action): its first `Choice`.
+pub fn primary_choice(family: &EventFamily) -> Option<&engine_backend::FamilyParam> {
+    family
+        .params
+        .iter()
+        .find(|param| param.kind == engine_backend::ParamKind::Choice)
+}
+
+/// The node's title: "On <the chosen option>" when the family has a primary
+/// choice (`On Move`), else "On <the family>".
+pub fn family_title(family: &EventFamily, values: &ParamValues) -> String {
+    let chosen = primary_choice(family).and_then(|param| {
+        let id = values.get(&param.name)?;
+        param.options.iter().find(|option| &option.id == id)
+    });
+    match chosen {
+        Some(option) => format!("On {}", option.label),
+        None => format!("On {}", family.label),
+    }
+}
+
+/// A family's palette entries: one node per choice of its primary parameter
+/// (every action the mapping binds, each with its own typed value pin), or one
+/// node when it has none, per component class. Each starts bound to its choice
+/// and the parameters' defaults; the phases to hear are chosen on the node.
 pub fn family_node_definitions(sets: &[AssetEvents]) -> Vec<(String, NodeDefinition)> {
     let mut seen = HashSet::new();
     let mut nodes = Vec::new();
@@ -230,31 +259,53 @@ pub fn family_node_definitions(sets: &[AssetEvents]) -> Vec<(String, NodeDefinit
             if !seen.insert((class.clone(), family.id.clone())) {
                 continue;
             }
-            let values = family.defaults();
-            // A family with nothing to choose (no actions) has no node to
-            // offer; one whose defaults do not resolve has nothing to start from.
-            let Ok(resolved) = (family.resolve)(family, &values) else {
-                continue;
+            let primary = primary_choice(family);
+            let bound: Vec<Option<&engine_backend::FamilyOption>> = match primary {
+                Some(param) => param.options.iter().map(Some).collect(),
+                None => vec![None],
             };
-            let outputs = family_output_pins(&resolved)
-                .into_iter()
-                .map(|(id, ty)| pin(&id, &ty, PinType::Output))
-                .collect();
-            nodes.push((
-                format!("Events/Components/{class}/{}", family.group),
-                NodeDefinition {
-                    id: family_node_type(&family.id),
-                    name: format!("On {}", family.label),
-                    icon: "📡".to_owned(),
-                    description: family.description.clone(),
-                    documentation: family.documentation.clone(),
-                    inputs: Vec::new(),
-                    outputs,
-                    properties: family_properties(family, &values, &resolved, class),
-                    color: Some("#C0392B".to_owned()),
-                    is_event: true,
-                },
-            ));
+            for option in bound {
+                let mut values = family.defaults();
+                if let (Some(param), Some(option)) = (primary, option) {
+                    values.insert(param.name.clone(), option.id.clone());
+                }
+                // A choice whose parameters do not resolve has nothing to start from.
+                let Ok(resolved) = (family.resolve)(family, &values) else {
+                    continue;
+                };
+                let outputs = family_output_pins(&resolved)
+                    .into_iter()
+                    .map(|(id, ty)| pin(&id, &ty, PinType::Output))
+                    .collect();
+                let (id, description) = match option {
+                    Some(option) => (
+                        format!("{}:{}", family_node_type(&family.id), option.id),
+                        format!(
+                            "{} ({}: {})",
+                            family.description, family.label, option.detail
+                        ),
+                    ),
+                    None => (family_node_type(&family.id), family.description.clone()),
+                };
+                nodes.push((
+                    format!("Events/Components/{class}/{}", family.group),
+                    NodeDefinition {
+                        id,
+                        name: family_title(family, &values),
+                        icon: "📡".to_owned(),
+                        description,
+                        documentation: family.documentation.clone(),
+                        // Dragged off a component reference like an asset-owned
+                        // event; left unwired it listens on the object it is
+                        // placed in.
+                        inputs: vec![pin("component_ref", class, PinType::Input)],
+                        outputs,
+                        properties: family_properties(family, &values, &resolved, class),
+                        color: Some("#C0392B".to_owned()),
+                        is_event: true,
+                    },
+                ));
+            }
         }
     }
     nodes.sort_by(|a, b| (&a.0, &a.1.name).cmp(&(&b.0, &b.1.name)));
@@ -429,14 +480,29 @@ mod tests {
     }
 
     #[test]
-    fn a_family_is_one_palette_entry_with_an_exec_output_per_default_arm() {
+    fn a_family_is_a_palette_node_per_choice_each_with_its_own_typed_pins() {
         let nodes = family_node_definitions(&[with_family(), with_family()]);
-        assert_eq!(nodes.len(), 1, "once per class and family");
+        assert_eq!(nodes.len(), 2, "one per choice, once per class and family");
+        let titles: Vec<_> = nodes.iter().map(|(_, node)| node.name.as_str()).collect();
+        assert_eq!(titles, ["On narrow", "On wide"]);
+        let wide = nodes.iter().find(|(_, node)| node.name == "On wide").unwrap();
+        assert_eq!(wide.1.id, "event::family::thing.pick:wide");
+        assert_eq!(wide.1.properties.get("thing").map(String::as_str), Some("wide"));
+        assert!(
+            wide.1.outputs.iter().any(|p| p.id == "Value" && format!("{:?}", p.data_type).contains("Vec3")),
+            "its value pin is typed from its choice"
+        );
+        assert_eq!(family_of_node_type(&wide.1.id), Some("thing.pick"));
         let (category, node) = &nodes[0];
         assert_eq!(category, "Events/Components/Widget/Pickers");
-        assert_eq!(node.id, "event::family::thing.pick");
+        assert_eq!(node.id, "event::family::thing.pick:narrow");
+        assert_eq!(node.properties.get("title").map(String::as_str), Some("On narrow"));
         assert!(node.is_event);
-        assert!(node.inputs.is_empty(), "no component reference to wire");
+        assert_eq!(
+            node.inputs.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+            ["component_ref"],
+            "dragged off a component reference like any component event"
+        );
         let outputs: Vec<_> = node.outputs.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(outputs, ["up", "Value"]);
         let property = |key: &str| node.properties.get(key).map(String::as_str);

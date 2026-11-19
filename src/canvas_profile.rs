@@ -59,6 +59,15 @@ pub struct ProfileData {
     /// [`BlueprintProfile::create_node`] creates them from here. Entries and
     /// definitions are published together.
     pub extra_definitions: HashMap<String, NodeDefinition>,
+    /// The slow part of the catalogue (other classes' events, input actions, the
+    /// components' asset events) loads in the background: whether it is still
+    /// coming, which refresh it is for (a stale result is dropped), and what the
+    /// last one found (kept until the next arrives, so the palette does not
+    /// empty while it reloads).
+    pub catalog_loading: bool,
+    pub catalog_generation: u64,
+    pub slow_catalog: Vec<CatalogEntry>,
+    pub slow_definitions: HashMap<String, NodeDefinition>,
     /// The parametric events the open class's components offer, by family id.
     /// A family node's pins and compile snapshot follow its parameters through
     /// [`BlueprintProfile`]'s `pin_commands`.
@@ -191,6 +200,18 @@ impl Presenter for BlueprintPresenter {
                 format!("On {}", self.event_title(uid)),
                 rgba(0xc0, 0x39, 0x2b, 1.0),
             );
+            p.icon = Some('📡');
+            p
+        } else if crate::features::events::asset_events::family_of_node_type(ty).is_some() {
+            // A parametric event (an input action): titled by what it is bound to
+            // (`On Move`), which the node carries.
+            let title = node
+                .properties
+                .get("title")
+                .and_then(|value| value.as_str())
+                .unwrap_or("Event")
+                .to_owned();
+            let mut p = NodePresentation::card(title, rgba(0xc0, 0x39, 0x2b, 1.0));
             p.icon = Some('📡');
             p
         } else if let Some(title) = self.subgraph_title(ty) {
@@ -405,6 +426,22 @@ impl GraphProfile for BlueprintProfile {
 
     fn type_resolver(&self) -> &dyn TypeResolver {
         &self.resolver
+    }
+
+    fn catalog_loading(&self) -> bool {
+        self.presenter
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .catalog_loading
+    }
+
+    fn catalog_version(&self) -> u64 {
+        self.presenter
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .catalog_version
     }
 
     fn catalog(&self) -> Vec<CatalogEntry> {

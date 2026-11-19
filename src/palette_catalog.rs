@@ -112,19 +112,10 @@ impl BlueprintEditorPanel {
             .as_deref()
             .and_then(crate::features::class_dirs::class_name_of)
             .unwrap_or_else(|| "unnamed_blueprint".to_owned());
-        let asset_events = crate::features::events::asset_events::of_prefab(
-            class_path.as_deref(),
-            &self.prefab_asset,
-        );
         push_event_categories(
             &mut out,
             &mut definitions,
-            engine_events::event_node_definitions(
-                class_path.as_deref(),
-                &class_name,
-                &self.local_event_defs,
-                &asset_events,
-            ),
+            engine_events::event_node_definitions_fast(&class_name, &self.local_event_defs),
         );
 
         // Use the host's snapshot rather than this editor DLL's local inventory,
@@ -160,20 +151,100 @@ impl BlueprintEditorPanel {
 
     /// Publishes [`Self::catalog_extras`] to the canvas profile. Call it when
     /// macros, events, the class or the prefab change.
+    ///
+    /// The nodes known without reading anything are published at once. The rest
+    /// (other classes' events, the project's input actions, what the components'
+    /// assets declare) need files read, so they load in the background as an
+    /// editor task and are added when ready; until then the palette lists what
+    /// it has with a loading indicator, and the entries of the last load stay
+    /// (nothing flickers out while it reloads). A refresh that is overtaken by a
+    /// newer one drops its result.
     pub fn refresh_catalog(&self, cx: &App) {
         let (extras, definitions) = self.catalog_extras(cx);
-        let mut data = self.profile_data.write().unwrap_or_else(|e| e.into_inner());
-        data.extra_catalog = extras;
-        data.extra_definitions = definitions;
-        // The parametric events (a cached read), for the family nodes' pins and
-        // the properties panel.
-        data.event_families = crate::features::events::asset_events::families(
-            &crate::features::events::asset_events::of_prefab(
-                self.current_class_path.as_deref(),
-                &self.prefab_asset,
+        let generation = {
+            let mut data = self.profile_data.write().unwrap_or_else(|e| e.into_inner());
+            let (kept_entries, kept_definitions) =
+                (data.slow_catalog.clone(), data.slow_definitions.clone());
+            data.extra_catalog = extras;
+            data.extra_catalog.extend(kept_entries);
+            data.extra_definitions = definitions;
+            data.extra_definitions.extend(kept_definitions);
+            data.catalog_generation += 1;
+            data.catalog_loading = true;
+            data.catalog_version += 1;
+            data.catalog_generation
+        };
+
+        let shared = self.profile_data.clone();
+        let class_path = self.current_class_path.clone();
+        let prefab = self.prefab_asset.clone();
+        editor_task_queue::global().submit(
+            editor_task_queue::TaskDescription::new(
+                "Loading Blueprint palette events",
+                "Blueprint",
+                editor_task_queue::TaskDuration::Short,
             ),
+            move |ctx| {
+                let _loading = LoadingGuard {
+                    data: shared.clone(),
+                    generation,
+                };
+                ctx.set_phase("Reading the components' assets");
+                let asset_events = crate::features::events::asset_events::of_prefab(
+                    class_path.as_deref(),
+                    &prefab,
+                );
+                ctx.set_phase("Reading other classes' events and the project's input");
+                let slow = engine_events::event_node_definitions_slow(
+                    class_path.as_deref(),
+                    &asset_events,
+                );
+                let families = crate::features::events::asset_events::families(&asset_events);
+                let mut entries = Vec::new();
+                let mut definitions = HashMap::new();
+                push_event_categories(&mut entries, &mut definitions, slow);
+
+                let mut data = shared.write().unwrap_or_else(|e| e.into_inner());
+                if data.catalog_generation != generation {
+                    // A newer refresh is on its way; its result is the one.
+                    return Ok(());
+                }
+                let old: std::collections::HashSet<String> = data
+                    .slow_catalog
+                    .iter()
+                    .map(|entry| entry.definition.clone())
+                    .collect();
+                data.extra_catalog
+                    .retain(|entry| !old.contains(&entry.definition));
+                for id in &old {
+                    data.extra_definitions.remove(id);
+                }
+                data.extra_catalog.extend(entries.iter().cloned());
+                data.extra_definitions.extend(definitions.clone());
+                data.slow_catalog = entries;
+                data.slow_definitions = definitions;
+                data.event_families = families;
+                data.catalog_version += 1;
+                Ok(())
+            },
         );
-        data.catalog_version += 1;
+    }
+}
+
+/// Clears the profile's loading flag when a palette load ends, however it ends
+/// (a result, a stale result, a panic), unless a newer load has taken over.
+struct LoadingGuard {
+    data: crate::canvas_profile::SharedProfileData,
+    generation: u64,
+}
+
+impl Drop for LoadingGuard {
+    fn drop(&mut self) {
+        let mut data = self.data.write().unwrap_or_else(|e| e.into_inner());
+        if data.catalog_generation == self.generation {
+            data.catalog_loading = false;
+            data.catalog_version += 1;
+        }
     }
 }
 
@@ -285,5 +356,31 @@ mod tests {
         assert!(profile
             .create_node("event::on::Player.on_game_start", "b", Position::zero())
             .is_none());
+    }
+
+    #[test]
+    fn a_finished_load_clears_loading_unless_a_newer_one_started() {
+        let shared: crate::canvas_profile::SharedProfileData = Default::default();
+        {
+            let mut data = shared.write().unwrap();
+            data.catalog_generation = 2;
+            data.catalog_loading = true;
+        }
+        drop(LoadingGuard {
+            data: shared.clone(),
+            generation: 1,
+        });
+        assert!(
+            shared.read().unwrap().catalog_loading,
+            "an older load ending leaves the newer one's indicator"
+        );
+        let before = shared.read().unwrap().catalog_version;
+        drop(LoadingGuard {
+            data: shared.clone(),
+            generation: 2,
+        });
+        let data = shared.read().unwrap();
+        assert!(!data.catalog_loading);
+        assert!(data.catalog_version > before, "the picker is told to look again");
     }
 }

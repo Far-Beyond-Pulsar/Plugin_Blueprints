@@ -341,18 +341,30 @@ pub fn node_definition(node: &EventNode) -> NodeDefinition {
     }
 }
 
-/// Every event node for the class at `class_path` (named `class_name`,
-/// with event definitions `defs`), by category.
-pub fn event_node_definitions(
-    class_path: Option<&Path>,
+/// The event nodes known without reading anything: the engine's built-in
+/// events and this class's own. The palette lists these at once.
+pub fn event_node_definitions_fast(
     class_name: &str,
     defs: &[crate::core::graph::EventDefinition],
-    asset_events: &[engine_backend::AssetEvents],
 ) -> Vec<(String, NodeDefinition)> {
     let mut events = builtin_events();
-    events.extend(project_events(class_path));
     events.extend(local_events(class_name, defs));
-    let mut definitions = event_nodes(&events)
+    event_nodes(&events)
+        .iter()
+        .map(|node| (node.category.clone(), node_definition(node)))
+        .collect()
+}
+
+/// The event nodes that need files read or assets scanned: other classes'
+/// events (their compiled modules), the project's input actions, and what the
+/// class's components get from the assets they name. The palette loads these
+/// in the background (`palette_catalog::BlueprintEditorPanel::refresh_catalog`)
+/// and adds them when they are ready.
+pub fn event_node_definitions_slow(
+    class_path: Option<&Path>,
+    asset_events: &[engine_backend::AssetEvents],
+) -> Vec<(String, NodeDefinition)> {
+    let mut definitions = event_nodes(&project_events(class_path))
         .iter()
         .map(|node| (node.category.clone(), node_definition(node)))
         .collect::<Vec<_>>();
@@ -365,6 +377,19 @@ pub fn event_node_definitions(
     );
     definitions.extend(super::asset_events::node_definitions(asset_events));
     definitions.extend(super::asset_events::family_node_definitions(asset_events));
+    definitions
+}
+
+/// Every event node for the class at `class_path` (named `class_name`,
+/// with event definitions `defs`), by category.
+pub fn event_node_definitions(
+    class_path: Option<&Path>,
+    class_name: &str,
+    defs: &[crate::core::graph::EventDefinition],
+    asset_events: &[engine_backend::AssetEvents],
+) -> Vec<(String, NodeDefinition)> {
+    let mut definitions = event_node_definitions_fast(class_name, defs);
+    definitions.extend(event_node_definitions_slow(class_path, asset_events));
     definitions
 }
 
