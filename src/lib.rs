@@ -213,12 +213,21 @@ impl EditorPluginComponents for BlueprintEditorPlugin {
 pub struct BlueprintLanguage;
 
 impl ScriptLanguage for BlueprintLanguage {
-    fn id(&self) -> &str {
-        LANGUAGE_ID
-    }
-
-    fn display_name(&self) -> &str {
-        "Blueprints"
+    /// A class's `compile_target` key of its saved graph: `"rust"` generates
+    /// the class into the game crate.
+    fn compile_target(&self, class_dir: &std::path::Path) -> Result<Option<String>, String> {
+        #[derive(serde::Deserialize)]
+        struct Graph {
+            #[serde(default)]
+            compile_target: Option<String>,
+        }
+        let graph = class_dir.join(blueprint_compiler::GRAPH_FILE);
+        let Ok(text) = engine_fs::virtual_fs::read_to_string(&graph) else {
+            return Ok(None);
+        };
+        serde_json::from_str::<Graph>(&text)
+            .map(|graph| graph.compile_target)
+            .map_err(|error| format!("{}: {error}", graph.display()))
     }
 
     fn validate_project(&self, project_root: &std::path::Path) -> Result<(), String> {
@@ -263,23 +272,33 @@ pub fn script_language() -> Arc<dyn ScriptLanguage> {
     Arc::new(BlueprintLanguage)
 }
 
-impl EditorPluginScripting for BlueprintEditorPlugin {
-    fn script_languages(&self) -> Vec<Arc<dyn ScriptLanguage>> {
-        vec![script_language()]
-    }
-}
+/// Blueprints as a language: one registration with everything the host needs
+/// (identity, the marker file of its classes, the graph compiler). The host
+/// routes to it through `pulsar_language::LanguageRegistry`; a project that
+/// disables this plugin has no Blueprint language, markers or compiler.
+pub const LANGUAGE: pulsar_language::Language = pulsar_language::Language {
+    origin: pulsar_plugins::origin!(),
+    id: LANGUAGE_ID,
+    display_name: "Blueprints",
+    file_extensions: &[],
+    language_ids: &[],
+    highlight_id: "",
+    class_markers: &[blueprint_compiler::GRAPH_FILE],
+    config_files: &[],
+    compiler: Some(script_language),
+    server: None,
+};
 
 // Static built-ins are instantiated through the Rust API and must not emit the
 // process-global dynamic loader symbols shared by every plugin.
 #[cfg(not(feature = "builtin"))]
-export_plugin!(BlueprintEditorPlugin, scripting);
+export_plugin!(BlueprintEditorPlugin);
 
 // This plugin's descriptor (`pulsar-plugin.toml`): linking the crate installs it.
 pulsar_plugins::installed!("pulsar-plugin.toml", build);
 
-/// Everything the plugin registers (its folder of example Blueprints, and the
+/// Everything the plugin registers (its language, its folder of example Blueprints, and the
 /// editor provider with the `builtin` feature).
-#[cfg_attr(not(feature = "builtin"), allow(unused_variables))]
 pub fn build(p: &mut pulsar_plugins::PluginBuilder) {
     // The plugin's folder: the example Blueprints (`examples/`), read-only.
     p.add(engine_fs::FileProvider {
@@ -287,6 +306,8 @@ pub fn build(p: &mut pulsar_plugins::PluginBuilder) {
         open: examples::open,
         in_game: engine_fs::InGame::Snapshot,
     });
+    // Its one language registration: identity, class marker, compiler.
+    p.add(LANGUAGE);
     #[cfg(feature = "builtin")]
     builtin_provider::build(p);
 }

@@ -44,6 +44,8 @@ ui_common          = { workspace = true }
 engine_backend     = { workspace = true }
 # The one prefab model (`prefab.json`), with its record migrations on load.
 pulsar_class       = { workspace = true }
+# The `Language` this plugin registers (identity, class marker, compiler).
+pulsar_language    = { workspace = true }
 pulsar_reflection  = { workspace = true }
 # The `#[blueprint]` node registry the palette and graph checks read.
 pulsar_std         = { workspace = true }

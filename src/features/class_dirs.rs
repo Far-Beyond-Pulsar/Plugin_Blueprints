@@ -9,7 +9,7 @@
 use engine_fs::virtual_fs as vfs;
 use std::path::{Path, PathBuf};
 
-const GRAPH_FILE: &str = "graph_save.json";
+const GRAPH_FILE: &str = blueprint_compiler::GRAPH_FILE;
 
 /// `name` without a trailing `.class` extension.
 pub fn strip_class_ext(name: &str) -> &str {
@@ -150,28 +150,6 @@ pub fn source_files(dir: &Path) -> Vec<PathBuf> {
     .iter()
     .map(|name| dir.join(name))
     .collect()
-}
-
-/// Whether this language may compile `dir`. A class has exactly one language:
-/// a class that also has TypeScript source, or whose compiled module was
-/// written by another language, is refused rather than overwritten.
-pub fn check_language(dir: &Path) -> Result<(), String> {
-    if vfs::is_file(&dir.join("class.ts")) {
-        return Err(
-            "this class has both `graph_save.json` (Blueprint) and `class.ts` (TypeScript): \
-                    a class has one language, so remove one of them"
-                .to_owned(),
-        );
-    }
-    let written_by = class_and_store(dir).and_then(|(entry, store)| store.language(&entry.id));
-    match written_by {
-        Some(other) if other != LANGUAGE_ID => Err(format!(
-            "its compiled module was written by the `{other}` language; delete its module from \
-             the project's {} to compile it as a Blueprint",
-            pulsar_class::modules::STORE_DIR
-        )),
-        _ => Ok(()),
-    }
 }
 
 /// Store `module_json` as `dir`'s compiled module, written by this language.

@@ -236,7 +236,9 @@ impl BlueprintEditorPanel {
             .current_class_path
             .as_ref()
             .ok_or("No class loaded — cannot compile")?;
-        crate::features::class_dirs::check_language(class_path)?;
+        // The host owns the one-language rule: a class that is another
+        // language's (or two) is refused before anything is overwritten.
+        pulsar_class::check_owned(class_path, crate::LANGUAGE_ID)?;
         let module = self.compile_module(cx).inspect_err(|_| {
             // Never leave a module from an older graph behind.
             crate::features::class_dirs::remove_module(class_path);

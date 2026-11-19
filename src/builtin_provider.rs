@@ -5,7 +5,7 @@
 //! while the plugin is enabled for the project), exactly like
 //! any other editor that is part of a build: the editor shell does not
 //! depend on this crate, and a build without it simply has no Blueprint
-//! editor and no Blueprint scripting language. All types, vtables and drop
+//! editor. All types, vtables and drop
 //! glue live in the same binary, so there is no FFI boundary.
 
 use std::path::{Path, PathBuf};
@@ -43,9 +43,6 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
         crate::BlueprintEditorPlugin::default().ai_tools()
     }
 
-    fn script_languages(&self) -> Vec<Arc<dyn ScriptLanguage>> {
-        vec![crate::script_language()]
-    }
 
     fn capabilities_for_file(&self, file_path: &Path) -> Vec<String> {
         crate::BlueprintEditorPlugin::default().capabilities_for_file(file_path)
@@ -93,8 +90,8 @@ impl BuiltinEditorProvider for BlueprintEditorBuiltinProvider {
     }
 }
 
-/// Registers the editor provider, the trait implementer source and the
-/// script language.
+/// Registers the editor provider and the trait implementer source (the
+/// language itself is registered by the root's `build`).
 pub(crate) fn build(p: &mut pulsar_plugins::PluginBuilder) {
     p.add(PluginEditorProvider {
         origin: p.origin(),
@@ -112,13 +109,5 @@ pub(crate) fn build(p: &mut pulsar_plugins::PluginBuilder) {
         claims: Some(crate::features::traits::source::is_blueprint_asset),
         scan: Some(crate::features::traits::source::scan),
         list: None,
-    });
-
-    // The headless tools (`pulsar package`, CI) find languages through the same
-    // registration, so they select this compiler by this id.
-    p.add(plugin_editor_api::LinkedScriptLanguage {
-        origin: p.origin(),
-        id: crate::LANGUAGE_ID,
-        create: crate::script_language,
     });
 }

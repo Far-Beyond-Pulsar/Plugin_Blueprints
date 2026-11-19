@@ -28,7 +28,7 @@ pub fn validate_project_classes_with_component_events(
     // Current Blueprint class assets are named graph_save.json, not
     // `.blueprint`. Reuse the class discovery rules used by compilation so
     // preflight examines the same class directories as the build path.
-    for class_dir in crate::features::class_dirs::project_class_dirs(root) {
+    for class_dir in project_class_dirs(root) {
         class_files.insert(class_dir.join("graph_save.json"));
     }
     // Also support callers that pass a class directory directly.
@@ -380,13 +380,17 @@ pub(crate) fn compile_asset(
     }
 }
 
-/// The class directories under `<root>/src/classes` holding a saved graph
-/// (`graph_save.json`), sorted.
+/// The class directories of the project holding a saved graph that are this
+/// language's alone (a class that is two languages' is the host's problem
+/// to report: `pulsar_class::class_problems`), sorted.
 pub fn project_class_dirs(root: &Path) -> Vec<std::path::PathBuf> {
     crate::features::class_dirs::project_class_dirs(root)
+        .into_iter()
+        .filter(|dir| pulsar_class::is_owned_by(dir, crate::LANGUAGE_ID))
+        .collect()
 }
 
-const GRAPH_FILE: &str = "graph_save.json";
+const GRAPH_FILE: &str = blueprint_compiler::GRAPH_FILE;
 
 /// Compile one class directory's saved graph and store its module in the
 /// project's module store (`pulsar_class::modules`; the class folder is
@@ -400,14 +404,6 @@ fn compile_class_dir(
     use plugin_editor_api::CompileDiagnostic;
     let class = crate::features::class_dirs::class_name_of(dir);
     let graph_file = dir.join(GRAPH_FILE);
-    // A refusal must not delete the other language's artifact, so it comes before `fail`.
-    if let Err(message) = crate::features::class_dirs::check_language(dir) {
-        return Err(vec![CompileDiagnostic::error(
-            class.clone(),
-            Some(graph_file.clone()),
-            message,
-        )]);
-    }
     let fail = |message: String| {
         crate::features::class_dirs::remove_module(dir);
         vec![CompileDiagnostic::error(
