@@ -2233,6 +2233,142 @@ mod engine_events {
         );
     }
 
+    /// One node, several exec outputs: `event::on_each` compiles to one handler
+    /// and one subscription per exec output, each running only its own chain,
+    /// all reading the node's shared data pins. This is the shape an
+    /// "On Input Action" node with one exec output per phase needs.
+    #[test]
+    fn one_event_node_with_an_exec_output_per_event_compiles_one_handler_each() {
+        let sig = |name: &str, id: u64| EventSignature {
+            id,
+            name: name.into(),
+            fields: vec![
+                EventField::new("entity", Type::Entity),
+                EventField::new("x", Type::Float),
+            ],
+        };
+        let known = [
+            sig("input::Move.started", 1),
+            sig("input::Move.triggered", 2),
+            sig("input::Move.completed", 3),
+        ];
+        let vars = vec![
+            var("started_by", "Entity", None),
+            var("triggered_by", "Entity", None),
+        ];
+        let mut g = Graph::default();
+        g.node(
+            "on_move",
+            "event::on_each",
+            &[
+                P::ExecOut("Started"),
+                P::ExecOut("Triggered"),
+                P::Out("entity", "Entity"),
+                P::Out("x", "f64"),
+            ],
+        );
+        g.prop(
+            "on_move",
+            "events",
+            json!("Started=input::Move.started, Triggered=input::Move.triggered"),
+        );
+        g.set_var("s_set", "started_by", "Entity");
+        g.set_var("t_set", "triggered_by", "Entity");
+        g.data("on_move", "entity", "s_set", "value");
+        g.data("on_move", "entity", "t_set", "value");
+        g.exec("on_move", "Started", "s_set");
+        g.exec("on_move", "Triggered", "t_set");
+        let graph = g.build();
+        let module = compile(
+            &ClassSource {
+                name: "Hero",
+                graph: &graph,
+                variables: &vars,
+                events: &[],
+                known_events: &known,
+                version: 0,
+            },
+            &natives(),
+        )
+        .unwrap_or_else(|d| panic!("{d:?}"));
+
+        let names: Vec<_> = module
+            .subscriptions
+            .iter()
+            .map(|s| s.event.clone())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                EventRef::Name("input::Move.started".into()),
+                EventRef::Name("input::Move.triggered".into())
+            ],
+            "one subscription per exec output; Completed has no pin and is not heard"
+        );
+        assert!(module
+            .subscriptions
+            .iter()
+            .all(|s| s.scope == SubscriptionScope::Self_));
+        assert_ne!(
+            module.subscriptions[0].handler, module.subscriptions[1].handler,
+            "each phase is its own handler"
+        );
+        let stores = |handler: u32| -> Vec<u32> {
+            module.functions[handler as usize]
+                .code
+                .iter()
+                .filter_map(|i| match i {
+                    pulsar_script_vm::Instr::StoreVar { var, .. } => Some(*var),
+                    _ => None,
+                })
+                .collect()
+        };
+        let started = stores(module.subscriptions[0].handler);
+        let triggered = stores(module.subscriptions[1].handler);
+        assert_eq!(started.len(), 1, "Started runs only its own chain");
+        assert_eq!(triggered.len(), 1, "Triggered runs only its own chain");
+        assert_ne!(started, triggered);
+    }
+
+    #[test]
+    fn an_each_event_node_with_mismatched_payloads_is_an_error() {
+        let a = EventSignature {
+            id: 1,
+            name: "a.one".into(),
+            fields: vec![EventField::new("x", Type::Float)],
+        };
+        let b = EventSignature {
+            id: 2,
+            name: "a.two".into(),
+            fields: vec![EventField::new("x", Type::Int)],
+        };
+        let mut g = Graph::default();
+        g.node(
+            "n",
+            "event::on_each",
+            &[P::ExecOut("One"), P::ExecOut("Two"), P::Out("x", "f64")],
+        );
+        g.prop("n", "events", json!("One=a.one,Two=a.two"));
+        let graph = g.build();
+        let errs = compile(
+            &ClassSource {
+                name: "E",
+                graph: &graph,
+                variables: &[],
+                events: &[],
+                known_events: &[a, b],
+                version: 0,
+            },
+            &natives(),
+        )
+        .unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|d| d.to_string().contains("different payload")),
+            "{errs:?}"
+        );
+    }
+
     #[test]
     fn palette_lists_event_nodes_by_category() {
         let events = [
@@ -2815,5 +2951,114 @@ mod conformance_fixtures {
             )
             .unwrap();
         }
+    }
+}
+
+/// A family node (`event::family::<id>`): the same one-handler-per-exec-output
+/// compile as `event::on_each`, plus typed data outputs built from the raw
+/// event's fields by its `lowering` property.
+mod family_nodes {
+    use super::*;
+    use blueprint_compiler::{compile, ClassSource, Diagnostic};
+    use pulsar_script_math as _;
+    use pulsar_script_vm::{EventField, EventSignature, Type};
+
+    fn input_event(name: &str, id: u64) -> EventSignature {
+        let mut fields = vec![EventField::new("entity", Type::Entity)];
+        fields.extend(
+            ["value", "x", "y", "z", "elapsed", "triggered_for"]
+                .map(|f| EventField::new(f, Type::Float)),
+        );
+        EventSignature {
+            id,
+            name: name.into(),
+            fields,
+        }
+    }
+
+    fn compile_family(lowering: &str) -> Result<pulsar_script_vm::Module, Vec<Diagnostic>> {
+        let known = [
+            input_event("input::Move.started", 1),
+            input_event("input::Move.triggered", 2),
+        ];
+        let vars = vec![var("seen", "Vec2", None)];
+        let mut g = Graph::default();
+        g.node(
+            "on_move",
+            "event::family::input.action",
+            &[
+                P::ExecOut("Started"),
+                P::ExecOut("Triggered"),
+                P::Out("Value", "Vec2"),
+                P::Out("Pressed", "bool"),
+                P::Out("Elapsed", "f64"),
+                P::Out("Entity", "Entity"),
+            ],
+        );
+        g.prop(
+            "on_move",
+            "events",
+            json!("Started=input::Move.started,Triggered=input::Move.triggered"),
+        );
+        g.prop("on_move", "lowering", json!(lowering));
+        g.set_var("set_seen", "seen", "Vec2");
+        g.data("on_move", "Value", "set_seen", "value");
+        g.exec("on_move", "Triggered", "set_seen");
+        let graph = g.build();
+        compile(
+            &ClassSource {
+                name: "Hero",
+                graph: &graph,
+                variables: &vars,
+                events: &[],
+                known_events: &known,
+                version: 0,
+            },
+            &natives(),
+        )
+    }
+
+    const LOWERING: &str =
+        "Value=vec2:x,y;Pressed=bool:value;Elapsed=f64:elapsed;Entity=entity:entity";
+
+    #[test]
+    fn a_2d_action_value_is_a_vec2_built_from_x_and_y() {
+        let module = compile_family(LOWERING).unwrap_or_else(|d| panic!("{d:?}"));
+        assert_eq!(module.subscriptions.len(), 2, "one per exec output");
+        let triggered = &module.functions[module.subscriptions[1].handler as usize];
+        assert!(
+            triggered
+                .code
+                .iter()
+                .any(|i| matches!(i, pulsar_script_vm::Instr::CallNative { .. })),
+            "Vec2::new is called"
+        );
+        assert!(triggered
+            .code
+            .iter()
+            .any(|i| matches!(i, pulsar_script_vm::Instr::StoreVar { .. })));
+        assert!(
+            module.imports.iter().any(|i| i.name == "Vec2::new"),
+            "the native is imported"
+        );
+    }
+
+    #[test]
+    fn a_bad_lowering_is_an_error_on_the_node() {
+        let errors = compile_family("Value=vec2:x,nope").unwrap_err();
+        assert!(
+            errors.iter().any(|d| d.to_string().contains("no field `nope`")),
+            "{errors:?}"
+        );
+        let errors = compile_family("Value=quaternion:x,y").unwrap_err();
+        assert!(
+            errors.iter().any(|d| d.to_string().contains("unknown lowering")),
+            "{errors:?}"
+        );
+        let errors = compile_family("Value=vec3:x,y").unwrap_err();
+        assert!(
+            errors.iter().any(|d| d.to_string().contains("needs 3 field")),
+            "{errors:?}"
+        );
     }
 }

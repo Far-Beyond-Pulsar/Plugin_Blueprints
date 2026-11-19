@@ -367,6 +367,13 @@ struct EventFn {
     param_pins: Vec<Vec<String>>,
     /// Engine event subscriptions this function handles.
     subscriptions: Vec<(String, SubscriptionScope)>,
+    /// For a node with several exec outputs (`event::on_each`): the one
+    /// exec pin this function runs, by node id. A node absent here runs every
+    /// exec output, as an ordinary event node does.
+    only_exec: HashMap<String, String>,
+    /// The payload field names, in parameter order (for lowering a family's
+    /// data outputs from them).
+    fields: Vec<String>,
 }
 
 struct Compiler<'a> {
@@ -562,6 +569,10 @@ impl<'a> Compiler<'a> {
                 );
                 continue;
             }
+            if node.node_type == "event::on_each" || node.node_type.starts_with("event::family::") {
+                self.declare_each_event(node, &mut by_name);
+                continue;
+            }
             let mut subscription = None;
             let (name, params, param_pins) = if let Some(event) =
                 component_event_name(&node.node_type)
@@ -732,6 +743,8 @@ impl<'a> Compiler<'a> {
                         nodes: vec![node.id.clone()],
                         param_pins,
                         subscriptions,
+                        only_exec: HashMap::new(),
+                        fields: Vec::new(),
                     });
                 }
             }
@@ -772,6 +785,176 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    /// An `event::on_each` node: one node, several exec outputs, each its own
+    /// engine event. Its `events` property maps `pin=event` pairs, comma
+    /// separated (`Started=input::Move.started,Triggered=input::Move.triggered`).
+    /// Every event must carry the same payload; the data pins are shared, and
+    /// each exec output compiles to its own handler with its own subscription.
+    fn declare_each_event(&mut self, node: &NodeInstance, by_name: &mut HashMap<String, usize>) {
+        let Some(Json::String(spec)) = node.properties.get("events") else {
+            self.error(Some(&node.id), "event node has no `events` property");
+            return;
+        };
+        let scope = match node.properties.get("scope") {
+            Some(Json::String(s)) if !s.trim().is_empty() => match parse_scope(s) {
+                Some(scope) => Some(scope),
+                None => {
+                    self.error(
+                        Some(&node.id),
+                        format!("scope `{s}` is not self, global or class"),
+                    );
+                    return;
+                }
+            },
+            _ => None,
+        };
+        let mut shared: Option<Vec<Type>> = None;
+        for pair in spec.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+            let Some((pin, event)) = pair.split_once('=') else {
+                self.error(Some(&node.id), format!("`{pair}` is not `pin=event`"));
+                continue;
+            };
+            let (pin, event) = (pin.trim(), event.trim());
+            let Some(sig) = self.event_sig(&node.id, event) else {
+                continue;
+            };
+            let types = sig.field_types();
+            match &shared {
+                Some(first) if *first != types => {
+                    self.error(
+                        Some(&node.id),
+                        format!("`{event}` carries a different payload from the node's other events"),
+                    );
+                    continue;
+                }
+                None => shared = Some(types.clone()),
+                _ => {}
+            }
+            let declared_here = self.module.events.iter().any(|e| e.name == event);
+            let scope = scope.unwrap_or_else(|| default_scope(&sig, declared_here));
+            let scope_tag = match scope {
+                SubscriptionScope::Self_ => "self",
+                SubscriptionScope::Global => "global",
+                SubscriptionScope::Class => "class",
+                SubscriptionScope::Component(_) => "component",
+            };
+            let name = format!("on_event__{}__{scope_tag}", sanitize(event));
+            let param_pins: Vec<Vec<String>> =
+                sig.fields.iter().map(|f| vec![f.name.clone()]).collect();
+            match by_name.get(&name) {
+                Some(&index) => {
+                    if self.events[index].params != types {
+                        self.error(
+                            Some(&node.id),
+                            format!("event `{name}` declared twice with different parameters"),
+                        );
+                        continue;
+                    }
+                    let handler = &mut self.events[index];
+                    handler.nodes.push(node.id.clone());
+                    handler.only_exec.insert(node.id.clone(), pin.to_owned());
+                    handler.subscriptions.push((event.to_owned(), scope));
+                }
+                None => {
+                    by_name.insert(name.clone(), self.events.len());
+                    self.events.push(EventFn {
+                        name,
+                        params: types,
+                        nodes: vec![node.id.clone()],
+                        param_pins,
+                        subscriptions: vec![(event.to_owned(), scope)],
+                        only_exec: HashMap::from([(node.id.clone(), pin.to_owned())]),
+                        fields: sig.fields.iter().map(|f| f.name.clone()).collect(),
+                    });
+                }
+            }
+        }
+    }
+
+    /// Build the typed data outputs of a family node from its `lowering`
+    /// property: `pin=kind:field[,field]` entries separated by `;`, where kind
+    /// is `f64` or `entity` (the field as it is), `bool` (the field is above
+    /// one half) or `vec2` / `vec3` (a value of that type from its fields).
+    /// `f` already holds the event's fields as its first registers.
+    fn lower_family_outputs(&mut self, f: &mut Func, node_id: &str, fields: &[String]) {
+        let Some(node) = self.node(node_id) else {
+            return;
+        };
+        let Some(Json::String(spec)) = node.properties.get("lowering") else {
+            return;
+        };
+        for entry in spec.split(';').map(str::trim).filter(|e| !e.is_empty()) {
+            let parsed = entry
+                .split_once('=')
+                .and_then(|(pin, rest)| Some((pin.trim(), rest.split_once(':')?)));
+            let Some((pin, (kind, used))) = parsed else {
+                self.error(Some(node_id), format!("`{entry}` is not `pin=kind:fields`"));
+                continue;
+            };
+            let mut regs = Vec::new();
+            for name in used.split(',').map(str::trim) {
+                match fields.iter().position(|field| field == name) {
+                    Some(index) => regs.push(index as Reg),
+                    None => {
+                        self.error(
+                            Some(node_id),
+                            format!("the event has no field `{name}` for `{pin}`"),
+                        );
+                        regs.clear();
+                        break;
+                    }
+                }
+            }
+            let expected = match kind.trim() {
+                "f64" | "entity" | "bool" => 1,
+                "vec2" => 2,
+                "vec3" => 3,
+                other => {
+                    self.error(Some(node_id), format!("unknown lowering `{other}` for `{pin}`"));
+                    continue;
+                }
+            };
+            if regs.len() != expected {
+                if !regs.is_empty() {
+                    self.error(
+                        Some(node_id),
+                        format!("`{pin}` needs {expected} field(s), found {}", regs.len()),
+                    );
+                }
+                continue;
+            }
+            let reg = match kind.trim() {
+                "bool" => {
+                    let half = self.konst(f, Constant::Float(0.5));
+                    let cond = f.reg(Type::Bool);
+                    f.emit(Instr::Binary {
+                        op: BinOp::Lt,
+                        dst: cond,
+                        a: half,
+                        b: regs[0],
+                    });
+                    cond
+                }
+                "vec2" | "vec3" => {
+                    let (native, ty) = if kind.trim() == "vec2" {
+                        ("Vec2::new", "Vec2")
+                    } else {
+                        ("Vec3::new", "Vec3")
+                    };
+                    if self.natives.get(native).is_none() {
+                        self.error(Some(node_id), format!("`{native}` is not available to scripts"));
+                        continue;
+                    }
+                    let dst = f.reg(Type::object(ty));
+                    self.call(f, native, regs, Some(dst));
+                    dst
+                }
+                _ => regs[0],
+            };
+            f.outputs.insert((node_id.to_owned(), pin.to_owned()), reg);
+        }
+    }
+
     fn is_custom_event(&self, node: &NodeInstance) -> bool {
         node.node_type.starts_with("on_")
             && builtin_event(&node.node_type).is_none()
@@ -786,11 +969,13 @@ impl<'a> Compiler<'a> {
     fn compile_events(&mut self) {
         for index in 0..self.events.len() {
             let event = &self.events[index];
-            let (nodes, params, param_pins, name) = (
+            let (nodes, params, param_pins, name, only_exec, fields) = (
                 event.nodes.clone(),
                 event.params.clone(),
                 event.param_pins.clone(),
                 event.name.clone(),
+                event.only_exec.clone(),
+                event.fields.clone(),
             );
             let mut f = Func::new(&params);
             for (param, pins) in param_pins.iter().enumerate() {
@@ -802,6 +987,11 @@ impl<'a> Compiler<'a> {
                     }
                 }
             }
+            // A family node's data outputs are typed values built from the raw
+            // event's fields (a `Vec2` from `x`, `y`), once, before its chain.
+            for node in &nodes {
+                self.lower_family_outputs(&mut f, node, &fields);
+            }
             // The prologue and the final return belong to the event node.
             f.lowering.push(nodes.first().cloned().unwrap_or_default());
             if name == "tick" {
@@ -810,7 +1000,10 @@ impl<'a> Compiler<'a> {
             }
             for node in &nodes {
                 f.lowering.push(node.clone());
-                self.follow_all_exec(&mut f, node);
+                match only_exec.get(node) {
+                    Some(pin) => self.follow(&mut f, node, pin),
+                    None => self.follow_all_exec(&mut f, node),
+                }
                 f.lowering.pop();
             }
             f.emit(Instr::Return { value: None });
@@ -2409,25 +2602,28 @@ impl<'a> Compiler<'a> {
     }
 }
 
+/// Whether an event name (the part of a component event after the class) is
+/// owned by an asset, not by the component: asset events are namespaced
+/// (`montage::<id>.hit`), a component's own are `Class.event`.
+pub fn is_asset_owned_event(event_name: &str) -> bool {
+    event_name.contains("::")
+}
+
 /// Return the canonical `ComponentType.event_name` for a component event node.
 /// Older saved graphs used `event:on_component:` with either `:` or `.` before
 /// the event name; current graphs use `event::on_component::Component.event`.
 fn component_event_name(node_type: &str) -> Option<String> {
     if let Some(event) = node_type.strip_prefix("event::on_component::") {
-        // Animation events keep their asset-qualified event identity
-        // (`animseq::<sequence-id>.<notify-id>` for Sequence-owned notifies and
-        // states, `montage::<montage-id>.<notify-id | lifecycle_kind>` for what a
-        // Montage owns) while using the established component-reference
-        // subscription path. The component prefix names the SceneDB source
-        // reference; it is not part of the event name.
-        if let Some((component, event_name)) = event.split_once('.') {
-            // `AnimationComponent` raises them; graphs saved before the animator
-            // split from the skinned mesh name `SkeletalMeshComponent`.
-            if matches!(component, "AnimationComponent" | "SkeletalMeshComponent")
-                && (event_name.starts_with("animseq::")
-                    || event_name.starts_with("montage::")
-                    || event_name.starts_with("animgraph::"))
-            {
+        // An asset-owned event keeps its asset-qualified identity
+        // (`animseq::<sequence-id>.<notify-id>`, `montage::<id>.<item>`, an input
+        // action's `inputaction::...`) while using the established
+        // component-reference subscription path. The component prefix names
+        // the SceneDB source reference; it is not part of the event name. What
+        // makes an event asset-owned is its namespace, not the class or the
+        // asset kind, so any plugin's asset events work and graphs saved
+        // under a component's former class (`SkeletalMeshComponent`) still do.
+        if let Some((_, event_name)) = event.split_once('.') {
+            if is_asset_owned_event(event_name) {
                 return Some(event_name.to_owned());
             }
         }

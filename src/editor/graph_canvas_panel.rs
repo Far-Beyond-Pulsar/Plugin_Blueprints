@@ -709,6 +709,40 @@ impl GraphCanvasPanel {
         );
     }
 
+    /// Sets a parameter of an event family node (an input action, the phases
+    /// to hear) and brings the node's pins and compile snapshot in line, as one
+    /// undo step. Wires on pins that survive stay.
+    pub fn update_family_param(
+        &mut self,
+        node_id: &str,
+        key: &str,
+        value: String,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(node) = self.graph(cx).nodes.get(node_id).cloned() else {
+            return;
+        };
+        let Some(family) = crate::features::events::asset_events::family_of_node_type(
+            &node.node_type,
+        )
+        .and_then(|id| self.bp_profile.event_family(id)) else {
+            return;
+        };
+        let mut commands = vec![GraphCommand::SetProperty {
+            node: node_id.to_owned(),
+            key: key.to_owned(),
+            value: Some(serde_json::Value::String(value)),
+        }];
+        // The node sees its parameters as they will be after the edit.
+        let mut after = self.graph(cx).clone();
+        if commands[0].apply(&mut after).is_ok() {
+            if let Some(edited) = after.nodes.get(node_id) {
+                commands.extend(crate::canvas_profile::family_commands(&family, edited));
+            }
+        }
+        let _ = self.apply("Edit event", commands, cx);
+    }
+
     // ── View ───────────────────────────────────────────────────────────────
 
     /// Centres the view on `node_id`.

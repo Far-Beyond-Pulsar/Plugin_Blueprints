@@ -386,3 +386,117 @@ impl PropertiesRenderer {
             .join(" ")
     }
 }
+
+impl PropertiesRenderer {
+    /// The parameters of an event family node as rows of chips: a `Choice`
+    /// picks one option, a `Multi` toggles each. A click edits the node through
+    /// `GraphCanvasPanel::update_family_param`, which brings its pins and
+    /// compile snapshot in line as one undo step. Below the chips, why the
+    /// parameters do not make sense yet, if they do not.
+    pub(super) fn render_family_params(
+        canvas_entity: &Entity<GraphCanvasPanel>,
+        family: &engine_backend::EventFamily,
+        node: &NodeView,
+        cx: &mut Context<GraphCanvasPanel>,
+    ) -> AnyElement {
+        let theme = cx.theme().clone();
+        let mut body = v_flex().w_full().p_3().gap_3();
+        let mut values = engine_backend::ParamValues::new();
+        for param in &family.params {
+            let current = node
+                .properties
+                .get(&param.name)
+                .cloned()
+                .unwrap_or_else(|| param.default.clone());
+            values.insert(param.name.clone(), current.clone());
+            let selected: Vec<String> = current
+                .split(',')
+                .map(|part| part.trim().to_owned())
+                .filter(|part| !part.is_empty())
+                .collect();
+            let chips = param.options.iter().map(|option| {
+                let on = selected.contains(&option.id);
+                let next = match param.kind {
+                    engine_backend::ParamKind::Choice => option.id.clone(),
+                    engine_backend::ParamKind::Multi => param
+                        .options
+                        .iter()
+                        .filter(|other| (other.id == option.id) != selected.contains(&other.id))
+                        .map(|other| other.id.clone())
+                        .collect::<Vec<_>>()
+                        .join(","),
+                };
+                let (entity, node_id, key) =
+                    (canvas_entity.clone(), node.id.clone(), param.name.clone());
+                let label = if option.detail.is_empty() {
+                    option.label.clone()
+                } else {
+                    format!("{}  ·  {}", option.label, option.detail)
+                };
+                div()
+                    .id(SharedString::from(format!(
+                        "family-{}-{}-{}",
+                        node.id, param.name, option.id
+                    )))
+                    .px_2()
+                    .py_1()
+                    .rounded(px(4.0))
+                    .border_1()
+                    .border_color(if on {
+                        theme.accent
+                    } else {
+                        theme.border
+                    })
+                    .bg(if on {
+                        theme.accent.opacity(0.15)
+                    } else {
+                        gpui::transparent_black()
+                    })
+                    .text_xs()
+                    .text_color(if on {
+                        theme.foreground
+                    } else {
+                        theme.muted_foreground
+                    })
+                    .cursor_pointer()
+                    .child(label)
+                    .on_click(move |_, _window, cx| {
+                        entity.update(cx, |canvas, cx| {
+                            canvas.update_family_param(&node_id, &key, next.clone(), cx);
+                        });
+                    })
+            });
+            body = body.child(
+                v_flex()
+                    .gap_1p5()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_medium()
+                            .text_color(theme.muted_foreground)
+                            .child(param.label.clone()),
+                    )
+                    .child(h_flex().flex_wrap().gap_1().children(chips)),
+            );
+        }
+        if let Err(why) = (family.resolve)(family, &values) {
+            body = body.child(
+                div()
+                    .text_xs()
+                    .text_color(theme.danger)
+                    .child(why),
+            );
+        }
+        Self::render_card(
+            [
+                Self::render_section_header(&family.label, IconName::Settings, cx)
+                    .px_3()
+                    .pt_3()
+                    .into_any_element(),
+                body.into_any_element(),
+            ],
+            cx,
+        )
+        .into_any_element()
+    }
+}

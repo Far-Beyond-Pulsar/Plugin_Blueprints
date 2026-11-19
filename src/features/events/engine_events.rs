@@ -223,96 +223,6 @@ pub fn input_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
         .collect()
 }
 
-fn animation_catalog(
-    class_path: Option<&Path>,
-    referenced_assets: &std::collections::HashSet<String>,
-) -> Vec<(String, EventDescriptor)> {
-    let Some(root) = class_path.and_then(crate::features::class_dirs::project_root_of) else {
-        return Vec::new();
-    };
-    if referenced_assets.is_empty() {
-        return Vec::new();
-    }
-    // Asset-source-aware: only the assets the component names (its graph's
-    // closure, or its single sequence) are read, through the asset index.
-    // The skeletal mesh's plugin answers for its class
-    // (`engine_backend::ComponentEventsRegistration`).
-    let catalog = engine_backend::component_asset_events(ANIMATOR, &root, referenced_assets);
-    for (path, error) in catalog.diagnostics {
-        tracing::warn!(path = %path.display(), %error,
-            "could not discover animation notify events");
-    }
-    catalog.events
-}
-
-/// The animator's class (the animation plugin's): it raises animation notifies.
-const ANIMATOR: &str = "AnimationComponent";
-/// The skinned mesh's class, which was the player before the animator split
-/// from it: saved graphs and unmigrated prefabs name it.
-const LEGACY_PLAYER: &str = "SkeletalMeshComponent";
-
-/// Whether a prefab component of `class` names animation assets.
-fn is_animator_class(class: &str) -> bool {
-    class == ANIMATOR || class == LEGACY_PLAYER
-}
-
-/// Animation schemas are available to a class only when its prefab has a
-/// typed skeletal animation asset reference. This keeps the event palette
-/// aligned with the asset refs in the class's SceneDB component defaults.
-/// The prefab comes through `pulsar_class`'s model (record migrations included),
-/// loaded purely: a palette is a read path and never rewrites `prefab.json`.
-fn referenced_animation_asset_ids(class_path: &Path) -> std::collections::HashSet<String> {
-    match pulsar_class::prefab::PrefabAsset::load_from_dir(class_path) {
-        Ok(prefab) => animation_asset_ids_from_prefab(&prefab),
-        Err(error) => {
-            tracing::warn!("Could not read the class prefab for animation events: {error}");
-            std::collections::HashSet::new()
-        }
-    }
-}
-
-/// Animation assets named by this class's current prefab component defaults.
-/// The in-memory prefab is authoritative while its inspector has unsaved edits.
-pub fn animation_asset_ids_from_prefab(
-    prefab: &pulsar_class::prefab::PrefabAsset,
-) -> std::collections::HashSet<String> {
-    prefab
-        .components
-        .iter()
-        .filter(|component| component.enabled && is_animator_class(&component.class_name))
-        .filter_map(|component| {
-            let id = component
-                .data
-                .get("animation_graph")
-                .and_then(serde_json::Value::as_str)
-                .or_else(|| component.data.get("animation")?.as_str())?;
-            uuid::Uuid::parse_str(id).ok().map(|id| id.to_string())
-        })
-        .collect()
-}
-
-fn animation_palette_event(descriptor: &EventDescriptor) -> Option<PaletteEvent> {
-    Some(PaletteEvent {
-        signature: signature_of(descriptor)?,
-        category: "Animation".into(),
-        declared_here: false,
-    })
-}
-
-/// saved animation assets use the same descriptors as the live player.
-pub fn animation_events(class_path: Option<&Path>) -> Vec<PaletteEvent> {
-    let Some(class_path) = class_path else {
-        return Vec::new();
-    };
-    animation_catalog(
-        Some(class_path),
-        &referenced_animation_asset_ids(class_path),
-    )
-    .iter()
-    .filter_map(|(_, descriptor)| animation_palette_event(descriptor))
-    .collect()
-}
-
 /// This class's own custom events, as the compiler will declare them.
 pub fn local_events(
     class_name: &str,
@@ -351,7 +261,7 @@ pub fn known_event_signatures(class_path: Option<&Path>) -> Vec<EventSignature> 
         .into_iter()
         .chain(project_events(class_path))
         .chain(input_events(class_path))
-        .chain(animation_events(class_path))
+        .chain(super::asset_events::palette_events(&super::asset_events::of_class(class_path)))
         .map(|e| e.signature)
         .collect()
 }
@@ -367,28 +277,6 @@ pub fn known_event_signatures_with_components(
         .into_iter()
         .chain(component_event_signatures(component_events))
         .collect()
-}
-
-/// Compile against the class's current in-memory animation asset references.
-/// This matters while the prefab inspector has unsaved reference changes.
-pub fn known_event_signatures_with_components_and_animation_assets(
-    class_path: Option<&Path>,
-    component_events: &[plugin_editor_api::ComponentEventMetadata],
-    animation_assets: &std::collections::HashSet<String>,
-) -> Vec<EventSignature> {
-    let mut signatures = builtin_events()
-        .into_iter()
-        .chain(project_events(class_path))
-        .chain(input_events(class_path))
-        .chain(
-            animation_catalog(class_path, animation_assets)
-                .iter()
-                .filter_map(|(_, descriptor)| animation_palette_event(descriptor)),
-        )
-        .map(|event| event.signature)
-        .collect::<Vec<_>>();
-    signatures.extend(component_event_signatures(component_events));
-    signatures
 }
 
 /// The editor's event definitions as compiler input.
@@ -408,7 +296,7 @@ pub fn event_sources(
         .collect()
 }
 
-fn pin(id: &str, ty: &str, pin_type: PinType) -> PinDefinition {
+pub(super) fn pin(id: &str, ty: &str, pin_type: PinType) -> PinDefinition {
     PinDefinition {
         id: id.to_string(),
         name: id.to_string(),
@@ -459,7 +347,7 @@ pub fn event_node_definitions(
     class_path: Option<&Path>,
     class_name: &str,
     defs: &[crate::core::graph::EventDefinition],
-    animation_assets: &std::collections::HashSet<String>,
+    asset_events: &[engine_backend::AssetEvents],
 ) -> Vec<(String, NodeDefinition)> {
     let mut events = builtin_events();
     events.extend(project_events(class_path));
@@ -475,98 +363,27 @@ pub fn event_node_definitions(
             .filter(|node| node.is_event)
             .map(|node| (node.category.clone(), node_definition(node))),
     );
-    definitions.extend(animation_notify_component_nodes(
-        class_path,
-        animation_assets,
-    ));
+    definitions.extend(super::asset_events::node_definitions(asset_events));
+    definitions.extend(super::asset_events::family_node_definitions(asset_events));
     definitions
 }
 
-/// Animation notifies are raised by a particular `AnimationComponent` and
-/// are identified by the animation asset and notify IDs. They must use the
-/// existing component-reference subscription path, never the generic event
-/// palette's Global/Broadcast nodes.
-fn animation_notify_component_nodes(
+/// Compile against the events the class's components get from the assets they
+/// name right now (the in-memory prefab while its inspector has unsaved edits).
+pub fn known_event_signatures_with_components_and_assets(
     class_path: Option<&Path>,
-    animation_assets: &std::collections::HashSet<String>,
-) -> Vec<(String, NodeDefinition)> {
-    animation_event_nodes(animation_catalog(class_path, animation_assets))
-}
-
-/// Entry points for canonical animation event descriptors: `animseq` ones are
-/// notifies and notify states of a Sequence, `montage` ones are what a Montage
-/// owns (its own notifies and states, and its lifecycle events). Each is
-/// filtered to its source asset by its canonical name and bound to one
-/// `AnimationComponent` reference.
-pub fn animation_event_nodes(
-    catalog: Vec<(String, EventDescriptor)>,
-) -> Vec<(String, NodeDefinition)> {
-    let mut nodes = Vec::new();
-    for (label, descriptor) in catalog {
-        let Some(signature) = signature_of(&descriptor) else {
-            continue;
-        };
-        let source_id = descriptor
-            .name
-            .split_once('.')
-            .map(|(source, _)| source)
-            .unwrap_or_default();
-        let source_label: String = source_id.chars().take(8).collect();
-        let kind = descriptor.namespace.as_deref().unwrap_or("animseq");
-        let (group, source_noun) = if kind == "montage" {
-            ("Montage", "Montage")
-        } else if kind == "animgraph" {
-            ("Animation Graph", "Animation Graph")
-        } else {
-            ("Animation", "animation sequence")
-        };
-        let mut outputs = vec![pin("Body", "execution", PinType::Output)];
-        outputs.extend(signature.fields.iter().map(|field| {
-            pin(
-                &field.name,
-                &blueprint_compiler::palette::pin_type_name(&field.ty),
-                PinType::Output,
-            )
-        }));
-        let title = format!("On {label}");
-        nodes.push((
-            format!(
-                "Events/Components/AnimationComponent/{group}/{source_label}"
-            ),
-            NodeDefinition {
-                // `component_event_name` strips the component qualifier for
-                // animation asset events, leaving the canonical asset name.
-                id: format!(
-                    "event::on_component::AnimationComponent.{}",
-                    signature.name
-                ),
-                name: title.clone(),
-                icon: "📡".to_owned(),
-                description: format!(
-                    "Runs for this AnimationComponent reference when {source_noun} {source_id} emits {label}."
-                ),
-                documentation: format!(
-                    "Asset-owned event `{}` of {source_noun} `{source_id}`. Connect an `AnimationComponent` reference to `component_ref` to subscribe to that SceneDB component instance. The event is delivered on the referenced actor's entity channel; it is not a global broadcast. Notify states raise it for each phase: check `notify_phase` (`begin`, `tick`, `end`) and `end_reason`.",
-                    signature.name
-                ),
-                inputs: vec![pin(
-                    "component_ref",
-                    ANIMATOR,
-                    PinType::Input,
-                )],
-                outputs,
-                properties: std::collections::HashMap::from([
-                    ("component_type".to_owned(), ANIMATOR.to_owned()),
-                    ("animation_sequence_id".to_owned(), source_id.to_owned()),
-                    ("animation_source_kind".to_owned(), kind.to_owned()),
-                ]),
-                color: Some("#C0392B".to_owned()),
-                is_event: true,
-            },
-        ));
-    }
-    nodes.sort_by(|a, b| (&a.0, &a.1.name).cmp(&(&b.0, &b.1.name)));
-    nodes
+    component_events: &[plugin_editor_api::ComponentEventMetadata],
+    asset_events: &[engine_backend::AssetEvents],
+) -> Vec<EventSignature> {
+    let mut signatures = builtin_events()
+        .into_iter()
+        .chain(project_events(class_path))
+        .chain(input_events(class_path))
+        .chain(super::asset_events::palette_events(asset_events))
+        .map(|event| event.signature)
+        .collect::<Vec<_>>();
+    signatures.extend(component_event_signatures(component_events));
+    signatures
 }
 
 /// Build typed Blueprint entry points for host-owned component events. The
@@ -643,35 +460,15 @@ pub fn component_event_signatures(
 /// node loaded from a file.
 pub fn describe_node_type(node_type: &str) -> Option<(String, bool)> {
     if let Some(event_name) = node_type.strip_prefix("event::on_component::") {
-        // an animator's asset events; graphs saved before the animator split
-        // from the skinned mesh name the mesh's class
-        let asset_event = |kind: &str| {
-            [ANIMATOR, LEGACY_PLAYER].iter().any(|class| {
-                event_name
-                    .strip_prefix(class)
-                    .and_then(|rest| rest.strip_prefix('.'))
-                    .is_some_and(|rest| rest.starts_with(kind))
-            })
-        };
-        if asset_event("animseq::") {
-            return Some(("On Animation Notify".to_owned(), true));
-        }
-        if asset_event("animgraph::") {
-            return Some(("On Animation State".to_owned(), true));
-        }
-        if asset_event("montage::") {
-            let lifecycle = event_name.contains(".lifecycle_");
-            return Some((
-                if lifecycle {
-                    "On Montage Event"
-                } else {
-                    "On Montage Notify"
-                }
-                .to_owned(),
-                true,
-            ));
-        }
         let (component, member) = event_name.split_once('.')?;
+        // An asset-owned event is namespaced (`montage::<id>.hit`): the source
+        // that owns the namespace may title it, whichever component class a
+        // graph saved it under.
+        if blueprint_compiler::is_asset_owned_event(member) {
+            if let Some(title) = engine_backend::node_title(member) {
+                return Some((title, true));
+            }
+        }
         return Some((format!("On {} ({component})", title_case(member)), true));
     }
     // Keep legacy serialized component event node IDs readable. Versions in
@@ -709,157 +506,3 @@ fn title_case(snake: &str) -> String {
         .join(" ")
 }
 
-#[cfg(test)]
-mod animation_event_tests {
-    use super::*;
-
-    fn montage_descriptor(item: &str) -> EventDescriptor {
-        EventDescriptor::dynamic_in(
-            "montage",
-            format!("11111111-2222-4333-8444-555555555555.{item}"),
-            [
-                ("entity".to_owned(), FieldType::U64),
-                ("source".to_owned(), FieldType::U64),
-                ("result".to_owned(), FieldType::Str),
-                ("instance".to_owned(), FieldType::I64),
-            ],
-        )
-        .expect("montage is a valid namespace")
-    }
-
-    #[test]
-    fn state_machine_events_become_component_bound_entry_points_of_their_graph() {
-        let descriptor = EventDescriptor::dynamic_in(
-            "animgraph",
-            "11111111-2222-4333-8444-555555555555.state_entered",
-            [
-                ("entity".to_owned(), FieldType::U64),
-                ("source".to_owned(), FieldType::U64),
-                ("machine".to_owned(), FieldType::Str),
-            ],
-        )
-        .expect("animgraph is a valid namespace");
-        let nodes =
-            animation_event_nodes(vec![("Locomotion state entered".to_owned(), descriptor)]);
-        assert_eq!(nodes.len(), 1);
-        let (category, node) = &nodes[0];
-        assert_eq!(
-            category,
-            "Events/Components/AnimationComponent/Animation Graph/11111111"
-        );
-        assert!(node.id.starts_with("event::on_component::AnimationComponent.animgraph::11111111-2222-4333-8444-555555555555."));
-        assert_eq!(node.inputs[0].id, "component_ref");
-        assert_eq!(
-            node.properties
-                .get("animation_source_kind")
-                .map(String::as_str),
-            Some("animgraph")
-        );
-        assert_eq!(
-            describe_node_type(&node.id),
-            Some(("On Animation State".to_owned(), true))
-        );
-    }
-
-    #[test]
-    fn montage_events_become_component_bound_entry_points_filtered_to_their_asset() {
-        let catalog = vec![
-            (
-                "Swing ended".to_owned(),
-                montage_descriptor("lifecycle_ended"),
-            ),
-            ("Swing.Hit [abc]".to_owned(), montage_descriptor("hit")),
-        ];
-        let nodes = animation_event_nodes(catalog);
-        assert_eq!(nodes.len(), 2);
-        for (category, node) in &nodes {
-            assert_eq!(
-                category,
-                "Events/Components/AnimationComponent/Montage/11111111"
-            );
-            assert!(node.is_event);
-            assert!(
-                node.id.starts_with("event::on_component::AnimationComponent.montage::11111111-2222-4333-8444-555555555555."),
-                "{}",
-                node.id
-            );
-            // bound to one component reference, never a global broadcast
-            assert_eq!(node.inputs.len(), 1);
-            assert_eq!(node.inputs[0].id, "component_ref");
-            assert_eq!(
-                node.properties.get("component_type").map(String::as_str),
-                Some("AnimationComponent")
-            );
-            assert_eq!(
-                node.properties
-                    .get("animation_source_kind")
-                    .map(String::as_str),
-                Some("montage")
-            );
-            assert_eq!(
-                node.properties
-                    .get("animation_sequence_id")
-                    .map(String::as_str),
-                Some("11111111-2222-4333-8444-555555555555")
-            );
-            let outputs: Vec<_> = node.outputs.iter().map(|p| p.id.as_str()).collect();
-            assert_eq!(outputs, ["Body", "entity", "source", "result", "instance"]);
-        }
-    }
-
-    #[test]
-    fn sequence_notifies_and_states_stay_in_the_animation_group() {
-        let descriptor = EventDescriptor::dynamic_in(
-            "animseq",
-            "99999999-2222-4333-8444-555555555555.swing",
-            [
-                ("entity".to_owned(), FieldType::U64),
-                ("notify_phase".to_owned(), FieldType::Str),
-            ],
-        )
-        .unwrap();
-        let nodes = animation_event_nodes(vec![("Walk.Swing".to_owned(), descriptor)]);
-        assert_eq!(
-            nodes[0].0,
-            "Events/Components/AnimationComponent/Animation/99999999"
-        );
-        assert_eq!(
-            nodes[0]
-                .1
-                .properties
-                .get("animation_source_kind")
-                .map(String::as_str),
-            Some("animseq")
-        );
-    }
-
-    #[test]
-    fn saved_animation_nodes_are_described_as_entry_points() {
-        let notify = "event::on_component::SkeletalMeshComponent.montage::m1.hit";
-        assert_eq!(
-            describe_node_type(notify),
-            Some(("On Montage Notify".to_owned(), true))
-        );
-        let lifecycle = "event::on_component::SkeletalMeshComponent.montage::m1.lifecycle_ended";
-        assert_eq!(
-            describe_node_type(lifecycle),
-            Some(("On Montage Event".to_owned(), true))
-        );
-        let sequence = "event::on_component::SkeletalMeshComponent.animseq::s1.step";
-        assert_eq!(
-            describe_node_type(sequence),
-            Some(("On Animation Notify".to_owned(), true))
-        );
-        // the animator's own ids, as the palette makes them now
-        let state = "event::on_component::AnimationComponent.animgraph::g1.enter";
-        assert_eq!(
-            describe_node_type(state),
-            Some(("On Animation State".to_owned(), true))
-        );
-        let animator = "event::on_component::AnimationComponent.montage::m1.hit";
-        assert_eq!(
-            describe_node_type(animator),
-            Some(("On Montage Notify".to_owned(), true))
-        );
-    }
-}

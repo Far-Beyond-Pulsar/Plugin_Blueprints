@@ -59,6 +59,10 @@ pub struct ProfileData {
     /// [`BlueprintProfile::create_node`] creates them from here. Entries and
     /// definitions are published together.
     pub extra_definitions: HashMap<String, NodeDefinition>,
+    /// The parametric events the open class's components offer, by family id.
+    /// A family node's pins and compile snapshot follow its parameters through
+    /// [`BlueprintProfile`]'s `pin_commands`.
+    pub event_families: HashMap<String, engine_backend::EventFamily>,
     /// Bumped whenever [`Self::extra_catalog`] is replaced.
     pub catalog_version: u64,
 }
@@ -538,6 +542,31 @@ impl GraphProfile for BlueprintProfile {
         })
     }
 
+    fn pin_commands(&self, graph: &GraphDescription, node: &str) -> Vec<graphy::GraphCommand> {
+        let Some(instance) = graph.nodes.get(node) else {
+            return Vec::new();
+        };
+        let Some(family_id) =
+            crate::features::events::asset_events::family_of_node_type(&instance.node_type)
+        else {
+            return set_pins(self.refresh_pins(graph, node), graph, node);
+        };
+        let family = self
+            .presenter
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .event_families
+            .get(family_id)
+            .cloned();
+        let Some(family) = family else {
+            // The component that offered the family is gone from the class:
+            // the node keeps the pins and the snapshot it was saved with.
+            return Vec::new();
+        };
+        family_commands(&family, instance)
+    }
+
     fn is_deletable(&self, node: &NodeInstance) -> bool {
         !matches!(node.node_type.as_str(), "macro_entry" | "macro_exit")
     }
@@ -606,5 +635,118 @@ pub fn datatype_from_str(s: &str) -> DataType {
     match graphy_blueprint::DataType::from_type_str(s) {
         graphy_blueprint::DataType::Execution => DataType::Exec,
         graphy_blueprint::DataType::Data(info) => DataType::typed(info.to_string()),
+    }
+}
+
+/// Commands that bring a family node's snapshot and pins in line with its
+/// parameters: the properties the compiler reads (`events`, `lowering`), and
+/// its pins, keeping wires on pins that survive. Nothing when the parameters
+/// do not resolve (the node keeps what it had) or nothing changed.
+pub fn family_commands(
+    family: &engine_backend::EventFamily,
+    node: &NodeInstance,
+) -> Vec<graphy::GraphCommand> {
+    use crate::features::events::asset_events::{family_output_pins, family_properties};
+    let values: engine_backend::ParamValues = family
+        .params
+        .iter()
+        .map(|param| {
+            let current = node
+                .properties
+                .get(&param.name)
+                .map(|value| match value {
+                    serde_json::Value::String(text) => text.clone(),
+                    other => other.to_string(),
+                })
+                .unwrap_or_else(|| param.default.clone());
+            (param.name.clone(), current)
+        })
+        .collect();
+    let Ok(resolved) = (family.resolve)(family, &values) else {
+        return Vec::new();
+    };
+    let class = node
+        .properties
+        .get("component_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    let mut commands = Vec::new();
+    for (key, text) in family_properties(family, &values, &resolved, class) {
+        let same = node
+            .properties
+            .get(&key)
+            .is_some_and(|old| old.as_str() == Some(text.as_str()));
+        if !same {
+            commands.push(graphy::GraphCommand::SetProperty {
+                node: node.id.clone(),
+                key,
+                value: Some(serde_json::Value::String(text)),
+            });
+        }
+    }
+    let outputs: Vec<PinInstance> = family_output_pins(&resolved)
+        .into_iter()
+        .map(|(id, ty)| PinInstance {
+            id: id.clone(),
+            pin: Pin {
+                id,
+                name: String::new(),
+                data_type: datatype_from_str(&ty),
+                pin_type: PinType::Output,
+            },
+        })
+        .collect();
+    let same_pins = node.outputs.len() == outputs.len()
+        && node
+            .outputs
+            .iter()
+            .zip(&outputs)
+            .all(|(a, b)| a.id == b.id && a.data_type() == b.data_type());
+    if !same_pins {
+        commands.push(graphy::GraphCommand::SetPins {
+            node: node.id.clone(),
+            inputs: node.inputs.clone(),
+            outputs,
+        });
+    }
+    commands
+}
+
+/// A pin update as the canvas applies it (the default `pin_commands`).
+fn set_pins(
+    update: Option<PinUpdate>,
+    graph: &GraphDescription,
+    node: &str,
+) -> Vec<graphy::GraphCommand> {
+    let (Some(update), Some(current)) = (update, graph.nodes.get(node)) else {
+        return Vec::new();
+    };
+    let same = |a: &[PinInstance], b: &[PinInstance]| {
+        a.len() == b.len()
+            && a.iter()
+                .zip(b)
+                .all(|(x, y)| x.id == y.id && x.data_type() == y.data_type())
+    };
+    if same(&current.inputs, &update.inputs) && same(&current.outputs, &update.outputs) {
+        return Vec::new();
+    }
+    vec![graphy::GraphCommand::SetPins {
+        node: node.to_string(),
+        inputs: update.inputs,
+        outputs: update.outputs,
+    }]
+}
+
+impl BlueprintProfile {
+    /// The parametric event family `id` of the open class, if its components
+    /// offer it. The properties panel draws a family node's parameters from it.
+    pub fn event_family(&self, id: &str) -> Option<engine_backend::EventFamily> {
+        self.presenter
+            .data
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .event_families
+            .get(id)
+            .cloned()
     }
 }

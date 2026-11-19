@@ -14,3 +14,4 @@ serde_json = "1.0"
 [dev-dependencies]
 pulsar_reflection = { workspace = true }
 pulsar_scenedb = { workspace = true }
+pulsar_script_math = { workspace = true }

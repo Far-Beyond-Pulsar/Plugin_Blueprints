@@ -1,3 +1,4 @@
+pub mod asset_events;
 pub mod engine_events;
 pub mod hierarchy_item;
 pub mod operations;

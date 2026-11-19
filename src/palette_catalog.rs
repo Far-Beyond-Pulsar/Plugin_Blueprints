@@ -112,7 +112,10 @@ impl BlueprintEditorPanel {
             .as_deref()
             .and_then(crate::features::class_dirs::class_name_of)
             .unwrap_or_else(|| "unnamed_blueprint".to_owned());
-        let animation_assets = engine_events::animation_asset_ids_from_prefab(&self.prefab_asset);
+        let asset_events = crate::features::events::asset_events::of_prefab(
+            class_path.as_deref(),
+            &self.prefab_asset,
+        );
         push_event_categories(
             &mut out,
             &mut definitions,
@@ -120,7 +123,7 @@ impl BlueprintEditorPanel {
                 class_path.as_deref(),
                 &class_name,
                 &self.local_event_defs,
-                &animation_assets,
+                &asset_events,
             ),
         );
 
@@ -162,6 +165,14 @@ impl BlueprintEditorPanel {
         let mut data = self.profile_data.write().unwrap_or_else(|e| e.into_inner());
         data.extra_catalog = extras;
         data.extra_definitions = definitions;
+        // The parametric events (a cached read), for the family nodes' pins and
+        // the properties panel.
+        data.event_families = crate::features::events::asset_events::families(
+            &crate::features::events::asset_events::of_prefab(
+                self.current_class_path.as_deref(),
+                &self.prefab_asset,
+            ),
+        );
         data.catalog_version += 1;
     }
 }

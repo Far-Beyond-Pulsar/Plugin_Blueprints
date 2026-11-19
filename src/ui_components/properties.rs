@@ -560,6 +560,12 @@ impl PropertiesRenderer {
         let properties_body: Option<AnyElement> = (!selected_node.properties.is_empty())
             .then(|| Self::render_node_properties(&selected_node, cx).into_any_element());
 
+        let family_card: Option<AnyElement> =
+            crate::features::events::asset_events::family_of_node_type(&selected_node.definition_id)
+                .and_then(|id| canvas.bp_profile.event_family(id))
+                .map(|family| {
+                    Self::render_family_params(&canvas_entity, &family, &selected_node, cx)
+                });
         v_flex()
             .gap_3()
             // Title card
@@ -602,6 +608,7 @@ impl PropertiesRenderer {
                 ],
                 cx,
             ))
+            .when_some(family_card, |el, card| el.child(card))
             // Inputs card
             .when(!selected_node.inputs.is_empty(), |el| {
                 el.child(Self::render_card(
