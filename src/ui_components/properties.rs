@@ -274,6 +274,10 @@ impl PropertiesRenderer {
                                     &prop_name_for_wb,
                                     json,
                                 );
+                                // The class's events follow what its components name
+                                // (a mapping, a graph): the palette is rebuilt from the
+                                // edited prefab (a cached read).
+                                panel.refresh_catalog(cx);
                                 cx.notify();
                             });
                         }

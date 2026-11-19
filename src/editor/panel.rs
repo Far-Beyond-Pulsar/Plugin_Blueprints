@@ -392,6 +392,7 @@ impl BlueprintEditorPanel {
             |this, _, event: &SearchableListEvent<&'static str>, cx| {
                 if let SearchableListEvent::Select(class_name) = event {
                     this.add_prefab_component(class_name.to_string());
+                    this.refresh_catalog(cx);
                     this.show_add_component_dialog = false;
                     cx.notify();
                 }
