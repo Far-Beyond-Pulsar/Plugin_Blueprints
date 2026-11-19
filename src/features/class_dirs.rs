@@ -53,6 +53,8 @@ pub fn project_root_of(class_dir: &Path) -> Option<PathBuf> {
     }
     parent
         .ancestors()
+        // A plugin's mounted folder is never the project: it is in one.
+        .filter(|dir| vfs::mount_of(dir).is_none())
         .find(|dir| vfs::is_dir(&dir.join("Pulsar")) || vfs::is_file(&dir.join("Cargo.toml")))
         .map(Path::to_path_buf)
 }
@@ -84,12 +86,14 @@ pub fn project_class_dirs(root: &Path) -> Vec<PathBuf> {
             if skip_when_searching(name) {
                 continue;
             }
-            // `<project>/plugins/` is the mount of the installed plugins' folders, which
-            // ship read-only example classes (this plugin's `examples/`). They are
-            // samples to copy, not classes of the project: compiling or validating them
-            // with the project would fail them on the project's missing siblings and
-            // traits.
-            if depth == 0 && name == "plugins" {
+            // `<project>/plugins/` is the mount of the installed plugins' folders. A
+            // plugin's `examples/` ship read-only example classes: samples to copy, not
+            // classes of the project (compiling or validating them with the project
+            // would fail them on its missing siblings and traits). A plugin's `classes/`
+            // ship classes the project uses as they are (the Gameplay plugin's default
+            // player character): they compile into the project's module store, the
+            // class folder itself staying read-only.
+            if name == "examples" && path.starts_with(root.join("plugins")) {
                 continue;
             }
             let is_class_folder = path.extension().and_then(|e| e.to_str()) == Some("class");
