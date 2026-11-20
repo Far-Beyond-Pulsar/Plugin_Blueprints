@@ -205,12 +205,8 @@ impl Presenter for BlueprintPresenter {
         } else if crate::features::events::asset_events::family_of_node_type(ty).is_some() {
             // A parametric event (an input action): titled by what it is bound to
             // (`On Move`), which the node carries.
-            let title = node
-                .properties
-                .get("title")
-                .and_then(|value| value.as_str())
-                .unwrap_or("Event")
-                .to_owned();
+            let title =
+                crate::features::events::asset_events::family_node_title(&node.properties);
             let mut p = NodePresentation::card(title, rgba(0xc0, 0x39, 0x2b, 1.0));
             p.icon = Some('📡');
             p

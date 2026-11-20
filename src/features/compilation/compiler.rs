@@ -181,7 +181,7 @@ impl BlueprintEditorPanel {
                 default: v.default_value.as_deref().map(property_value_from_raw),
             })
             .collect();
-        let graph = self.build_graphy_description(cx)?;
+        let mut graph = self.build_graphy_description(cx)?;
         // Engine events (#924): this class's custom events are declared;
         // event nodes are checked against the built-in and other classes'.
         let mut events =
@@ -207,6 +207,16 @@ impl BlueprintEditorPanel {
             Some(class_path.as_path()),
             &self.prefab_asset,
         );
+        // What is compiled follows the mapping as it is now: a family node's saved
+        // snapshot (its events and how its pins are built) is brought in line with
+        // the live catalog first, so a renamed or retyped action compiles as it is.
+        let reconciled = crate::features::events::asset_events::reconcile_family_nodes(
+            &mut graph,
+            &crate::features::events::asset_events::families(&asset_events),
+        );
+        if reconciled > 0 {
+            tracing::info!(reconciled, "input event nodes brought in line with their mapping");
+        }
         let known_events = crate::features::events::engine_events::known_event_signatures_with_components_and_assets(
             Some(class_path.as_path()),
             &self.component_event_metadata,

@@ -12,7 +12,7 @@
 //! calling this on every palette rebuild and every compile does no file
 //! access once a catalog has been read.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use blueprint_compiler::palette::PaletteEvent;
@@ -149,6 +149,68 @@ pub fn families(sets: &[AssetEvents]) -> std::collections::HashMap<String, Event
         .flat_map(|set| set.catalog.families.iter())
         .map(|family| (family.id.clone(), family.clone()))
         .collect()
+}
+
+/// The title of a family node loaded from a file: the `title` it was saved with,
+/// else what its saved `events` say it listens to (`input::IA_Move.started` is
+/// "On IA_Move"), else its family's name. A node must read well before (and
+/// without) the catalog that made it is known, and a file saved by an older build
+/// has no `title`.
+pub fn family_node_title(properties: &HashMap<String, serde_json::Value>) -> String {
+    let text = |key: &str| {
+        properties
+            .get(key)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    };
+    if let Some(title) = text("title") {
+        return title.to_owned();
+    }
+    // `Pin=namespace::name.phase,...`: the first event's name, before its phase.
+    let from_events = text("events")
+        .and_then(|events| events.split(',').next())
+        .and_then(|pair| pair.split_once('=').map(|(_, event)| event))
+        .and_then(|event| event.rsplit("::").next())
+        .and_then(|name| name.rsplit_once('.').map(|(action, _)| action))
+        .filter(|action| !action.is_empty());
+    match from_events {
+        Some(action) => format!("On {action}"),
+        None => "On Event".to_owned(),
+    }
+}
+
+/// Brings every family node of `graph` in line with the live `families`: its
+/// title, snapshot (`events`, `lowering`) and pins, as when a parameter is edited.
+/// A node whose family is not offered (the component is gone) or whose choice no
+/// longer resolves is left exactly as it was saved. Returns how many nodes
+/// changed. A graph opened from disk, and a compile, both run this, so what is
+/// shown and what is compiled follow the mapping as it is now, not as it was
+/// when the node was placed.
+pub fn reconcile_family_nodes(
+    graph: &mut graphy::GraphDescription,
+    families: &HashMap<String, EventFamily>,
+) -> usize {
+    let ids: Vec<String> = graph.nodes.keys().cloned().collect();
+    let mut changed = 0;
+    for id in ids {
+        let Some(node) = graph.nodes.get(&id) else {
+            continue;
+        };
+        let Some(family) = family_of_node_type(&node.node_type).and_then(|f| families.get(f))
+        else {
+            continue;
+        };
+        let commands = crate::canvas_profile::family_commands(family, node);
+        if commands.is_empty() {
+            continue;
+        }
+        for command in commands {
+            let _ = command.apply(graph);
+        }
+        changed += 1;
+    }
+    changed
 }
 
 /// The node type of a family.
@@ -597,6 +659,93 @@ mod tests {
         node.set_property("thing", serde_json::Value::String("narrow".into()));
         node.set_property("phases", serde_json::Value::String(String::new()));
         assert!(family_commands(&f, &node).is_empty());
+    }
+
+    // ---- stability of family nodes loaded from disk ----
+
+    fn props(pairs: &[(&str, &str)]) -> HashMap<String, serde_json::Value> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), serde_json::Value::String((*v).to_owned())))
+            .collect()
+    }
+
+    #[test]
+    fn a_family_node_is_titled_from_what_it_was_saved_with() {
+        assert_eq!(
+            family_node_title(&props(&[("title", "On Move"), ("events", "Triggered=input::Jump.triggered")])),
+            "On Move",
+            "the saved title wins"
+        );
+        assert_eq!(
+            family_node_title(&props(&[(
+                "events",
+                "Started=input::IA_Move.started,Ongoing=input::IA_Move.ongoing"
+            )])),
+            "On IA_Move",
+            "a file saved before titles existed: read from the events it listens to"
+        );
+        assert_eq!(family_node_title(&props(&[("title", "  ")])), "On Event");
+        assert_eq!(family_node_title(&HashMap::new()), "On Event");
+        assert_eq!(
+            family_node_title(&props(&[("events", "garbage")])),
+            "On Event",
+            "never panics on a damaged snapshot"
+        );
+    }
+
+    fn graph_with(node: graphy::NodeInstance) -> graphy::GraphDescription {
+        let mut graph = graphy::GraphDescription::new("t");
+        graph.add_node(node);
+        graph
+    }
+
+    #[test]
+    fn opening_a_graph_brings_a_stale_family_node_in_line_with_the_mapping() {
+        let f = family();
+        let mut stale = node_of_family();
+        // What an older build left: no title, the other action's snapshot.
+        stale.properties.remove("title");
+        stale.set_property("thing", serde_json::Value::String("wide".into()));
+        let mut graph = graph_with(stale);
+        let families = HashMap::from([(f.id.clone(), f)]);
+
+        assert_eq!(reconcile_family_nodes(&mut graph, &families), 1);
+        let node = graph.nodes.values().next().unwrap();
+        let property = |key: &str| node.properties.get(key).and_then(|v| v.as_str());
+        assert_eq!(property("title"), Some("On wide"));
+        assert_eq!(property("events"), Some("up=thing::wide.up"));
+        assert!(
+            node.outputs.iter().any(|p| p.id == "Value"
+                && format!("{:?}", p.data_type()).contains("Vec3")),
+            "its value pin follows the action's type now"
+        );
+
+        // Settled: a second pass has nothing to do.
+        assert_eq!(reconcile_family_nodes(&mut graph, &families), 0);
+    }
+
+    #[test]
+    fn a_family_node_whose_action_is_gone_is_left_as_saved() {
+        let f = family();
+        let mut orphan = node_of_family();
+        orphan.set_property("thing", serde_json::Value::String("deleted".into()));
+        let before = orphan.clone();
+        let mut graph = graph_with(orphan);
+        let families = HashMap::from([(f.id.clone(), f)]);
+        assert_eq!(reconcile_family_nodes(&mut graph, &families), 0);
+        let after = graph.nodes.values().next().unwrap();
+        assert_eq!(after.properties, before.properties);
+        assert_eq!(after.outputs.len(), before.outputs.len(), "keeps its pins and wires");
+    }
+
+    #[test]
+    fn a_family_node_whose_component_is_gone_is_left_as_saved() {
+        let node = node_of_family();
+        let before = node.properties.clone();
+        let mut graph = graph_with(node);
+        assert_eq!(reconcile_family_nodes(&mut graph, &HashMap::new()), 0);
+        assert_eq!(graph.nodes.values().next().unwrap().properties, before);
     }
 
     #[test]

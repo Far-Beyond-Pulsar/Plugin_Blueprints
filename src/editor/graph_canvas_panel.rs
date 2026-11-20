@@ -71,6 +71,9 @@ pub struct GraphCanvasPanel {
     /// Colour pickers shown in the inspector, by comment id.
     pub comment_pickers: HashMap<String, Entity<ui::color_picker::ColorPickerState>>,
     pub pin_property_state: PropertyStateManager,
+    /// The palette catalogue version this tab's event nodes were last brought in
+    /// line with (see [`Self::reconcile_family_nodes`]).
+    pub reconciled_catalog_version: u64,
 
     // ── Sidebar drags ──────────────────────────────────────────────────────
     pub dragging_variable: Option<crate::features::variables::VariableDrag>,
@@ -193,6 +196,7 @@ impl GraphCanvasPanel {
             zip_tie_length_input,
             comment_pickers: HashMap::new(),
             pin_property_state: PropertyStateManager::new(),
+            reconciled_catalog_version: 0,
             dragging_variable: None,
             variable_drop_menu_position: None,
             dragging_macro: None,
@@ -707,6 +711,45 @@ impl GraphCanvasPanel {
             }],
             cx,
         );
+    }
+
+    /// Brings the event family nodes of this graph in line with the live catalogue:
+    /// the title, the snapshot the compiler reads and the pins, as editing a
+    /// parameter does. A graph opened from disk has them as an older build, or an
+    /// older mapping, left them; this runs once the palette's background load has
+    /// finished, and again whenever it reloads. Not an undo step: nothing the user
+    /// did. Nodes whose component is gone, or whose action no longer exists, stay
+    /// exactly as saved.
+    pub fn reconcile_family_nodes(&mut self, cx: &mut Context<Self>) {
+        let graph = self.graph(cx).clone();
+        let mut commands = Vec::new();
+        for node in graph.nodes.values() {
+            let Some(family) =
+                crate::features::events::asset_events::family_of_node_type(&node.node_type)
+                    .and_then(|id| self.bp_profile.event_family(id))
+            else {
+                continue;
+            };
+            commands.extend(crate::canvas_profile::family_commands(&family, node));
+        }
+        self.apply_system("Update input events", commands, cx);
+    }
+
+    /// Runs [`Self::reconcile_family_nodes`] when the palette's catalogue has
+    /// changed since the last time and is not still loading. Called from render, so
+    /// the work is deferred out of it.
+    pub fn reconcile_family_nodes_when_ready(&mut self, cx: &mut Context<Self>) {
+        let version = self.bp_profile.catalog_version();
+        if version == self.reconciled_catalog_version || self.bp_profile.catalog_loading() {
+            return;
+        }
+        self.reconciled_catalog_version = version;
+        let this = cx.entity().downgrade();
+        cx.defer(move |cx| {
+            if let Some(this) = this.upgrade() {
+                this.update(cx, |this, cx| this.reconcile_family_nodes(cx));
+            }
+        });
     }
 
     /// Sets a parameter of an event family node (an input action, the phases

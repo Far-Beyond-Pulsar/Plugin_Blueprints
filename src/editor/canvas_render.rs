@@ -9,6 +9,9 @@ use crate::editor::graph_canvas_panel::GraphCanvasPanel;
 
 impl Render for GraphCanvasPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Event nodes loaded from disk follow the mapping once the palette has
+        // finished loading it (deferred: not done in the middle of a render).
+        self.reconcile_family_nodes_when_ready(cx);
         let theme = crate::theme::graph_theme(cx);
         if self.canvas.read(cx).theme() != &theme {
             self.canvas
