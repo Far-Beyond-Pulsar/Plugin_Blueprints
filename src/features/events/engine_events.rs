@@ -368,28 +368,22 @@ pub fn event_node_definitions_slow(
         .iter()
         .map(|node| (node.category.clone(), node_definition(node)))
         .collect::<Vec<_>>();
-    // Input actions: entry points only.
+    // Input actions: entry points only, and not those a family node of the
+    // class already offers (its player input component's actions). They stay
+    // in `known_event_signatures`, so graphs that use them still compile.
+    let in_families = super::asset_events::family_event_names(asset_events);
+    let flat_inputs: Vec<_> = input_events(class_path)
+        .into_iter()
+        .filter(|event| !in_families.contains(&event.signature.name))
+        .collect();
     definitions.extend(
-        event_nodes(&input_events(class_path))
+        event_nodes(&flat_inputs)
             .iter()
             .filter(|node| node.is_event)
             .map(|node| (node.category.clone(), node_definition(node))),
     );
     definitions.extend(super::asset_events::node_definitions(asset_events));
     definitions.extend(super::asset_events::family_node_definitions(asset_events));
-    definitions
-}
-
-/// Every event node for the class at `class_path` (named `class_name`,
-/// with event definitions `defs`), by category.
-pub fn event_node_definitions(
-    class_path: Option<&Path>,
-    class_name: &str,
-    defs: &[crate::core::graph::EventDefinition],
-    asset_events: &[engine_backend::AssetEvents],
-) -> Vec<(String, NodeDefinition)> {
-    let mut definitions = event_node_definitions_fast(class_name, defs);
-    definitions.extend(event_node_definitions_slow(class_path, asset_events));
     definitions
 }
 

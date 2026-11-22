@@ -64,8 +64,8 @@ impl VariablesRenderer {
         let panel_entity_for_drop = panel_entity.clone();
 
         let config = HierarchyConfig {
-            items,
-            root_ids,
+            items: items.into(),
+            root_ids: root_ids.into(),
             layout: HierarchyLayout::Panel,
 
             // Panel header

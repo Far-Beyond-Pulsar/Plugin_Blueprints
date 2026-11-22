@@ -151,6 +151,17 @@ pub fn families(sets: &[AssetEvents]) -> std::collections::HashMap<String, Event
         .collect()
 }
 
+/// Every event name the families of `sets` offer: a flat node for one of these
+/// would only repeat what a family node already shows (#2036).
+pub fn family_event_names(sets: &[AssetEvents]) -> HashSet<String> {
+    sets.iter()
+        .flat_map(|set| set.catalog.families.iter())
+        .flat_map(|family| family.events.iter())
+        // The qualified name (`namespace::name`), as `palette_events` gives it.
+        .filter_map(|event| signature_of(event).map(|signature| signature.name))
+        .collect()
+}
+
 /// The title of a family node loaded from a file: the `title` it was saved with,
 /// else what its saved `events` say it listens to (`input::IA_Move.started` is
 /// "On IA_Move"), else its family's name. A node must read well before (and
@@ -746,6 +757,27 @@ mod tests {
         let mut graph = graph_with(node);
         assert_eq!(reconcile_family_nodes(&mut graph, &HashMap::new()), 0);
         assert_eq!(graph.nodes.values().next().unwrap().properties, before);
+    }
+
+    #[test]
+    fn the_events_a_family_offers_are_named_so_flat_nodes_can_step_aside() {
+        let mut picker = family();
+        picker.events = vec![
+            event("Poke", "poke").descriptor,
+            event("Prod", "prod").descriptor,
+        ];
+        let mut sets = set("Widget", Vec::new());
+        sets.catalog = Arc::new(ComponentEventCatalog {
+            events: Vec::new(),
+            families: vec![picker],
+            diagnostics: Vec::new(),
+        });
+        let names = family_event_names(&[sets]);
+        assert_eq!(
+            names,
+            HashSet::from(["thing::a1.poke".to_string(), "thing::a1.prod".to_string()])
+        );
+        assert!(family_event_names(&[set("Widget", vec![event("Poke", "poke")])]).is_empty());
     }
 
     #[test]

@@ -70,8 +70,8 @@ impl EventsRenderer {
         let root_ids: Vec<usize> = (0..items.len()).collect();
 
         let config = HierarchyConfig {
-            items,
-            root_ids,
+            items: items.into(),
+            root_ids: root_ids.into(),
             layout: HierarchyLayout::Panel,
 
             title: Some("Custom Events".to_string()),

@@ -66,8 +66,8 @@ impl MacrosRenderer {
         let root_ids: Vec<usize> = items.iter().map(|item| item.index).collect();
 
         let config = HierarchyConfig {
-            items,
-            root_ids,
+            items: items.into(),
+            root_ids: root_ids.into(),
             layout: HierarchyLayout::Panel,
 
             // Panel header

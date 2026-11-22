@@ -3045,6 +3045,43 @@ mod family_nodes {
     }
 
     #[test]
+    fn a_family_node_whose_action_is_gone_names_the_action() {
+        let vars = vec![var("seen", "Vec2", None)];
+        let mut g = Graph::default();
+        g.node(
+            "on_move",
+            "event::family::input.action",
+            &[P::ExecOut("Triggered"), P::Out("Value", "Vec2")],
+        );
+        g.prop("on_move", "events", json!("Triggered=input::IA_Move.triggered"));
+        g.prop("on_move", "lowering", json!("Value=vec2:x,y"));
+        g.set_var("set_seen", "seen", "Vec2");
+        g.data("on_move", "Value", "set_seen", "value");
+        g.exec("on_move", "Triggered", "set_seen");
+        let graph = g.build();
+        // The mapping no longer has IA_Move: no signature for its events.
+        let errors = compile(
+            &ClassSource {
+                name: "Hero",
+                graph: &graph,
+                variables: &vars,
+                events: &[],
+                known_events: &[],
+                version: 0,
+            },
+            &natives(),
+        )
+        .unwrap_err();
+        let text: Vec<String> = errors.iter().map(ToString::to_string).collect();
+        assert!(
+            text.iter().any(|e| e.contains("`IA_Move` is gone")
+                && e.contains("input.action")
+                && e.contains("input::IA_Move.triggered")),
+            "{text:?}"
+        );
+    }
+
+    #[test]
     fn a_bad_lowering_is_an_error_on_the_node() {
         let errors = compile_family("Value=vec2:x,nope").unwrap_err();
         assert!(
@@ -3108,10 +3145,66 @@ mod family_component_scope {
             &natives(),
         );
         // The node has no wire into `component_ref` here: the subscription is
-        // the property's. (The wired case needs a component reference node; see
-        // the on_component tests for that path.)
+        // the property's (the wired case is the test below).
         let module = module.unwrap_or_else(|d| panic!("{d:?}"));
         assert_eq!(module.subscriptions[0].scope, SubscriptionScope::Self_);
+    }
+
+    /// Wired from a prefab slot's component reference, the node listens to that
+    /// component (the slot's handle variable), whatever its `scope` property says.
+    #[test]
+    fn a_wired_component_ref_scopes_the_family_node_to_that_component() {
+        const SLOT: &str = "6d1f2c3a-0b4e-4f5a-9c8d-7e6f5a4b3c2d";
+        let sig = EventSignature {
+            id: 1,
+            name: "input::Move.triggered".into(),
+            fields: vec![EventField::new("entity", Type::Entity)],
+        };
+        let vars = vec![var("seen", "Entity", None)];
+        let mut g = Graph::default();
+        g.node(
+            "input",
+            "get_component_ref::PlayerInputComponent::0",
+            &[P::Out("component", "PlayerInputComponent")],
+        )
+        .prop("input", "slot_id", json!(SLOT));
+        g.node(
+            "on_move",
+            "event::family::input.action",
+            &[
+                P::In("component_ref", "PlayerInputComponent"),
+                P::ExecOut("Triggered"),
+                P::Out("Entity", "Entity"),
+            ],
+        );
+        g.prop("on_move", "events", json!("Triggered=input::Move.triggered"));
+        g.prop("on_move", "lowering", json!("Entity=entity:entity"));
+        g.prop("on_move", "component_type", json!("PlayerInputComponent"));
+        g.prop("on_move", "scope", json!("self"));
+        g.data("input", "component", "on_move", "component_ref");
+        g.set_var("set_seen", "seen", "Entity");
+        g.exec("on_move", "Triggered", "set_seen");
+        let graph = g.build();
+        let module = compile(
+            &ClassSource {
+                name: "Hero",
+                graph: &graph,
+                variables: &vars,
+                events: &[],
+                known_events: std::slice::from_ref(&sig),
+                version: 0,
+            },
+            &natives(),
+        )
+        .unwrap_or_else(|d| panic!("{d:?}"));
+        assert_eq!(module.subscriptions.len(), 1);
+        let SubscriptionScope::Component(variable) = module.subscriptions[0].scope else {
+            panic!("{:?}", module.subscriptions[0].scope);
+        };
+        assert_eq!(
+            module.variables[variable as usize].name,
+            blueprint_compiler::slot_variable_name(SLOT)
+        );
     }
 }
 

@@ -152,6 +152,17 @@ pub struct ClassSource<'a> {
     pub version: u32,
 }
 
+/// The error for a family node (of family `family`) whose event `event` nothing
+/// offers any more: it names what the event belonged to (`input::IA_Jump.started`
+/// is `IA_Jump`), so the Problems list says which action or source is gone.
+fn missing_family_event(family: &str, event: &str) -> String {
+    let local = event.rsplit_once("::").map_or(event, |(_, local)| local);
+    let subject = local.rsplit_once('.').map_or(local, |(subject, _)| subject);
+    format!(
+        "`{subject}` is gone: this `{family}` node listens to `{event}`, which nothing offers \n         now (renamed or removed); point the node at another `{family}` or restore `{subject}`"
+    )
+}
+
 /// The engine name of event `event` declared by class `class`.
 pub fn qualified_event_name(class: &str, event: &str) -> String {
     format!("{class}.{event}")
@@ -373,6 +384,19 @@ struct EventFn {
     only_exec: HashMap<String, String>,
     /// The payload field names, in parameter order (for lowering a family's
     /// data outputs from them).
+    fields: Vec<String>,
+}
+
+/// One event node's handler, as `register_handler` adds it to the
+/// function of its name (or starts that function).
+struct Handler {
+    name: String,
+    params: Vec<Type>,
+    param_pins: Vec<Vec<String>>,
+    /// The engine event (and scope) this node handles, if any.
+    subscription: Option<(String, SubscriptionScope)>,
+    /// The one exec output this node runs (a family node); `None` runs all.
+    only_exec: Option<String>,
     fields: Vec<String>,
 }
 
@@ -720,34 +744,18 @@ impl<'a> Compiler<'a> {
                     }
                 }
             }
-            match by_name.get(&name) {
-                Some(&index) => {
-                    if self.events[index].params != params {
-                        self.error(
-                            Some(&node.id),
-                            format!("event `{name}` declared twice with different parameters"),
-                        );
-                        continue;
-                    }
-                    self.events[index].nodes.push(node.id.clone());
-                    if let Some(subscription) = subscription {
-                        self.events[index].subscriptions.push(subscription);
-                    }
-                }
-                None => {
-                    by_name.insert(name.clone(), self.events.len());
-                    let subscriptions = subscription.into_iter().collect();
-                    self.events.push(EventFn {
-                        name,
-                        params,
-                        nodes: vec![node.id.clone()],
-                        param_pins,
-                        subscriptions,
-                        only_exec: HashMap::new(),
-                        fields: Vec::new(),
-                    });
-                }
-            }
+            self.register_handler(
+                &mut by_name,
+                &node.id,
+                Handler {
+                    name,
+                    params,
+                    param_pins,
+                    subscription,
+                    only_exec: None,
+                    fields: Vec::new(),
+                },
+            );
         }
         // Function indices follow `events` order.
         for (index, event) in self.events.iter().enumerate() {
@@ -790,6 +798,55 @@ impl<'a> Compiler<'a> {
     /// separated (`Started=input::Move.started,Triggered=input::Move.triggered`).
     /// Every event must carry the same payload; the data pins are shared, and
     /// each exec output compiles to its own handler with its own subscription.
+    /// Add `node` to the handler function named `handler.name`, or start it.
+    /// Two nodes of one name must agree on the parameters.
+    fn register_handler(
+        &mut self,
+        by_name: &mut HashMap<String, usize>,
+        node: &str,
+        handler: Handler,
+    ) {
+        let Handler {
+            name,
+            params,
+            param_pins,
+            subscription,
+            only_exec,
+            fields,
+        } = handler;
+        match by_name.get(&name) {
+            Some(&index) => {
+                if self.events[index].params != params {
+                    self.error(
+                        Some(node),
+                        format!("event `{name}` declared twice with different parameters"),
+                    );
+                    return;
+                }
+                let function = &mut self.events[index];
+                function.nodes.push(node.to_owned());
+                if let Some(pin) = only_exec {
+                    function.only_exec.insert(node.to_owned(), pin);
+                }
+                function.subscriptions.extend(subscription);
+            }
+            None => {
+                by_name.insert(name.clone(), self.events.len());
+                self.events.push(EventFn {
+                    name,
+                    params,
+                    nodes: vec![node.to_owned()],
+                    param_pins,
+                    subscriptions: subscription.into_iter().collect(),
+                    only_exec: only_exec
+                        .map(|pin| HashMap::from([(node.to_owned(), pin)]))
+                        .unwrap_or_default(),
+                    fields,
+                });
+            }
+        }
+    }
+
     fn declare_each_event(&mut self, node: &NodeInstance, by_name: &mut HashMap<String, usize>) {
         let Some(Json::String(spec)) = node.properties.get("events") else {
             self.error(Some(&node.id), "event node has no `events` property");
@@ -836,7 +893,19 @@ impl<'a> Compiler<'a> {
                 continue;
             };
             let (pin, event) = (pin.trim(), event.trim());
-            let Some(sig) = self.event_sig(&node.id, event) else {
+            let sig = match self.event_sigs.get(event) {
+                Some(sig) => Some(sig.clone()),
+                // A family node outlives what it listened to (an action renamed or
+                // removed): say which, not only that the event is unknown (#2016).
+                None => match node.node_type.strip_prefix("event::family::") {
+                    Some(family) => {
+                        self.error(Some(&node.id), missing_family_event(family, event));
+                        None
+                    }
+                    None => self.event_sig(&node.id, event),
+                },
+            };
+            let Some(sig) = sig else {
                 continue;
             };
             let types = sig.field_types();
@@ -872,33 +941,18 @@ impl<'a> Compiler<'a> {
             let name = format!("on_event__{}__{scope_tag}", sanitize(event));
             let param_pins: Vec<Vec<String>> =
                 sig.fields.iter().map(|f| vec![f.name.clone()]).collect();
-            match by_name.get(&name) {
-                Some(&index) => {
-                    if self.events[index].params != types {
-                        self.error(
-                            Some(&node.id),
-                            format!("event `{name}` declared twice with different parameters"),
-                        );
-                        continue;
-                    }
-                    let handler = &mut self.events[index];
-                    handler.nodes.push(node.id.clone());
-                    handler.only_exec.insert(node.id.clone(), pin.to_owned());
-                    handler.subscriptions.push((event.to_owned(), scope));
-                }
-                None => {
-                    by_name.insert(name.clone(), self.events.len());
-                    self.events.push(EventFn {
-                        name,
-                        params: types,
-                        nodes: vec![node.id.clone()],
-                        param_pins,
-                        subscriptions: vec![(event.to_owned(), scope)],
-                        only_exec: HashMap::from([(node.id.clone(), pin.to_owned())]),
-                        fields: sig.fields.iter().map(|f| f.name.clone()).collect(),
-                    });
-                }
-            }
+            self.register_handler(
+                by_name,
+                &node.id,
+                Handler {
+                    name,
+                    params: types,
+                    param_pins,
+                    subscription: Some((event.to_owned(), scope)),
+                    only_exec: Some(pin.to_owned()),
+                    fields: sig.fields.iter().map(|f| f.name.clone()).collect(),
+                },
+            );
         }
     }
 
