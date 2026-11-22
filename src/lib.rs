@@ -300,6 +300,12 @@ pulsar_plugins::installed!("pulsar-plugin.toml", build);
 /// Everything the plugin registers (its language, its folder of example Blueprints, and the
 /// editor provider with the `builtin` feature).
 pub fn build(p: &mut pulsar_plugins::PluginBuilder) {
+    // The icon the editor shows beside this plugin (Extensions window).
+    p.add(pulsar_plugins::PluginIcon {
+        origin: p.origin(),
+        format: pulsar_plugins::IconFormat::Png,
+        bytes: include_bytes!("../icon.png"),
+    });
     // The plugin's folder: the example Blueprints (`examples/`), read-only.
     p.add(engine_fs::FileProvider {
         origin: p.origin(),
