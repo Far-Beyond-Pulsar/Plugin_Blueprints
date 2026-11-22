@@ -299,7 +299,8 @@ pub fn check_blueprint(db: &TraitDb, blueprint: &Value) -> Vec<ConformanceIssue>
     issues
 }
 
-#[cfg(test)]
+// The tests read the asset functions `builtin` compiles (#2025).
+#[cfg(all(test, feature = "builtin"))]
 mod tests {
     use super::*;
     use pulsar_traits::{TraitMethodRecord, TraitParamRecord, TraitRecord};
