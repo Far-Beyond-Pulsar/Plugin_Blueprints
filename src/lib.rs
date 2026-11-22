@@ -327,3 +327,8 @@ pub fn example_files() -> Vec<(&'static str, &'static [u8])> {
         .map(|file| (file.path, file.bytes))
         .collect()
 }
+
+// The plugin as a library of its own, loaded by the editor from `plugins/editor`
+// (`cargo build -p <this package> --release --features dll`).
+#[cfg(feature = "dll")]
+plugin_editor_api::export_plugin_build!();
