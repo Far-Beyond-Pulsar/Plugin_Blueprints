@@ -61,6 +61,10 @@ pub fn project_root_of(class_dir: &Path) -> Option<PathBuf> {
 
 /// Every class directory of the project at `root`, sorted.
 pub fn project_class_dirs(root: &Path) -> Vec<PathBuf> {
+    // This library's copy of `engine_fs` knows no mounted project of the host's: without
+    // this the plugins' folders (`plugins/Gameplay/classes/PlayerCharacter.class`) are
+    // not in the listing, and a class the project uses is never compiled. Idempotent.
+    vfs::mount_project(root);
     let mut found: Vec<PathBuf> = vfs::list_dir(&root.join("src").join("classes"))
         .map(|entries| {
             entries
