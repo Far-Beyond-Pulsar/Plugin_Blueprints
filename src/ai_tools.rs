@@ -28,6 +28,10 @@ struct BlueprintAiSession {
 }
 
 pub(crate) struct AiGraphUpdate {
+    /// Save the open Blueprint instead of applying a graph change.
+    pub save: bool,
+    /// Only report the live canvas graph.
+    pub read: bool,
     pub before: GraphDescription,
     pub after: GraphDescription,
     response: smol::channel::Sender<Result<AiGraphUpdateAck, String>>,
@@ -135,7 +139,11 @@ pub(crate) fn register_live_editor(
 
 fn set_active_file(file_path: &Path) {
     if let Ok(mut guard) = state().lock() {
-        guard.active_file = Some(normalize_file_key(file_path));
+        // A call that names no open Blueprint (the MCP server's placeholder
+        // path) must not replace the editor the user last worked in.
+        if let Some(key) = resolve_session_key(&guard, file_path) {
+            guard.active_file = Some(key);
+        }
     }
 }
 
@@ -144,20 +152,110 @@ fn resolve_session_key(guard: &RuntimeState, requested: &Path) -> Option<PathBuf
     if guard.sessions.contains_key(&requested) {
         return Some(requested);
     }
+    // The same folder spelled differently (verbatim prefix, separators, case).
+    let wanted = comparable(&requested);
+    if let Some(key) = guard.sessions.keys().find(|key| comparable(key) == wanted) {
+        return Some(key.clone());
+    }
+    if names_a_blueprint(&requested) {
+        return None;
+    }
+    // No Blueprint named: the last one opened or used, or the only one.
+    if let Some(active) = guard
+        .active_file
+        .as_ref()
+        .filter(|active| guard.sessions.contains_key(*active))
+    {
+        return Some(active.clone());
+    }
+    if guard.sessions.len() == 1 {
+        return guard.sessions.keys().next().cloned();
+    }
     None
 }
 
+fn comparable(path: &Path) -> String {
+    let text = path.to_string_lossy().replace('\\', "/");
+    let text = text.strip_prefix("//?/").unwrap_or(&text);
+    let text = text.trim_end_matches('/');
+    if cfg!(windows) {
+        text.to_lowercase()
+    } else {
+        text.to_string()
+    }
+}
+
+fn names_a_blueprint(path: &Path) -> bool {
+    path.extension().is_some_and(|ext| ext == "class")
+        || path
+            .file_name()
+            .is_some_and(|name| name == "graph_save.json")
+}
+
+fn not_open(guard: &RuntimeState, requested: &Path) -> anyhow::Error {
+    let open = guard
+        .sessions
+        .keys()
+        .map(|key| key.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    anyhow!(
+        "Blueprint is not open in editor: {}. Open Blueprints: [{}]. Open it with editor_open_file first.",
+        requested.display(),
+        open
+    )
+}
+
+/// Copy the live canvas into the session, so a call sees what the editor
+/// shows (the user's edits too). The canvas is built by the editor's first
+/// frame, so a Blueprint that has not drawn yet is an error, not an empty graph.
+fn refresh_session() -> Result<()> {
+    let (key, route) = {
+        let guard = state()
+            .lock()
+            .map_err(|_| anyhow!("AI session state lock poisoned"))?;
+        let requested = requested_file(&guard)?;
+        let key =
+            resolve_session_key(&guard, &requested).ok_or_else(|| not_open(&guard, &requested))?;
+        match guard.live_editors.get(&key) {
+            Some(route) => (key, route.clone()),
+            // A session without a live editor (an upserted snapshot).
+            None => return Ok(()),
+        }
+    };
+    // The lock is not held while the UI thread answers.
+    let (response, receiver) = smol::channel::bounded(1);
+    let empty = GraphDescription::new("EventGraph");
+    route
+        .send_blocking(AiGraphUpdate {
+            save: false,
+            read: true,
+            before: empty.clone(),
+            after: empty,
+            response,
+        })
+        .map_err(|_| anyhow!("Live Blueprint editor is no longer available"))?;
+    let ack = receiver
+        .recv_blocking()
+        .map_err(|_| anyhow!("Live Blueprint editor did not answer"))?
+        .map_err(|error| anyhow!("{error}"))?;
+    let mut guard = state()
+        .lock()
+        .map_err(|_| anyhow!("AI session state lock poisoned"))?;
+    if let Some(session) = guard.sessions.get_mut(&key) {
+        session.graph = ack.graph;
+    }
+    Ok(())
+}
+
 fn with_session<R>(f: impl FnOnce(&BlueprintAiSession) -> Result<R>) -> Result<R> {
+    refresh_session()?;
     let guard = state()
         .lock()
         .map_err(|_| anyhow!("AI session state lock poisoned"))?;
     let requested = requested_file(&guard)?;
-    let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
-        anyhow!(
-            "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
-            requested.display()
-        )
-    })?;
+    let key =
+        resolve_session_key(&guard, &requested).ok_or_else(|| not_open(&guard, &requested))?;
     let session = guard
         .sessions
         .get(&key)
@@ -166,16 +264,13 @@ fn with_session<R>(f: impl FnOnce(&BlueprintAiSession) -> Result<R>) -> Result<R
 }
 
 fn with_session_mut<R>(f: impl FnOnce(&mut BlueprintAiSession) -> Result<R>) -> Result<R> {
+    refresh_session()?;
     let mut guard = state()
         .lock()
         .map_err(|_| anyhow!("AI session state lock poisoned"))?;
     let requested = requested_file(&guard)?;
-    let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
-        anyhow!(
-            "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
-            requested.display()
-        )
-    })?;
+    let key =
+        resolve_session_key(&guard, &requested).ok_or_else(|| not_open(&guard, &requested))?;
     let route = guard
         .live_editors
         .get(&key)
@@ -199,6 +294,8 @@ fn with_session_mut<R>(f: impl FnOnce(&mut BlueprintAiSession) -> Result<R>) -> 
         let (response, receiver) = smol::channel::bounded(1);
         if route
             .send_blocking(AiGraphUpdate {
+                save: false,
+                read: false,
                 before: before.clone(),
                 after: session.graph.clone(),
                 response,
@@ -541,6 +638,102 @@ fn sorted_nodes(graph: &GraphDescription) -> Vec<&NodeInstance> {
     let mut nodes: Vec<&NodeInstance> = graph.nodes.values().collect();
     nodes.sort_by(|a, b| a.id.cmp(&b.id));
     nodes
+}
+
+/// Save the open Blueprint to its class folder, like the editor's Save button.
+/// The write runs as an editor task; follow it with logs_query.
+#[tool(category = "blueprint")]
+pub fn blueprint_save() -> Result<Value> {
+    // The state lock is released before waiting for the UI thread.
+    let (key, route, graph) = {
+        let guard = state()
+            .lock()
+            .map_err(|_| anyhow!("AI session state lock poisoned"))?;
+        let requested = requested_file(&guard)?;
+        let key =
+            resolve_session_key(&guard, &requested).ok_or_else(|| not_open(&guard, &requested))?;
+        let route =
+            guard.live_editors.get(&key).cloned().ok_or_else(|| {
+                anyhow!("No live Blueprint editor is attached to {}", key.display())
+            })?;
+        let graph = guard.sessions[&key].graph.clone();
+        (key, route, graph)
+    };
+    let (response, receiver) = smol::channel::bounded(1);
+    route
+        .send_blocking(AiGraphUpdate {
+            save: true,
+            read: false,
+            before: graph.clone(),
+            after: graph,
+            response,
+        })
+        .map_err(|_| anyhow!("Live Blueprint editor is no longer available"))?;
+    receiver
+        .recv_blocking()
+        .map_err(|_| anyhow!("Live Blueprint editor did not answer the save"))?
+        .map_err(|error| anyhow!("Save failed: {error}"))?;
+    Ok(json!({ "ok": true, "save_started": true, "file": key.display().to_string() }))
+}
+
+/// Search the node catalogue for definition ids usable with blueprint_add_node.
+/// Every word of the query must appear in the id, name, category or description.
+/// Needs no open Blueprint. Event nodes the editor generates per project
+/// (component, input and trait events) are not listed.
+///
+/// # Arguments
+/// * `query` - Words to search for, e.g. "distance vec3". Omit to list all.
+/// * `limit` - Most results to return (default 40, at most 200).
+#[tool(category = "blueprint")]
+pub fn blueprint_search_node_definitions(
+    query: Option<String>,
+    limit: Option<i64>,
+) -> Result<Value> {
+    let words: Vec<String> = query
+        .unwrap_or_default()
+        .to_lowercase()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    let limit = limit.unwrap_or(40).clamp(1, 200) as usize;
+    let matched: Vec<_> = NodeDefinitions::load()
+        .categories
+        .iter()
+        .flat_map(|category| category.nodes.iter().map(move |node| (category, node)))
+        .filter(|(category, node)| {
+            let haystack = format!(
+                "{} {} {} {}",
+                node.id, node.name, category.name, node.description
+            )
+            .to_lowercase();
+            words.iter().all(|word| haystack.contains(word.as_str()))
+        })
+        .collect();
+    let profile = blueprint_profile();
+    let items = matched
+        .iter()
+        .take(limit)
+        .map(|(category, node)| {
+            let pins = profile
+                .create_node(&node.id, "preview", graphy::Position::new(0.0, 0.0))
+                .map(|instance| {
+                    let list = |pins: &[graphy::PinInstance]| {
+                        pins.iter()
+                            .map(|p| format!("{}: {}", p.id, type_string(p.data_type())))
+                            .collect::<Vec<_>>()
+                    };
+                    json!({ "inputs": list(&instance.inputs), "outputs": list(&instance.outputs) })
+                });
+            json!({
+                "definition_id": node.id,
+                "name": node.name,
+                "category": category.name,
+                "description": node.description,
+                "pins": pins,
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(json!({ "ok": true, "total_matches": matched.len(), "items": items }))
 }
 
 /// Summarize graph-wide structure and counts.

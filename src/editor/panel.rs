@@ -202,6 +202,7 @@ impl BlueprintEditorPanel {
     pub(crate) fn attach_ai_graph_updates(
         &mut self,
         file_path: std::path::PathBuf,
+        window_handle: AnyWindowHandle,
         cx: &mut Context<Self>,
     ) {
         let initial = self
@@ -211,6 +212,43 @@ impl BlueprintEditorPanel {
         let receiver = crate::ai_tools::register_live_editor(file_path.clone(), initial);
         cx.spawn(async move |this, cx| {
             while let Ok(update) = receiver.recv().await {
+                if update.read {
+                    let result = this
+                        .update(cx, |editor, cx| {
+                            editor
+                                .main_canvas()
+                                .map(|canvas| crate::ai_tools::AiGraphUpdateAck {
+                                    graph: canvas.read(cx).graph(cx).clone(),
+                                    applied: false,
+                                })
+                                .ok_or_else(|| {
+                                    "The Blueprint graph has not drawn yet: the editor builds \
+                                     its canvas on its first frame. Bring the tab to the front \
+                                     and move the mouse over it, then retry."
+                                        .to_string()
+                                })
+                        })
+                        .map_err(|error| error.to_string())
+                        .and_then(|result| result);
+                    update.respond(result).await;
+                    continue;
+                }
+                if update.save {
+                    let result = cx
+                        .update_window(window_handle, |_, window, cx| {
+                            this.update(cx, |editor, cx| {
+                                editor.plugin_save(window, cx);
+                                crate::ai_tools::AiGraphUpdateAck {
+                                    graph: update.after.clone(),
+                                    applied: true,
+                                }
+                            })
+                        })
+                        .and_then(|inner| inner)
+                        .map_err(|error| error.to_string());
+                    update.respond(result).await;
+                    continue;
+                }
                 let result = this
                     .update(cx, |editor, cx| {
                         editor.apply_ai_graph_update(&file_path, &update.before, &update.after, cx)
@@ -307,7 +345,7 @@ impl BlueprintEditorPanel {
                     match result {
                         Ok(()) => {
                             panel.load_error = None;
-                            panel.attach_ai_graph_updates(file_path, cx);
+                            panel.attach_ai_graph_updates(file_path, window_handle, cx);
                             log::info!("Loaded blueprint asynchronously");
                         }
                         Err(error) => {
