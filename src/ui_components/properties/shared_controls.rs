@@ -10,6 +10,22 @@ use std::sync::Arc;
 use ui::{h_flex, v_flex, ActiveTheme as _, IconName, StyledExt};
 use ui_common::reflected_properties_panel::rgba_to_hsla;
 
+/// The reflected type whose property editor edits a native node's pin literal,
+/// when the native names one (its `pin_type.<pin>` attribute): a level pin
+/// gets the level picker, the input mode a choice. The pin's script type (and
+/// the saved literal, a plain value) is unchanged.
+pub(crate) fn native_pin_editor_type(
+    node_type: &str,
+    pin: &str,
+) -> Option<&'static pulsar_reflection::RuntimeTypeInfo> {
+    let native = node_type.strip_prefix("native::")?;
+    let name = crate::features::compilation::compiler::script_natives()
+        .get(native)?
+        .attr(&format!("pin_type.{pin}"))?
+        .to_owned();
+    pulsar_reflection::RUNTIME_TYPE_REGISTRY.get_by_name(&name)
+}
+
 impl PropertiesRenderer {
     pub(super) fn render_multi_selection_state<T>(
         node_count: usize,
@@ -161,7 +177,9 @@ impl PropertiesRenderer {
             return row.into_any_element();
         }
 
-        let Some(type_info) = pin.data_type.runtime_type() else {
+        let Some(type_info) =
+            native_pin_editor_type(&node.definition_id, &pin.id).or_else(|| pin.data_type.runtime_type())
+        else {
             return row.into_any_element();
         };
 

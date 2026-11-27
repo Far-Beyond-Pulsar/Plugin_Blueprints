@@ -108,27 +108,19 @@ pub fn event_sources(specs: &[TraitMethodSpec]) -> Vec<blueprint_compiler::Event
 }
 
 /// The compiler's declarations of the trait events a Blueprint's metadata
-/// asks for, resolved against the project's traits (ids first, then legacy
-/// paths). `local` are the names of its own custom events, which win over a
-/// trait event of the same name. Reads the trait index; the compile and
-/// preflight paths call this, the editing paths never do.
+/// asks for, resolved against `index`, the project's traits (ids first, then
+/// legacy paths). `local` are the names of its own custom events, which win
+/// over a trait event of the same name. The compile and preflight paths call
+/// this, the editing paths never do. The caller reads the index
+/// ([`project_traits`]) once for everything it compiles.
 pub fn declared_event_sources(
     metadata: &graphy_blueprint::BlueprintMetadata,
-    project_root: &std::path::Path,
+    index: &pulsar_traits::TraitIndex,
     local: &[&str],
 ) -> Vec<blueprint_compiler::EventSource> {
     if metadata.implemented_trait_ids.is_empty() && metadata.implemented_traits.is_empty() {
         return Vec::new();
     }
-    let index = match pulsar_traits::TraitIndex::load_or_rebuild(project_root) {
-        Ok(index) => index,
-        Err(error) => {
-            tracing::warn!(
-                "Trait events not declared: could not read the project's traits: {error:#}"
-            );
-            return Vec::new();
-        }
-    };
     let mut ids: Vec<String> = metadata
         .implemented_trait_ids
         .iter()
@@ -141,6 +133,18 @@ pub fn declared_event_sources(
         .into_iter()
         .filter(|source| !local.contains(&source.name.as_str()))
         .collect()
+}
+
+/// The project's traits as its files say now: a scan of the whole project, so
+/// read it once per compile pass, never per class.
+pub fn project_traits(project_root: &std::path::Path) -> Option<pulsar_traits::TraitIndex> {
+    match pulsar_traits::TraitIndex::load_or_rebuild(project_root) {
+        Ok(index) => Some(index),
+        Err(error) => {
+            tracing::warn!("Traits not checked: could not read the project's traits: {error:#}");
+            None
+        }
+    }
 }
 
 /// The entry-point nodes for the Add menu, as `(category, definition)`.

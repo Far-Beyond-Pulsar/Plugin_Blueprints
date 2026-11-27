@@ -58,7 +58,7 @@ pub fn validate_project_classes_with_component_events(
     // Declared traits are part of the contract Play builds against: a
     // Blueprint missing a method of a trait it declares fails here, before the
     // project builds. Without a readable index there is nothing to check.
-    let trait_index = pulsar_traits::TraitIndex::load_or_rebuild(root).ok();
+    let trait_index = crate::features::traits::events::project_traits(root);
 
     for path in class_files {
         let problem = engine_fs::virtual_fs::read_to_string(&path)
@@ -87,8 +87,12 @@ pub fn validate_project_classes_with_component_events(
                 }
             })
             .and_then(|asset| {
-                let mut problems =
-                    validate_asset_with_component_events(&asset, path.parent(), component_events);
+                let mut problems = validate_asset_with_component_events(
+                    &asset,
+                    path.parent(),
+                    component_events,
+                    trait_index.as_ref(),
+                );
                 if let (Some(index), Ok(value)) = (&trait_index, serde_json::to_value(&asset)) {
                     problems.extend(
                         crate::features::traits::source::check_blueprint(index.db(), &value)
@@ -260,12 +264,14 @@ fn validate_asset_with_component_events(
     asset: &crate::io::formats::BlueprintAsset,
     class_dir: Option<&std::path::Path>,
     component_events: &[plugin_editor_api::ComponentEventMetadata],
+    traits: Option<&pulsar_traits::TraitIndex>,
 ) -> Vec<String> {
     compile_asset(
         asset,
         class_dir,
         crate::features::compilation::compiler::script_natives(),
         component_events,
+        traits,
     )
     .problems
     .into_iter()
@@ -284,11 +290,13 @@ pub(crate) struct AssetCompile {
 /// Compile a saved class the way Play runs it: structural checks, the
 /// UI -> Graphy conversion, local macro expansion, data-flow analysis and the
 /// script module compile against `natives`. No GPUI state is involved.
+/// `traits` is the project's, for the trait events the class declares.
 pub(crate) fn compile_asset(
     asset: &crate::io::formats::BlueprintAsset,
     class_dir: Option<&std::path::Path>,
     natives: &pulsar_script_vm::NativeRegistry,
     component_events: &[plugin_editor_api::ComponentEventMetadata],
+    traits: Option<&pulsar_traits::TraitIndex>,
 ) -> AssetCompile {
     let mut report = ValidationReport::default();
     check_ui_graph(&asset.main_graph, &mut report);
@@ -344,11 +352,11 @@ pub(crate) fn compile_asset(
         })
         .collect();
     // Trait events a Blueprint declares are part of what it compiles with.
-    if let Some(root) = class_dir.and_then(crate::features::class_dirs::project_root_of) {
+    if let Some(index) = traits {
         let local: Vec<&str> = asset.local_events.iter().map(|e| e.name.as_str()).collect();
         events.extend(crate::features::traits::events::declared_event_sources(
             &asset.blueprint_metadata,
-            &root,
+            index,
             &local,
         ));
     }
@@ -400,6 +408,7 @@ fn compile_class_dir(
     dir: &Path,
     natives: &pulsar_script_vm::NativeRegistry,
     component_events: &[plugin_editor_api::ComponentEventMetadata],
+    traits: Option<&pulsar_traits::TraitIndex>,
 ) -> Result<(), Vec<plugin_editor_api::CompileDiagnostic>> {
     use plugin_editor_api::CompileDiagnostic;
     let class = crate::features::class_dirs::class_name_of(dir);
@@ -418,7 +427,7 @@ fn compile_class_dir(
         &crate::io::formats::strip_header_comments(&text),
     )
     .map_err(|e| fail(format!("failed to parse blueprint asset: {e}")))?;
-    let compiled = compile_asset(&asset, Some(dir), natives, component_events);
+    let compiled = compile_asset(&asset, Some(dir), natives, component_events, traits);
     let Some(module) = compiled.module else {
         crate::features::class_dirs::remove_module(dir);
         return Err(compiled
@@ -459,12 +468,13 @@ pub fn compile_project_classes_with_component_events(
     component_events: &[plugin_editor_api::ComponentEventMetadata],
 ) -> Vec<plugin_editor_api::CompileDiagnostic> {
     let mut pending = project_class_dirs(root);
+    let traits = crate::features::traits::events::project_traits(root);
     let mut failures = Vec::new();
     while !pending.is_empty() {
         failures.clear();
         let mut failed = Vec::new();
         for dir in &pending {
-            match compile_class_dir(dir, natives, component_events) {
+            match compile_class_dir(dir, natives, component_events, traits.as_ref()) {
                 Ok(()) => tracing::info!(class = %dir.display(), "Blueprint class compiled"),
                 Err(problems) => {
                     failures.extend(problems);

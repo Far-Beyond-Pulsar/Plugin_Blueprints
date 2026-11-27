@@ -688,6 +688,77 @@ impl NodeDefinitions {
     }
 }
 
+/// The title of a node the catalogue does not list (a component node of a class
+/// the open prefab does not hold, a native whose library is absent). A title
+/// says what the node does: the thing it acts on is on its reference pin, so
+/// the node type's `::` path is never shown.
+pub fn uncatalogued_title(node_type: &str) -> String {
+    let property_title = |class: &str, property: &str| {
+        REGISTRY
+            .create_instance(class)
+            .and_then(|instance| {
+                instance
+                    .get_properties()
+                    .into_iter()
+                    .find(|p| p.name == property)
+                    .map(|p| p.display_name.to_string())
+            })
+            .unwrap_or_else(|| words(property))
+    };
+    let parts: Vec<&str> = node_type.split("::").collect();
+    match parts.as_slice() {
+        ["comp_get_prop", class, property] => format!("Get {}", property_title(class, property)),
+        ["comp_set_prop", class, property] => format!("Set {}", property_title(class, property)),
+        ["comp_call", class, method] => REGISTRY
+            .get_methods(class)
+            .and_then(|methods| {
+                methods
+                    .iter()
+                    .find(|m| m.name == *method)
+                    .map(|m| m.display_name.to_string())
+            })
+            .unwrap_or_else(|| words(method)),
+        // The getter has no reference pin to say which component it gets.
+        ["get_component_ref", class, _slot] => format!("Get {class}"),
+        [.., last] if parts.len() > 1 => words(last),
+        _ => node_type.replace('_', " "),
+    }
+}
+
+/// `set_move` as `Set Move`.
+fn words(snake: &str) -> String {
+    snake
+        .split('_')
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first.to_uppercase().chain(chars).collect()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::uncatalogued_title;
+
+    #[test]
+    fn a_title_never_shows_the_node_types_path() {
+        for (node_type, title) in [
+            ("comp_call::NoSuchComponent::set_move", "Set Move"),
+            ("comp_get_prop::NoSuchComponent::walk_speed", "Get Walk Speed"),
+            ("comp_set_prop::NoSuchComponent::walk_speed", "Set Walk Speed"),
+            ("get_component_ref::SoundEffectComponent::0", "Get SoundEffectComponent"),
+            ("native::Transform::rotation_degrees", "Rotation Degrees"),
+            ("print_string", "print string"),
+        ] {
+            assert_eq!(uncatalogued_title(node_type), title, "{node_type}");
+        }
+    }
+}
+
 /// Build a pin's canonical data type directly from its registered reflection
 /// type info — `type_name` is already the registry-stable identity, so no
 /// string-parsing/conversion layer is needed (the registry resolves it back

@@ -240,7 +240,10 @@ impl Presenter for BlueprintPresenter {
             p.icon = def.icon.chars().next();
             p
         } else {
-            NodePresentation::card(ty.replace('_', " "), category_accent(ty))
+            NodePresentation::card(
+                crate::core::definitions::uncatalogued_title(ty),
+                category_accent(ty),
+            )
         };
         // A `__return__` output is drawn in the header instead of a body row.
         p.header_output = node.outputs.iter().position(|o| o.id == "__return__");

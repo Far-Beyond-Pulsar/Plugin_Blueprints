@@ -427,7 +427,7 @@ pub fn component_event_node_definitions(
             continue;
         }
 
-        let title = format!("On {} ({})", title_case(member), event.component_class);
+        let title = component_event_title(&event.component_class, member);
         let mut outputs = vec![pin("Body", "execution", PinType::Output)];
         outputs.extend(event.event.fields.iter().map(|field| {
             pin(
@@ -488,7 +488,7 @@ pub fn describe_node_type(node_type: &str) -> Option<(String, bool)> {
                 return Some((title, true));
             }
         }
-        return Some((format!("On {} ({component})", title_case(member)), true));
+        return Some((component_event_title(component, member), true));
     }
     // Keep legacy serialized component event node IDs readable. Versions in
     // the wild used either a colon or a dot between component and event names.
@@ -498,17 +498,32 @@ pub fn describe_node_type(node_type: &str) -> Option<(String, bool)> {
         if component.is_empty() || member.is_empty() {
             return None;
         }
-        return Some((format!("On {} ({component})", title_case(member)), true));
+        return Some((component_event_title(component, member), true));
     }
     let rest = node_type.strip_prefix("event::")?;
     let (kind, name) = rest.split_once("::")?;
+    // `CoinGameMode.collect`: the event, and the class that declares it. Only a
+    // send to a class shows the class: it has no reference pin that does.
+    let (owner, event) = name.rsplit_once('.').unwrap_or(("", name));
     Some(match kind {
-        "on" => (format!("On {name}"), true),
-        "send" => (format!("Send {name} to"), false),
-        "broadcast" => (format!("Broadcast {name}"), false),
-        "to_class" => (format!("Send {name} to Class"), false),
+        "on" => (format!("On {event}"), true),
+        "send" => (format!("Send {event} to"), false),
+        "broadcast" => (format!("Broadcast {event}"), false),
+        "to_class" if owner.is_empty() => (format!("Send {event} to Class"), false),
+        "to_class" => (format!("Send {event} to {}", short_name(owner)), false),
         _ => return None,
     })
+}
+
+/// A component event's title: the event, and the component's name without its
+/// namespace (an entry point has no reference pin to say which component).
+fn component_event_title(component: &str, member: &str) -> String {
+    format!("On {} ({})", title_case(member), short_name(component))
+}
+
+/// `physics::ColliderComponent` as `ColliderComponent`.
+fn short_name(path: &str) -> &str {
+    path.rsplit("::").next().unwrap_or(path)
 }
 
 fn title_case(snake: &str) -> String {

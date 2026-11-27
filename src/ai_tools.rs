@@ -431,12 +431,17 @@ fn blueprint_profile() -> BlueprintProfile {
     BlueprintProfile::blueprint(Default::default())
 }
 
-/// The title a node shows: its catalogue name, or its type.
+/// The title a node shows: an event's, its catalogue name, or the title of a
+/// node the catalogue does not list.
 fn node_title(node: &NodeInstance) -> String {
-    NodeDefinitions::load()
-        .get_node_definition(&node.node_type)
-        .map(|d| d.name.clone())
-        .unwrap_or_else(|| node.node_type.replace('_', " "))
+    crate::features::events::engine_events::describe_node_type(&node.node_type)
+        .map(|(title, _)| title)
+        .or_else(|| {
+            NodeDefinitions::load()
+                .get_node_definition(&node.node_type)
+                .map(|d| d.name.clone())
+        })
+        .unwrap_or_else(|| crate::core::definitions::uncatalogued_title(&node.node_type))
 }
 
 fn properties_as_text(node: &NodeInstance) -> HashMap<String, String> {

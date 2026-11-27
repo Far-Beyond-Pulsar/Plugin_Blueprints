@@ -196,12 +196,18 @@ impl BlueprintEditorPanel {
             .project_root
             .clone()
             .or_else(|| crate::features::class_dirs::project_root_of(class_path))
+            .filter(|_| {
+                !self.blueprint_metadata.implemented_trait_ids.is_empty()
+                    || !self.blueprint_metadata.implemented_traits.is_empty()
+            })
         {
-            events.extend(crate::features::traits::events::declared_event_sources(
-                &self.blueprint_metadata,
-                &root,
-                &local_names,
-            ));
+            if let Some(index) = crate::features::traits::events::project_traits(&root) {
+                events.extend(crate::features::traits::events::declared_event_sources(
+                    &self.blueprint_metadata,
+                    &index,
+                    &local_names,
+                ));
+            }
         }
         let asset_events = crate::features::events::asset_events::of_prefab(
             Some(class_path.as_path()),
